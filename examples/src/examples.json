@@ -39,6 +39,10 @@
         "title": "Constraint Motors",
         "tags": ["world", "physics", "constraints", "motors", "hinge", "slider", "powered", "dynamics"]
     },
+    "example-hinge-motor": {
+        "title": "Hinge Motor",
+        "tags": ["world", "physics", "constraints", "motors", "hinge", "walking", "robot", "linkage", "dynamics"]
+    },
     "example-voxel-triangle-mesh": {
         "title": "Voxel Triangle Mesh",
         "tags": ["world", "physics", "voxel", "triangle-mesh", "gltf", "dynamics", "shapes"]
