@@ -222,9 +222,6 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
 }
 
 const WELD_GRID_INV = 1e8; // 1 / 1e-8
-const SHIFT_64 = 64n;
-const SHIFT_128 = 128n;
-const MASK_64 = (1n << 64n) - 1n;
 
 function deduplicateVertices(inputPositions: number[]): {
     positions: number[];
@@ -237,10 +234,10 @@ function deduplicateVertices(inputPositions: number[]): {
     let uniqueCount = 0;
 
     for (let i = 0; i < vertexCount; i++) {
-        const qx = BigInt(Math.round(inputPositions[i * 3] * WELD_GRID_INV));
-        const qy = BigInt(Math.round(inputPositions[i * 3 + 1] * WELD_GRID_INV));
-        const qz = BigInt(Math.round(inputPositions[i * 3 + 2] * WELD_GRID_INV));
-        const key = ((qx & MASK_64) << SHIFT_128) | ((qy & MASK_64) << SHIFT_64) | (qz & MASK_64);
+        const qx = Math.round(inputPositions[i * 3] * WELD_GRID_INV);
+        const qy = Math.round(inputPositions[i * 3 + 1] * WELD_GRID_INV);
+        const qz = Math.round(inputPositions[i * 3 + 2] * WELD_GRID_INV);
+        const key = (BigInt(qx) << 96n) | (BigInt(qy) << 48n) | BigInt(qz);
 
         let idx = vertexMap.get(key);
         if (idx === undefined) {
