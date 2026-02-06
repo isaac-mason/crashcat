@@ -374,6 +374,11 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
 
     body.activeIndex = INACTIVE_BODY_INDEX;
 
+    body.headContactKey = contacts.INVALID_CONTACT_KEY;
+    body.contactCount = 0;
+    body.islandIndex = -1;
+    body.ccdBodyIndex = -1;
+
     body.constraintIds.length = 0;
 }
 
