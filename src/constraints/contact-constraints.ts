@@ -456,19 +456,7 @@ const _addContactConstraint_invInertiaA = mat4.create();
 const _addContactConstraint_invInertiaB = mat4.create();
 const _addContactConstraint_contactSettings = createContactSettings();
 
-/**
- * Add a contact constraint from a new manifold.
- * Matches contact points to cache for warm starting.
- *
- * @param contactConstraints contact constraint state containing cache and buffer
- * @param bodyPairHandle unique identifier for this body pair
- * @param bodyA first body (must have id < bodyB.id)
- * @param bodyB second body (must have id > bodyA.id)
- * @param contactManifold contact manifold from collision detection
- * @param options world options containing cache thresholds
- * @param deltaTime physics time step (for speculative contacts and restitution)
- * @returns true if constraint was created (false for sensors)
- */
+/** add a contact constraint from a new manifold */
 export function addContactConstraint(
     contactConstraints: ContactConstraints,
     contactsState: contacts.Contacts,
