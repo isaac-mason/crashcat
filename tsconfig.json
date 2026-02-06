@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "moduleResolution": "bundler",
+    "strict": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "./dist",
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "skipLibCheck": true,
+    "baseUrl": "./",
+    "rootDir": "./",
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "three": ["node_modules/@types/three"],
+      "three/*": ["node_modules/@types/three/*"]
+    }
+  },
+  "include": ["./src", "./three"],
+  "exclude": ["./dist"]
+}

@@ -1,0 +1,21 @@
+{
+    "name": "crashcat-examples",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "rm -rf ./dist && vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "lil-gui": "^0.20.0",
+        "crashcat": "workspace:*",
+        "three": "^0.180.0"
+    },
+    "devDependencies": {
+        "@types/three": "^0.180.0",
+        "typescript": "^5.9.3",
+        "vite": "^7.1.10"
+    }
+}

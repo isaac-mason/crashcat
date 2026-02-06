@@ -1,0 +1,138 @@
+{
+    "example-shapes": {
+        "title": "Shapes",
+        "tags": ["world", "physics", "shapes", "primitives", "dynamics"]
+    },
+    "example-triangle-mesh": {
+        "title": "Triangle Mesh",
+        "tags": ["world", "physics", "triangle-mesh", "gltf", "dynamics", "shapes"]
+    },
+    "example-ragdoll": {
+        "title": "Ragdoll",
+        "tags": ["world", "physics", "ragdoll", "constraints", "joints", "dynamics"]
+    },
+    "example-kcc": {
+        "title": "Kinematic Character Controller",
+        "tags": ["world", "physics", "kcc", "character-controller", "kinematic", "movement"]
+    },
+    "example-pointer-ray": {
+        "title": "Pointer Raycast",
+        "tags": ["world", "physics", "raycast", "pointer", "kinematic", "shapes", "interactive"]
+    },
+    "example-cluster": {
+        "title": "Cluster",
+        "tags": ["world", "physics", "cluster", "velocity"]
+    },
+    "example-ccd": {
+        "title": "Continuous Collision Detection",
+        "tags": ["world", "physics", "ccd", "continuous", "collision", "dynamics"]
+    },
+    "example-kinematic": {
+        "title": "Kinematic Body",
+        "tags": ["world", "physics", "kinematic", "convex-hull", "gltf", "motion"]
+    },
+    "example-constraints": {
+        "title": "Constraints",
+        "tags": ["world", "physics", "constraints"]
+    },
+    "example-constraints-motors": {
+        "title": "Constraint Motors",
+        "tags": ["world", "physics", "constraints", "motors", "hinge", "slider", "powered", "dynamics"]
+    },
+    "example-voxel-triangle-mesh": {
+        "title": "Voxel Triangle Mesh",
+        "tags": ["world", "physics", "voxel", "triangle-mesh", "gltf", "dynamics", "shapes"]
+    },
+    "example-voxel-custom-shape": {
+        "title": "Voxel Custom Shape",
+        "tags": ["world", "physics", "voxel", "custom-shape", "shapes", "dynamics"]
+    },
+    "example-restitution": {
+        "title": "Restitution",
+        "tags": ["world", "physics", "restitution", "bounciness", "contact-solver", "dynamics"]
+    },
+    "example-friction": {
+        "title": "Friction",
+        "tags": ["world", "physics", "friction", "contact-solver", "dynamics"]
+    },
+    "example-linear-damping": {
+        "title": "Linear Damping",
+        "tags": ["world", "physics", "linear-damping", "drag", "dynamics"]
+    },
+    "example-angular-damping": {
+        "title": "Angular Damping",
+        "tags": ["world", "physics", "angular-damping", "drag", "dynamics"]
+    },
+    "example-gravity-factor": {
+        "title": "Gravity Factor",
+        "tags": ["world", "physics", "gravity", "gravity-factor", "dynamics"]
+    },
+    "example-mass-properties": {
+        "title": "Mass Properties",
+        "tags": ["world", "physics", "mass", "inertia", "center-of-mass", "stability", "dynamics"]
+    },
+    "example-add-impulse-at-position": {
+        "title": "Add Impulse at Position",
+        "tags": ["world", "physics", "impulse", "raycast", "dynamics", "interactive"]
+    },
+    "example-cast-ray": {
+        "title": "Cast Ray",
+        "tags": ["world", "physics", "raycast", "casting", "collision"]
+    },
+    "example-cast-shape": {
+        "title": "Cast Shape",
+        "tags": ["world", "physics", "casting", "ccd", "collision"]
+    },
+    "example-collide-point": {
+        "title": "Collide Point",
+        "tags": ["world", "physics", "collision", "broadphase", "narrowphase"]
+    },
+    "example-collide-shape": {
+        "title": "Collide Shape",
+        "tags": ["world", "physics", "collision", "broadphase", "narrowphase"]
+    },
+    "example-sensor": {
+        "title": "Sensor",
+        "tags": ["world", "physics", "sensor", "triggers", "collision"]
+    },
+    "example-object-layer-filtering": {
+        "title": "Object Layer Filtering",
+        "tags": ["world", "physics", "object-layers", "collision-filtering", "layers"]
+    },
+    "example-collision-filtering": {
+        "title": "Collision Filtering",
+        "tags": ["world", "physics", "collision-filtering", "collision", "layers"]
+    },
+    "example-collide-shape-vs-shape": {
+        "title": "Collide Shape vs Shape",
+        "tags": ["collision", "broadphase", "narrowphase", "shapes"]
+    },
+    "example-collide-point-vs-shape": {
+        "title": "Collide Point vs Shape",
+        "tags": ["collision", "broadphase", "narrowphase", "shapes"]
+    },
+    "example-cast-ray-vs-shape": {
+        "title": "Cast Ray vs Shape",
+        "tags": ["collision", "raycast", "casting", "shapes", "ccd"]
+    },
+    "example-cast-shape-vs-shape": {
+        "title": "Cast Shape vs Shape",
+        "tags": ["collision", "casting", "ccd", "shapes", "continuous"]
+    },
+    "example-gjk": {
+        "title": "GJK Collision Detection",
+        "tags": ["collision", "gjk", "narrowphase", "minkowski", "simplex"]
+    },
+    "example-get-supporting-face": {
+        "title": "Get Supporting Face",
+        "tags": ["collision", "supporting-face", "shapes"]
+    },
+    "example-convex-hull-builder": {
+        "title": "Convex Hull Builder",
+        "tags": ["convex-hull", "shapes", "geometry", "builder"]
+    },
+    "example-test-scenarios": {
+        "title": "Test Scenarios",
+        "tags": ["tests", "scenarios"]
+    }
+}
