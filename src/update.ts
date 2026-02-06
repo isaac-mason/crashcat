@@ -1544,10 +1544,7 @@ const _applyCCD_normalScaled = vec3.create();
 const _applyCCD_tangentVel = vec3.create();
 const _applyCCD_frictionDir = vec3.create();
 
-/**
- * apply collision impulse for CCD contact using constraint solver infrastructure.
- * does a single solve iteration using AxisConstraintPart.
- */
+/** apply collision impulse for CCD contact using constraint solver infrastructure, does a single solve iteration using @see AxisConstraintPart */
 function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody): void {
     // skip if bodyA is not dynamic
     if (bodyA.motionType !== MotionType.DYNAMIC) return;
