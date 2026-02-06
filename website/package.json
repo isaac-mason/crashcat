@@ -1,0 +1,23 @@
+{
+  "name": "website",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "crashcat": "workspace:*",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@types/three": "^0.182.0",
+    "globals": "^16.4.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  }
+}

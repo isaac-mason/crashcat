@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>crashcat - javascript 3d rigid body physics</title>
+    <meta name="description" content="A 3D rigid body physics engine for JavaScript, designed for games and simulations.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>💥 </text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./src/index.css" />
+  </head>
+  <body>
+    <div id="root">
+      <div id="loading" class="loading-container">
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-info">
+        <h1 class="nav-title">crashcat</h1>
+        <p class="nav-subtitle">javascript 3d rigid body physics</p>
+      </div>
+      <div class="nav-links">
+        <a href="/examples">examples</a>
+        <a href="/docs">docs</a>
+        <a href="https://github.com/isaac-mason/crashcat" target="_blank" rel="noopener noreferrer">github</a>
+        <a href="https://www.npmjs.com/package/crashcat">npm</a>
+      </div>
+    </nav>
+
+    <footer class="footer">
+      <button id="debug-toggle">show debug view [d]</button>
+      <div class="footer-links">
+        <a href="https://x.com/isaac_mason_" class="footer-link" target="_blank" rel="noopener noreferrer">x.com/isaac_mason_</a>
+        <a href="https://github.com/sponsors/isaac-mason" class="footer-link" target="_blank" rel="noopener noreferrer">sponsor me!</a>
+      </div>
+    </footer>
+
+    <script type="module" src="./src/index.ts"></script>
+  </body>
+</html>

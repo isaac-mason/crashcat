@@ -43,7 +43,7 @@
     },
     "packageManager": "pnpm@8.15.2+sha1.798034f615aa211c6c2ae00010cc20be5fc102ee",
     "dependencies": {
-        "mathcat": "0.0.6"
+        "mathcat": "0.0.8"
     },
     "peerDependencies": {
         "three": ">=0.180.0"
@@ -57,7 +57,7 @@
         "@biomejs/biome": "^2.2.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@rollup/plugin-typescript": "^12.1.4",
-        "@types/three": "0.180.0",
+        "@types/three": "0.182.0",
         "rollup": "^4.46.2",
         "rollup-plugin-copy": "^3.5.0",
         "rollup-plugin-filesize": "^10.0.0",
