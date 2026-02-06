@@ -140,34 +140,46 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
     /* remove duplicate triangles */
     let finalTriangleCount = 0;
 
-    const seen = new Set<bigint>();
+    const seen = new Set<string>();
     let writeIdx = 0;
 
     for (let readIdx = 0; readIdx < validTriangleCount; readIdx++) {
         const readOffset = readIdx * TRIANGLE_STRIDE;
-        let ia = triangleBuffer[readOffset + OFFSET_INDEX_A];
-        let ib = triangleBuffer[readOffset + OFFSET_INDEX_B];
-        let ic = triangleBuffer[readOffset + OFFSET_INDEX_C];
+        const ia = triangleBuffer[readOffset + OFFSET_INDEX_A];
+        const ib = triangleBuffer[readOffset + OFFSET_INDEX_B];
+        const ic = triangleBuffer[readOffset + OFFSET_INDEX_C];
+        const materialId = triangleBuffer[readOffset + OFFSET_MATERIAL_ID];
 
-        // sort indices to canonical form
-        if (ia > ib) {
-            const t = ia;
-            ia = ib;
-            ib = t;
-        }
-        if (ib > ic) {
-            const t = ib;
-            ib = ic;
-            ic = t;
-        }
-        if (ia > ib) {
-            const t = ia;
-            ia = ib;
-            ib = t;
+        // rotate indices so lowest comes first (preserves winding order)
+        let iaCanon: number, ibCanon: number, icCanon: number;
+        if (ia < ib) {
+            if (ia < ic) {
+                // ia is smallest
+                iaCanon = ia;
+                ibCanon = ib;
+                icCanon = ic;
+            } else {
+                // ic is smallest: rotate right
+                iaCanon = ic;
+                ibCanon = ia;
+                icCanon = ib;
+            }
+        } else {
+            if (ib < ic) {
+                // ib is smallest: rotate left
+                iaCanon = ib;
+                ibCanon = ic;
+                icCanon = ia;
+            } else {
+                // ic is smallest: rotate right
+                iaCanon = ic;
+                ibCanon = ia;
+                icCanon = ib;
+            }
         }
 
-        // pack into BigInt: (ia << 64) | (ib << 32) | ic
-        const key = (BigInt(ia) << 64n) | (BigInt(ib) << 32n) | BigInt(ic);
+        // dedup key includes indices + materialId
+        const key = `${iaCanon},${ibCanon},${icCanon},${materialId}`;
 
         if (!seen.has(key)) {
             seen.add(key);
