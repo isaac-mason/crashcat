@@ -1,3 +1,5 @@
+/** @module crashcat */
+
 export * from './shapes/register';
 export * from './shapes/shapes';
 export * from './shapes/convex';
@@ -6,10 +8,9 @@ export * as box from './shapes/box';
 export type { CapsuleShape, CapsuleShapeSettings } from './shapes/capsule';
 export * as capsule from './shapes/capsule';
 export type { CompoundShape, CompoundShapeSettings } from './shapes/compound';
+export * as compound from './shapes/compound';
 export type { CylinderShape, CylinderShapeSettings } from './shapes/cylinder';
 export * as cylinder from './shapes/cylinder';
-export * as compound from './shapes/compound';
-export * as convex from './shapes/convex';
 export type { ConvexHullShape, ConvexHullShapeSettings } from './shapes/convex-hull';
 export * as convexHull from './shapes/convex-hull';
 export type { EmptyShape } from './shapes/empty-shape';
@@ -29,6 +30,8 @@ export * as plane from './shapes/plane';
 export * as convexHullBuilder from './shapes/utils/convex-hull-builder';
 export * as triangleMeshBuilder from './shapes/utils/triangle-mesh-builder';
 export * as triangleMeshBvh from './shapes/utils/triangle-mesh-bvh';
+
+export * from './constraints/combine-material';
 
 export * from './collision/narrowphase';
 export * from './collision/cast-ray-vs-shape';
