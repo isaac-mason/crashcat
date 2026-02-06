@@ -435,7 +435,8 @@ export function create(world: World, settings: RigidBodySettings): RigidBody {
 }
 
 /**
- * Removes a body from the world, returns true if successful
+ * Removes a body from the world
+ * @returns true if the body was successfully removed, false if the body was already pooled (invalid)
  */
 export function remove(world: World, body: RigidBody): boolean {
     // return false if already pooled
