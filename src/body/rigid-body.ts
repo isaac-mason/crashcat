@@ -326,6 +326,13 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     }
 
     const mp = body.motionProperties;
+
+    // reset velocities and accumulators (important for pooled bodies)
+    vec3.zero(mp.linearVelocity);
+    vec3.zero(mp.angularVelocity);
+    vec3.zero(mp.force);
+    vec3.zero(mp.torque);
+
     mp.gravityFactor = o.gravityFactor ?? DEFAULT_RIGID_BODY_SETTINGS.gravityFactor;
     mp.linearDamping = o.linearDamping ?? DEFAULT_RIGID_BODY_SETTINGS.linearDamping;
     mp.angularDamping = o.angularDamping ?? DEFAULT_RIGID_BODY_SETTINGS.angularDamping;
