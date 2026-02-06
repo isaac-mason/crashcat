@@ -140,9 +140,10 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
     /* remove duplicate triangles */
     let finalTriangleCount = 0;
 
-    const seen = new Set<string>();
+    const seen = new Set<bigint>();
     let writeIdx = 0;
 
+    console.time('Deduplicate triangles');
     for (let readIdx = 0; readIdx < validTriangleCount; readIdx++) {
         const readOffset = readIdx * TRIANGLE_STRIDE;
         const ia = triangleBuffer[readOffset + OFFSET_INDEX_A];
@@ -154,37 +155,32 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
         let iaCanon: number, ibCanon: number, icCanon: number;
         if (ia < ib) {
             if (ia < ic) {
-                // ia is smallest
                 iaCanon = ia;
                 ibCanon = ib;
                 icCanon = ic;
             } else {
-                // ic is smallest: rotate right
                 iaCanon = ic;
                 ibCanon = ia;
                 icCanon = ib;
             }
         } else {
             if (ib < ic) {
-                // ib is smallest: rotate left
                 iaCanon = ib;
                 ibCanon = ic;
                 icCanon = ia;
             } else {
-                // ic is smallest: rotate right
                 iaCanon = ic;
                 ibCanon = ia;
                 icCanon = ib;
             }
         }
 
-        // dedup key includes indices + materialId
-        const key = `${iaCanon},${ibCanon},${icCanon},${materialId}`;
+        // pack 4 values into one bigint, 32 bits each
+        const key = (BigInt(iaCanon) << 96n) | (BigInt(ibCanon) << 64n) | (BigInt(icCanon) << 32n) | BigInt(materialId + 1);
 
         if (!seen.has(key)) {
             seen.add(key);
 
-            // move triangle to write position if needed (in-place compaction)
             if (writeIdx !== readIdx) {
                 const writeOffset = writeIdx * TRIANGLE_STRIDE;
                 for (let j = 0; j < TRIANGLE_STRIDE; j++) {
@@ -194,6 +190,7 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
             writeIdx++;
         }
     }
+    console.timeEnd('Deduplicate triangles');
 
     finalTriangleCount = writeIdx;
 
