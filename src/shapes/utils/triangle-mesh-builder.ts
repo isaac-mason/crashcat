@@ -224,255 +224,37 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
     };
 }
 
+const WELD_GRID_INV = 1e8; // 1 / 1e-8
+const SHIFT_64 = 64n;
+const SHIFT_128 = 128n;
+const MASK_64 = (1n << 64n) - 1n;
+
 function deduplicateVertices(inputPositions: number[]): {
     positions: number[];
     indexMap: number[];
 } {
     const vertexCount = Math.floor(inputPositions.length / 3);
-    const weldDistanceSq = 1e-16; // (1e-8)^2
-
-    // initialize union-find: each vertex points to itself
-    const weldedVertices = new Uint32Array(vertexCount);
-    for (let i = 0; i < vertexCount; i++) {
-        weldedVertices[i] = i;
-    }
-
-    // create vertex indices array
-    const vertexIndices = new Uint32Array(vertexCount);
-    for (let i = 0; i < vertexCount; i++) {
-        vertexIndices[i] = i;
-    }
-
-    // scratch buffer for vertices on both sides of split plane
-    const scratch = new Uint32Array(vertexCount);
-
-    // recursively partition and weld vertices
-    indexifyVerticesRecursively(
-        inputPositions,
-        vertexIndices,
-        0,
-        vertexCount,
-        scratch,
-        weldedVertices,
-        weldDistanceSq,
-        32, // max recursion depth
-    );
-
-    // flatten union-find structure and count unique vertices
-    let numUniqueVertices = 0;
-    for (let i = 0; i < vertexCount; i++) {
-        weldedVertices[i] = weldedVertices[weldedVertices[i]];
-        if (weldedVertices[i] === i) {
-            numUniqueVertices++;
-        }
-    }
-
-    // collect unique vertices and build index map
+    const vertexMap = new Map<bigint, number>();
     const positions: number[] = [];
-    positions.length = numUniqueVertices * 3;
-    let writeIdx = 0;
+    const indexMap = new Array<number>(vertexCount);
+    let uniqueCount = 0;
 
     for (let i = 0; i < vertexCount; i++) {
-        if (weldedVertices[i] === i) {
-            // this is a unique vertex
-            const newIdx = writeIdx++;
-            positions[newIdx * 3 + 0] = inputPositions[i * 3 + 0];
-            positions[newIdx * 3 + 1] = inputPositions[i * 3 + 1];
-            positions[newIdx * 3 + 2] = inputPositions[i * 3 + 2];
-            weldedVertices[i] = newIdx;
-        } else {
-            // duplicate vertex - use the remapped index
-            weldedVertices[i] = weldedVertices[weldedVertices[i]];
+        const qx = BigInt(Math.round(inputPositions[i * 3] * WELD_GRID_INV));
+        const qy = BigInt(Math.round(inputPositions[i * 3 + 1] * WELD_GRID_INV));
+        const qz = BigInt(Math.round(inputPositions[i * 3 + 2] * WELD_GRID_INV));
+        const key = ((qx & MASK_64) << SHIFT_128) | ((qy & MASK_64) << SHIFT_64) | (qz & MASK_64);
+
+        let idx = vertexMap.get(key);
+        if (idx === undefined) {
+            idx = uniqueCount++;
+            vertexMap.set(key, idx);
+            positions.push(inputPositions[i * 3], inputPositions[i * 3 + 1], inputPositions[i * 3 + 2]);
         }
+        indexMap[i] = idx;
     }
 
-    return { positions, indexMap: Array.from(weldedVertices) };
-}
-
-/**
- * Recursively partition vertices along spatial planes and weld nearby vertices.
- */
-function indexifyVerticesRecursively(
-    positions: number[],
-    indices: Uint32Array,
-    start: number,
-    count: number,
-    scratch: Uint32Array,
-    weldedVertices: Uint32Array,
-    weldDistanceSq: number,
-    maxRecursion: number,
-): void {
-    // base case: use brute force for small clusters
-    if (count <= 8 || maxRecursion === 0) {
-        indexifyVerticesBruteForce(positions, indices, start, count, weldedVertices, weldDistanceSq);
-        return;
-    }
-
-    // calculate bounding box
-    let minX = Infinity,
-        minY = Infinity,
-        minZ = Infinity;
-    let maxX = -Infinity,
-        maxY = -Infinity,
-        maxZ = -Infinity;
-
-    for (let i = start; i < start + count; i++) {
-        const idx = indices[i];
-        const x = positions[idx * 3 + 0];
-        const y = positions[idx * 3 + 1];
-        const z = positions[idx * 3 + 2];
-
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-        if (z < minZ) minZ = z;
-        if (z > maxZ) maxZ = z;
-    }
-
-    // determine split axis (longest extent)
-    const extentX = maxX - minX;
-    const extentY = maxY - minY;
-    const extentZ = maxZ - minZ;
-
-    let splitAxis: number;
-    let splitValue: number;
-
-    if (extentX >= extentY && extentX >= extentZ) {
-        splitAxis = 0;
-        splitValue = (minX + maxX) * 0.5;
-    } else if (extentY >= extentZ) {
-        splitAxis = 1;
-        splitValue = (minY + maxY) * 0.5;
-    } else {
-        splitAxis = 2;
-        splitValue = (minZ + maxZ) * 0.5;
-    }
-
-    const weldDistance = Math.sqrt(weldDistanceSq);
-
-    // partition vertices into left, right, and middle (on both sides)
-    let left = start;
-    let right = start + count;
-    let scratchCount = 0;
-
-    while (left < right) {
-        const idx = indices[left];
-        const value = positions[idx * 3 + splitAxis];
-        const distanceToPlane = value - splitValue;
-
-        if (distanceToPlane < -weldDistance) {
-            // left side
-            left++;
-        } else if (distanceToPlane > weldDistance) {
-            // right side - swap with last element
-            right--;
-            const temp = indices[left];
-            indices[left] = indices[right];
-            indices[right] = temp;
-        } else {
-            // on both sides - goes into scratch buffer
-            scratch[scratchCount++] = indices[left];
-            left++;
-        }
-    }
-
-    // check if we made progress
-    if (scratchCount === count) {
-        // all vertices on split plane, fall back to brute force
-        indexifyVerticesBruteForce(positions, indices, start, count, weldedVertices, weldDistanceSq);
-        return;
-    }
-
-    // calculate partition sizes
-    const numLeft = left - start;
-    const numRight = start + count - right;
-
-    // copy middle vertices to both partitions
-    for (let i = 0; i < scratchCount; i++) {
-        indices[start + numLeft + i] = scratch[i];
-        indices[right + i] = scratch[i];
-    }
-
-    // recurse on both partitions
-    indexifyVerticesRecursively(
-        positions,
-        indices,
-        start,
-        numLeft + scratchCount,
-        scratch,
-        weldedVertices,
-        weldDistanceSq,
-        maxRecursion - 1,
-    );
-
-    indexifyVerticesRecursively(
-        positions,
-        indices,
-        right,
-        numRight + scratchCount,
-        scratch,
-        weldedVertices,
-        weldDistanceSq,
-        maxRecursion - 1,
-    );
-}
-
-/** brute force comparison of vertices in a small cluster. uses union-find to link nearby vertices */
-function indexifyVerticesBruteForce(
-    positions: number[],
-    indices: Uint32Array,
-    start: number,
-    count: number,
-    weldedVertices: Uint32Array,
-    weldDistanceSq: number,
-): void {
-    // compare every vertex with every other vertex
-    for (let i = start; i < start + count; i++) {
-        const idx1 = indices[i];
-        const x1 = positions[idx1 * 3 + 0];
-        const y1 = positions[idx1 * 3 + 1];
-        const z1 = positions[idx1 * 3 + 2];
-
-        for (let j = i + 1; j < start + count; j++) {
-            const idx2 = indices[j];
-            const x2 = positions[idx2 * 3 + 0];
-            const y2 = positions[idx2 * 3 + 1];
-            const z2 = positions[idx2 * 3 + 2];
-
-            // check distance
-            const dx = x2 - x1;
-            const dy = y2 - y1;
-            const dz = z2 - z1;
-            const distSq = dx * dx + dy * dy + dz * dz;
-
-            if (distSq <= weldDistanceSq) {
-                // find roots of both vertices
-                let root1 = idx1;
-                while (weldedVertices[root1] < root1) {
-                    root1 = weldedVertices[root1];
-                }
-
-                let root2 = idx2;
-                while (weldedVertices[root2] < root2) {
-                    root2 = weldedVertices[root2];
-                }
-
-                // link higher to lower
-                if (root1 !== root2) {
-                    const lowest = root1 < root2 ? root1 : root2;
-                    const highest = root1 < root2 ? root2 : root1;
-                    weldedVertices[highest] = lowest;
-
-                    // path compression
-                    weldedVertices[idx1] = lowest;
-                    weldedVertices[idx2] = lowest;
-                }
-
-                break; // found a match, move to next vertex
-            }
-        }
-    }
+    return { positions, indexMap };
 }
 
 const _normal0 = vec3.create();
@@ -499,7 +281,7 @@ type EdgeRefs = {
     count: number;
     tri0: number; // packed (triIdx << 3 | edgeBit)
     tri1: number; // packed (triIdx << 3 | edgeBit)
-}
+};
 
 function computeActiveEdges(data: TriangleMeshData, cosThreshold: number): void {
     // early exit: if threshold is negative, all edges remain active

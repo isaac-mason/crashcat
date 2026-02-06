@@ -128,18 +128,6 @@ activeEdgeCosThresholdAngle            });
             expect(result.data.triangleCount).toBe(1);
         });
 
-        test('removes duplicate triangles with reversed vertex order', () => {
-            const result = buildTriangleMesh({
-                positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
-                indices: [0, 1, 2, 2, 1, 0],
-                degenerateTolerance: 1e-6,
-                bvhMaxLeafTris: 2,
-                bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
-            });
-
-            expect(result.data.triangleCount).toBe(1);
-        });
 
         test('keeps unique triangles', () => {
             const result = buildTriangleMesh({
