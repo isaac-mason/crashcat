@@ -440,7 +440,7 @@ export function create(world: World, settings: SixDOFConstraintSettings): SixDOF
             }
         }
     }
-    // set motor spring settings (defaults match Jolt's MotorSettings: 2.0 Hz for rotation, 10.0 Hz for translation)
+    // set motor spring settings (defaults: 2.0 Hz for rotation, 10.0 Hz for translation)
     if (settings.motorSpringSettings) {
         for (let i = 0; i < 6; i++) {
             if (settings.motorSpringSettings[i]) {

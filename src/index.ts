@@ -31,8 +31,6 @@ export * as convexHullBuilder from './shapes/utils/convex-hull-builder';
 export * as triangleMeshBuilder from './shapes/utils/triangle-mesh-builder';
 export * as triangleMeshBvh from './shapes/utils/triangle-mesh-bvh';
 
-export * from './constraints/combine-material';
-
 export * from './collision/narrowphase';
 export * from './collision/cast-ray-vs-shape';
 export * from './collision/cast-shape-vs-shape';
@@ -63,17 +61,20 @@ export * as subShape from './body/sub-shape';
 export type { SubShapeId } from './body/sub-shape';
 export { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 
-export type { ConeConstraint, ConeConstraintSettings } from './constraints/cone-constraint';
-export * as coneConstraint from './constraints/cone-constraint';
+export * from './constraints/combine-material';
+
+export type { ContactSettings } from './constraints/contact-constraints';
+export * as contactConstraints from './constraints/contact-constraints';
+
 export type { ConstraintBase } from './constraints/constraint-base';
-export { ConstraintSpace } from './constraints/constraint-base';
 export * as motorSettings from './constraints/constraint-part/motor-settings';
 export { type MotorSettings, MotorState } from './constraints/constraint-part/motor-settings';
 export * as springSettings from './constraints/constraint-part/spring-settings';
 export { SpringMode, type SpringSettings } from './constraints/constraint-part/spring-settings';
+export { ConstraintSpace } from './constraints/constraint-base';
+export type { ConeConstraint, ConeConstraintSettings } from './constraints/cone-constraint';
+export * as coneConstraint from './constraints/cone-constraint';
 export { SwingType } from './constraints/constraint-part/swing-twist-constraint-part';
-export type { ContactSettings } from './constraints/contact-constraints';
-export * as contactConstraints from './constraints/contact-constraints';
 export type { DistanceConstraint, DistanceConstraintSettings } from './constraints/distance-constraint';
 export * as distanceConstraint from './constraints/distance-constraint';
 export type { FixedConstraint, FixedConstraintSettings } from './constraints/fixed-constraint';

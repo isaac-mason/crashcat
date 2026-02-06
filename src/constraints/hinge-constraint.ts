@@ -317,7 +317,7 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
             // calculate inverse initial orientation from world space axes
             const r0 = getInvInitialOrientationXZ(normalAxis1, hingeAxis1, normalAxis2, hingeAxis2);
 
-            // transform to body-relative space (Jolt: q20^-1 * r0 * q10)
+            // transform to body-relative space: q20^-1 * r0 * q10
             // this is needed because at runtime we compute: diff = q2 * invInitialOrientation * q1^-1
             // with body-relative invInitialOrientation, when bodies are at their initial orientations (q1=q10, q2=q20):
             // diff = q20 * (q20^-1 * r0 * q10) * q10^-1 = r0
@@ -433,6 +433,11 @@ export function setLimits(constraint: HingeConstraint, min: number, max: number)
     constraint.limitsMin = Math.max(min, -Math.PI);
     constraint.limitsMax = Math.min(max, Math.PI);
     constraint.hasLimits = constraint.limitsMin > -Math.PI || constraint.limitsMax < Math.PI;
+
+    // clamp target angle to new limits
+    if (constraint.hasLimits) {
+        constraint.targetAngle = Math.max(constraint.limitsMin, Math.min(constraint.limitsMax, constraint.targetAngle));
+    }
 }
 
 /** Set motor state for hinge constraint. */
@@ -455,7 +460,9 @@ export function setTargetAngularVelocity(constraint: HingeConstraint, velocity: 
  * @param angle target angle in radians
  */
 export function setTargetAngle(constraint: HingeConstraint, angle: number): void {
-    constraint.targetAngle = angle;
+    constraint.targetAngle = constraint.hasLimits
+        ? Math.max(constraint.limitsMin, Math.min(constraint.limitsMax, angle))
+        : angle;
 }
 
 /**
@@ -478,6 +485,10 @@ const _hingeConstraint_qRel = quat.create();
  * Calculate the current hinge angle theta.
  */
 function calculateA1AndTheta(constraint: HingeConstraint, bodyA: RigidBody, bodyB: RigidBody): void {
+    if (!constraint.hasLimits && constraint.motorState === MotorState.OFF && constraint.maxFrictionTorque <= 0) {
+        return;
+    }
+
     // calculate world space hinge axis
     vec3.transformQuat(_hingeConstraint_worldHingeAxis1, constraint.localSpaceHingeAxis1, bodyA.quaternion);
     vec3.copy(constraint.worldSpaceHingeAxis1, _hingeConstraint_worldHingeAxis1);
@@ -494,11 +505,14 @@ function calculateA1AndTheta(constraint: HingeConstraint, bodyA: RigidBody, body
     quat.multiply(_hingeConstraint_qRel, _hingeConstraint_qRel, _hingeConstraint_q1);
 
     // get angle from quaternion (rotation around hinge axis)
+    // 2 * atan(dot(axis, xyz) / w) — must use atan (not atan2) for correct [-PI, PI] range
     const qw = _hingeConstraint_qRel[3];
-    const qxyz = vec3.fromValues(_hingeConstraint_qRel[0], _hingeConstraint_qRel[1], _hingeConstraint_qRel[2]);
-    const axisDot = vec3.dot(_hingeConstraint_worldHingeAxis1, qxyz);
+    const axisDot =
+        _hingeConstraint_worldHingeAxis1[0] * _hingeConstraint_qRel[0] +
+        _hingeConstraint_worldHingeAxis1[1] * _hingeConstraint_qRel[1] +
+        _hingeConstraint_worldHingeAxis1[2] * _hingeConstraint_qRel[2];
 
-    constraint.theta = 2 * Math.atan2(axisDot, qw);
+    constraint.theta = qw === 0 ? Math.PI : 2 * Math.atan(axisDot / qw);
 }
 
 /** Center angle around zero (wrap to [-PI, PI]). */
@@ -508,6 +522,20 @@ function centerAngleAroundZero(angle: number): number {
     return angle;
 }
 
+/** Get the smallest angle to the closest limit. */
+function getSmallestAngleToLimit(constraint: HingeConstraint): number {
+    const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
+    const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
+    return Math.abs(distToMin) < Math.abs(distToMax) ? distToMin : distToMax;
+}
+
+/** Check if min limit is the closest limit. */
+function isMinLimitClosest(constraint: HingeConstraint): boolean {
+    const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
+    const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
+    return Math.abs(distToMin) < Math.abs(distToMax);
+}
+
 /** Calculate rotation limits constraint properties. */
 function calculateRotationLimitsConstraintProperties(
     constraint: HingeConstraint,
@@ -515,84 +543,19 @@ function calculateRotationLimitsConstraintProperties(
     bodyB: RigidBody,
     deltaTime: number,
 ): void {
-    if (!constraint.hasLimits) {
-        angleConstraintPart.deactivate(constraint.rotationLimitsConstraintPart);
-        return;
-    }
-
-    // Check if min == max (fixed angle)
-    if (constraint.limitsMin === constraint.limitsMax) {
-        const error = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
-        if (constraint.limitsSpringSettings.frequencyOrStiffness > 0) {
-            angleConstraintPart.calculateConstraintPropertiesWithSettings(
-                constraint.rotationLimitsConstraintPart,
-                deltaTime,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-                0,
-                error,
-                constraint.limitsSpringSettings,
-            );
-        } else {
-            angleConstraintPart.calculateConstraintProperties(
-                constraint.rotationLimitsConstraintPart,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-            );
-        }
-        return;
-    }
-
-    // Check if at min limit
-    const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
-    const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
-
-    if (distToMin < 0) {
-        // Below min limit
-        if (constraint.limitsSpringSettings.frequencyOrStiffness > 0) {
-            angleConstraintPart.calculateConstraintPropertiesWithSettings(
-                constraint.rotationLimitsConstraintPart,
-                deltaTime,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-                0,
-                distToMin,
-                constraint.limitsSpringSettings,
-            );
-        } else {
-            angleConstraintPart.calculateConstraintProperties(
-                constraint.rotationLimitsConstraintPart,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-            );
-        }
-    } else if (distToMax > 0) {
-        // Above max limit
-        if (constraint.limitsSpringSettings.frequencyOrStiffness > 0) {
-            angleConstraintPart.calculateConstraintPropertiesWithSettings(
-                constraint.rotationLimitsConstraintPart,
-                deltaTime,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-                0,
-                distToMax,
-                constraint.limitsSpringSettings,
-            );
-        } else {
-            angleConstraintPart.calculateConstraintProperties(
-                constraint.rotationLimitsConstraintPart,
-                bodyA,
-                bodyB,
-                constraint.worldSpaceHingeAxis1,
-            );
-        }
+    // activate when at or beyond limits
+    if (constraint.hasLimits && (constraint.theta <= constraint.limitsMin || constraint.theta >= constraint.limitsMax)) {
+        angleConstraintPart.calculateConstraintPropertiesWithSettings(
+            constraint.rotationLimitsConstraintPart,
+            deltaTime,
+            bodyA,
+            bodyB,
+            constraint.worldSpaceHingeAxis1,
+            0,
+            getSmallestAngleToLimit(constraint),
+            constraint.limitsSpringSettings,
+        );
     } else {
-        // Within limits - no constraint active
         angleConstraintPart.deactivate(constraint.rotationLimitsConstraintPart);
     }
 }
@@ -771,17 +734,12 @@ export function solveVelocity(constraint: HingeConstraint, bodies: Bodies, delta
         if (constraint.limitsMin === constraint.limitsMax) {
             minLambda = -Infinity;
             maxLambda = Infinity;
+        } else if (isMinLimitClosest(constraint)) {
+            minLambda = 0;
+            maxLambda = Infinity;
         } else {
-            const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
-            const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
-
-            if (Math.abs(distToMin) < Math.abs(distToMax)) {
-                minLambda = 0;
-                maxLambda = Infinity;
-            } else {
-                minLambda = -Infinity;
-                maxLambda = 0;
-            }
+            minLambda = -Infinity;
+            maxLambda = 0;
         }
 
         limit = angleConstraintPart.solveVelocityConstraint(
@@ -855,15 +813,11 @@ export function solvePosition(constraint: HingeConstraint, bodies: Bodies, delta
         calculateRotationLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 
         if (angleConstraintPart.isActive(constraint.rotationLimitsConstraintPart)) {
-            const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
-            const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
-            const positionError = Math.abs(distToMin) < Math.abs(distToMax) ? distToMin : distToMax;
-
             limit = angleConstraintPart.solvePositionConstraint(
                 constraint.rotationLimitsConstraintPart,
                 bodyA,
                 bodyB,
-                positionError,
+                getSmallestAngleToLimit(constraint),
                 baumgarteFactor,
             );
         }
