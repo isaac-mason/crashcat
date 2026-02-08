@@ -1,6 +1,7 @@
 /** @module crashcat */
 
 export * from './shapes/register';
+export * from './shapes/register-all';
 export * from './shapes/shapes';
 export * from './shapes/convex';
 export type { BoxShape, BoxShapeSettings } from './shapes/box';
