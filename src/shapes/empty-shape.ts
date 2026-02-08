@@ -1,12 +1,6 @@
 import { type Box3, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
-import {
-	defineShape,
-	ShapeCategory,
-	ShapeType,
-	type SupportingFaceResult,
-	type SurfaceNormalResult,
-} from './shapes';
+import { defineShape, ShapeCategory, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
 
 /**
  * Empty shape - has no volume, no collision geometry.
@@ -20,10 +14,10 @@ import {
  * - Can still be used in constraints (e.g., for "fixed to world" constraints)
  */
 export type EmptyShape = {
-	type: ShapeType.EMPTY;
-	aabb: Box3;
-	centerOfMass: Vec3;
-	volume: number;
+    type: ShapeType.EMPTY;
+    aabb: Box3;
+    centerOfMass: Vec3;
+    volume: number;
 };
 
 /**
@@ -31,59 +25,60 @@ export type EmptyShape = {
  * Useful for creating static anchor bodies that don't need collision geometry.
  */
 export function create(): EmptyShape {
-	return {
-		type: ShapeType.EMPTY,
-		// zero-size AABB at origin [min, max] both at [0,0,0]
-		aabb: [vec3.create(), vec3.create()],
-		// center of mass at origin
-		centerOfMass: vec3.create(),
-		// zero volume
-		volume: 0,
-	};
+    return {
+        type: ShapeType.EMPTY,
+        // zero-size AABB at origin [min, max] both at [0,0,0]
+        aabb: [vec3.create(), vec3.create()],
+        // center of mass at origin
+        centerOfMass: vec3.create(),
+        // zero volume
+        volume: 0,
+    };
 }
 
-export const def = defineShape<EmptyShape>({
-	type: ShapeType.EMPTY,
-	category: ShapeCategory.OTHER,
-	computeMassProperties(out: MassProperties, _shape: EmptyShape): void {
-		// empty shape has zero mass and zero inertia
-		out.mass = 0;
-		// inertia matrix is already initialized to zeros in massProperties.create()
-	},
+export const def = /* @__PURE__ */ (() =>
+    defineShape<EmptyShape>({
+        type: ShapeType.EMPTY,
+        category: ShapeCategory.OTHER,
+        computeMassProperties(out: MassProperties, _shape: EmptyShape): void {
+            // empty shape has zero mass and zero inertia
+            out.mass = 0;
+            // inertia matrix is already initialized to zeros in massProperties.create()
+        },
 
-	getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: EmptyShape, _subShapeId: number): void {
-		// no surface, return zero normal
-		vec3.zero(ioResult.normal);
-		vec3.zero(ioResult.position);
-		quat.identity(ioResult.quaternion);
-		vec3.set(ioResult.scale, 1, 1, 1);
-	},
+        getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: EmptyShape, _subShapeId: number): void {
+            // no surface, return zero normal
+            vec3.zero(ioResult.normal);
+            vec3.zero(ioResult.position);
+            quat.identity(ioResult.quaternion);
+            vec3.set(ioResult.scale, 1, 1, 1);
+        },
 
-	getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: EmptyShape, _subShapeId: number): void {
-		// no faces, return empty face
-		ioResult.face.numVertices = 0;
-	},
+        getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: EmptyShape, _subShapeId: number): void {
+            // no faces, return empty face
+            ioResult.face.numVertices = 0;
+        },
 
-	getInnerRadius(_shape: EmptyShape): number {
-		return 0;
-	},
-	getLeafShape(out, shape, subShapeId): void {
-		// leaf shape returns itself
-		out.shape = shape;
-		out.remainder = subShapeId;
-	},
-    getSubShapeTransformedShape(out, shape, subShapeId): void {
-        // leaf shape returns itself with accumulated transforms
-        out.shape = shape;
-        out.remainder = subShapeId;
-    },
-    castRay: () => {
-        /* no-op */
-    },
-    collidePoint: () => {
-        /* no-op */
-    },
-	register: () => {
-		/* no-op */
-	},
-});
+        getInnerRadius(_shape: EmptyShape): number {
+            return 0;
+        },
+        getLeafShape(out, shape, subShapeId): void {
+            // leaf shape returns itself
+            out.shape = shape;
+            out.remainder = subShapeId;
+        },
+        getSubShapeTransformedShape(out, shape, subShapeId): void {
+            // leaf shape returns itself with accumulated transforms
+            out.shape = shape;
+            out.remainder = subShapeId;
+        },
+        castRay: () => {
+            /* no-op */
+        },
+        collidePoint: () => {
+            /* no-op */
+        },
+        register: () => {
+            /* no-op */
+        },
+    }))();

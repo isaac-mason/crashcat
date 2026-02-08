@@ -401,11 +401,7 @@ const DEFAULT_KCC_SETTINGS = {
  * @param quaternion initial quaternion
  * @returns the new kinematic character controller
  */
-export function create(
-    settings: KCCSettings,
-    position: Vec3,
-    quaternion: Quat,
-): KCC {
+export function create(settings: KCCSettings, position: Vec3, quaternion: Quat): KCC {
     // get up direction from settings or default to Y-up, normalized
     const up = vec3.normalize(vec3.create(), settings.up ?? DEFAULT_KCC_SETTINGS.up);
 
@@ -1163,7 +1159,7 @@ const characterCollideCollector = {
 };
 
 /** character cast shape collector - finds earliest hit */
-const characterCastCollector = {
+const characterCastCollector = /* @__PURE__ */ (() => ({
     bodyIdB: -1,
     earlyOutFraction: 1.0,
     outContact: null! as CharacterContact,
@@ -1318,7 +1314,7 @@ const characterCastCollector = {
         this.character = null!;
         vec3.zero(this.displacement);
     },
-};
+}))();
 
 /**
  * Comparison function for deterministic contact sorting.
@@ -1741,12 +1737,7 @@ const _determineConstraints_horizontalNormal = /* @__PURE__ */ vec3.create();
  * @param deltaTime time step
  * @param pool constraints pool to use
  */
-function determineConstraints(
-    character: KCC,
-    contacts: CharacterContact[],
-    deltaTime: number,
-    pool: ConstraintsPool,
-): void {
+function determineConstraints(character: KCC, contacts: CharacterContact[], deltaTime: number, pool: ConstraintsPool): void {
     // release any previously active constraints
     releaseAllConstraints(pool);
 
@@ -2628,11 +2619,7 @@ const _cancelVelocity_normal = /* @__PURE__ */ vec3.create();
  * @param desiredVelocity input desired velocity
  * @param outVelocity output velocity with steep slope components canceled
  */
-function cancelVelocityTowardsSteepSlopes(
-    character: KCC,
-    desiredVelocity: Vec3,
-    outVelocity: Vec3,
-): void {
+function cancelVelocityTowardsSteepSlopes(character: KCC, desiredVelocity: Vec3, outVelocity: Vec3): void {
     // start with desired velocity
     vec3.copy(outVelocity, desiredVelocity);
 
@@ -3049,11 +3036,7 @@ function handleContact(
  * @param character the character controller
  * @param listener optional listener for callbacks
  */
-function finalizeContactTracking(
-    world: World,
-    character: KCC,
-    listener: CharacterListener | undefined,
-): void {
+function finalizeContactTracking(world: World, character: KCC, listener: CharacterListener | undefined): void {
     // re-mark all contacts - reset all counts to 0, then mark active ones as 1
     const activeListenerContacts = getActiveListenerContacts(character.listenerContacts);
     for (const value of activeListenerContacts) {
@@ -3233,12 +3216,7 @@ const _refreshContacts_movementDirection = /* @__PURE__ */ vec3.create();
  * @param filter collision filter
  * @param listener optional listener for callbacks (will receive onContactRemoved for contacts that are no longer active)
  */
-export function refreshContacts(
-    world: World,
-    character: KCC,
-    filter: Filter,
-    listener?: CharacterListener,
-): void {
+export function refreshContacts(world: World, character: KCC, filter: Filter, listener?: CharacterListener): void {
     // start tracking contact changes (mark existing contacts as "not seen")
     resetContactTracking(character);
 

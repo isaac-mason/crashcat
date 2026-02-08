@@ -86,59 +86,65 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 const _supportingFace_scaledOffset = /* @__PURE__ */ vec3.create();
 const _supportingFace_transformedOffset = /* @__PURE__ */ vec3.create();
 
-export const def = defineShape<OffsetCenterOfMassShape>({
-    type: ShapeType.OFFSET_CENTER_OF_MASS,
-    category: ShapeCategory.DECORATOR,
+export const def = /* @__PURE__ */ (() =>
+    defineShape<OffsetCenterOfMassShape>({
+        type: ShapeType.OFFSET_CENTER_OF_MASS,
+        category: ShapeCategory.DECORATOR,
 
-    computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassShape): void {
-        // get inner shape mass properties
-        computeMassProperties(_childMassProperties, shape.shape);
+        computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassShape): void {
+            // get inner shape mass properties
+            computeMassProperties(_childMassProperties, shape.shape);
 
-        // translate inertia by offset using parallel axis theorem
-        // this shifts the inertia tensor from the inner shape's COM to the new COM
-        massProperties.translate(out, _childMassProperties, shape.offset);
-    },
+            // translate inertia by offset using parallel axis theorem
+            // this shifts the inertia tensor from the inner shape's COM to the new COM
+            massProperties.translate(out, _childMassProperties, shape.offset);
+        },
 
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
-        // in crashcat, collision geometry is at origin, not COM-centered
-        // so we just pass through to the inner shape
-        shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
-    },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
+            // in crashcat, collision geometry is at origin, not COM-centered
+            // so we just pass through to the inner shape
+            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+        },
 
-    getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: OffsetCenterOfMassShape, subShapeId: number): void {
-        // compute -scale * offset
-        vec3.multiply(_supportingFace_scaledOffset, ioResult.scale, shape.offset);
-        vec3.negate(_supportingFace_scaledOffset, _supportingFace_scaledOffset);
+        getSupportingFace(
+            ioResult: SupportingFaceResult,
+            direction: Vec3,
+            shape: OffsetCenterOfMassShape,
+            subShapeId: number,
+        ): void {
+            // compute -scale * offset
+            vec3.multiply(_supportingFace_scaledOffset, ioResult.scale, shape.offset);
+            vec3.negate(_supportingFace_scaledOffset, _supportingFace_scaledOffset);
 
-        // transform by rotation
-        vec3.transformQuat(_supportingFace_transformedOffset, _supportingFace_scaledOffset, ioResult.quaternion);
+            // transform by rotation
+            vec3.transformQuat(_supportingFace_transformedOffset, _supportingFace_scaledOffset, ioResult.quaternion);
 
-        // pre-translate the position
-        vec3.add(ioResult.position, ioResult.position, _supportingFace_transformedOffset);
+            // pre-translate the position
+            vec3.add(ioResult.position, ioResult.position, _supportingFace_transformedOffset);
 
-        // delegate to inner shape
-        shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
-    },
+            // delegate to inner shape
+            shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
+        },
 
-    getInnerRadius(shape: OffsetCenterOfMassShape): number {
-        // inner radius doesn't change with COM offset
-        return getShapeInnerRadius(shape.shape);
-    },
+        getInnerRadius(shape: OffsetCenterOfMassShape): number {
+            // inner radius doesn't change with COM offset
+            return getShapeInnerRadius(shape.shape);
+        },
 
-    castRay: castRayVsOffsetCenterOfMass,
-    collidePoint: collidePointVsOffsetCenterOfMass,
+        castRay: castRayVsOffsetCenterOfMass,
+        collidePoint: collidePointVsOffsetCenterOfMass,
 
-    register: () => {
-        // register collision dispatch for all shape types
-        for (const shapeDef of Object.values(shapeDefs)) {
-            setCollideShapeFn(ShapeType.OFFSET_CENTER_OF_MASS, shapeDef.type, collideOffsetCenterOfMassVsShape);
-            setCollideShapeFn(shapeDef.type, ShapeType.OFFSET_CENTER_OF_MASS, collideShapeVsOffsetCenterOfMass);
+        register: () => {
+            // register collision dispatch for all shape types
+            for (const shapeDef of Object.values(shapeDefs)) {
+                setCollideShapeFn(ShapeType.OFFSET_CENTER_OF_MASS, shapeDef.type, collideOffsetCenterOfMassVsShape);
+                setCollideShapeFn(shapeDef.type, ShapeType.OFFSET_CENTER_OF_MASS, collideShapeVsOffsetCenterOfMass);
 
-            setCastShapeFn(ShapeType.OFFSET_CENTER_OF_MASS, shapeDef.type, castOffsetCenterOfMassVsShape);
-            setCastShapeFn(shapeDef.type, ShapeType.OFFSET_CENTER_OF_MASS, castShapeVsOffsetCenterOfMass);
-        }
-    },
-});
+                setCastShapeFn(ShapeType.OFFSET_CENTER_OF_MASS, shapeDef.type, castOffsetCenterOfMassVsShape);
+                setCastShapeFn(shapeDef.type, ShapeType.OFFSET_CENTER_OF_MASS, castShapeVsOffsetCenterOfMass);
+            }
+        },
+    }))();
 
 // in crashcat, collision geometry is at origin, not COM-centered
 // so ray casting is a simple passthrough - no transformation needed

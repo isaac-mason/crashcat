@@ -143,99 +143,100 @@ export function create(o: TriangleMeshShapeSettings): TriangleMeshShape {
 }
 
 const _subShapeIdPopResult = /* @__PURE__ */ subShape.popResult();
-const _getSurfaceNormal_normal: Vec3 = [0, 0, 0];
-const _getSupportingFace_a: Vec3 = [0, 0, 0];
-const _getSupportingFace_b: Vec3 = [0, 0, 0];
-const _getSupportingFace_c: Vec3 = [0, 0, 0];
+const _getSurfaceNormal_normal = /* @__PURE__ */ vec3.create();
+const _getSupportingFace_a = /* @__PURE__ */ vec3.create();
+const _getSupportingFace_b = /* @__PURE__ */ vec3.create();
+const _getSupportingFace_c = /* @__PURE__ */ vec3.create();
 
-export const def = defineShape<TriangleMeshShape>({
-    type: ShapeType.TRIANGLE_MESH,
-    category: ShapeCategory.MESH,
-    computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): void {
-        // triangle meshes are static collision geometry by default.
-        // mass properties should be overridden at the body level if needed.
-        out.mass = 0;
-        mat4.identity(out.inertia);
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
-        subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
-        const triangleIndex = _subShapeIdPopResult.value;
+export const def = /* @__PURE__ */ (() =>
+    defineShape<TriangleMeshShape>({
+        type: ShapeType.TRIANGLE_MESH,
+        category: ShapeCategory.MESH,
+        computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): void {
+            // triangle meshes are static collision geometry by default.
+            // mass properties should be overridden at the body level if needed.
+            out.mass = 0;
+            mat4.identity(out.inertia);
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
+            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+            const triangleIndex = _subShapeIdPopResult.value;
 
-        // if triangleIndex is a valid triangle index, return that triangle's normal
-        if (triangleIndex >= 0 && triangleIndex < shape.data.triangleCount) {
-            getTriangleNormal(_getSurfaceNormal_normal, shape.data, triangleIndex);
-            vec3.copy(ioResult.normal, _getSurfaceNormal_normal);
-            return;
-        }
-
-        assert(false, 'Invalid SubShapeID for TriangleMeshShape');
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: TriangleMeshShape, subShapeId: number): void {
-        const face = ioResult.face;
-        const { position, quaternion, scale } = ioResult;
-
-        // extract triangle index from SubShapeID
-        subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
-        const triangleIndex = _subShapeIdPopResult.value;
-
-        const a = _getSupportingFace_a;
-        const b = _getSupportingFace_b;
-        const c = _getSupportingFace_c;
-        getTriangleVertices(a, b, c, shape.data, triangleIndex);
-
-        // check if scale inverts winding (negative determinant)
-        const insideOut = isScaleInsideOut(scale);
-
-        // return the 3 vertices of the triangle
-        face.numVertices = 3;
-
-        if (insideOut) {
-            // reverse winding: a,b,c -> c,b,a
-            face.vertices[0] = c[0];
-            face.vertices[1] = c[1];
-            face.vertices[2] = c[2];
-            face.vertices[3] = b[0];
-            face.vertices[4] = b[1];
-            face.vertices[5] = b[2];
-            face.vertices[6] = a[0];
-            face.vertices[7] = a[1];
-            face.vertices[8] = a[2];
-        } else {
-            face.vertices[0] = a[0];
-            face.vertices[1] = a[1];
-            face.vertices[2] = a[2];
-            face.vertices[3] = b[0];
-            face.vertices[4] = b[1];
-            face.vertices[5] = b[2];
-            face.vertices[6] = c[0];
-            face.vertices[7] = c[1];
-            face.vertices[8] = c[2];
-        }
-
-        transformFace(face, position, quaternion, scale);
-    },
-    getInnerRadius(_shape: TriangleMeshShape): number {
-        return 0.0;
-    },
-    castRay: castRayVsTriangleMesh,
-    collidePoint: collidePointVsTriangleMesh,
-    register: () => {
-        for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
-                setCollideShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, collideConvexVsTriangleMesh);
-                setCollideShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, collideTriangleMeshVsConvex);
-                setCastShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, castConvexVsTriangleMesh);
-                setCastShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, castTriangleMeshVsConvex);
+            // if triangleIndex is a valid triangle index, return that triangle's normal
+            if (triangleIndex >= 0 && triangleIndex < shape.data.triangleCount) {
+                getTriangleNormal(_getSurfaceNormal_normal, shape.data, triangleIndex);
+                vec3.copy(ioResult.normal, _getSurfaceNormal_normal);
+                return;
             }
-        }
 
-        // specialized collision and cast functions for sphere (2-4x faster than generic convex)
-        setCollideShapeFn(ShapeType.SPHERE, ShapeType.TRIANGLE_MESH, collideSphereVsTriangleMesh);
-        setCollideShapeFn(ShapeType.TRIANGLE_MESH, ShapeType.SPHERE, collideTriangleMeshVsSphere);
-        setCastShapeFn(ShapeType.SPHERE, ShapeType.TRIANGLE_MESH, castSphereVsTriangleMesh);
-        setCastShapeFn(ShapeType.TRIANGLE_MESH, ShapeType.SPHERE, castTriangleMeshVsSphere);
-    },
-});
+            assert(false, 'Invalid SubShapeID for TriangleMeshShape');
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: TriangleMeshShape, subShapeId: number): void {
+            const face = ioResult.face;
+            const { position, quaternion, scale } = ioResult;
+
+            // extract triangle index from SubShapeID
+            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+            const triangleIndex = _subShapeIdPopResult.value;
+
+            const a = _getSupportingFace_a;
+            const b = _getSupportingFace_b;
+            const c = _getSupportingFace_c;
+            getTriangleVertices(a, b, c, shape.data, triangleIndex);
+
+            // check if scale inverts winding (negative determinant)
+            const insideOut = isScaleInsideOut(scale);
+
+            // return the 3 vertices of the triangle
+            face.numVertices = 3;
+
+            if (insideOut) {
+                // reverse winding: a,b,c -> c,b,a
+                face.vertices[0] = c[0];
+                face.vertices[1] = c[1];
+                face.vertices[2] = c[2];
+                face.vertices[3] = b[0];
+                face.vertices[4] = b[1];
+                face.vertices[5] = b[2];
+                face.vertices[6] = a[0];
+                face.vertices[7] = a[1];
+                face.vertices[8] = a[2];
+            } else {
+                face.vertices[0] = a[0];
+                face.vertices[1] = a[1];
+                face.vertices[2] = a[2];
+                face.vertices[3] = b[0];
+                face.vertices[4] = b[1];
+                face.vertices[5] = b[2];
+                face.vertices[6] = c[0];
+                face.vertices[7] = c[1];
+                face.vertices[8] = c[2];
+            }
+
+            transformFace(face, position, quaternion, scale);
+        },
+        getInnerRadius(_shape: TriangleMeshShape): number {
+            return 0.0;
+        },
+        castRay: castRayVsTriangleMesh,
+        collidePoint: collidePointVsTriangleMesh,
+        register: () => {
+            for (const shapeDef of Object.values(shapeDefs)) {
+                if (shapeDef.category === ShapeCategory.CONVEX) {
+                    setCollideShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, collideConvexVsTriangleMesh);
+                    setCollideShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, collideTriangleMeshVsConvex);
+                    setCastShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, castConvexVsTriangleMesh);
+                    setCastShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, castTriangleMeshVsConvex);
+                }
+            }
+
+            // specialized collision and cast functions for sphere (2-4x faster than generic convex)
+            setCollideShapeFn(ShapeType.SPHERE, ShapeType.TRIANGLE_MESH, collideSphereVsTriangleMesh);
+            setCollideShapeFn(ShapeType.TRIANGLE_MESH, ShapeType.SPHERE, collideTriangleMeshVsSphere);
+            setCastShapeFn(ShapeType.SPHERE, ShapeType.TRIANGLE_MESH, castSphereVsTriangleMesh);
+            setCastShapeFn(ShapeType.TRIANGLE_MESH, ShapeType.SPHERE, castTriangleMeshVsSphere);
+        },
+    }))();
 
 /* cast ray */
 
@@ -437,43 +438,45 @@ function castRayVsTriangleMesh(
 
 /* collide point */
 
-class HitCountCollector {
-    bodyIdB = -1;
-    earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
-    hitCount = 0;
-    lastSubShapeId = EMPTY_SUB_SHAPE_ID;
+const hitCountCollector = {
+    bodyIdB: -1,
+    earlyOutFraction: INITIAL_EARLY_OUT_FRACTION,
+    hitCount: 0,
+    lastSubShapeId: EMPTY_SUB_SHAPE_ID,
 
     addHit(hit: CastRayHit): void {
         this.hitCount++;
         this.lastSubShapeId = hit.subShapeId;
-    }
+    },
 
     addMiss(): void {
         // no-op
-    }
+    },
 
     shouldEarlyOut(): boolean {
         return false; // never early out, count all hits
-    }
+    },
 
     reset(): void {
         this.bodyIdB = -1;
         this.hitCount = 0;
         this.lastSubShapeId = EMPTY_SUB_SHAPE_ID;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
-    }
-}
+    },
+};
 
-const _collidePointVsTriangleMesh_hitCountCollector = /* @__PURE__ */ new HitCountCollector();
-const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ createDefaultCastRaySettings();
-_collidePointVsTriangleMesh_castRaySettings.collideWithBackfaces = true; // backface collision required for odd-even rule
+const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ (() => {
+    const s = createDefaultCastRaySettings();
+    s.collideWithBackfaces = true; // backface collision required for odd-even rule
+    return s;
+})();
 
 const _collidePointVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _collidePointVsTriangleMesh_localPoint = /* @__PURE__ */ vec3.create();
 const _collidePointVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
 const _collidePointVsTriangleMesh_rayDirection = /* @__PURE__ */ vec3.create();
 const _collidePointVsTriangleMesh_aabbSize = /* @__PURE__ */ vec3.create();
-const _collidePointVsTriangleMesh_popResult: subShape.PopResult = { value: 0, remainder: subShape.EMPTY_SUB_SHAPE_ID };
+const _collidePointVsTriangleMesh_popResult = /* @__PURE__ */ subShape.popResult();
 const _collidePointHit = /* @__PURE__ */ createCollidePointHit();
 
 function collidePointVsTriangleMesh(
@@ -539,13 +542,13 @@ function collidePointVsTriangleMesh(
     );
 
     // reset hit counter and perform raycast
-    _collidePointVsTriangleMesh_hitCountCollector.reset();
-    _collidePointVsTriangleMesh_hitCountCollector.bodyIdB = collector.bodyIdB;
+    hitCountCollector.reset();
+    hitCountCollector.bodyIdB = collector.bodyIdB;
 
     // cast ray through mesh, counting all triangle intersections
     // biome-ignore format: readability
     castRayVsTriangleMesh(
-        _collidePointVsTriangleMesh_hitCountCollector,
+        hitCountCollector,
         _collidePointVsTriangleMesh_castRaySettings,
         _collidePointVsTriangleMesh_ray,
         shapeB,
@@ -559,17 +562,13 @@ function collidePointVsTriangleMesh(
     // apply odd-even rule (Jordan curve theorem)
     // odd number of hits = point is inside
     // even number of hits = point is outside
-    const isInside = (_collidePointVsTriangleMesh_hitCountCollector.hitCount & 1) !== 0;
+    const isInside = (hitCountCollector.hitCount & 1) !== 0;
 
     if (isInside) {
-        _collidePointHit.subShapeIdB = _collidePointVsTriangleMesh_hitCountCollector.lastSubShapeId;
+        _collidePointHit.subShapeIdB = hitCountCollector.lastSubShapeId;
 
         // extract triangle index from subShapeId to get material
-        subShape.popIndex(
-            _collidePointVsTriangleMesh_popResult,
-            _collidePointVsTriangleMesh_hitCountCollector.lastSubShapeId,
-            shapeB.data.triangleCount,
-        );
+        subShape.popIndex(_collidePointVsTriangleMesh_popResult, hitCountCollector.lastSubShapeId, shapeB.data.triangleCount);
         _collidePointHit.materialId = triangleMeshData.getMaterialId(shapeB.data, _collidePointVsTriangleMesh_popResult.value);
 
         _collidePointHit.bodyIdB = collector.bodyIdB;

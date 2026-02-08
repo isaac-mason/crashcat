@@ -94,64 +94,65 @@ export function update(shape: ScaledShape): void {
 
 const _childMassProperties = /* @__PURE__ */ massProperties.create();
 
-export const def = defineShape<ScaledShape>({
-    type: ShapeType.SCALED,
-    category: ShapeCategory.DECORATOR,
-    computeMassProperties(out: MassProperties, shape: ScaledShape): void {
-        computeMassProperties(_childMassProperties, shape.shape);
-        massProperties.scale(out, _childMassProperties, shape.scale);
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ScaledShape, subShapeId: number): void {
-        // accumulate scale
-        vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
+export const def = /* @__PURE__ */ (() =>
+    defineShape<ScaledShape>({
+        type: ShapeType.SCALED,
+        category: ShapeCategory.DECORATOR,
+        computeMassProperties(out: MassProperties, shape: ScaledShape): void {
+            computeMassProperties(_childMassProperties, shape.shape);
+            massProperties.scale(out, _childMassProperties, shape.scale);
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ScaledShape, subShapeId: number): void {
+            // accumulate scale
+            vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
 
-        // transform surface position to local space: divide by scale (inverse transform)
-        vec3.divide(ioResult.position, ioResult.position, shape.scale);
+            // transform surface position to local space: divide by scale (inverse transform)
+            vec3.divide(ioResult.position, ioResult.position, shape.scale);
 
-        // get normal from inner shape
-        shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+            // get normal from inner shape
+            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
 
-        // transform normal: divide by scale and renormalize
-        // this handles the (M^-1)^T transformation for plane normals
-        vec3.divide(ioResult.normal, ioResult.normal, shape.scale);
-        vec3.normalize(ioResult.normal, ioResult.normal);
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ScaledShape, subShapeId: number): void {
-        // accumulate scale: scale = scale * shape.scale
-        vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
+            // transform normal: divide by scale and renormalize
+            // this handles the (M^-1)^T transformation for plane normals
+            vec3.divide(ioResult.normal, ioResult.normal, shape.scale);
+            vec3.normalize(ioResult.normal, ioResult.normal);
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ScaledShape, subShapeId: number): void {
+            // accumulate scale: scale = scale * shape.scale
+            vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
 
-        // compute face in inner shape space - pass SubShapeID unchanged (decorator shapes don't consume bits)
-        shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
-    },
-    getInnerRadius(shape: ScaledShape): number {
-        const minScale = Math.min(Math.abs(shape.scale[0]), Math.abs(shape.scale[1]), Math.abs(shape.scale[2]));
-        return minScale * getShapeInnerRadius(shape.shape);
-    },
-    getLeafShape(outResult, shape, subShapeId): void {
-        // pass through to inner shape
-        const innerShapeDef = shapeDefs[shape.shape.type];
-        innerShapeDef.getLeafShape(outResult, shape.shape, subShapeId);
-    },
-    getSubShapeTransformedShape(out, shape, subShapeId): void {
-        // apply scale
-        vec3.multiply(out.scale, out.scale, shape.scale);
+            // compute face in inner shape space - pass SubShapeID unchanged (decorator shapes don't consume bits)
+            shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
+        },
+        getInnerRadius(shape: ScaledShape): number {
+            const minScale = Math.min(Math.abs(shape.scale[0]), Math.abs(shape.scale[1]), Math.abs(shape.scale[2]));
+            return minScale * getShapeInnerRadius(shape.shape);
+        },
+        getLeafShape(outResult, shape, subShapeId): void {
+            // pass through to inner shape
+            const innerShapeDef = shapeDefs[shape.shape.type];
+            innerShapeDef.getLeafShape(outResult, shape.shape, subShapeId);
+        },
+        getSubShapeTransformedShape(out, shape, subShapeId): void {
+            // apply scale
+            vec3.multiply(out.scale, out.scale, shape.scale);
 
-        // pass through to inner shape
-        const innerShapeDef = shapeDefs[shape.shape.type];
-        innerShapeDef.getSubShapeTransformedShape(out, shape.shape, subShapeId);
-    },
-    castRay: castRayVsScaled,
-    collidePoint: collidePointVsScaled,
-    register: () => {
-        for (const shapeDef of Object.values(shapeDefs)) {
-            setCollideShapeFn(ShapeType.SCALED, shapeDef.type, collideScaledVsShape);
-            setCollideShapeFn(shapeDef.type, ShapeType.SCALED, collideShapeVsScaled);
+            // pass through to inner shape
+            const innerShapeDef = shapeDefs[shape.shape.type];
+            innerShapeDef.getSubShapeTransformedShape(out, shape.shape, subShapeId);
+        },
+        castRay: castRayVsScaled,
+        collidePoint: collidePointVsScaled,
+        register: () => {
+            for (const shapeDef of Object.values(shapeDefs)) {
+                setCollideShapeFn(ShapeType.SCALED, shapeDef.type, collideScaledVsShape);
+                setCollideShapeFn(shapeDef.type, ShapeType.SCALED, collideShapeVsScaled);
 
-            setCastShapeFn(ShapeType.SCALED, shapeDef.type, castScaledVsShape);
-            setCastShapeFn(shapeDef.type, ShapeType.SCALED, castShapeVsScaled);
-        }
-    },
-});
+                setCastShapeFn(ShapeType.SCALED, shapeDef.type, castScaledVsShape);
+                setCastShapeFn(shapeDef.type, ShapeType.SCALED, castShapeVsScaled);
+            }
+        },
+    }))();
 
 /* cast ray */
 

@@ -92,83 +92,84 @@ export function update(shape: SphereShape): void {
 
 /* shape def */
 
-export const def = defineShape<SphereShape>({
-    type: ShapeType.SPHERE,
-    category: ShapeCategory.CONVEX,
-    computeMassProperties(out: MassProperties, shape: SphereShape): void {
-        const r2 = shape.radius * shape.radius;
-        out.mass = (4.0 / 3.0) * Math.PI * shape.radius * r2 * shape.density;
+export const def = /* @__PURE__ */ (() =>
+    defineShape<SphereShape>({
+        type: ShapeType.SPHERE,
+        category: ShapeCategory.CONVEX,
+        computeMassProperties(out: MassProperties, shape: SphereShape): void {
+            const r2 = shape.radius * shape.radius;
+            out.mass = (4.0 / 3.0) * Math.PI * shape.radius * r2 * shape.density;
 
-        // calculate inertia: I = (2/5) * m * r²
-        const inertia = (2.0 / 5.0) * out.mass * r2;
+            // calculate inertia: I = (2/5) * m * r²
+            const inertia = (2.0 / 5.0) * out.mass * r2;
 
-        // set diagonal inertia tensor using mat4::sScale pattern
-        // diagonal matrix in column-major order: [I, 0, 0, 0, 0, I, 0, 0, 0, 0, I, 0, 0, 0, 0, 1]
-        out.inertia[0] = inertia;
-        out.inertia[1] = 0;
-        out.inertia[2] = 0;
-        out.inertia[3] = 0;
-        out.inertia[4] = 0;
-        out.inertia[5] = inertia;
-        out.inertia[6] = 0;
-        out.inertia[7] = 0;
-        out.inertia[8] = 0;
-        out.inertia[9] = 0;
-        out.inertia[10] = inertia;
-        out.inertia[11] = 0;
-        out.inertia[12] = 0;
-        out.inertia[13] = 0;
-        out.inertia[14] = 0;
-        out.inertia[15] = 1.0;
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: SphereShape, subShapeId: number): void {
-        assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for SphereShape');
+            // set diagonal inertia tensor using mat4::sScale pattern
+            // diagonal matrix in column-major order: [I, 0, 0, 0, 0, I, 0, 0, 0, 0, I, 0, 0, 0, 0, 1]
+            out.inertia[0] = inertia;
+            out.inertia[1] = 0;
+            out.inertia[2] = 0;
+            out.inertia[3] = 0;
+            out.inertia[4] = 0;
+            out.inertia[5] = inertia;
+            out.inertia[6] = 0;
+            out.inertia[7] = 0;
+            out.inertia[8] = 0;
+            out.inertia[9] = 0;
+            out.inertia[10] = inertia;
+            out.inertia[11] = 0;
+            out.inertia[12] = 0;
+            out.inertia[13] = 0;
+            out.inertia[14] = 0;
+            out.inertia[15] = 1.0;
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: SphereShape, subShapeId: number): void {
+            assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for SphereShape');
 
-        const len = vec3.length(ioResult.position);
+            const len = vec3.length(ioResult.position);
 
-        if (len !== 0.0) {
-            // vec3.scale(out.normal, out.position, 1 / len);
-            ioResult.normal[0] = ioResult.position[0] / len;
-            ioResult.normal[1] = ioResult.position[1] / len;
-            ioResult.normal[2] = ioResult.position[2] / len;
-            return;
-        }
-
-        // fallback to y axis if position is at origin
-        ioResult.normal[0] = 0;
-        ioResult.normal[1] = 1;
-        ioResult.normal[2] = 0;
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: SphereShape, _subShapeId: number): void {
-        // sphere has no supporting face (single point)
-        ioResult.face.numVertices = 0;
-    },
-    getInnerRadius(shape: SphereShape): number {
-        return shape.radius;
-    },
-    castRay: convex.castRayVsConvex,
-    collidePoint: collidePointVsSphere,
-    createSupportPool: createSphereSupportPool,
-    getSupportFunction: getSphereSupportFunction,
-    register: () => {
-        // sphere vs convex shapes
-        for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
-                setCollideShapeFn(ShapeType.SPHERE, shapeDef.type, convex.collideConvexVsConvex);
-                setCollideShapeFn(shapeDef.type, ShapeType.SPHERE, convex.collideConvexVsConvex);
-
-                setCastShapeFn(ShapeType.SPHERE, shapeDef.type, convex.castConvexVsConvex);
-                setCastShapeFn(shapeDef.type, ShapeType.SPHERE, convex.castConvexVsConvex);
+            if (len !== 0.0) {
+                // vec3.scale(out.normal, out.position, 1 / len);
+                ioResult.normal[0] = ioResult.position[0] / len;
+                ioResult.normal[1] = ioResult.position[1] / len;
+                ioResult.normal[2] = ioResult.position[2] / len;
+                return;
             }
-        }
 
-        // optimized sphere vs sphere handler
-        setCollideShapeFn(ShapeType.SPHERE, ShapeType.SPHERE, collideSphereVsSphere);
+            // fallback to y axis if position is at origin
+            ioResult.normal[0] = 0;
+            ioResult.normal[1] = 1;
+            ioResult.normal[2] = 0;
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: SphereShape, _subShapeId: number): void {
+            // sphere has no supporting face (single point)
+            ioResult.face.numVertices = 0;
+        },
+        getInnerRadius(shape: SphereShape): number {
+            return shape.radius;
+        },
+        castRay: convex.castRayVsConvex,
+        collidePoint: collidePointVsSphere,
+        createSupportPool: createSphereSupportPool,
+        getSupportFunction: getSphereSupportFunction,
+        register: () => {
+            // sphere vs convex shapes
+            for (const shapeDef of Object.values(shapeDefs)) {
+                if (shapeDef.category === ShapeCategory.CONVEX) {
+                    setCollideShapeFn(ShapeType.SPHERE, shapeDef.type, convex.collideConvexVsConvex);
+                    setCollideShapeFn(shapeDef.type, ShapeType.SPHERE, convex.collideConvexVsConvex);
 
-        // TODO: sphere vs triangle mesh
-        // ...
-    },
-});
+                    setCastShapeFn(ShapeType.SPHERE, shapeDef.type, convex.castConvexVsConvex);
+                    setCastShapeFn(shapeDef.type, ShapeType.SPHERE, convex.castConvexVsConvex);
+                }
+            }
+
+            // optimized sphere vs sphere handler
+            setCollideShapeFn(ShapeType.SPHERE, ShapeType.SPHERE, collideSphereVsSphere);
+
+            // TODO: sphere vs triangle mesh
+            // ...
+        },
+    }))();
 
 /**
  * Sphere support for EXCLUDE_CONVEX_RADIUS mode.

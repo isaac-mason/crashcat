@@ -104,17 +104,18 @@ export function update(shape: PlaneShape): void {
 
 /* shape def */
 
-export const def = defineShape<PlaneShape>({
-    type: ShapeType.PLANE,
-    category: ShapeCategory.OTHER,
-    computeMassProperties,
-    getSurfaceNormal,
-    getSupportingFace,
-    getInnerRadius,
-    castRay: castRayVsPlane,
-    collidePoint: collidePointVsPlane,
-    register,
-});
+export const def = /* @__PURE__ */ (() =>
+    defineShape<PlaneShape>({
+        type: ShapeType.PLANE,
+        category: ShapeCategory.OTHER,
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
+        castRay: castRayVsPlane,
+        collidePoint: collidePointVsPlane,
+        register,
+    }))();
 
 function computeMassProperties(out: MassProperties, _shape: PlaneShape): void {
     out.mass = 0;
@@ -125,7 +126,12 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: PlaneShape, _sub
     vec3.copy(ioResult.normal, shape.plane.normal);
 }
 
-const _getSupportingFace_vertices: [Vec3, Vec3, Vec3, Vec3] = [/* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create()];
+const _getSupportingFace_vertices: [Vec3, Vec3, Vec3, Vec3] = [
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+];
 
 function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: PlaneShape, _subShapeId: number): void {
     const { position, quaternion, scale } = ioResult;
@@ -140,15 +146,31 @@ function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, sha
     face.numVertices = 4;
     if (insideOut) {
         // reverse winding: 0,1,2,3 -> 3,2,1,0
-        face.vertices[0] = _getSupportingFace_vertices[3][0]; face.vertices[1] = _getSupportingFace_vertices[3][1]; face.vertices[2] = _getSupportingFace_vertices[3][2];
-        face.vertices[3] = _getSupportingFace_vertices[2][0]; face.vertices[4] = _getSupportingFace_vertices[2][1]; face.vertices[5] = _getSupportingFace_vertices[2][2];
-        face.vertices[6] = _getSupportingFace_vertices[1][0]; face.vertices[7] = _getSupportingFace_vertices[1][1]; face.vertices[8] = _getSupportingFace_vertices[1][2];
-        face.vertices[9] = _getSupportingFace_vertices[0][0]; face.vertices[10] = _getSupportingFace_vertices[0][1]; face.vertices[11] = _getSupportingFace_vertices[0][2];
+        face.vertices[0] = _getSupportingFace_vertices[3][0];
+        face.vertices[1] = _getSupportingFace_vertices[3][1];
+        face.vertices[2] = _getSupportingFace_vertices[3][2];
+        face.vertices[3] = _getSupportingFace_vertices[2][0];
+        face.vertices[4] = _getSupportingFace_vertices[2][1];
+        face.vertices[5] = _getSupportingFace_vertices[2][2];
+        face.vertices[6] = _getSupportingFace_vertices[1][0];
+        face.vertices[7] = _getSupportingFace_vertices[1][1];
+        face.vertices[8] = _getSupportingFace_vertices[1][2];
+        face.vertices[9] = _getSupportingFace_vertices[0][0];
+        face.vertices[10] = _getSupportingFace_vertices[0][1];
+        face.vertices[11] = _getSupportingFace_vertices[0][2];
     } else {
-        face.vertices[0] = _getSupportingFace_vertices[0][0]; face.vertices[1] = _getSupportingFace_vertices[0][1]; face.vertices[2] = _getSupportingFace_vertices[0][2];
-        face.vertices[3] = _getSupportingFace_vertices[1][0]; face.vertices[4] = _getSupportingFace_vertices[1][1]; face.vertices[5] = _getSupportingFace_vertices[1][2];
-        face.vertices[6] = _getSupportingFace_vertices[2][0]; face.vertices[7] = _getSupportingFace_vertices[2][1]; face.vertices[8] = _getSupportingFace_vertices[2][2];
-        face.vertices[9] = _getSupportingFace_vertices[3][0]; face.vertices[10] = _getSupportingFace_vertices[3][1]; face.vertices[11] = _getSupportingFace_vertices[3][2];
+        face.vertices[0] = _getSupportingFace_vertices[0][0];
+        face.vertices[1] = _getSupportingFace_vertices[0][1];
+        face.vertices[2] = _getSupportingFace_vertices[0][2];
+        face.vertices[3] = _getSupportingFace_vertices[1][0];
+        face.vertices[4] = _getSupportingFace_vertices[1][1];
+        face.vertices[5] = _getSupportingFace_vertices[1][2];
+        face.vertices[6] = _getSupportingFace_vertices[2][0];
+        face.vertices[7] = _getSupportingFace_vertices[2][1];
+        face.vertices[8] = _getSupportingFace_vertices[2][2];
+        face.vertices[9] = _getSupportingFace_vertices[3][0];
+        face.vertices[10] = _getSupportingFace_vertices[3][1];
+        face.vertices[11] = _getSupportingFace_vertices[3][2];
     }
 
     transformFace(face, position, quaternion, scale);
@@ -239,7 +261,12 @@ function getPlaneVertices(out: [Vec3, Vec3, Vec3, Vec3], shape: PlaneShape): voi
     vec3.add(out[3], _getPlaneVertices_point, _getPlaneVertices_temp);
 }
 
-const _computePlaneLocalBounds_vertices: [Vec3, Vec3, Vec3, Vec3] = [/* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create()];
+const _computePlaneLocalBounds_vertices: [Vec3, Vec3, Vec3, Vec3] = [
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+];
 const _computePlaneLocalBounds_offset = /* @__PURE__ */ vec3.create();
 const _computePlaneLocalBounds_behind = /* @__PURE__ */ vec3.create();
 

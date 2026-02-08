@@ -93,261 +93,262 @@ export function update(shape: BoxShape): void {
 
 const _computeBoxMassProperties_fullExtents = /* @__PURE__ */ vec3.create();
 
-export const def = defineShape<BoxShape>({
-    type: ShapeType.BOX,
-    category: ShapeCategory.CONVEX,
-    computeMassProperties(out: MassProperties, shape: BoxShape): void {
-        const fullExtents = vec3.scale(_computeBoxMassProperties_fullExtents, shape.halfExtents, 2);
-        massProperties.setMassAndInertiaOfSolidBox(out, fullExtents, shape.density);
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: BoxShape, subShapeId: number): void {
-        assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for BoxShape');
+export const def = /* @__PURE__ */ (() =>
+    defineShape<BoxShape>({
+        type: ShapeType.BOX,
+        category: ShapeCategory.CONVEX,
+        computeMassProperties(out: MassProperties, shape: BoxShape): void {
+            const fullExtents = vec3.scale(_computeBoxMassProperties_fullExtents, shape.halfExtents, 2);
+            massProperties.setMassAndInertiaOfSolidBox(out, fullExtents, shape.density);
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: BoxShape, subShapeId: number): void {
+            assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for BoxShape');
 
-        // get absolute distance from center to each face
-        const diffX = Math.abs(Math.abs(ioResult.position[0]) - shape.halfExtents[0]);
-        const diffY = Math.abs(Math.abs(ioResult.position[1]) - shape.halfExtents[1]);
-        const diffZ = Math.abs(Math.abs(ioResult.position[2]) - shape.halfExtents[2]);
+            // get absolute distance from center to each face
+            const diffX = Math.abs(Math.abs(ioResult.position[0]) - shape.halfExtents[0]);
+            const diffY = Math.abs(Math.abs(ioResult.position[1]) - shape.halfExtents[1]);
+            const diffZ = Math.abs(Math.abs(ioResult.position[2]) - shape.halfExtents[2]);
 
-        // find axis closest to box surface
-        let dominantAxis = 0;
-        let minDist = diffX;
-        if (diffY < minDist) {
-            dominantAxis = 1;
-            minDist = diffY;
-        }
-        if (diffZ < minDist) {
-            dominantAxis = 2;
-        }
+            // find axis closest to box surface
+            let dominantAxis = 0;
+            let minDist = diffX;
+            if (diffY < minDist) {
+                dominantAxis = 1;
+                minDist = diffY;
+            }
+            if (diffZ < minDist) {
+                dominantAxis = 2;
+            }
 
-        // return axis normal with sign based on position
-        ioResult.normal[0] = 0;
-        ioResult.normal[1] = 0;
-        ioResult.normal[2] = 0;
-        ioResult.normal[dominantAxis] = ioResult.position[dominantAxis] > 0.0 ? 1.0 : -1.0;
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: BoxShape, _subShapeId: number): void {
-        const hx = shape.halfExtents[0];
-        const hy = shape.halfExtents[1];
-        const hz = shape.halfExtents[2];
-        const face = ioResult.face;
-        const { position, quaternion, scale } = ioResult;
+            // return axis normal with sign based on position
+            ioResult.normal[0] = 0;
+            ioResult.normal[1] = 0;
+            ioResult.normal[2] = 0;
+            ioResult.normal[dominantAxis] = ioResult.position[dominantAxis] > 0.0 ? 1.0 : -1.0;
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: BoxShape, _subShapeId: number): void {
+            const hx = shape.halfExtents[0];
+            const hy = shape.halfExtents[1];
+            const hz = shape.halfExtents[2];
+            const face = ioResult.face;
+            const { position, quaternion, scale } = ioResult;
 
-        // check if scale inverts winding
-        const insideOut = isScaleInsideOut(scale);
+            // check if scale inverts winding
+            const insideOut = isScaleInsideOut(scale);
 
-        // find dominant axis
-        const absX = Math.abs(direction[0]);
-        const absY = Math.abs(direction[1]);
-        const absZ = Math.abs(direction[2]);
+            // find dominant axis
+            const absX = Math.abs(direction[0]);
+            const absY = Math.abs(direction[1]);
+            const absZ = Math.abs(direction[2]);
 
-        face.numVertices = 4;
+            face.numVertices = 4;
 
-        if (absX >= absY && absX >= absZ) {
-            // face perpendicular to X axis
-            if (direction[0] < 0) {
-                // positive X face (direction points toward -X, so face is on +X side)
-                if (insideOut) {
-                    face.vertices[0] = hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = -hz;
-                    face.vertices[9] = hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = -hz;
+            if (absX >= absY && absX >= absZ) {
+                // face perpendicular to X axis
+                if (direction[0] < 0) {
+                    // positive X face (direction points toward -X, so face is on +X side)
+                    if (insideOut) {
+                        face.vertices[0] = hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = -hz;
+                        face.vertices[9] = hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = -hz;
+                    } else {
+                        face.vertices[0] = hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = -hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = hz;
+                    }
                 } else {
-                    face.vertices[0] = hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = -hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = hz;
+                    // negative X face
+                    if (insideOut) {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = -hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = -hx;
+                        face.vertices[7] = -hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = -hz;
+                    } else {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = -hx;
+                        face.vertices[4] = -hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = -hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = hy;
+                        face.vertices[11] = -hz;
+                    }
+                }
+            } else if (absY >= absX && absY >= absZ) {
+                // face perpendicular to Y axis
+                if (direction[1] < 0) {
+                    // positive Y face
+                    if (insideOut) {
+                        face.vertices[0] = hx;
+                        face.vertices[1] = hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = -hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = hy;
+                        face.vertices[11] = -hz;
+                    } else {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = -hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = hx;
+                        face.vertices[10] = hy;
+                        face.vertices[11] = -hz;
+                    }
+                } else {
+                    // negative Y face
+                    if (insideOut) {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = -hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = -hy;
+                        face.vertices[8] = -hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = -hz;
+                    } else {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = -hy;
+                        face.vertices[5] = -hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = -hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = hz;
+                    }
                 }
             } else {
-                // negative X face
-                if (insideOut) {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = -hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = -hx;
-                    face.vertices[7] = -hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = -hz;
+                // face perpendicular to Z axis
+                if (direction[2] < 0) {
+                    // positive Z face
+                    if (insideOut) {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = hy;
+                        face.vertices[2] = hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = -hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = hz;
+                    } else {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = -hy;
+                        face.vertices[5] = hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = hy;
+                        face.vertices[11] = hz;
+                    }
                 } else {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = -hx;
-                    face.vertices[4] = -hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = -hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = hy;
-                    face.vertices[11] = -hz;
+                    // negative Z face
+                    if (insideOut) {
+                        face.vertices[0] = hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = -hz;
+                        face.vertices[6] = -hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = -hz;
+                        face.vertices[9] = -hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = -hz;
+                    } else {
+                        face.vertices[0] = -hx;
+                        face.vertices[1] = -hy;
+                        face.vertices[2] = -hz;
+                        face.vertices[3] = -hx;
+                        face.vertices[4] = hy;
+                        face.vertices[5] = -hz;
+                        face.vertices[6] = hx;
+                        face.vertices[7] = hy;
+                        face.vertices[8] = -hz;
+                        face.vertices[9] = hx;
+                        face.vertices[10] = -hy;
+                        face.vertices[11] = -hz;
+                    }
                 }
             }
-        } else if (absY >= absX && absY >= absZ) {
-            // face perpendicular to Y axis
-            if (direction[1] < 0) {
-                // positive Y face
-                if (insideOut) {
-                    face.vertices[0] = hx;
-                    face.vertices[1] = hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = -hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = hy;
-                    face.vertices[11] = -hz;
-                } else {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = -hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = hx;
-                    face.vertices[10] = hy;
-                    face.vertices[11] = -hz;
-                }
-            } else {
-                // negative Y face
-                if (insideOut) {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = -hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = -hy;
-                    face.vertices[8] = -hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = -hz;
-                } else {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = -hy;
-                    face.vertices[5] = -hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = -hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = hz;
-                }
-            }
-        } else {
-            // face perpendicular to Z axis
-            if (direction[2] < 0) {
-                // positive Z face
-                if (insideOut) {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = hy;
-                    face.vertices[2] = hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = -hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = hz;
-                } else {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = -hy;
-                    face.vertices[5] = hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = hy;
-                    face.vertices[11] = hz;
-                }
-            } else {
-                // negative Z face
-                if (insideOut) {
-                    face.vertices[0] = hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = -hz;
-                    face.vertices[6] = -hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = -hz;
-                    face.vertices[9] = -hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = -hz;
-                } else {
-                    face.vertices[0] = -hx;
-                    face.vertices[1] = -hy;
-                    face.vertices[2] = -hz;
-                    face.vertices[3] = -hx;
-                    face.vertices[4] = hy;
-                    face.vertices[5] = -hz;
-                    face.vertices[6] = hx;
-                    face.vertices[7] = hy;
-                    face.vertices[8] = -hz;
-                    face.vertices[9] = hx;
-                    face.vertices[10] = -hy;
-                    face.vertices[11] = -hz;
-                }
-            }
-        }
 
-        transformFace(face, position, quaternion, scale);
-    },
-    getInnerRadius(shape: BoxShape): number {
-        return Math.min(shape.halfExtents[0], shape.halfExtents[1], shape.halfExtents[2]);
-    },
-    castRay: convex.castRayVsConvex,
-    collidePoint: collidePointVsBox,
-    createSupportPool: createBoxSupportPool,
-    getSupportFunction: getBoxSupportFunction,
-    register: () => {
-        for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
-                setCollideShapeFn(ShapeType.BOX, shapeDef.type, convex.collideConvexVsConvex);
-                setCollideShapeFn(shapeDef.type, ShapeType.BOX, convex.collideConvexVsConvex);
+            transformFace(face, position, quaternion, scale);
+        },
+        getInnerRadius(shape: BoxShape): number {
+            return Math.min(shape.halfExtents[0], shape.halfExtents[1], shape.halfExtents[2]);
+        },
+        castRay: convex.castRayVsConvex,
+        collidePoint: collidePointVsBox,
+        createSupportPool: createBoxSupportPool,
+        getSupportFunction: getBoxSupportFunction,
+        register: () => {
+            for (const shapeDef of Object.values(shapeDefs)) {
+                if (shapeDef.category === ShapeCategory.CONVEX) {
+                    setCollideShapeFn(ShapeType.BOX, shapeDef.type, convex.collideConvexVsConvex);
+                    setCollideShapeFn(shapeDef.type, ShapeType.BOX, convex.collideConvexVsConvex);
 
-                setCastShapeFn(ShapeType.BOX, shapeDef.type, convex.castConvexVsConvex);
-                setCastShapeFn(shapeDef.type, ShapeType.BOX, convex.castConvexVsConvex);
+                    setCastShapeFn(ShapeType.BOX, shapeDef.type, convex.castConvexVsConvex);
+                    setCastShapeFn(shapeDef.type, ShapeType.BOX, convex.castConvexVsConvex);
+                }
             }
-        }
-    },
-});
+        },
+    }))();
 
 type BoxSupportPool = BoxSupport;
 

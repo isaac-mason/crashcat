@@ -10,10 +10,10 @@ importers:
     dependencies:
       mathcat:
         specifier: 0.0.8
-        version: 0.0.8
+        version: link:../mathcat
       three:
-        specifier: '>=0.180.0'
-        version: 0.180.0
+        specifier: '>=0.182.0'
+        version: 0.182.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.2.0
@@ -2173,10 +2173,6 @@ packages:
       uc.micro: 2.1.0
     dev: true
 
-  /mathcat@0.0.8:
-    resolution: {integrity: sha512-Xvrc2opip17vPtZOj5ow05lKvZows2NyCMoQ7drIq3L7hKYr/gCZTFuZV5cR8gbvS0QCe9/lT31tImFWuQRbdA==}
-    dev: false
-
   /mdurl@2.0.0:
     resolution: {integrity: sha512-Lf+9+2r+Tdp5wXDXC4PcIBjTDtq4UKjCPMQhKIuzpJNW0b96kVqSwW0bT7FhRSfmAiFYgP+SCRvdrDozfh0U5w==}
     dev: true
@@ -2921,10 +2917,6 @@ packages:
       commander: 2.20.3
       source-map-support: 0.5.21
     dev: true
-
-  /three@0.180.0:
-    resolution: {integrity: sha512-o+qycAMZrh+TsE01GqWUxUIKR1AL0S8pq7zDkYOQw8GqfX8b8VoCKYUoHbhiX5j+7hr8XsuHDVU6+gkQJQKg9w==}
-    dev: false
 
   /three@0.182.0:
     resolution: {integrity: sha512-GbHabT+Irv+ihI1/f5kIIsZ+Ef9Sl5A1Y7imvS5RQjWgtTPfPnZ43JmlYI7NtCRDK9zir20lQpfg8/9Yd02OvQ==}

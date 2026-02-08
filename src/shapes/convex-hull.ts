@@ -448,124 +448,129 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 
 /* shape def */
 
-export const def = defineShape<ConvexHullShape>({
-    type: ShapeType.CONVEX_HULL,
-    category: ShapeCategory.CONVEX,
-    computeMassProperties(out: MassProperties, shape: ConvexHullShape): void {
-        // mass = volume * density
-        out.mass = shape.volume * shape.density;
+export const def = /* @__PURE__ */ (() =>
+    defineShape<ConvexHullShape>({
+        type: ShapeType.CONVEX_HULL,
+        category: ShapeCategory.CONVEX,
+        computeMassProperties(out: MassProperties, shape: ConvexHullShape): void {
+            // mass = volume * density
+            out.mass = shape.volume * shape.density;
 
-        // scale inertia tensor by density
-        mat4.multiplyScalar(out.inertia, shape.inertia, shape.density);
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ConvexHullShape, subShapeId: number): void {
-        assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for ConvexHullShape');
+            // scale inertia tensor by density
+            mat4.multiplyScalar(out.inertia, shape.inertia, shape.density);
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ConvexHullShape, subShapeId: number): void {
+            assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for ConvexHullShape');
 
-        // find the plane with the smallest absolute signed distance to the surface point
-        const firstPlane = shape.planes[0];
-        vec3.copy(ioResult.normal, firstPlane.normal);
-        let bestDist = Math.abs(firstPlane.constant + vec3.dot(firstPlane.normal, ioResult.position));
+            // find the plane with the smallest absolute signed distance to the surface point
+            const firstPlane = shape.planes[0];
+            vec3.copy(ioResult.normal, firstPlane.normal);
+            let bestDist = Math.abs(firstPlane.constant + vec3.dot(firstPlane.normal, ioResult.position));
 
-        for (let i = 1; i < shape.planes.length; i++) {
-            const plane = shape.planes[i];
-            const dist = Math.abs(plane.constant + vec3.dot(plane.normal, ioResult.position));
-            if (dist < bestDist) {
-                bestDist = dist;
-                vec3.copy(ioResult.normal, plane.normal);
+            for (let i = 1; i < shape.planes.length; i++) {
+                const plane = shape.planes[i];
+                const dist = Math.abs(plane.constant + vec3.dot(plane.normal, ioResult.position));
+                if (dist < bestDist) {
+                    bestDist = dist;
+                    vec3.copy(ioResult.normal, plane.normal);
+                }
             }
-        }
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ConvexHullShape, _subShapeId: number): void {
-        const face = ioResult.face;
-        const scale = ioResult.scale;
-        const quaternion = ioResult.quaternion;
-        const position = ioResult.position;
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ConvexHullShape, _subShapeId: number): void {
+            const face = ioResult.face;
+            const scale = ioResult.scale;
+            const quaternion = ioResult.quaternion;
+            const position = ioResult.position;
 
-        // compute inverse scale for normal transformation
-        // normals transform by (M^-1)^T, for diagonal scale matrix this is 1/scale
-        vec3.set(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
+            // compute inverse scale for normal transformation
+            // normals transform by (M^-1)^T, for diagonal scale matrix this is 1/scale
+            vec3.set(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
 
-        // transform first plane normal and find initial best
-        vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[0].normal);
-        const plane0NormalLength = vec3.length(_supportingFace_planeNormal);
-        let bestDot = vec3.dot(_supportingFace_planeNormal, direction) / plane0NormalLength;
-        let bestFaceIdx = 0;
+            // transform first plane normal and find initial best
+            vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[0].normal);
+            const plane0NormalLength = vec3.length(_supportingFace_planeNormal);
+            let bestDot = vec3.dot(_supportingFace_planeNormal, direction) / plane0NormalLength;
+            let bestFaceIdx = 0;
 
-        // find face with smallest (most negative) dot product
-        for (let i = 1; i < shape.planes.length; i++) {
-            vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[i].normal);
-            const planeNormalLength = vec3.length(_supportingFace_planeNormal);
-            const dot = vec3.dot(_supportingFace_planeNormal, direction) / planeNormalLength;
+            // find face with smallest (most negative) dot product
+            for (let i = 1; i < shape.planes.length; i++) {
+                vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[i].normal);
+                const planeNormalLength = vec3.length(_supportingFace_planeNormal);
+                const dot = vec3.dot(_supportingFace_planeNormal, direction) / planeNormalLength;
 
-            if (dot < bestDot) {
-                bestDot = dot;
-                bestFaceIdx = i;
+                if (dot < bestDot) {
+                    bestDot = dot;
+                    bestFaceIdx = i;
+                }
             }
-        }
 
-        // get vertices of best face
-        const bestFace = shape.faces[bestFaceIdx];
-        const firstVtxIdx = bestFace.firstVertex;
-        const numVertices = bestFace.numVertices;
+            // get vertices of best face
+            const bestFace = shape.faces[bestFaceIdx];
+            const firstVtxIdx = bestFace.firstVertex;
+            const numVertices = bestFace.numVertices;
 
-        // downsample if too many vertices (prevent overflow in contact clipping)
-        // TODO: (comment from JoltPhysics) This really needs a better algorithm to determine which vertices are important!
-        const maxVerticesToReturn = Math.floor(MAX_FACE_VERTICES / 2);
-        const deltaVtx = Math.floor((numVertices + maxVerticesToReturn - 1) / maxVerticesToReturn);
+            // downsample if too many vertices (prevent overflow in contact clipping)
+            // TODO: (comment from JoltPhysics) This really needs a better algorithm to determine which vertices are important!
+            const maxVerticesToReturn = Math.floor(MAX_FACE_VERTICES / 2);
+            const deltaVtx = Math.floor((numVertices + maxVerticesToReturn - 1) / maxVerticesToReturn);
 
-        // check if scale inverts winding (negative determinant)
-        const insideOut = isScaleInsideOut(scale);
+            // check if scale inverts winding (negative determinant)
+            const insideOut = isScaleInsideOut(scale);
 
-        // store local vertices
-        face.numVertices = 0;
+            // store local vertices
+            face.numVertices = 0;
 
-        if (insideOut) {
-            // flip winding of supporting face
-            for (let i = numVertices - 1; i >= 0; i -= deltaVtx) {
-                const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
-                const vertex = shape.points[vtxIdx].position;
-                const base = face.numVertices * 3;
-                face.vertices[base] = vertex[0]; face.vertices[base + 1] = vertex[1]; face.vertices[base + 2] = vertex[2];
-                face.numVertices++;
+            if (insideOut) {
+                // flip winding of supporting face
+                for (let i = numVertices - 1; i >= 0; i -= deltaVtx) {
+                    const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
+                    const vertex = shape.points[vtxIdx].position;
+                    const base = face.numVertices * 3;
+                    face.vertices[base] = vertex[0];
+                    face.vertices[base + 1] = vertex[1];
+                    face.vertices[base + 2] = vertex[2];
+                    face.numVertices++;
+                }
+            } else {
+                // normal winding of supporting face
+                for (let i = 0; i < numVertices; i += deltaVtx) {
+                    const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
+                    const vertex = shape.points[vtxIdx].position;
+                    const base = face.numVertices * 3;
+                    face.vertices[base] = vertex[0];
+                    face.vertices[base + 1] = vertex[1];
+                    face.vertices[base + 2] = vertex[2];
+                    face.numVertices++;
+                }
             }
-        } else {
-            // normal winding of supporting face
-            for (let i = 0; i < numVertices; i += deltaVtx) {
-                const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
-                const vertex = shape.points[vtxIdx].position;
-                const base = face.numVertices * 3;
-                face.vertices[base] = vertex[0]; face.vertices[base + 1] = vertex[1]; face.vertices[base + 2] = vertex[2];
-                face.numVertices++;
-            }
-        }
 
-        transformFace(face, position, quaternion, scale);
-    },
-    getInnerRadius(shape: ConvexHullShape): number {
-        // calculate the inner radius by getting the minimum distance from the origin to the planes of the hull
-        let innerRadius = Number.MAX_VALUE;
-        for (const plane of shape.planes) {
-            // distance from origin (0,0,0) to plane: -constant (since points are relative to COM)
-            innerRadius = Math.min(innerRadius, -plane.constant);
-        }
-        // clamp against zero for numerical stability (flat convex hulls may have round-off issues)
-        return Math.max(0.0, innerRadius);
-    },
-    castRay: convex.castRayVsConvex,
-    collidePoint: convex.collidePointVsConvex,
-    createSupportPool: createConvexHullSupportPool,
-    getSupportFunction: getConvexHullSupportFunction,
-    register: () => {
-        for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
-                setCollideShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.collideConvexVsConvex);
-                setCollideShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.collideConvexVsConvex);
-                setCastShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.castConvexVsConvex);
-                setCastShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.castConvexVsConvex);
+            transformFace(face, position, quaternion, scale);
+        },
+        getInnerRadius(shape: ConvexHullShape): number {
+            // calculate the inner radius by getting the minimum distance from the origin to the planes of the hull
+            let innerRadius = Number.MAX_VALUE;
+            for (const plane of shape.planes) {
+                // distance from origin (0,0,0) to plane: -constant (since points are relative to COM)
+                innerRadius = Math.min(innerRadius, -plane.constant);
             }
-        }
-    },
-});
+            // clamp against zero for numerical stability (flat convex hulls may have round-off issues)
+            return Math.max(0.0, innerRadius);
+        },
+        castRay: convex.castRayVsConvex,
+        collidePoint: convex.collidePointVsConvex,
+        createSupportPool: createConvexHullSupportPool,
+        getSupportFunction: getConvexHullSupportFunction,
+        register: () => {
+            for (const shapeDef of Object.values(shapeDefs)) {
+                if (shapeDef.category === ShapeCategory.CONVEX) {
+                    setCollideShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.collideConvexVsConvex);
+                    setCollideShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.collideConvexVsConvex);
+                    setCastShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.castConvexVsConvex);
+                    setCastShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.castConvexVsConvex);
+                }
+            }
+        },
+    }))();
 
 /* support functions */
 

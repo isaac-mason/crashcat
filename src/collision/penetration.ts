@@ -204,11 +204,13 @@ const rotateByAxisAngle = (out: Vec3, v: Vec3, axis: Vec3, angleRadians: number)
 };
 
 const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(256);
-const _epa_hullState = /* @__PURE__ */ hull.init();
+const _epa_hullState = /* @__PURE__ */ (() => {
+    const state = hull.init();
+    // set hull positions once - the array reference stays the same, we just clear/refill it
+    state.positions = _epa_supportPoints.y.values;
+    return state;
+})();
 const _epa_newTriangles: hull.NewTriangles = [];
-
-// set hull positions once - the array reference stays the same, we just clear/refill it
-_epa_hullState.positions = _epa_supportPoints.y.values;
 
 const RADIANS_120_DEG = /* @__PURE__ */ degreesToRadians(120.0);
 

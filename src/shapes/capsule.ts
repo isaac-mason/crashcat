@@ -108,162 +108,169 @@ export function update(shape: CapsuleShape): void {
 
 /* shape def */
 
-export const def = defineShape<CapsuleShape>({
-    type: ShapeType.CAPSULE,
-    category: ShapeCategory.CONVEX,
-    computeMassProperties(out: MassProperties, shape: CapsuleShape): void {
-        const r = shape.radius;
-        const h = shape.halfHeightOfCylinder;
+export const def = /* @__PURE__ */ (() =>
+    defineShape<CapsuleShape>({
+        type: ShapeType.CAPSULE,
+        category: ShapeCategory.CONVEX,
+        computeMassProperties(out: MassProperties, shape: CapsuleShape): void {
+            const r = shape.radius;
+            const h = shape.halfHeightOfCylinder;
 
-        // mass = density * volume
-        out.mass = shape.volume * shape.density;
+            // mass = density * volume
+            out.mass = shape.volume * shape.density;
 
-        // calculate inertia
-        const radius_sq = r * r;
-        const height = 2.0 * h;
-        const cylinder_mass = Math.PI * height * radius_sq * shape.density;
-        const hemisphere_mass = ((2.0 * Math.PI) / 3.0) * radius_sq * r * shape.density;
+            // calculate inertia
+            const radius_sq = r * r;
+            const height = 2.0 * h;
+            const cylinder_mass = Math.PI * height * radius_sq * shape.density;
+            const hemisphere_mass = ((2.0 * Math.PI) / 3.0) * radius_sq * r * shape.density;
 
-        // from cylinder
-        const height_sq = height * height;
-        const inertia_y = radius_sq * cylinder_mass * 0.5;
-        const inertia_xz = cylinder_mass * ((1.0 / 12.0) * height_sq + (1.0 / 4.0) * radius_sq);
+            // from cylinder
+            const height_sq = height * height;
+            const inertia_y = radius_sq * cylinder_mass * 0.5;
+            const inertia_xz = cylinder_mass * ((1.0 / 12.0) * height_sq + (1.0 / 4.0) * radius_sq);
 
-        // from hemispheres
-        const hemisphere_ixx_izz = hemisphere_mass * ((2.0 / 5.0) * radius_sq + h * h + (3.0 / 8.0) * h * r);
-        const hemisphere_iyy = hemisphere_mass * (2.0 / 5.0) * radius_sq;
+            // from hemispheres
+            const hemisphere_ixx_izz = hemisphere_mass * ((2.0 / 5.0) * radius_sq + h * h + (3.0 / 8.0) * h * r);
+            const hemisphere_iyy = hemisphere_mass * (2.0 / 5.0) * radius_sq;
 
-        // total inertia
-        const i_xx_zz = inertia_xz + hemisphere_ixx_izz;
-        const i_yy = inertia_y + hemisphere_iyy;
+            // total inertia
+            const i_xx_zz = inertia_xz + hemisphere_ixx_izz;
+            const i_yy = inertia_y + hemisphere_iyy;
 
-        // set diagonal inertia tensor (column-major mat4)
-        out.inertia[0] = i_xx_zz;
-        out.inertia[1] = 0;
-        out.inertia[2] = 0;
-        out.inertia[3] = 0;
-        out.inertia[4] = 0;
-        out.inertia[5] = i_yy;
-        out.inertia[6] = 0;
-        out.inertia[7] = 0;
-        out.inertia[8] = 0;
-        out.inertia[9] = 0;
-        out.inertia[10] = i_xx_zz;
-        out.inertia[11] = 0;
-        out.inertia[12] = 0;
-        out.inertia[13] = 0;
-        out.inertia[14] = 0;
-        out.inertia[15] = 1.0;
-    },
-    getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CapsuleShape, subShapeId: number): void {
-        assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for CapsuleShape');
+            // set diagonal inertia tensor (column-major mat4)
+            out.inertia[0] = i_xx_zz;
+            out.inertia[1] = 0;
+            out.inertia[2] = 0;
+            out.inertia[3] = 0;
+            out.inertia[4] = 0;
+            out.inertia[5] = i_yy;
+            out.inertia[6] = 0;
+            out.inertia[7] = 0;
+            out.inertia[8] = 0;
+            out.inertia[9] = 0;
+            out.inertia[10] = i_xx_zz;
+            out.inertia[11] = 0;
+            out.inertia[12] = 0;
+            out.inertia[13] = 0;
+            out.inertia[14] = 0;
+            out.inertia[15] = 1.0;
+        },
+        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CapsuleShape, subShapeId: number): void {
+            assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for CapsuleShape');
 
-        // capsule aligned along Y-axis from (0, -h, 0) to (0, h, 0) with radius r
-        // clamp Y to cylinder range, then compute normal from clamped point
-        const clampedY = Math.max(-shape.halfHeightOfCylinder, Math.min(shape.halfHeightOfCylinder, ioResult.position[1]));
+            // capsule aligned along Y-axis from (0, -h, 0) to (0, h, 0) with radius r
+            // clamp Y to cylinder range, then compute normal from clamped point
+            const clampedY = Math.max(-shape.halfHeightOfCylinder, Math.min(shape.halfHeightOfCylinder, ioResult.position[1]));
 
-        const toPointX = ioResult.position[0];
-        const toPointY = ioResult.position[1] - clampedY;
-        const toPointZ = ioResult.position[2];
+            const toPointX = ioResult.position[0];
+            const toPointY = ioResult.position[1] - clampedY;
+            const toPointZ = ioResult.position[2];
 
-        const len = Math.sqrt(toPointX * toPointX + toPointY * toPointY + toPointZ * toPointZ);
-        if (len !== 0.0) {
-            ioResult.normal[0] = toPointX / len;
-            ioResult.normal[1] = toPointY / len;
-            ioResult.normal[2] = toPointZ / len;
-            return;
-        }
-
-        // fallback: if on central axis, use radial direction from X-Z plane
-        // if exactly at center, default to Y axis
-        const radialLen = Math.sqrt(ioResult.position[0] * ioResult.position[0] + ioResult.position[2] * ioResult.position[2]);
-        if (radialLen > 0) {
-            ioResult.normal[0] = ioResult.position[0] / radialLen;
-            ioResult.normal[1] = 0;
-            ioResult.normal[2] = ioResult.position[2] / radialLen;
-        } else {
-            ioResult.normal[0] = 1; // arbitrary radial direction
-            ioResult.normal[1] = 0;
-            ioResult.normal[2] = 0;
-        }
-    },
-    getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CapsuleShape, _subShapeId: number): void {
-        const face = ioResult.face;
-        const { position, quaternion, scale } = ioResult;
-        const halfHeightOfCylinder = shape.halfHeightOfCylinder;
-        const radius = shape.radius;
-
-        // capsule is aligned along Y-axis: line segment from (0, -h, 0) to (0, h, 0) with radius r
-
-        // get direction in horizontal plane (zero out Y component)
-        const horizontalDirX = direction[0];
-        const horizontalDirZ = direction[2];
-
-        // check zero vector, in this case we're hitting from top/bottom so there's no supporting face
-        const len = Math.sqrt(horizontalDirX * horizontalDirX + horizontalDirZ * horizontalDirZ);
-        if (len === 0.0) {
-            face.numVertices = 0;
-            return;
-        }
-
-        // get support point for top and bottom sphere in the opposite of 'direction' (including convex radius)
-        // support = (radius / len) * horizontal_direction
-        const supportX = (radius / len) * horizontalDirX;
-        const supportZ = (radius / len) * horizontalDirZ;
-
-        // support_top = (0, halfHeight, 0) - support
-        const supportTopX = -supportX;
-        const supportTopY = halfHeightOfCylinder;
-        const supportTopZ = -supportZ;
-
-        // support_bottom = (0, -halfHeight, 0) - support
-        const supportBottomX = -supportX;
-        const supportBottomY = -halfHeightOfCylinder;
-        const supportBottomZ = -supportZ;
-
-        // get projection on inDirection.
-        // note that inDirection is not normalized, so we need to divide by inDirection.Length() to get the actual projection.
-        // we've multiplied both sides of the if below with inDirection.Length().
-        const projTop = supportTopX * direction[0] + supportTopY * direction[1] + supportTopZ * direction[2];
-        const projBottom = supportBottomX * direction[0] + supportBottomY * direction[1] + supportBottomZ * direction[2];
-
-        // cCapsuleProjectionSlop = 0.02f (from PhysicsSettings.h)
-        const capsuleProjectionSlop = 0.02;
-        const directionLength = Math.sqrt(
-            direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2],
-        );
-
-        // if projection is roughly equal then return line, otherwise we return nothing as there's only 1 point
-        if (Math.abs(projTop - projBottom) < capsuleProjectionSlop * directionLength) {
-            face.numVertices = 2;
-            face.vertices[0] = supportTopX; face.vertices[1] = supportTopY; face.vertices[2] = supportTopZ;
-            face.vertices[3] = supportBottomX; face.vertices[4] = supportBottomY; face.vertices[5] = supportBottomZ;
-            transformFace(face, position, quaternion, scale);
-        } else {
-            // only one point is relevant
-            face.numVertices = 0;
-        }
-    },
-    getInnerRadius(shape: CapsuleShape): number {
-        return shape.radius;
-    },
-    castRay: convex.castRayVsConvex,
-    collidePoint: convex.collidePointVsConvex,
-    createSupportPool: createCapsuleSupportPool,
-    getSupportFunction: getCapsuleSupportFunction,
-    register: () => {
-        // capsule vs all convex shapes
-        for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
-                setCollideShapeFn(ShapeType.CAPSULE, shapeDef.type, convex.collideConvexVsConvex);
-                setCollideShapeFn(shapeDef.type, ShapeType.CAPSULE, convex.collideConvexVsConvex);
-
-                setCastShapeFn(ShapeType.CAPSULE, shapeDef.type, convex.castConvexVsConvex);
-                setCastShapeFn(shapeDef.type, ShapeType.CAPSULE, convex.castConvexVsConvex);
+            const len = Math.sqrt(toPointX * toPointX + toPointY * toPointY + toPointZ * toPointZ);
+            if (len !== 0.0) {
+                ioResult.normal[0] = toPointX / len;
+                ioResult.normal[1] = toPointY / len;
+                ioResult.normal[2] = toPointZ / len;
+                return;
             }
-        }
-    },
-});
+
+            // fallback: if on central axis, use radial direction from X-Z plane
+            // if exactly at center, default to Y axis
+            const radialLen = Math.sqrt(
+                ioResult.position[0] * ioResult.position[0] + ioResult.position[2] * ioResult.position[2],
+            );
+            if (radialLen > 0) {
+                ioResult.normal[0] = ioResult.position[0] / radialLen;
+                ioResult.normal[1] = 0;
+                ioResult.normal[2] = ioResult.position[2] / radialLen;
+            } else {
+                ioResult.normal[0] = 1; // arbitrary radial direction
+                ioResult.normal[1] = 0;
+                ioResult.normal[2] = 0;
+            }
+        },
+        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CapsuleShape, _subShapeId: number): void {
+            const face = ioResult.face;
+            const { position, quaternion, scale } = ioResult;
+            const halfHeightOfCylinder = shape.halfHeightOfCylinder;
+            const radius = shape.radius;
+
+            // capsule is aligned along Y-axis: line segment from (0, -h, 0) to (0, h, 0) with radius r
+
+            // get direction in horizontal plane (zero out Y component)
+            const horizontalDirX = direction[0];
+            const horizontalDirZ = direction[2];
+
+            // check zero vector, in this case we're hitting from top/bottom so there's no supporting face
+            const len = Math.sqrt(horizontalDirX * horizontalDirX + horizontalDirZ * horizontalDirZ);
+            if (len === 0.0) {
+                face.numVertices = 0;
+                return;
+            }
+
+            // get support point for top and bottom sphere in the opposite of 'direction' (including convex radius)
+            // support = (radius / len) * horizontal_direction
+            const supportX = (radius / len) * horizontalDirX;
+            const supportZ = (radius / len) * horizontalDirZ;
+
+            // support_top = (0, halfHeight, 0) - support
+            const supportTopX = -supportX;
+            const supportTopY = halfHeightOfCylinder;
+            const supportTopZ = -supportZ;
+
+            // support_bottom = (0, -halfHeight, 0) - support
+            const supportBottomX = -supportX;
+            const supportBottomY = -halfHeightOfCylinder;
+            const supportBottomZ = -supportZ;
+
+            // get projection on inDirection.
+            // note that inDirection is not normalized, so we need to divide by inDirection.Length() to get the actual projection.
+            // we've multiplied both sides of the if below with inDirection.Length().
+            const projTop = supportTopX * direction[0] + supportTopY * direction[1] + supportTopZ * direction[2];
+            const projBottom = supportBottomX * direction[0] + supportBottomY * direction[1] + supportBottomZ * direction[2];
+
+            // cCapsuleProjectionSlop = 0.02f (from PhysicsSettings.h)
+            const capsuleProjectionSlop = 0.02;
+            const directionLength = Math.sqrt(
+                direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2],
+            );
+
+            // if projection is roughly equal then return line, otherwise we return nothing as there's only 1 point
+            if (Math.abs(projTop - projBottom) < capsuleProjectionSlop * directionLength) {
+                face.numVertices = 2;
+                face.vertices[0] = supportTopX;
+                face.vertices[1] = supportTopY;
+                face.vertices[2] = supportTopZ;
+                face.vertices[3] = supportBottomX;
+                face.vertices[4] = supportBottomY;
+                face.vertices[5] = supportBottomZ;
+                transformFace(face, position, quaternion, scale);
+            } else {
+                // only one point is relevant
+                face.numVertices = 0;
+            }
+        },
+        getInnerRadius(shape: CapsuleShape): number {
+            return shape.radius;
+        },
+        castRay: convex.castRayVsConvex,
+        collidePoint: convex.collidePointVsConvex,
+        createSupportPool: createCapsuleSupportPool,
+        getSupportFunction: getCapsuleSupportFunction,
+        register: () => {
+            // capsule vs all convex shapes
+            for (const shapeDef of Object.values(shapeDefs)) {
+                if (shapeDef.category === ShapeCategory.CONVEX) {
+                    setCollideShapeFn(ShapeType.CAPSULE, shapeDef.type, convex.collideConvexVsConvex);
+                    setCollideShapeFn(shapeDef.type, ShapeType.CAPSULE, convex.collideConvexVsConvex);
+
+                    setCastShapeFn(ShapeType.CAPSULE, shapeDef.type, convex.castConvexVsConvex);
+                    setCastShapeFn(shapeDef.type, ShapeType.CAPSULE, convex.castConvexVsConvex);
+                }
+            }
+        },
+    }))();
 
 /* support functions */
 
