@@ -29,8 +29,8 @@ export function copy(out: MassProperties, source: MassProperties): MassPropertie
     return out;
 }
 
-const _setMassAndInertiaOfSolidBox_sizeSq = vec3.create();
-const _setMassAndInertiaOfSolidBox_scale = vec3.create();
+const _setMassAndInertiaOfSolidBox_sizeSq = /* @__PURE__ */ vec3.create();
+const _setMassAndInertiaOfSolidBox_scale = /* @__PURE__ */ vec3.create();
 
 /** sets mass and inertia of a solid box */
 export function setMassAndInertiaOfSolidBox(out: MassProperties, boxSize: Vec3, density: number): MassProperties {
@@ -51,9 +51,9 @@ export function setMassAndInertiaOfSolidBox(out: MassProperties, boxSize: Vec3, 
     return out;
 }
 
-const _scale_diagonal = vec3.create();
-const _scale_xyz_sq = vec3.create();
-const _scale_xyz_scaled_sq = vec3.create();
+const _scale_diagonal = /* @__PURE__ */ vec3.create();
+const _scale_xyz_sq = /* @__PURE__ */ vec3.create();
+const _scale_xyz_scaled_sq = /* @__PURE__ */ vec3.create();
 
 /** scales mass properties by given scale factors */
 export function scale(out: MassProperties, source: MassProperties, inScale: Vec3): MassProperties {
@@ -113,9 +113,9 @@ export function scale(out: MassProperties, source: MassProperties, inScale: Vec3
     return out;
 }
 
-const _rotate_temp1 = mat4.create();
-const _rotate_temp2 = mat4.create();
-const _rotate_temp3 = mat3.create();
+const _rotate_temp1 = /* @__PURE__ */ mat4.create();
+const _rotate_temp2 = /* @__PURE__ */ mat4.create();
+const _rotate_temp3 = /* @__PURE__ */ mat3.create();
 
 /** rotates mass properties by given rotation matrix */
 export function rotate(out: MassProperties, source: MassProperties, rotation: Mat4): MassProperties {
@@ -160,9 +160,9 @@ export function rotate(out: MassProperties, source: MassProperties, rotation: Ma
     return out;
 }
 
-const _translate_scaleMatrix = mat4.create();
-const _translate_outerProduct = mat4.create();
-const _translate_temp = mat4.create();
+const _translate_scaleMatrix = /* @__PURE__ */ mat4.create();
+const _translate_outerProduct = /* @__PURE__ */ mat4.create();
+const _translate_temp = /* @__PURE__ */ mat4.create();
 
 /** translates mass properties by given translation vector */
 export function translate(out: MassProperties, source: MassProperties, translation: Vec3): MassProperties {

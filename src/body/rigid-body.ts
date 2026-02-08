@@ -291,10 +291,10 @@ function makeRigidBody(): RigidBody {
     };
 }
 
-const VEC3_ZERO = vec3.create();
-const QUAT_IDENTITY = quat.create();
+const VEC3_ZERO = /* @__PURE__ */ vec3.create();
+const QUAT_IDENTITY = /* @__PURE__ */ quat.create();
 
-const _setRigidBody_tmpMassProperties = massProperties.create();
+const _setRigidBody_tmpMassProperties = /* @__PURE__ */ massProperties.create();
 
 /** initializes a body object with the given settings */
 function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
@@ -504,7 +504,7 @@ export function* iterate(world: World): Generator<RigidBody> {
     }
 }
 
-const _getInverseInertia_rot = mat4.create();
+const _getInverseInertia_rot = /* @__PURE__ */ mat4.create();
 
 /**
  * get the world-space inverse inertia matrix for a body.
@@ -536,7 +536,7 @@ export function updateCenterOfMassPosition(body: RigidBody): void {
     vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, body.position);
 }
 
-const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = vec3.create();
+const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ vec3.create();
 
 /**
  * Updates the body's position (shape origin) based on centerOfMassPosition.
@@ -553,7 +553,7 @@ export function updatePositionFromCenterOfMass(body: RigidBody): void {
     vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
 }
 
-const _updateBodyAABB_corner = vec3.create();
+const _updateBodyAABB_corner = /* @__PURE__ */ vec3.create();
 
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
@@ -933,10 +933,10 @@ export function clearForces(body: RigidBody): void {
     vec3.zero(body.motionProperties.torque);
 }
 
-const _moveKinematic_newCom = vec3.create();
-const _moveKinematic_deltaPos = vec3.create();
-const _moveKinematic_deltaRot = quat.create();
-const _moveKinematic_quatConj = quat.create();
+const _moveKinematic_newCom = /* @__PURE__ */ vec3.create();
+const _moveKinematic_deltaPos = /* @__PURE__ */ vec3.create();
+const _moveKinematic_deltaRot = /* @__PURE__ */ quat.create();
+const _moveKinematic_quatConj = /* @__PURE__ */ quat.create();
 
 /**
  * Moves a kinematic body towards a target position and rotation over the given delta time.
@@ -961,9 +961,9 @@ export function moveKinematic(body: RigidBody, targetPosition: Vec3, targetQuate
     motionProperties.moveKinematic(body.motionProperties, _moveKinematic_deltaPos, _moveKinematic_deltaRot, deltaTime);
 }
 
-const _getWorldSurfaceNormal_localPos = vec3.create();
-const _getWorldSurfaceNormal_normal = vec3.create();
-const _getWorldSurfaceNormal_invQuat = quat.create();
+const _getWorldSurfaceNormal_localPos = /* @__PURE__ */ vec3.create();
+const _getWorldSurfaceNormal_normal = /* @__PURE__ */ vec3.create();
+const _getWorldSurfaceNormal_invQuat = /* @__PURE__ */ quat.create();
 
 /**
  * Gets the surface normal at a world-space position on the body's shape.
@@ -1041,7 +1041,7 @@ export function getSubShapeTransformedShape(
     shapeDef.getSubShapeTransformedShape(out, rootShape, subShapeId);
 }
 
-const _getPointVelocity_pointRelativeToCOM = vec3.create();
+const _getPointVelocity_pointRelativeToCOM = /* @__PURE__ */ vec3.create();
 
 /**
  * Get velocity of a point on the body (point relative to center of mass).
@@ -1113,7 +1113,7 @@ const WakeInAABBVisitor = {
     },
 };
 
-const _wakeInAABB_filter = filter.createEmpty();
+const _wakeInAABB_filter = /* @__PURE__ */ filter.createEmpty();
 
 /**
  * Wake all sleeping bodies within an AABB.

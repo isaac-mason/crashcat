@@ -91,7 +91,7 @@ export function update(shape: BoxShape): void {
 
 /* shape def */
 
-const _computeBoxMassProperties_fullExtents = vec3.create();
+const _computeBoxMassProperties_fullExtents = /* @__PURE__ */ vec3.create();
 
 export const def = defineShape<BoxShape>({
     type: ShapeType.BOX,
@@ -362,9 +362,9 @@ function getBoxSupportFunction(pool: BoxSupportPool, shape: BoxShape, mode: Supp
 
 /* collide point */
 
-const _collidePointVsBox_posB = vec3.create();
-const _collidePointVsBox_quatB = quat.create();
-const _collidePointVsBox_hit = createCollidePointHit();
+const _collidePointVsBox_posB = /* @__PURE__ */ vec3.create();
+const _collidePointVsBox_quatB = /* @__PURE__ */ quat.create();
+const _collidePointVsBox_hit = /* @__PURE__ */ createCollidePointHit();
 
 function collidePointVsBox(
     collector: CollidePointCollector,

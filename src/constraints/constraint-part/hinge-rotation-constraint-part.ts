@@ -85,13 +85,13 @@ export function isActive(part: HingeRotationConstraintPart): boolean {
     );
 }
 
-const _calc_a2 = vec3.create();
-const _calc_perp = vec3.create();
-const _calc_summedInvInertia = mat4.create();
-const _calc_temp = vec3.create();
-const _calc_invEffMass = mat2.create();
-const _calc_rotA = mat4.create();
-const _calc_rotB = mat4.create();
+const _calc_a2 = /* @__PURE__ */ vec3.create();
+const _calc_perp = /* @__PURE__ */ vec3.create();
+const _calc_summedInvInertia = /* @__PURE__ */ mat4.create();
+const _calc_temp = /* @__PURE__ */ vec3.create();
+const _calc_invEffMass = /* @__PURE__ */ mat2.create();
+const _calc_rotA = /* @__PURE__ */ mat4.create();
+const _calc_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Calculate constraint properties for the hinge rotation constraint.
@@ -190,8 +190,8 @@ export function calculateConstraintProperties(
     part.effectiveMass[3] = _calc_invEffMass[0] * invDet;
 }
 
-const _ws_impulse = vec3.create();
-const _ws_angularDelta = vec3.create();
+const _ws_impulse = /* @__PURE__ */ vec3.create();
+const _ws_angularDelta = /* @__PURE__ */ vec3.create();
 
 /** Apply warm start impulse from previous frame */
 export function warmStart(
@@ -277,8 +277,8 @@ export function solveVelocityConstraint(part: HingeRotationConstraintPart, bodyA
     return applyVelocityStep(part, bodyA, bodyB, lambda0, lambda1);
 }
 
-const _pos_impulse = vec3.create();
-const _pos_angularDelta = vec3.create();
+const _pos_impulse = /* @__PURE__ */ vec3.create();
+const _pos_angularDelta = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the position constraint (Baumgarte stabilization).

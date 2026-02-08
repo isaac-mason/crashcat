@@ -67,7 +67,7 @@ export function popResult(): PopResult {
     return { value: 0, remainder: EMPTY_SUB_SHAPE_ID };
 }
 
-const _popResult: PopResult = popResult();
+const _popResult = /* @__PURE__ */ popResult();
 
 /** pop index from sub shape id path */
 export function popIndex(outResult: PopResult, subShapeID: SubShapeId, count: number): void {

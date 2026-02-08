@@ -292,8 +292,8 @@ export function getConstraintSortFields(out: ConstraintSortFields, constraints: 
     }
 }
 
-const _sortFieldsA = createConstraintSortFields();
-const _sortFieldsB = createConstraintSortFields();
+const _sortFieldsA = /* @__PURE__ */ createConstraintSortFields();
+const _sortFieldsB = /* @__PURE__ */ createConstraintSortFields();
 
 /**
  * sort constraint IDs for deterministic solving.

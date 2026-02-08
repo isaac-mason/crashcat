@@ -473,13 +473,13 @@ export function getCurrentAngle(constraint: HingeConstraint): number {
     return constraint.theta;
 }
 
-const _hingeConstraint_rotA = mat4.create();
-const _hingeConstraint_rotB = mat4.create();
-const _hingeConstraint_worldHingeAxis1 = vec3.create();
-const _hingeConstraint_worldHingeAxis2 = vec3.create();
-const _hingeConstraint_q1 = quat.create();
-const _hingeConstraint_q2 = quat.create();
-const _hingeConstraint_qRel = quat.create();
+const _hingeConstraint_rotA = /* @__PURE__ */ mat4.create();
+const _hingeConstraint_rotB = /* @__PURE__ */ mat4.create();
+const _hingeConstraint_worldHingeAxis1 = /* @__PURE__ */ vec3.create();
+const _hingeConstraint_worldHingeAxis2 = /* @__PURE__ */ vec3.create();
+const _hingeConstraint_q1 = /* @__PURE__ */ quat.create();
+const _hingeConstraint_q2 = /* @__PURE__ */ quat.create();
+const _hingeConstraint_qRel = /* @__PURE__ */ quat.create();
 
 /**
  * Calculate the current hinge angle theta.

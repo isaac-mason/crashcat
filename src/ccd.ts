@@ -101,7 +101,7 @@ export function init(): CCD {
     };
 }
 
-export const ccdBodyPool = pool(createCCDBody);
+export const ccdBodyPool = /* @__PURE__ */ pool(createCCDBody);
 
 /** clear CCD state for a new physics step, clears state from previous frame */
 export function clear(state: CCD, bodies: Bodies): void {
@@ -122,7 +122,7 @@ export function clear(state: CCD, bodies: Bodies): void {
     state.ccdBodies.length = 0;
 }
 
-const _computeSweptAABB_endAABB = box3.create();
+const _computeSweptAABB_endAABB = /* @__PURE__ */ box3.create();
 
 /** compute AABB that encompasses both start and end positions (swept AABB) */
 export function computeSweptAABB(out: Box3, body: RigidBody, displacement: Vec3): void {

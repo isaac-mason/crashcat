@@ -269,7 +269,7 @@ export function getSwingTwist(q: Quat, outSwing: Quat, outTwist: Quat): void {
     }
 }
 
-const _clampSwingTwist_ellipseClosest = vec2.create();
+const _clampSwingTwist_ellipseClosest = /* @__PURE__ */ vec2.create();
 
 /**
  * Clamp swing and twist quaternions against limits.
@@ -474,18 +474,18 @@ function getClosestPointOnEllipse(out: [number, number], px: number, py: number,
     out[1] = (bSq * py) / tPlusBSq;
 }
 
-const _calc_q_swing = quat.create();
-const _calc_q_twist = quat.create();
-const _calc_q_clamped_swing = quat.create();
-const _calc_q_clamped_twist = quat.create();
-const _calc_twist_to_world = quat.create();
-const _calc_axisY = vec3.create();
+const _calc_q_swing = /* @__PURE__ */ quat.create();
+const _calc_q_twist = /* @__PURE__ */ quat.create();
+const _calc_q_clamped_swing = /* @__PURE__ */ quat.create();
+const _calc_q_clamped_twist = /* @__PURE__ */ quat.create();
+const _calc_twist_to_world = /* @__PURE__ */ quat.create();
+const _calc_axisY = /* @__PURE__ */ vec3.create();
 
-const _calc_axisZ = vec3.create();
-const _calc_axisX = vec3.create();
-const _calc_current = vec3.create();
-const _calc_desired = vec3.create();
-const _calc_cross = vec3.create();
+const _calc_axisZ = /* @__PURE__ */ vec3.create();
+const _calc_axisX = /* @__PURE__ */ vec3.create();
+const _calc_current = /* @__PURE__ */ vec3.create();
+const _calc_desired = /* @__PURE__ */ vec3.create();
+const _calc_cross = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculate constraint properties for the swing-twist limits.
@@ -725,11 +725,11 @@ export function solveVelocityConstraint(part: SwingTwistConstraintPart, bodyA: R
     return impulse;
 }
 
-const _pos_q_swing = quat.create();
-const _pos_q_twist = quat.create();
-const _pos_inv_initial = quat.create();
-const _pos_rotA = mat4.create();
-const _pos_rotB = mat4.create();
+const _pos_q_swing = /* @__PURE__ */ quat.create();
+const _pos_q_twist = /* @__PURE__ */ quat.create();
+const _pos_inv_initial = /* @__PURE__ */ quat.create();
+const _pos_rotA = /* @__PURE__ */ mat4.create();
+const _pos_rotB = /* @__PURE__ */ mat4.create();
 const _pos_rotation_part = rotationEulerConstraintPart.create();
 
 /**

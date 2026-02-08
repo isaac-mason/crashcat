@@ -474,7 +474,7 @@ export function computeMassProperties(out: MassProperties, shape: Shape): MassPr
     return out;
 }
 
-const _supportingFaceResult = createSupportingFaceResult();
+const _supportingFaceResult = /* @__PURE__ */ createSupportingFaceResult();
 
 /**
  * Computes the supporting face, takes a local-space direction and returns face vertices in world space.

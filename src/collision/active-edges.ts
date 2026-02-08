@@ -14,11 +14,11 @@ const COS_1_DEGREE = 0.999848; // cos(1°) - parallel normal threshold
 const BARYCENTRIC_EPSILON = 1.0e-4;
 const BARYCENTRIC_ONE_MINUS_EPSILON = 1.0 - BARYCENTRIC_EPSILON;
 
-const _barycentricCoords = createBarycentricCoordinatesResult();
-const _v0Shifted = vec3.create();
-const _v1Shifted = vec3.create();
-const _v2Shifted = vec3.create();
-const _cross = vec3.create();
+const _barycentricCoords = /* @__PURE__ */ createBarycentricCoordinatesResult();
+const _v0Shifted = /* @__PURE__ */ vec3.create();
+const _v1Shifted = /* @__PURE__ */ vec3.create();
+const _v2Shifted = /* @__PURE__ */ vec3.create();
+const _cross = /* @__PURE__ */ vec3.create();
 
 /**
  * Determine if an edge between two triangles should be treated as collidable.

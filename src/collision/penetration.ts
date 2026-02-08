@@ -31,7 +31,7 @@ export const createPenetrationDepth = (): PenetrationDepth => ({
     pointB: vec3.create(),
 });
 
-const _gjk_closestPoints = createGjkClosestPoints();
+const _gjk_closestPoints = /* @__PURE__ */ createGjkClosestPoints();
 
 export function penetrationDepthStepGJK(
     outPenetrationDepth: PenetrationDepth,
@@ -100,36 +100,36 @@ export function penetrationDepthStepGJK(
 const EPA_MAX_POINTS_TO_INCLUDE_ORIGIN_IN_HULL = 32;
 const EPA_MAX_POINTS = 128;
 
-const _epa_d1 = vec3.fromValues(0, 1, 0);
-const _epa_d2 = vec3.fromValues(-1, -1, -1);
-const _epa_d3 = vec3.fromValues(1, -1, -1);
-const _epa_d4 = vec3.fromValues(0, -1, 1);
+const _epa_d1 = /* @__PURE__ */ vec3.fromValues(0, 1, 0);
+const _epa_d2 = /* @__PURE__ */ vec3.fromValues(-1, -1, -1);
+const _epa_d3 = /* @__PURE__ */ vec3.fromValues(1, -1, -1);
+const _epa_d4 = /* @__PURE__ */ vec3.fromValues(0, -1, 1);
 
-const _epa_axis = vec3.create();
-const _epa_dir1 = vec3.create();
-const _epa_dir2 = vec3.create();
-const _epa_dir3 = vec3.create();
-const _epa_quat = quat.create();
-const _epa_p = vec3.create();
-const _epa_q = vec3.create();
-const _epa_y = vec3.create();
-const _epa_negatedDirection = vec3.create();
-const _epa_negatedNormal = vec3.create();
-const _epa_p2 = vec3.create();
-const _epa_q2 = vec3.create();
-const _epa_w2 = vec3.create();
-const _epa_p01 = vec3.create();
-const _epa_p02 = vec3.create();
-const _epa_q01 = vec3.create();
-const _epa_q02 = vec3.create();
-const _epa_p10 = vec3.create();
-const _epa_p12 = vec3.create();
-const _epa_q10 = vec3.create();
-const _epa_q12 = vec3.create();
+const _epa_axis = /* @__PURE__ */ vec3.create();
+const _epa_dir1 = /* @__PURE__ */ vec3.create();
+const _epa_dir2 = /* @__PURE__ */ vec3.create();
+const _epa_dir3 = /* @__PURE__ */ vec3.create();
+const _epa_quat = /* @__PURE__ */ quat.create();
+const _epa_p = /* @__PURE__ */ vec3.create();
+const _epa_q = /* @__PURE__ */ vec3.create();
+const _epa_y = /* @__PURE__ */ vec3.create();
+const _epa_negatedDirection = /* @__PURE__ */ vec3.create();
+const _epa_negatedNormal = /* @__PURE__ */ vec3.create();
+const _epa_p2 = /* @__PURE__ */ vec3.create();
+const _epa_q2 = /* @__PURE__ */ vec3.create();
+const _epa_w2 = /* @__PURE__ */ vec3.create();
+const _epa_p01 = /* @__PURE__ */ vec3.create();
+const _epa_p02 = /* @__PURE__ */ vec3.create();
+const _epa_q01 = /* @__PURE__ */ vec3.create();
+const _epa_q02 = /* @__PURE__ */ vec3.create();
+const _epa_p10 = /* @__PURE__ */ vec3.create();
+const _epa_p12 = /* @__PURE__ */ vec3.create();
+const _epa_q10 = /* @__PURE__ */ vec3.create();
+const _epa_q12 = /* @__PURE__ */ vec3.create();
 
-const _epa_penetrationNormal = vec3.create();
-const _epa_contactPointA = vec3.create();
-const _epa_contactPointB = vec3.create();
+const _epa_penetrationNormal = /* @__PURE__ */ vec3.create();
+const _epa_contactPointA = /* @__PURE__ */ vec3.create();
+const _epa_contactPointB = /* @__PURE__ */ vec3.create();
 
 type EpaSupportPoints = {
     /** minkowski difference points */
@@ -203,14 +203,14 @@ const rotateByAxisAngle = (out: Vec3, v: Vec3, axis: Vec3, angleRadians: number)
     vec3.transformQuat(out, v, _epa_quat);
 };
 
-const _epa_supportPoints = createEpaSupportPoints(256);
-const _epa_hullState = hull.init();
+const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(256);
+const _epa_hullState = /* @__PURE__ */ hull.init();
 const _epa_newTriangles: hull.NewTriangles = [];
 
 // set hull positions once - the array reference stays the same, we just clear/refill it
 _epa_hullState.positions = _epa_supportPoints.y.values;
 
-const RADIANS_120_DEG = degreesToRadians(120.0);
+const RADIANS_120_DEG = /* @__PURE__ */ degreesToRadians(120.0);
 
 /**
  * EPA penetration depth step.
@@ -520,10 +520,10 @@ export function penetrationDepthStepEPA(
     return true;
 }
 
-const _castShape_penetrationDepth = createPenetrationDepth();
-const _castShape_addRadiusA = createAddConvexRadiusSupport();
-const _castShape_addRadiusB = createAddConvexRadiusSupport();
-const _castShape_transformedA = createTransformedSupport();
+const _castShape_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
+const _castShape_addRadiusA = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _castShape_addRadiusB = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _castShape_transformedA = /* @__PURE__ */ createTransformedSupport();
 
 export function penetrationCastShape(
     out: GjkCastShapeResult,

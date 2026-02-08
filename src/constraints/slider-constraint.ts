@@ -190,13 +190,13 @@ export type SliderConstraintSettings = {
     numPositionStepsOverride?: number;
 };
 
-const _getInvInitialOrientationXY_z1 = vec3.create();
-const _getInvInitialOrientationXY_z2 = vec3.create();
-const _getInvInitialOrientationXY_mat1 = mat3.create();
-const _getInvInitialOrientationXY_mat2 = mat3.create();
-const _getInvInitialOrientationXY_q1 = quat.create();
-const _getInvInitialOrientationXY_q2 = quat.create();
-const _getInvInitialOrientationXY_q1Conj = quat.create();
+const _getInvInitialOrientationXY_z1 = /* @__PURE__ */ vec3.create();
+const _getInvInitialOrientationXY_z2 = /* @__PURE__ */ vec3.create();
+const _getInvInitialOrientationXY_mat1 = /* @__PURE__ */ mat3.create();
+const _getInvInitialOrientationXY_mat2 = /* @__PURE__ */ mat3.create();
+const _getInvInitialOrientationXY_q1 = /* @__PURE__ */ quat.create();
+const _getInvInitialOrientationXY_q2 = /* @__PURE__ */ quat.create();
+const _getInvInitialOrientationXY_q1Conj = /* @__PURE__ */ quat.create();
 
 /** calculate the inverse initial orientation for rotation tracking */
 function getInvInitialOrientationXY(out: Quat, sliderAxis1: Vec3, normalAxis1: Vec3, sliderAxis2: Vec3, normalAxis2: Vec3): Quat {
@@ -245,15 +245,15 @@ function getInvInitialOrientationXY(out: Quat, sliderAxis1: Vec3, normalAxis1: V
     return out;
 }
 
-const V0 = vec3.create();
+const V0 = /* @__PURE__ */ vec3.create();
 
-const _create_sliderAxis1 = vec3.create();
-const _create_sliderAxis2 = vec3.create();
-const _create_normalAxis1 = vec3.create();
-const _create_normalAxis2 = vec3.create();
-const _create_invQuatA = quat.create();
-const _create_invQuatB = quat.create();
-const _create_anchor = vec3.create();
+const _create_sliderAxis1 = /* @__PURE__ */ vec3.create();
+const _create_sliderAxis2 = /* @__PURE__ */ vec3.create();
+const _create_normalAxis1 = /* @__PURE__ */ vec3.create();
+const _create_normalAxis2 = /* @__PURE__ */ vec3.create();
+const _create_invQuatA = /* @__PURE__ */ quat.create();
+const _create_invQuatB = /* @__PURE__ */ quat.create();
+const _create_anchor = /* @__PURE__ */ vec3.create();
 
 /** Create a slider constraint */
 export function create(world: World, settings: SliderConstraintSettings): SliderConstraint {
@@ -442,10 +442,10 @@ export function get(world: World, id: ConstraintId): SliderConstraint | undefine
     return constraint;
 }
 
-const _getCurrentPosition_r1 = vec3.create();
-const _getCurrentPosition_r2 = vec3.create();
-const _getCurrentPosition_u = vec3.create();
-const _getCurrentPosition_sliderAxis = vec3.create();
+const _getCurrentPosition_r1 = /* @__PURE__ */ vec3.create();
+const _getCurrentPosition_r2 = /* @__PURE__ */ vec3.create();
+const _getCurrentPosition_u = /* @__PURE__ */ vec3.create();
+const _getCurrentPosition_sliderAxis = /* @__PURE__ */ vec3.create();
 
 /**
  * Get current position along the slider axis.
@@ -525,11 +525,11 @@ export function getMaxFrictionForce(constraint: SliderConstraint): number {
     return constraint.maxFrictionForce;
 }
 
-const _sliderConstraint_rotA = mat4.create();
-const _sliderConstraint_rotB = mat4.create();
-const _sliderConstraint_r1PlusU = vec3.create();
-const _sliderConstraint_invInertiaA = mat4.create();
-const _sliderConstraint_invInertiaB = mat4.create();
+const _sliderConstraint_rotA = /* @__PURE__ */ mat4.create();
+const _sliderConstraint_rotB = /* @__PURE__ */ mat4.create();
+const _sliderConstraint_r1PlusU = /* @__PURE__ */ vec3.create();
+const _sliderConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
+const _sliderConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
 
 /**
  * Calculate R1, R2, and U vectors.

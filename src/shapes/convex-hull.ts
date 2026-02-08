@@ -87,20 +87,20 @@ export type ConvexHullPlane = {
 const MAX_POINTS_IN_HULL = 256;
 const MAX_FACE_VERTICES = 32;
 
-const _tetrahedronVertex1 = vec3.create();
-const _tetrahedronVertex2 = vec3.create();
-const _tetrahedronVertex3 = vec3.create();
-const _covarianceTemp = mat4.create();
-const _covarianceTransposed = mat4.create();
-const _covarianceResult = mat4.create();
-const _normalMatrixAdjoint = mat4.create();
-const _vertexShiftDirection = vec3.create();
-const _faceNormalCross = vec3.create();
-const _perpendicularNormal = vec3.create();
-const _affineTransform = mat4.create();
+const _tetrahedronVertex1 = /* @__PURE__ */ vec3.create();
+const _tetrahedronVertex2 = /* @__PURE__ */ vec3.create();
+const _tetrahedronVertex3 = /* @__PURE__ */ vec3.create();
+const _covarianceTemp = /* @__PURE__ */ mat4.create();
+const _covarianceTransposed = /* @__PURE__ */ mat4.create();
+const _covarianceResult = /* @__PURE__ */ mat4.create();
+const _normalMatrixAdjoint = /* @__PURE__ */ mat4.create();
+const _vertexShiftDirection = /* @__PURE__ */ vec3.create();
+const _faceNormalCross = /* @__PURE__ */ vec3.create();
+const _perpendicularNormal = /* @__PURE__ */ vec3.create();
+const _affineTransform = /* @__PURE__ */ mat4.create();
 
-const _supportingFace_invScale = vec3.create();
-const _supportingFace_planeNormal = vec3.create();
+const _supportingFace_invScale = /* @__PURE__ */ vec3.create();
+const _supportingFace_planeNormal = /* @__PURE__ */ vec3.create();
 
 /** create a convex hull shape */
 export function create(o: ConvexHullShapeSettings): ConvexHullShape {
@@ -718,11 +718,11 @@ export function createConvexHullNoConvexSupport(): ConvexHullNoConvexSupport {
     };
 }
 
-const _convexHullNoConvex_p1 = plane3.create();
-const _convexHullNoConvex_p2 = plane3.create();
-const _convexHullNoConvex_p3 = plane3.create();
-const _convexHullNoConvex_newPoint = vec3.create();
-const _convexHullNoConvex_perpNormal = vec3.create();
+const _convexHullNoConvex_p1 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvex_p2 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvex_p3 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvex_newPoint = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvex_perpNormal = /* @__PURE__ */ vec3.create();
 
 export function setConvexHullNoConvexSupport(out: ConvexHullNoConvexSupport, shape: ConvexHullShape): void {
     const convexRadius = shape.convexRadius;
@@ -823,16 +823,16 @@ export function createConvexHullNoConvexSupportScaled(): ConvexHullNoConvexSuppo
     };
 }
 
-const _convexHullNoConvexScaled_invScale = vec3.create();
-const _convexHullNoConvexScaled_scaledPos = vec3.create();
-const _convexHullNoConvexScaled_n1 = vec3.create();
-const _convexHullNoConvexScaled_n2 = vec3.create();
-const _convexHullNoConvexScaled_n3 = vec3.create();
-const _convexHullNoConvexScaled_p1 = plane3.create();
-const _convexHullNoConvexScaled_p2 = plane3.create();
-const _convexHullNoConvexScaled_p3 = plane3.create();
-const _convexHullNoConvexScaled_newPoint = vec3.create();
-const _convexHullNoConvexScaled_perpNormal = vec3.create();
+const _convexHullNoConvexScaled_invScale = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_scaledPos = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_n1 = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_n2 = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_n3 = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_p1 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvexScaled_p2 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvexScaled_p3 = /* @__PURE__ */ plane3.create();
+const _convexHullNoConvexScaled_newPoint = /* @__PURE__ */ vec3.create();
+const _convexHullNoConvexScaled_perpNormal = /* @__PURE__ */ vec3.create();
 
 function scaleConvexRadius(radius: number, scale: Vec3): number {
     // use minimum absolute scale component

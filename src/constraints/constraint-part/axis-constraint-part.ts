@@ -81,13 +81,13 @@ export function resetAxisConstraintPart(part: AxisConstraintPart): void {
     part.springPart.softness = 0;
 }
 
-const _acp_r1PlusUxAxis = vec3.create();
-const _acp_r2xAxis = vec3.create();
-const _acp_invI1_r1PlusUxAxis = vec3.create();
-const _acp_invI2_r2xAxis = vec3.create();
+const _acp_r1PlusUxAxis = /* @__PURE__ */ vec3.create();
+const _acp_r2xAxis = /* @__PURE__ */ vec3.create();
+const _acp_invI1_r1PlusUxAxis = /* @__PURE__ */ vec3.create();
+const _acp_invI2_r2xAxis = /* @__PURE__ */ vec3.create();
 
-const _acp_scaledInvInertiaA = mat4.create();
-const _acp_scaledInvInertiaB = mat4.create();
+const _acp_scaledInvInertiaA = /* @__PURE__ */ mat4.create();
+const _acp_scaledInvInertiaB = /* @__PURE__ */ mat4.create();
 
 /**
  * Helper to calculate inverse effective mass (cached jacobian terms).
@@ -471,7 +471,7 @@ export function getTotalLambdaValue(part: AxisConstraintPart): number {
     return part.totalLambda;
 }
 
-const _acp_ws_impulse = vec3.create();
+const _acp_ws_impulse = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply warm start impulse from previous frame.
@@ -526,7 +526,7 @@ export function warmStart(
     }
 }
 
-const _acp_sv_impulse = vec3.create();
+const _acp_sv_impulse = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve velocity constraint (one iteration).
@@ -685,8 +685,8 @@ export function solveVelocityConstraintWithMassOverride(
     return applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, clampedLambda);
 }
 
-const _acp_sp_impulse = vec3.create();
-const _acp_sp_angularStep = vec3.create();
+const _acp_sp_impulse = /* @__PURE__ */ vec3.create();
+const _acp_sp_angularStep = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve position constraint (Baumgarte stabilization).

@@ -281,8 +281,8 @@ export function get(world: World, id: ConstraintId): FixedConstraint | undefined
     return constraint;
 }
 
-const _fixedConstraint_rotA = mat4.create();
-const _fixedConstraint_rotB = mat4.create();
+const _fixedConstraint_rotA = /* @__PURE__ */ mat4.create();
+const _fixedConstraint_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Setup velocity constraint for fixed constraint.

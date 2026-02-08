@@ -321,7 +321,7 @@ export type CapsuleWithConvexSupport = {
     getSupport(direction: Vec3, out: Vec3): void;
 };
 
-const _capsuleWithConvexGetSupport_radiusVec = vec3.create();
+const _capsuleWithConvexGetSupport_radiusVec = /* @__PURE__ */ vec3.create();
 
 function capsuleWithConvexGetSupport(this: CapsuleWithConvexSupport, direction: Vec3, out: Vec3): void {
     const length = vec3.length(direction);

@@ -235,13 +235,13 @@ export function get(world: World, id: ConstraintId): DistanceConstraint | undefi
     return constraint;
 }
 
-const _distanceConstraint_rotA = mat4.create();
-const _distanceConstraint_rotB = mat4.create();
-const _distanceConstraint_invInertiaA = mat4.create();
-const _distanceConstraint_invInertiaB = mat4.create();
-const _distanceConstraint_r1PlusU = vec3.create();
-const _distanceConstraint_r2 = vec3.create();
-const _distanceConstraint_delta = vec3.create();
+const _distanceConstraint_rotA = /* @__PURE__ */ mat4.create();
+const _distanceConstraint_rotB = /* @__PURE__ */ mat4.create();
+const _distanceConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
+const _distanceConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
+const _distanceConstraint_r1PlusU = /* @__PURE__ */ vec3.create();
+const _distanceConstraint_r2 = /* @__PURE__ */ vec3.create();
+const _distanceConstraint_delta = /* @__PURE__ */ vec3.create();
 
 /** calculate distance constraint properties. Updates world positions, normal, and sets up axis constraint part */
 function calculateDistanceConstraintProperties(

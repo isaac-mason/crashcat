@@ -65,7 +65,7 @@ function computeCompoundVolume(shape: CompoundShape): number {
     return totalVolume;
 }
 
-const _computeCompoundLocalBounds_transformed = vec3.create();
+const _computeCompoundLocalBounds_transformed = /* @__PURE__ */ vec3.create();
 
 function computeCompoundLocalBounds(out: Box3, shape: CompoundShape): void {
     // start with empty bounds
@@ -104,8 +104,8 @@ function computeCompoundLocalBounds(out: Box3, shape: CompoundShape): void {
     }
 }
 
-const _computeCompoundCenterOfMass_childCOM = vec3.create();
-const _computeCompoundCenterOfMass_worldChildCOM = vec3.create();
+const _computeCompoundCenterOfMass_childCOM = /* @__PURE__ */ vec3.create();
+const _computeCompoundCenterOfMass_worldChildCOM = /* @__PURE__ */ vec3.create();
 
 function computeCompoundCenterOfMass(out: Vec3, shape: CompoundShape): void {
     // Compute weighted center of mass based on child mass and transforms
@@ -146,21 +146,21 @@ export function update(shape: CompoundShape): void {
     shape.volume = computeCompoundVolume(shape);
 }
 
-const _computeCompoundMassProperties_childMass = massProperties.create();
-const _computeCompoundMassProperties_childCOM = vec3.create();
-const _computeCompoundMassProperties_childCOMRelative = vec3.create();
-const _computeCompoundMassProperties_rotatedInertia = massProperties.create();
-const _computeCompoundMassProperties_childRotMat3 = mat3.create();
-const _computeCompoundMassProperties_childRotMat4 = mat4.create();
+const _computeCompoundMassProperties_childMass = /* @__PURE__ */ massProperties.create();
+const _computeCompoundMassProperties_childCOM = /* @__PURE__ */ vec3.create();
+const _computeCompoundMassProperties_childCOMRelative = /* @__PURE__ */ vec3.create();
+const _computeCompoundMassProperties_rotatedInertia = /* @__PURE__ */ massProperties.create();
+const _computeCompoundMassProperties_childRotMat3 = /* @__PURE__ */ mat3.create();
+const _computeCompoundMassProperties_childRotMat4 = /* @__PURE__ */ mat4.create();
 
-const _getSurfaceNormal_invRotation = quat.create();
-const _getSurfaceNormal_forwardRotation = quat.create();
+const _getSurfaceNormal_invRotation = /* @__PURE__ */ quat.create();
+const _getSurfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
-const _subShapeIdPopResult = subShape.popResult();
+const _subShapeIdPopResult = /* @__PURE__ */ subShape.popResult();
 
-const _getSupportingFace_childPos = vec3.create();
-const _getSupportingFace_invChildRot = quat.create();
-const _getSupportingFace_localDirection = vec3.create();
+const _getSupportingFace_childPos = /* @__PURE__ */ vec3.create();
+const _getSupportingFace_invChildRot = /* @__PURE__ */ quat.create();
+const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 export const def = defineShape<CompoundShape>({
     type: ShapeType.COMPOUND,
@@ -339,12 +339,12 @@ export const def = defineShape<CompoundShape>({
 
 /* cast ray */
 
-const _castRayVsCompound_pos = vec3.create();
-const _castRayVsCompound_quat = quat.create();
-const _castRayVsCompound_transformedTranslation = vec3.create();
-const _castRayVsCompound_worldPos = vec3.create();
-const _castRayVsCompound_worldRot = quat.create();
-const _castRayVsCompound_subShapeIdBuilder = subShape.builder();
+const _castRayVsCompound_pos = /* @__PURE__ */ vec3.create();
+const _castRayVsCompound_quat = /* @__PURE__ */ quat.create();
+const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
+const _castRayVsCompound_worldPos = /* @__PURE__ */ vec3.create();
+const _castRayVsCompound_worldRot = /* @__PURE__ */ quat.create();
+const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 function castRayVsCompound(
     collector: CastRayCollector,
@@ -412,12 +412,12 @@ function castRayVsCompound(
 
 /* collide point */
 
-const _collidePointVsCompound_posB = vec3.create();
-const _collidePointVsCompound_quatB = quat.create();
-const _collidePointVsCompound_transformedTranslation = vec3.create();
-const _collidePointVsCompound_worldPos = vec3.create();
-const _collidePointVsCompound_worldRot = quat.create();
-const _collidePointVsCompound_subShapeIdBuilder = subShape.builder();
+const _collidePointVsCompound_posB = /* @__PURE__ */ vec3.create();
+const _collidePointVsCompound_quatB = /* @__PURE__ */ quat.create();
+const _collidePointVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
+const _collidePointVsCompound_worldPos = /* @__PURE__ */ vec3.create();
+const _collidePointVsCompound_worldRot = /* @__PURE__ */ quat.create();
+const _collidePointVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 function collidePointVsCompound(
     collector: CollidePointCollector,
@@ -488,7 +488,7 @@ function collidePointVsCompound(
 
 /* collide shape */
 
-const _transformedTranslation = vec3.create();
+const _transformedTranslation = /* @__PURE__ */ vec3.create();
 
 function collideCompoundVsShape(
     collector: CollideShapeCollector,
@@ -664,17 +664,17 @@ function collideShapeVsCompound(
 
 /* cast shape */
 
-const _subShapeIdBuilder = subShape.builder();
-const _worldPos = vec3.create();
-const _worldRot = quat.create();
-const _castDecorated_temp = vec3.create();
-const _transformDisplacementA = vec3.create();
+const _subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+const _worldPos = /* @__PURE__ */ vec3.create();
+const _worldRot = /* @__PURE__ */ quat.create();
+const _castDecorated_temp = /* @__PURE__ */ vec3.create();
+const _transformDisplacementA = /* @__PURE__ */ vec3.create();
 
-const _posA = vec3.create();
-const _quatA = quat.create();
-const _displacementA = vec3.create();
-const _posB = vec3.create();
-const _quatB = quat.create();
+const _posA = /* @__PURE__ */ vec3.create();
+const _quatA = /* @__PURE__ */ quat.create();
+const _displacementA = /* @__PURE__ */ vec3.create();
+const _posB = /* @__PURE__ */ vec3.create();
+const _quatB = /* @__PURE__ */ quat.create();
 
 function castCompoundVsShape(
     collector: CastShapeCollector,

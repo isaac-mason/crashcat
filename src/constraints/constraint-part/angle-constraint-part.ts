@@ -78,8 +78,8 @@ export function isActive(part: AngleConstraintPart): boolean {
     return part.effectiveMass !== 0;
 }
 
-const _calc_invI1_Axis = vec3.create();
-const _calc_invI2_Axis = vec3.create();
+const _calc_invI1_Axis = /* @__PURE__ */ vec3.create();
+const _calc_invI2_Axis = /* @__PURE__ */ vec3.create();
 
 /** helper to calculate inverse effective mass */
 function calculateInverseEffectiveMass(
@@ -264,7 +264,7 @@ export function calculateConstraintPropertiesWithSettings(
     }
 }
 
-const _ws_angularDelta = vec3.create();
+const _ws_angularDelta = /* @__PURE__ */ vec3.create();
 
 /** Apply warm start impulse from previous frame */
 export function warmStart(
@@ -346,7 +346,7 @@ export function solveVelocityConstraint(
     return applyVelocityStep(part, bodyA, bodyB, deltaLambda);
 }
 
-const _pos_angularDelta = vec3.create();
+const _pos_angularDelta = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the position constraint (Baumgarte stabilization).

@@ -16,7 +16,7 @@ export function createBarycentricCoordinatesResult(): BarycentricCoordinatesResu
     };
 }
 
-const _ab_2d = vec3.create();
+const _ab_2d = /* @__PURE__ */ vec3.create();
 
 export function computeBarycentricCoordinates2d(
     out: BarycentricCoordinatesResult,
@@ -54,10 +54,10 @@ export function computeBarycentricCoordinates2d(
     out.isValid = true;
 };
 
-const _ab_3d = vec3.create();
-const _ac_3d = vec3.create();
-const _bc_3d = vec3.create();
-const _otherBarycentric = createBarycentricCoordinatesResult();
+const _ab_3d = /* @__PURE__ */ vec3.create();
+const _ac_3d = /* @__PURE__ */ vec3.create();
+const _bc_3d = /* @__PURE__ */ vec3.create();
+const _otherBarycentric = /* @__PURE__ */ createBarycentricCoordinatesResult();
 
 export function computeBarycentricCoordinates3d(
     out: BarycentricCoordinatesResult,

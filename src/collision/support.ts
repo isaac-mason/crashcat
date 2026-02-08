@@ -22,7 +22,7 @@ export type Support = {
 
 /* shape support pool - pre-allocated support objects for hot paths */
 
-const allSupportPools = new Set<ShapeSupportPool>();
+const allSupportPools = /* @__PURE__ */ new Set<ShapeSupportPool>();
 
 /** creates a new shape support pool */
 export function createShapeSupportPool(): ShapeSupportPool {
@@ -218,7 +218,7 @@ export function setPolygonSupport(out: PolygonSupport, face: Face): void {
 
 /* transformed support - applies a position + rotation to an inner support function */
 
-const _supportTransformed_localDirection = vec3.create();
+const _supportTransformed_localDirection = /* @__PURE__ */ vec3.create();
 
 export type TransformedSupport = {
     convexRadius: number;

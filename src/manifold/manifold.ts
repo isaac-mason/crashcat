@@ -71,7 +71,7 @@ export function createContactManifold(): ContactManifold {
     };
 }
 
-export const contactManifoldPool = pool(createContactManifold);
+export const contactManifoldPool = /* @__PURE__ */ pool(createContactManifold);
 
 export function resetContactManifold(manifold: ContactManifold): void {
     manifold.numContactPoints = 0;
@@ -84,7 +84,7 @@ export function resetContactManifold(manifold: ContactManifold): void {
     manifold.materialIdB = -1;
 }
 
-const _swapShapes_tempNormal = vec3.create();
+const _swapShapes_tempNormal = /* @__PURE__ */ vec3.create();
 
 export function swapShapes(manifold: ContactManifold): void {
     // negate normal
@@ -167,11 +167,11 @@ export function setContactPoint(manifold: ContactManifold, index: number, worldP
 
 const _pruneContactPoints_projected: Vec3[] = [];
 const _pruneContactPoints_penetrationDepthSq: number[] = [];
-const _pruneContactPoints_projectedV1 = vec3.create();
-const _pruneContactPoints_edgeVec = vec3.create();
-const _pruneContactPoints_perpendicular = vec3.create();
-const _pruneContactPoints_toPoint = vec3.create();
-const _pruneContactPoints_depthVec = vec3.create();
+const _pruneContactPoints_projectedV1 = /* @__PURE__ */ vec3.create();
+const _pruneContactPoints_edgeVec = /* @__PURE__ */ vec3.create();
+const _pruneContactPoints_perpendicular = /* @__PURE__ */ vec3.create();
+const _pruneContactPoints_toPoint = /* @__PURE__ */ vec3.create();
+const _pruneContactPoints_depthVec = /* @__PURE__ */ vec3.create();
 
 const MIN_DISTANCE_SQ = 1.0e-6; // 1 mm²
 
@@ -317,18 +317,18 @@ export function pruneContactPoints(manifold: ContactManifold, penetrationAxis: V
     manifold.numContactPoints = outIndex;
 }
 
-const _manifoldBetweenTwoFaces_clippedFace = createFace();
+const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
 
-const _manifoldBetweenTwoFaces_planeOrigin = vec3.create();
-const _manifoldBetweenTwoFaces_edgeV1 = vec3.create();
-const _manifoldBetweenTwoFaces_edgeV2 = vec3.create();
-const _manifoldBetweenTwoFaces_firstEdge = vec3.create();
-const _manifoldBetweenTwoFaces_secondEdge = vec3.create();
-const _manifoldBetweenTwoFaces_planeNormal = vec3.create();
-const _manifoldBetweenTwoFaces_perp = vec3.create();
-const _manifoldBetweenTwoFaces_p1 = vec3.create();
-const _manifoldBetweenTwoFaces_p2 = vec3.create();
-const _manifoldBetweenTwoFaces_diff = vec3.create();
+const _manifoldBetweenTwoFaces_planeOrigin = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_edgeV1 = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_edgeV2 = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_firstEdge = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_secondEdge = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_planeNormal = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_perp = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_p1 = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_p2 = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_diff = /* @__PURE__ */ vec3.create();
 
 /**
  * Generates contact manifold from two supporting faces using polygon clipping.

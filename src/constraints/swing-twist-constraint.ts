@@ -175,10 +175,10 @@ function resetConstraint(constraint: SwingTwistConstraint): void {
     }
 }
 
-const _create_normalAxis1 = vec3.create();
-const _create_normalAxis2 = vec3.create();
-const _create_c_to_b1 = mat3.create();
-const _create_c_to_b2 = mat3.create();
+const _create_normalAxis1 = /* @__PURE__ */ vec3.create();
+const _create_normalAxis2 = /* @__PURE__ */ vec3.create();
+const _create_c_to_b1 = /* @__PURE__ */ mat3.create();
+const _create_c_to_b2 = /* @__PURE__ */ mat3.create();
 
 /** Create a swing-twist constraint */
 export function create(world: World, settings: SwingTwistConstraintSettings): SwingTwistConstraint {
@@ -432,8 +432,8 @@ export function setTargetAngularVelocityCS(constraint: SwingTwistConstraint, vel
     vec3.copy(constraint.targetAngularVelocity, velocity);
 }
 
-const _target_q_swing = quat.create();
-const _target_q_twist = quat.create();
+const _target_q_swing = /* @__PURE__ */ quat.create();
+const _target_q_twist = /* @__PURE__ */ quat.create();
 
 /** Set target orientation in constraint space */
 export function setTargetOrientationCS(constraint: SwingTwistConstraint, orientation: Quat): void {
@@ -448,8 +448,8 @@ export function setTargetOrientationCS(constraint: SwingTwistConstraint, orienta
     }
 }
 
-const _setTargetOrientationBS_temp = quat.create();
-const _setTargetOrientationBS_c1Conj = quat.create();
+const _setTargetOrientationBS_temp = /* @__PURE__ */ quat.create();
+const _setTargetOrientationBS_c1Conj = /* @__PURE__ */ quat.create();
 
 /** Set target orientation in body space (R2 = R1 * inOrientation) */
 export function setTargetOrientationBS(constraint: SwingTwistConstraint, orientation: Quat): void {
@@ -460,8 +460,8 @@ export function setTargetOrientationBS(constraint: SwingTwistConstraint, orienta
     setTargetOrientationCS(constraint, _setTargetOrientationBS_temp);
 }
 
-const _getRotationInConstraintSpace_q1 = quat.create();
-const _getRotationInConstraintSpace_q2 = quat.create();
+const _getRotationInConstraintSpace_q1 = /* @__PURE__ */ quat.create();
+const _getRotationInConstraintSpace_q2 = /* @__PURE__ */ quat.create();
 
 /** Get current rotation of constraint in constraint space */
 export function getRotationInConstraintSpace(out: Quat, constraint: SwingTwistConstraint, bodies: Bodies): void {
@@ -475,14 +475,14 @@ export function getRotationInConstraintSpace(out: Quat, constraint: SwingTwistCo
     quat.multiply(out, out, _getRotationInConstraintSpace_q2);
 }
 
-const _setup_rotA = mat4.create();
-const _setup_rotB = mat4.create();
-const _setup_wsAxis = mat4.create();
-const _setup_rotationError = vec3.create();
-const _setup_constraintBody1ToWorld = quat.create();
-const _setup_constraintBody2ToWorld = quat.create();
-const _setup_q = quat.create();
-const _setup_c1Conj = quat.create();
+const _setup_rotA = /* @__PURE__ */ mat4.create();
+const _setup_rotB = /* @__PURE__ */ mat4.create();
+const _setup_wsAxis = /* @__PURE__ */ mat4.create();
+const _setup_rotationError = /* @__PURE__ */ vec3.create();
+const _setup_constraintBody1ToWorld = /* @__PURE__ */ quat.create();
+const _setup_constraintBody2ToWorld = /* @__PURE__ */ quat.create();
+const _setup_q = /* @__PURE__ */ quat.create();
+const _setup_c1Conj = /* @__PURE__ */ quat.create();
 
 /**
  * Setup velocity constraint for swing-twist constraint.
@@ -751,12 +751,12 @@ export function solveVelocity(constraint: SwingTwistConstraint, bodies: Bodies, 
     return impulse;
 }
 
-const _solvePosition_rotA = mat4.create();
-const _solvePosition_rotB = mat4.create();
-const _solvePosition_q = quat.create();
-const _solvePosition_c1ToWorld = quat.create();
-const _solvePosition_c2ToWorld = quat.create();
-const _solvePosition_c1Conj = quat.create();
+const _solvePosition_rotA = /* @__PURE__ */ mat4.create();
+const _solvePosition_rotB = /* @__PURE__ */ mat4.create();
+const _solvePosition_q = /* @__PURE__ */ quat.create();
+const _solvePosition_c1ToWorld = /* @__PURE__ */ quat.create();
+const _solvePosition_c2ToWorld = /* @__PURE__ */ quat.create();
+const _solvePosition_c1Conj = /* @__PURE__ */ quat.create();
 
 /**
  * Solve position constraint for swing-twist constraint.

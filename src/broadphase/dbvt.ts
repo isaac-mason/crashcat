@@ -41,7 +41,7 @@ export type DBVTNode = {
     previousAabb: Box3;
 };
 
-const _stack = bvhStack.create(128);
+const _stack = /* @__PURE__ */ bvhStack.create(128);
 
 export function create(): DBVT {
     const dbvt: DBVT = {
@@ -178,7 +178,7 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
     }
 }
 
-const _prevAabb = box3.create();
+const _prevAabb = /* @__PURE__ */ box3.create();
 
 // todo: stack impl?
 function fetchLeaves(dbvt: DBVT, rootIndex: number, leaves: number[], depth = -1): void {
@@ -200,7 +200,7 @@ function surfaceArea(aabb: Box3): number {
     return 2 * (sx * sy + sx * sz + sy * sz);
 }
 
-const _boundsResult = box3.create();
+const _boundsResult = /* @__PURE__ */ box3.create();
 
 function boundsOfLeaves(dbvt: DBVT, leaves: number[]): Box3 {
     const result = _boundsResult;
@@ -212,7 +212,7 @@ function boundsOfLeaves(dbvt: DBVT, leaves: number[]): Box3 {
     return result;
 }
 
-const _mergedAabb = box3.create();
+const _mergedAabb = /* @__PURE__ */ box3.create();
 
 function bottomup(dbvt: DBVT, leaves: number[]): void {
     while (leaves.length > 1) {
@@ -444,7 +444,7 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     }
 }
 
-const _bounds = box3.create();
+const _bounds = /* @__PURE__ */ box3.create();
 
 export function add(dbvt: DBVT, body: RigidBody): number {
     // expand body bounds by margin
@@ -770,12 +770,12 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     }
 }
 
-const _ray = raycast3.create();
-const _rayDirection = vec3.create();
-const _rayOrigin = vec3.create();
-const _halfExtents = vec3.create();
-const _nodeBounds = box3.create();
-const _bodyBounds = box3.create();
+const _ray = /* @__PURE__ */ raycast3.create();
+const _rayDirection = /* @__PURE__ */ vec3.create();
+const _rayOrigin = /* @__PURE__ */ vec3.create();
+const _halfExtents = /* @__PURE__ */ vec3.create();
+const _nodeBounds = /* @__PURE__ */ box3.create();
+const _bodyBounds = /* @__PURE__ */ box3.create();
 
 export function castRay(
     world: World,

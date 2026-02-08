@@ -18,7 +18,7 @@ import type { Filter } from './filter';
 import type { Shape } from './shapes/shapes';
 import type { World } from './world';
 
-const _castRay_ray = raycast3.create();
+const _castRay_ray = /* @__PURE__ */ raycast3.create();
 
 const CastRayBodyVisitor = {
     shouldExit: false,
@@ -87,8 +87,8 @@ export function castRay(
     CastRayBodyVisitor.reset();
 }
 
-const _castShape_aabb = box3.create();
-const _castShape_mat4 = mat4.create();
+const _castShape_aabb = /* @__PURE__ */ box3.create();
+const _castShape_mat4 = /* @__PURE__ */ mat4.create();
 
 const CastShapeBodyVisitor = {
     shouldExit: false,
@@ -189,8 +189,8 @@ export function castShape(
     CastShapeBodyVisitor.reset();
 }
 
-const _collideShape_aabb = box3.create();
-const _collideShape_mat4 = mat4.create();
+const _collideShape_aabb = /* @__PURE__ */ box3.create();
+const _collideShape_mat4 = /* @__PURE__ */ mat4.create();
 
 const CollideShapeBodyVisitor = {
     shouldExit: false,

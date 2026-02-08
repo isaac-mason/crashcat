@@ -125,7 +125,7 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: PlaneShape, _sub
     vec3.copy(ioResult.normal, shape.plane.normal);
 }
 
-const _getSupportingFace_vertices: [Vec3, Vec3, Vec3, Vec3] = [vec3.create(), vec3.create(), vec3.create(), vec3.create()];
+const _getSupportingFace_vertices: [Vec3, Vec3, Vec3, Vec3] = [/* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create()];
 
 function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: PlaneShape, _subShapeId: number): void {
     const { position, quaternion, scale } = ioResult;
@@ -205,10 +205,10 @@ function getOrthogonalBasis(normal: Vec3, outPerp1: Vec3, outPerp2: Vec3): void 
     vec3.normalize(outPerp1, outPerp1);
 }
 
-const _getPlaneVertices_perp1 = vec3.create();
-const _getPlaneVertices_perp2 = vec3.create();
-const _getPlaneVertices_point = vec3.create();
-const _getPlaneVertices_temp = vec3.create();
+const _getPlaneVertices_perp1 = /* @__PURE__ */ vec3.create();
+const _getPlaneVertices_perp2 = /* @__PURE__ */ vec3.create();
+const _getPlaneVertices_point = /* @__PURE__ */ vec3.create();
+const _getPlaneVertices_temp = /* @__PURE__ */ vec3.create();
 
 function getPlaneVertices(out: [Vec3, Vec3, Vec3, Vec3], shape: PlaneShape): void {
     const normal = shape.plane.normal;
@@ -239,9 +239,9 @@ function getPlaneVertices(out: [Vec3, Vec3, Vec3, Vec3], shape: PlaneShape): voi
     vec3.add(out[3], _getPlaneVertices_point, _getPlaneVertices_temp);
 }
 
-const _computePlaneLocalBounds_vertices: [Vec3, Vec3, Vec3, Vec3] = [vec3.create(), vec3.create(), vec3.create(), vec3.create()];
-const _computePlaneLocalBounds_offset = vec3.create();
-const _computePlaneLocalBounds_behind = vec3.create();
+const _computePlaneLocalBounds_vertices: [Vec3, Vec3, Vec3, Vec3] = [/* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create(), /* @__PURE__ */ vec3.create()];
+const _computePlaneLocalBounds_offset = /* @__PURE__ */ vec3.create();
+const _computePlaneLocalBounds_behind = /* @__PURE__ */ vec3.create();
 
 function computePlaneLocalBounds(out: Box3, shape: PlaneShape): void {
     getPlaneVertices(_computePlaneLocalBounds_vertices, shape);
@@ -282,13 +282,13 @@ function register(): void {
     }
 }
 
-const _castRayVsPlane_worldPlane = plane3.create();
-const _castRayVsPlane_scaledPlane = plane3.create();
-const _castRayVsPlane_scale = vec3.create();
-const _castRayVsPlane_transform = mat4.create();
-const _castRayVsPlane_quat = quat.create();
-const _castRayVsPlane_pos = vec3.create();
-const _castRayVsPlane_hit = createCastRayHit();
+const _castRayVsPlane_worldPlane = /* @__PURE__ */ plane3.create();
+const _castRayVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
+const _castRayVsPlane_scale = /* @__PURE__ */ vec3.create();
+const _castRayVsPlane_transform = /* @__PURE__ */ mat4.create();
+const _castRayVsPlane_quat = /* @__PURE__ */ quat.create();
+const _castRayVsPlane_pos = /* @__PURE__ */ vec3.create();
+const _castRayVsPlane_hit = /* @__PURE__ */ createCastRayHit();
 
 function castRayVsPlane(
     collector: CastRayCollector,
@@ -365,14 +365,14 @@ function castRayVsPlane(
     }
 }
 
-const _collidePointVsPlane_worldPlane = plane3.create();
-const _collidePointVsPlane_scaledPlane = plane3.create();
-const _collidePointVsPlane_scale = vec3.create();
-const _collidePointVsPlane_transform = mat4.create();
-const _collidePointVsPlane_quat = quat.create();
-const _collidePointVsPlane_pos = vec3.create();
-const _collidePointVsPlane_point = vec3.create();
-const _collidePointVsPlane_hit = createCollidePointHit();
+const _collidePointVsPlane_worldPlane = /* @__PURE__ */ plane3.create();
+const _collidePointVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
+const _collidePointVsPlane_scale = /* @__PURE__ */ vec3.create();
+const _collidePointVsPlane_transform = /* @__PURE__ */ mat4.create();
+const _collidePointVsPlane_quat = /* @__PURE__ */ quat.create();
+const _collidePointVsPlane_pos = /* @__PURE__ */ vec3.create();
+const _collidePointVsPlane_point = /* @__PURE__ */ vec3.create();
+const _collidePointVsPlane_hit = /* @__PURE__ */ createCollidePointHit();
 
 function collidePointVsPlane(
     collector: CollidePointCollector,
@@ -419,30 +419,30 @@ function collidePointVsPlane(
 
 /* convex vs plane collision */
 
-const _collideConvexVsPlane_supportPool = createShapeSupportPool();
-const _collideConvexVsPlane_hit = createCollideShapeHit();
-const _collideConvexVsPlane_scaledPlane = plane3.create();
-const _collideConvexVsPlane_localPlane = plane3.create();
-const _collideConvexVsPlane_transform = mat4.create();
-const _collideConvexVsPlane_invTransform = mat4.create();
-const _collideConvexVsPlane_scaleA = vec3.create();
-const _collideConvexVsPlane_scaleB = vec3.create();
-const _collideConvexVsPlane_supportPoint = vec3.create();
-const _collideConvexVsPlane_normal = vec3.create();
-const _collideConvexVsPlane_point1 = vec3.create();
-const _collideConvexVsPlane_point2 = vec3.create();
-const _collideConvexVsPlane_transformA = mat4.create();
-const _collideConvexVsPlane_quatA = quat.create();
-const _collideConvexVsPlane_posA = vec3.create();
-const _collideConvexVsPlane_quatB = quat.create();
-const _collideConvexVsPlane_posB = vec3.create();
-const _collideConvexVsPlane_combinedTransform = mat4.create();
-const _collideConvexVsPlane_scaleVec = vec3.create();
-const _collideConvexVsPlane_offsetByRadius = vec3.create();
-const _collideConvexVsPlane_offsetByDistance = vec3.create();
-const _collideConvexVsPlane_point1World = vec3.create();
-const _collideConvexVsPlane_point2World = vec3.create();
-const _collideConvexVsPlane_penetrationAxisWorld = vec3.create();
+const _collideConvexVsPlane_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _collideConvexVsPlane_hit = /* @__PURE__ */ createCollideShapeHit();
+const _collideConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
+const _collideConvexVsPlane_localPlane = /* @__PURE__ */ plane3.create();
+const _collideConvexVsPlane_transform = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_invTransform = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_scaleA = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_scaleB = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_supportPoint = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_normal = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_point1 = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_point2 = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_transformA = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_quatA = /* @__PURE__ */ quat.create();
+const _collideConvexVsPlane_posA = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_quatB = /* @__PURE__ */ quat.create();
+const _collideConvexVsPlane_posB = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_combinedTransform = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_scaleVec = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_offsetByRadius = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_offsetByDistance = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_point1World = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_point2World = /* @__PURE__ */ vec3.create();
+const _collideConvexVsPlane_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
 
 function collideConvexVsPlane(
     collector: CollideShapeCollector,
@@ -586,16 +586,16 @@ function collideConvexVsPlane(
     }
 }
 
-const _getAdaptivePlaneSupportingFace_worldPlane = plane3.create();
-const _getAdaptivePlaneSupportingFace_center = vec3.create();
-const _getAdaptivePlaneSupportingFace_perp1 = vec3.create();
-const _getAdaptivePlaneSupportingFace_perp2 = vec3.create();
-const _getAdaptivePlaneSupportingFace_bboxSize = vec3.create();
-const _getAdaptivePlaneSupportingFace_temp = vec3.create();
-const _getAdaptivePlaneSupportingFace_v0 = vec3.create();
-const _getAdaptivePlaneSupportingFace_v1 = vec3.create();
-const _getAdaptivePlaneSupportingFace_v2 = vec3.create();
-const _getAdaptivePlaneSupportingFace_v3 = vec3.create();
+const _getAdaptivePlaneSupportingFace_worldPlane = /* @__PURE__ */ plane3.create();
+const _getAdaptivePlaneSupportingFace_center = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_perp1 = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_perp2 = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_bboxSize = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_temp = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_v0 = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_v1 = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_v2 = /* @__PURE__ */ vec3.create();
+const _getAdaptivePlaneSupportingFace_v3 = /* @__PURE__ */ vec3.create();
 
 /**
  * get an adaptive-sized supporting face for the plane.
@@ -669,33 +669,33 @@ function getAdaptivePlaneSupportingFace(
 
 /* cast convex vs plane */
 
-const _castConvexVsPlane_supportPool = createShapeSupportPool();
-const _castConvexVsPlane_hit = createCastShapeHit();
-const _castConvexVsPlane_scaledPlane = plane3.create();
-const _castConvexVsPlane_scaleA = vec3.create();
-const _castConvexVsPlane_scaleB = vec3.create();
-const _castConvexVsPlane_startTransform = mat4.create();
-const _castConvexVsPlane_normalInShapeSpace = vec3.create();
-const _castConvexVsPlane_supportPoint = vec3.create();
-const _castConvexVsPlane_direction = vec3.create();
-const _castConvexVsPlane_invQuat = quat.create();
-const _castConvexVsPlane_quatA = quat.create();
-const _castConvexVsPlane_posA = vec3.create();
-const _castConvexVsPlane_quatB = quat.create();
-const _castConvexVsPlane_posB = vec3.create();
-const _castConvexVsPlane_supportPointWorld = vec3.create();
-const _castConvexVsPlane_planeToWorld = mat4.create();
-const _castConvexVsPlane_offsetByRadius = vec3.create();
-const _castConvexVsPlane_offsetByDistance = vec3.create();
-const _castConvexVsPlane_point1 = vec3.create();
-const _castConvexVsPlane_point2 = vec3.create();
-const _castConvexVsPlane_offset = vec3.create();
-const _castConvexVsPlane_comHit = mat4.create();
-const _castConvexVsPlane_contactLocal = vec3.create();
-const _castConvexVsPlane_penetrationAxisWorld = vec3.create();
-const _castConvexVsPlane_shapeToWorld = mat4.create();
-const _castConvexVsPlane_quatFromMat4 = quat.create();
-const _castConvexVsPlane_posFromMat4 = vec3.create();
+const _castConvexVsPlane_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _castConvexVsPlane_hit = /* @__PURE__ */ createCastShapeHit();
+const _castConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
+const _castConvexVsPlane_scaleA = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_scaleB = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_startTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_normalInShapeSpace = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_supportPoint = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_direction = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_invQuat = /* @__PURE__ */ quat.create();
+const _castConvexVsPlane_quatA = /* @__PURE__ */ quat.create();
+const _castConvexVsPlane_posA = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_quatB = /* @__PURE__ */ quat.create();
+const _castConvexVsPlane_posB = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_supportPointWorld = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_planeToWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_offsetByRadius = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_offsetByDistance = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_point1 = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_point2 = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_offset = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_comHit = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_contactLocal = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
+const _castConvexVsPlane_shapeToWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_quatFromMat4 = /* @__PURE__ */ quat.create();
+const _castConvexVsPlane_posFromMat4 = /* @__PURE__ */ vec3.create();
 
 export function castConvexVsPlane(
     collector: CastShapeCollector,

@@ -138,7 +138,7 @@ class CollisionBodyPairVisitor implements BodyVisitor {
     }
 }
 
-const _collisionBodyPairVisitor = new CollisionBodyPairVisitor();
+const _collisionBodyPairVisitor = /* @__PURE__ */ new CollisionBodyPairVisitor();
 
 /** initializes broadphase state */
 export function init(layers: Layers): Broadphase {
@@ -210,8 +210,8 @@ export function reinsertBody(broadphase: Broadphase, body: RigidBody, layers: La
     addBody(broadphase, body, layers);
 }
 
-const _findCollidingPairs_filter = filter.createEmpty();
-const _findCollidingPairs_expandedAABB = box3.create();
+const _findCollidingPairs_filter = /* @__PURE__ */ filter.createEmpty();
+const _findCollidingPairs_expandedAABB = /* @__PURE__ */ box3.create();
 
 /** find potentially colliding body pairs, updates broadphase.pairs */
 export function findCollidingPairs(world: World, speculativeContactDistance: number, listener: Listener | undefined): void {

@@ -13,8 +13,8 @@ import type { WorldSettings } from './world-settings';
 
 const NO_ISLAND = -1;
 
-/** temporary object for reading constraint iteration overrides (avoids allocation per finalize call) */
-const _finalize_constraintOverrides = constraints.createConstraintIterationOverrides();
+/** temporary object for reading constraint iteration overrides */
+const _finalize_constraintOverrides = /* @__PURE__ */ constraints.createConstraintIterationOverrides();
 
 /** islands state, groups connected bodies for independent constraint solving */
 export type Islands = {

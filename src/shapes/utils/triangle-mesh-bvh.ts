@@ -279,7 +279,7 @@ function resetSahBin(bin: PreallocatedSahBin): void {
 /**
  * Temporary Box3 for left bounds accumulation in large mesh SAH.
  */
-const _leftBounds = box3.create();
+const _leftBounds = /* @__PURE__ */ box3.create();
 
 /**
  * Ensure the build data pool is large enough for the given triangle count.
@@ -585,15 +585,15 @@ function buildRecursive(
     return node;
 }
 
-const _extent = vec3.create();
-const _centerSize = vec3.create();
+const _extent = /* @__PURE__ */ vec3.create();
+const _centerSize = /* @__PURE__ */ vec3.create();
 
 /**
  * Scratch variables for center bounds computation.
  * Reused across all buildRecursive calls to avoid allocations.
  */
-const _centerMin = vec3.create();
-const _centerMax = vec3.create();
+const _centerMin = /* @__PURE__ */ vec3.create();
+const _centerMax = /* @__PURE__ */ vec3.create();
 
 /**
  * Compute optimal split axis and position for given strategy.

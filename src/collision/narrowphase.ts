@@ -162,8 +162,8 @@ export {
 export type { CollideShapeCollector, CollideShapeHit, CollideShapeSettings } from './collide-shape-vs-shape';
 export { InternalEdgeRemovingCollector, type VoidedFeature } from './internal-edge-removing-collector';
 
-const _internalEdgeRemovingCollector = new InternalEdgeRemovingCollector();
-const _internalEdgeRemoval_modifiedSettings = createDefaultCollideShapeSettings();
+const _internalEdgeRemovingCollector = /* @__PURE__ */ new InternalEdgeRemovingCollector();
+const _internalEdgeRemoval_modifiedSettings = /* @__PURE__ */ createDefaultCollideShapeSettings();
 
 /**
  * Collide two shapes using the registered collision dispatch handlers.

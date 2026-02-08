@@ -171,8 +171,8 @@ export function get(world: World, id: ConstraintId): PointConstraint | undefined
     return constraint;
 }
 
-const _setupPointConstraintVelocity_rotA = mat4.create();
-const _setupPointConstraintVelocity_rotB = mat4.create();
+const _setupPointConstraintVelocity_rotA = /* @__PURE__ */ mat4.create();
+const _setupPointConstraintVelocity_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Setup velocity constraint - calculate constraint properties from current body poses
@@ -223,8 +223,8 @@ export function solveVelocity(constraint: PointConstraint, bodies: Bodies): bool
     return pointConstraintPart.solveVelocityConstraint(constraint.pointConstraintPart, bodyA, bodyB);
 }
 
-const _solvePointConstraintPosition_rotA = mat4.create();
-const _solvePointConstraintPosition_rotB = mat4.create();
+const _solvePointConstraintPosition_rotA = /* @__PURE__ */ mat4.create();
+const _solvePointConstraintPosition_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Solve position constraint - Baumgarte stabilization for position drift

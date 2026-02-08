@@ -15,19 +15,19 @@ const COS_1_DEGREE = Math.cos((1 * Math.PI) / 180);
 const FLT_EPSILON = 1e-6;
 const FLT_EPSILON_SQ = FLT_EPSILON * FLT_EPSILON;
 
-const _faceV0 = vec3.create();
-const _faceV1 = vec3.create();
-const _faceV2 = vec3.create();
-const _vertexA = vec3.create();
-const _vertexB = vec3.create();
-const _triangleNormal = vec3.create();
-const _contactNormal = vec3.create();
-const _v1 = vec3.create();
-const _v2 = vec3.create();
-const _v1_v2 = vec3.create();
-const _closest = vec3.create();
-const _edge01 = vec3.create();
-const _edge12 = vec3.create();
+const _faceV0 = /* @__PURE__ */ vec3.create();
+const _faceV1 = /* @__PURE__ */ vec3.create();
+const _faceV2 = /* @__PURE__ */ vec3.create();
+const _vertexA = /* @__PURE__ */ vec3.create();
+const _vertexB = /* @__PURE__ */ vec3.create();
+const _triangleNormal = /* @__PURE__ */ vec3.create();
+const _contactNormal = /* @__PURE__ */ vec3.create();
+const _v1 = /* @__PURE__ */ vec3.create();
+const _v2 = /* @__PURE__ */ vec3.create();
+const _v1_v2 = /* @__PURE__ */ vec3.create();
+const _closest = /* @__PURE__ */ vec3.create();
+const _edge01 = /* @__PURE__ */ vec3.create();
+const _edge12 = /* @__PURE__ */ vec3.create();
 
 type ClosestFeatureResult = {
     vertexIndex1: number;
@@ -48,9 +48,9 @@ export type VoidedFeature = {
     subShapeId: number;
 };
 
-const delayedResultsPool = pool(createCollideShapeHit);
+const delayedResultsPool = /* @__PURE__ */ pool(createCollideShapeHit);
 
-const voidedFeaturesPool = pool<VoidedFeature>(() => ({
+const voidedFeaturesPool = /* @__PURE__ */ pool<VoidedFeature>(() => ({
     feature: vec3.create(),
     subShapeId: 0,
 }));

@@ -54,13 +54,13 @@ export function isActive(part: PointConstraintPart): boolean {
     return part.effectiveMass[15] !== 0;
 }
 
-const _calc_r1Cross = mat4.create();
-const _calc_r2Cross = mat4.create();
-const _calc_invEffectiveMass = mat4.create();
-const _calc_temp1 = mat4.create();
-const _calc_temp2 = mat4.create();
-const _calc_invInertia1 = mat4.create();
-const _calc_invInertia2 = mat4.create();
+const _calc_r1Cross = /* @__PURE__ */ mat4.create();
+const _calc_r2Cross = /* @__PURE__ */ mat4.create();
+const _calc_invEffectiveMass = /* @__PURE__ */ mat4.create();
+const _calc_temp1 = /* @__PURE__ */ mat4.create();
+const _calc_temp2 = /* @__PURE__ */ mat4.create();
+const _calc_invInertia1 = /* @__PURE__ */ mat4.create();
+const _calc_invInertia2 = /* @__PURE__ */ mat4.create();
 
 /**
  * Calculate constraint properties for the point constraint.
@@ -187,12 +187,12 @@ export function warmStart(part: PointConstraintPart, bodyA: RigidBody, bodyB: Ri
 }
 
 // temp variables for solve velocity
-const _solveVel_jv = vec3.create();
-const _solveVel_lambda = vec3.create();
-const _solveVel_angA = vec3.create();
-const _solveVel_angB = vec3.create();
-const _solveVel_crossA = vec3.create();
-const _solveVel_crossB = vec3.create();
+const _solveVel_jv = /* @__PURE__ */ vec3.create();
+const _solveVel_lambda = /* @__PURE__ */ vec3.create();
+const _solveVel_angA = /* @__PURE__ */ vec3.create();
+const _solveVel_angB = /* @__PURE__ */ vec3.create();
+const _solveVel_crossA = /* @__PURE__ */ vec3.create();
+const _solveVel_crossB = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the velocity constraint.
@@ -243,8 +243,8 @@ export function solveVelocityConstraint(part: PointConstraintPart, bodyA: RigidB
 }
 
 // temp variables for apply velocity step
-const _applyVel_angularImpulseA = vec3.create();
-const _applyVel_angularImpulseB = vec3.create();
+const _applyVel_angularImpulseA = /* @__PURE__ */ vec3.create();
+const _applyVel_angularImpulseB = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply an impulse to both bodies.
@@ -288,10 +288,10 @@ function applyVelocityStep(part: PointConstraintPart, bodyA: RigidBody, bodyB: R
 }
 
 // temp variables for solve position
-const _solvePos_separation = vec3.create();
-const _solvePos_lambda = vec3.create();
-const _solvePos_linearStep = vec3.create();
-const _solvePos_angularStep = vec3.create();
+const _solvePos_separation = /* @__PURE__ */ vec3.create();
+const _solvePos_lambda = /* @__PURE__ */ vec3.create();
+const _solvePos_linearStep = /* @__PURE__ */ vec3.create();
+const _solvePos_angularStep = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the position constraint using Baumgarte stabilization.

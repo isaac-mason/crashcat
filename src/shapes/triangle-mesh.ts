@@ -142,7 +142,7 @@ export function create(o: TriangleMeshShapeSettings): TriangleMeshShape {
     return shape;
 }
 
-const _subShapeIdPopResult = subShape.popResult();
+const _subShapeIdPopResult = /* @__PURE__ */ subShape.popResult();
 const _getSurfaceNormal_normal: Vec3 = [0, 0, 0];
 const _getSupportingFace_a: Vec3 = [0, 0, 0];
 const _getSupportingFace_b: Vec3 = [0, 0, 0];
@@ -239,22 +239,22 @@ export const def = defineShape<TriangleMeshShape>({
 
 /* cast ray */
 
-const _castRayVsTriangleMesh_pos = vec3.create();
-const _castRayVsTriangleMesh_quat = quat.create();
-const _castRayVsTriangleMesh_scale = vec3.create();
-const _castRayVsTriangleMesh_rayOriginLocal = vec3.create();
-const _castRayVsTriangleMesh_rayDirectionLocal = vec3.create();
-const _castRayVsTriangleMesh_invQuat = quat.create();
-const _castRayVsTriangleMesh_ray = raycast3.create();
-const _castRayVsTriangleMesh_hitResult = raycast3.createIntersectsTriangleResult();
-const _castRayVsTriangleMesh_stack = bvhStack.create();
-const _castRayVsTriangleMesh_leftBounds = box3.create();
-const _castRayVsTriangleMesh_rightBounds = box3.create();
-const _castRayVsTriangleMesh_a = vec3.create();
-const _castRayVsTriangleMesh_b = vec3.create();
-const _castRayVsTriangleMesh_c = vec3.create();
-const _castRayVsTriangleMesh_hit = createCastRayHit();
-const _castRayVsTriangleMesh_subShapeIdBuilder = subShape.builder();
+const _castRayVsTriangleMesh_pos = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_quat = /* @__PURE__ */ quat.create();
+const _castRayVsTriangleMesh_scale = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_rayOriginLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
+const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
+const _castRayVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
+const _castRayVsTriangleMesh_rightBounds = /* @__PURE__ */ box3.create();
+const _castRayVsTriangleMesh_a = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_b = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_c = /* @__PURE__ */ vec3.create();
+const _castRayVsTriangleMesh_hit = /* @__PURE__ */ createCastRayHit();
+const _castRayVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 function castRayVsTriangleMesh(
     collector: CastRayCollector,
@@ -464,17 +464,17 @@ class HitCountCollector {
     }
 }
 
-const _collidePointVsTriangleMesh_hitCountCollector = new HitCountCollector();
-const _collidePointVsTriangleMesh_castRaySettings = createDefaultCastRaySettings();
+const _collidePointVsTriangleMesh_hitCountCollector = /* @__PURE__ */ new HitCountCollector();
+const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ createDefaultCastRaySettings();
 _collidePointVsTriangleMesh_castRaySettings.collideWithBackfaces = true; // backface collision required for odd-even rule
 
-const _collidePointVsTriangleMesh_quatB = quat.create();
-const _collidePointVsTriangleMesh_localPoint = vec3.create();
-const _collidePointVsTriangleMesh_ray = raycast3.create();
-const _collidePointVsTriangleMesh_rayDirection = vec3.create();
-const _collidePointVsTriangleMesh_aabbSize = vec3.create();
+const _collidePointVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
+const _collidePointVsTriangleMesh_localPoint = /* @__PURE__ */ vec3.create();
+const _collidePointVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
+const _collidePointVsTriangleMesh_rayDirection = /* @__PURE__ */ vec3.create();
+const _collidePointVsTriangleMesh_aabbSize = /* @__PURE__ */ vec3.create();
 const _collidePointVsTriangleMesh_popResult: subShape.PopResult = { value: 0, remainder: subShape.EMPTY_SUB_SHAPE_ID };
-const _collidePointHit = createCollidePointHit();
+const _collidePointHit = /* @__PURE__ */ createCollidePointHit();
 
 function collidePointVsTriangleMesh(
     collector: CollidePointCollector,
@@ -579,62 +579,62 @@ function collidePointVsTriangleMesh(
 
 /* cast shape */
 
-const _castShapeHit = createCastShapeHit();
-const _displacementInB = vec3.create();
-const _transformedSupportA = createTransformedSupport();
-const _triangleSupport = createTriangleSupport();
-const _sweptAABB: Box3 = box3.create();
+const _castShapeHit = /* @__PURE__ */ createCastShapeHit();
+const _displacementInB = /* @__PURE__ */ vec3.create();
+const _transformedSupportA = /* @__PURE__ */ createTransformedSupport();
+const _triangleSupport = /* @__PURE__ */ createTriangleSupport();
+const _sweptAABB: Box3 = /* @__PURE__ */ box3.create();
 
-const _gjkResult = createGjkCastShapeResult();
+const _gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 
-const _worldPointA = vec3.create();
-const _worldPointB = vec3.create();
-const _displacementScaled = vec3.create();
+const _worldPointA = /* @__PURE__ */ vec3.create();
+const _worldPointB = /* @__PURE__ */ vec3.create();
+const _displacementScaled = /* @__PURE__ */ vec3.create();
 
-const _posAInB = vec3.create();
-const _quatAInB = quat.create();
-const _positionDifference = vec3.create();
-const _inverseQuaternionB = quat.create();
-const _positionAtHitTime = vec3.create();
-const _inverseQuatAInB = quat.create();
+const _posAInB = /* @__PURE__ */ vec3.create();
+const _quatAInB = /* @__PURE__ */ quat.create();
+const _positionDifference = /* @__PURE__ */ vec3.create();
+const _inverseQuaternionB = /* @__PURE__ */ quat.create();
+const _positionAtHitTime = /* @__PURE__ */ vec3.create();
+const _inverseQuatAInB = /* @__PURE__ */ quat.create();
 
-const _faceNormal = vec3.create();
+const _faceNormal = /* @__PURE__ */ vec3.create();
 
-const _activeEdgeMovementDirection = vec3.create();
-const _triangleNormalForFix = vec3.create();
-const _conjugateQuat = quat.create();
+const _activeEdgeMovementDirection = /* @__PURE__ */ vec3.create();
+const _triangleNormalForFix = /* @__PURE__ */ vec3.create();
+const _conjugateQuat = /* @__PURE__ */ quat.create();
 
-const _triangleA = vec3.create();
-const _triangleB = vec3.create();
-const _triangleC = vec3.create();
-const _getTriangleVertices_a = vec3.create();
-const _getTriangleVertices_b = vec3.create();
-const _getTriangleVertices_c = vec3.create();
-const _computeTriangleAABB_result = box3.create();
-const _edgeA = vec3.create();
-const _edgeB = vec3.create();
-const _triangleNormal = vec3.create();
-const _penetrationDifference = vec3.create();
+const _triangleA = /* @__PURE__ */ vec3.create();
+const _triangleB = /* @__PURE__ */ vec3.create();
+const _triangleC = /* @__PURE__ */ vec3.create();
+const _getTriangleVertices_a = /* @__PURE__ */ vec3.create();
+const _getTriangleVertices_b = /* @__PURE__ */ vec3.create();
+const _getTriangleVertices_c = /* @__PURE__ */ vec3.create();
+const _computeTriangleAABB_result = /* @__PURE__ */ box3.create();
+const _edgeA = /* @__PURE__ */ vec3.create();
+const _edgeB = /* @__PURE__ */ vec3.create();
+const _triangleNormal = /* @__PURE__ */ vec3.create();
+const _penetrationDifference = /* @__PURE__ */ vec3.create();
 
-const _posA = vec3.create();
-const _quatA = quat.create();
-const _scaleA = vec3.create();
-const _displacementA = vec3.create();
-const _posB = vec3.create();
-const _quatB = quat.create();
-const _scaleB = vec3.create();
+const _posA = /* @__PURE__ */ vec3.create();
+const _quatA = /* @__PURE__ */ quat.create();
+const _scaleA = /* @__PURE__ */ vec3.create();
+const _displacementA = /* @__PURE__ */ vec3.create();
+const _posB = /* @__PURE__ */ vec3.create();
+const _quatB = /* @__PURE__ */ quat.create();
+const _scaleB = /* @__PURE__ */ vec3.create();
 
-const _mat4 = mat4.create();
+const _mat4 = /* @__PURE__ */ mat4.create();
 
-const _bvhStack = bvhStack.create();
-const _raycast = raycast3.create();
-const _halfExtents = vec3.create();
-const _expandedBounds = box3.create();
-const _triExpandedBounds = box3.create();
+const _bvhStack = /* @__PURE__ */ bvhStack.create();
+const _raycast = /* @__PURE__ */ raycast3.create();
+const _halfExtents = /* @__PURE__ */ vec3.create();
+const _expandedBounds = /* @__PURE__ */ box3.create();
+const _triExpandedBounds = /* @__PURE__ */ box3.create();
 
-const _subShapeIdBuilder = subShape.builder();
+const _subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
-const supportPoolA = createShapeSupportPool();
+const supportPoolA = /* @__PURE__ */ createShapeSupportPool();
 
 function castConvexVsTriangleMesh(
     collector: CastShapeCollector,
@@ -987,42 +987,42 @@ function castConvexVsTriangleMesh(
     // console.log(`[castConvexVsTriangleMesh] Nodes visited: ${nodesVisited}, GJK casts performed: ${gjkCastsPerformed}`);
 }
 
-const castTriangleMeshVsConvex = reversedCastShapeVsShape(castConvexVsTriangleMesh);
+const castTriangleMeshVsConvex = /* @__PURE__ */ reversedCastShapeVsShape(castConvexVsTriangleMesh);
 
 /* collide shape */
 
-const _collideShapeHit = createCollideShapeHit();
+const _collideShapeHit = /* @__PURE__ */ createCollideShapeHit();
 
-const _temp_faceDirA = vec3.create();
+const _temp_faceDirA = /* @__PURE__ */ vec3.create();
 
-const _simplex = createSimplex();
-const _penetrationDepth = createPenetrationDepth();
+const _simplex = /* @__PURE__ */ createSimplex();
+const _penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
 
-const _supportPoolA = createShapeSupportPool();
+const _supportPoolA = /* @__PURE__ */ createShapeSupportPool();
 
-const _addRadiusSupport = createAddConvexRadiusSupport();
+const _addRadiusSupport = /* @__PURE__ */ createAddConvexRadiusSupport();
 
-const _penetrationAxis = vec3.create();
-const _vectorAB = vec3.create();
+const _penetrationAxis = /* @__PURE__ */ vec3.create();
+const _vectorAB = /* @__PURE__ */ vec3.create();
 
-const _inverseQuatA = quat.create();
+const _inverseQuatA = /* @__PURE__ */ quat.create();
 
-const _aabbShapeExpand = vec3.create();
+const _aabbShapeExpand = /* @__PURE__ */ vec3.create();
 
-const _inverseQuatB = quat.create();
-const _boundsOf1InSpaceOf2 = box3.create();
-const _boundsOf1 = box3.create();
-const _transform2To1Pos = vec3.create();
-const _transform2To1Quat = quat.create();
+const _inverseQuatB = /* @__PURE__ */ quat.create();
+const _boundsOf1InSpaceOf2 = /* @__PURE__ */ box3.create();
+const _boundsOf1 = /* @__PURE__ */ box3.create();
+const _transform2To1Pos = /* @__PURE__ */ vec3.create();
+const _transform2To1Quat = /* @__PURE__ */ quat.create();
 
-const _triangleA_inA = vec3.create();
-const _triangleB_inA = vec3.create();
-const _triangleC_inA = vec3.create();
+const _triangleA_inA = /* @__PURE__ */ vec3.create();
+const _triangleB_inA = /* @__PURE__ */ vec3.create();
+const _triangleC_inA = /* @__PURE__ */ vec3.create();
 
-const _collideConvexVsTriangleMesh_stack = bvhStack.create();
-const _collideConvexVsTriangleMesh_queryCenter = vec3.create();
-const _collideConvexVsTriangleMesh_nodeCenter = vec3.create();
-const _collideConvexVsTriangleMesh_triangleAABB = box3.create();
+const _collideConvexVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+const _collideConvexVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
+const _collideConvexVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
+const _collideConvexVsTriangleMesh_triangleAABB = /* @__PURE__ */ box3.create();
 
 function collideConvexVsTriangleMesh(
     collector: CollideShapeCollector,
@@ -1379,42 +1379,42 @@ function collideConvexVsTriangleMesh(
     }
 }
 
-const collideTriangleMeshVsConvex = reversedCollideShapeVsShape(collideConvexVsTriangleMesh);
+const collideTriangleMeshVsConvex = /* @__PURE__ */ reversedCollideShapeVsShape(collideConvexVsTriangleMesh);
 
 /* collide sphere vs triangle mesh */
 
-const _collideSphereVsTriangleMesh_sphereCenterInMesh = vec3.create();
-const _collideSphereVsTriangleMesh_posB = vec3.create();
-const _collideSphereVsTriangleMesh_quatB = quat.create();
-const _collideSphereVsTriangleMesh_scaleB = vec3.create();
-const _collideSphereVsTriangleMesh_inverseQuatB = quat.create();
-const _collideSphereVsTriangleMesh_positionDifference = vec3.create();
-const _collideSphereVsTriangleMesh_boundsOfSphere = box3.create();
-const _collideSphereVsTriangleMesh_queryCenter = vec3.create();
-const _collideSphereVsTriangleMesh_nodeCenter = vec3.create();
-const _collideSphereVsTriangleMesh_stack = bvhStack.create();
-const _collideSphereVsTriangleMesh_v0 = vec3.create();
-const _collideSphereVsTriangleMesh_v1 = vec3.create();
-const _collideSphereVsTriangleMesh_v2 = vec3.create();
-const _collideSphereVsTriangleMesh_sv0 = vec3.create();
-const _collideSphereVsTriangleMesh_sv1 = vec3.create();
-const _collideSphereVsTriangleMesh_sv2 = vec3.create();
-const _collideSphereVsTriangleMesh_rv0 = vec3.create();
-const _collideSphereVsTriangleMesh_rv1 = vec3.create();
-const _collideSphereVsTriangleMesh_rv2 = vec3.create();
-const _collideSphereVsTriangleMesh_edge1 = vec3.create();
-const _collideSphereVsTriangleMesh_edge2 = vec3.create();
-const _collideSphereVsTriangleMesh_triangleNormal = vec3.create();
-const _collideSphereVsTriangleMesh_closestPointResult = createClosestPointOnTriangleResult();
-const _collideSphereVsTriangleMesh_penetrationAxis = vec3.create();
-const _collideSphereVsTriangleMesh_point1 = vec3.create();
-const _collideSphereVsTriangleMesh_point1World = vec3.create();
-const _collideSphereVsTriangleMesh_point2World = vec3.create();
-const _collideSphereVsTriangleMesh_penetrationAxisWorld = vec3.create();
-const _collideSphereVsTriangleMesh_activeEdgeMovementDir = vec3.create();
-const _collideSphereVsTriangleMesh_newPenetrationAxis = vec3.create();
-const _collideSphereVsTriangleMesh_hit = createCollideShapeHit();
-const _collideSphereVsTriangleMesh_subShapeIdBuilder = subShape.builder();
+const _collideSphereVsTriangleMesh_sphereCenterInMesh = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
+const _collideSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
+const _collideSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_boundsOfSphere = /* @__PURE__ */ box3.create();
+const _collideSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+const _collideSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_v1 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_v2 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_sv0 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_sv1 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_sv2 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_rv0 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_rv1 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_rv2 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_edge1 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_edge2 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
+const _collideSphereVsTriangleMesh_penetrationAxis = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_point1 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_point1World = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_point2World = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_newPenetrationAxis = /* @__PURE__ */ vec3.create();
+const _collideSphereVsTriangleMesh_hit = /* @__PURE__ */ createCollideShapeHit();
+const _collideSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 function collideSphereVsTriangleMesh(
     collector: CollideShapeCollector,
@@ -1720,63 +1720,63 @@ function collideSphereVsTriangleMesh(
     }
 }
 
-const collideTriangleMeshVsSphere = reversedCollideShapeVsShape(collideSphereVsTriangleMesh);
+const collideTriangleMeshVsSphere = /* @__PURE__ */ reversedCollideShapeVsShape(collideSphereVsTriangleMesh);
 
 /* cast sphere vs triangle mesh */
 
-const _castSphereVsTriangleMesh_start = vec3.create();
-const _castSphereVsTriangleMesh_direction = vec3.create();
-const _castSphereVsTriangleMesh_posB = vec3.create();
-const _castSphereVsTriangleMesh_quatB = quat.create();
-const _castSphereVsTriangleMesh_scaleB = vec3.create();
-const _castSphereVsTriangleMesh_inverseQuatB = quat.create();
-const _castSphereVsTriangleMesh_positionDifference = vec3.create();
-const _castSphereVsTriangleMesh_displacement = vec3.create();
-const _castSphereVsTriangleMesh_sweptBounds = box3.create();
-const _castSphereVsTriangleMesh_queryCenter = vec3.create();
-const _castSphereVsTriangleMesh_nodeCenter = vec3.create();
-const _castSphereVsTriangleMesh_stack = bvhStack.create();
-const _castSphereVsTriangleMesh_v0 = vec3.create();
-const _castSphereVsTriangleMesh_v1 = vec3.create();
-const _castSphereVsTriangleMesh_v2 = vec3.create();
-const _castSphereVsTriangleMesh_sv0 = vec3.create();
-const _castSphereVsTriangleMesh_sv1 = vec3.create();
-const _castSphereVsTriangleMesh_sv2 = vec3.create();
-const _castSphereVsTriangleMesh_rv0 = vec3.create();
-const _castSphereVsTriangleMesh_rv1 = vec3.create();
-const _castSphereVsTriangleMesh_rv2 = vec3.create();
-const _castSphereVsTriangleMesh_edge1 = vec3.create();
-const _castSphereVsTriangleMesh_edge2 = vec3.create();
-const _castSphereVsTriangleMesh_triangleNormal = vec3.create();
-const _castSphereVsTriangleMesh_closestPointResult = createClosestPointOnTriangleResult();
-const _castSphereVsTriangleMesh_hit = createCastShapeHit();
-const _castSphereVsTriangleMesh_subShapeIdBuilder = subShape.builder();
-const _castSphereVsTriangleMesh_activeEdgeMovementDir = vec3.create();
-const _castSphereVsTriangleMesh_origin = vec3.create();
-const _castSphereVsTriangleMesh_endPoint = vec3.create();
-const _castSphereVsTriangleMesh_triangleNormalForFix = vec3.create();
-const _castSphereVsTriangleMesh_contactPointAWorld = vec3.create();
-const _castSphereVsTriangleMesh_contactPointBWorld = vec3.create();
-const _castSphereVsTriangleMesh_contactNormalWorld = vec3.create();
-const _castSphereVsTriangleMesh_planeIntersectionTemp = vec3.create();
-const _castSphereVsTriangleMesh_interiorContactNormal = vec3.create();
-const _castSphereVsTriangleMesh_sphereCenterAtHit = vec3.create();
-const _castSphereVsTriangleMesh_v0RelativeToHit = vec3.create();
-const _castSphereVsTriangleMesh_v1RelativeToHit = vec3.create();
-const _castSphereVsTriangleMesh_v2RelativeToHit = vec3.create();
-const _castSphereVsTriangleMesh_edgeVertexContactNormal = vec3.create();
-const _castSphereVsTriangleMesh_edgeVertexContactPoint = vec3.create();
-const _castSphereVsTriangleMesh_contactNormal = vec3.create();
-const _castSphereVsTriangleMesh_contactPointA = vec3.create();
-const _castSphereVsTriangleMesh_d = vec3.create();
-const _castSphereVsTriangleMesh_v0Rel = vec3.create();
-const _castSphereVsTriangleMesh_v1Rel = vec3.create();
-const _castSphereVsTriangleMesh_v2Rel = vec3.create();
-const _castSphereVsTriangleMesh_n = vec3.create();
-const _castSphereVsTriangleMesh_n0 = vec3.create();
-const _castSphereVsTriangleMesh_n1 = vec3.create();
-const _castSphereVsTriangleMesh_n2 = vec3.create();
-const _castSphereVsTriangleMesh_p = vec3.create();
+const _castSphereVsTriangleMesh_start = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_direction = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
+const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
+const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_sweptBounds = /* @__PURE__ */ box3.create();
+const _castSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v1 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_sv0 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_sv1 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_sv2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_rv0 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_rv1 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_rv2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_edge1 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_edge2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
+const _castSphereVsTriangleMesh_hit = /* @__PURE__ */ createCastShapeHit();
+const _castSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+const _castSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_origin = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_endPoint = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_contactPointAWorld = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_contactPointBWorld = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_contactNormalWorld = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_planeIntersectionTemp = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_interiorContactNormal = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_sphereCenterAtHit = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v0RelativeToHit = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v1RelativeToHit = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v2RelativeToHit = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_edgeVertexContactNormal = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_edgeVertexContactPoint = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_contactNormal = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_contactPointA = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_d = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v0Rel = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v1Rel = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_v2Rel = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_n = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_n0 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_n1 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_n2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_p = /* @__PURE__ */ vec3.create();
 
 /** helper to add a cast hit with active edge detection for sphere vs triangle mesh */
 function castSphereVsTriangleMeshAddHit(
@@ -2238,4 +2238,4 @@ function castSphereVsTriangleMesh(
     }
 }
 
-const castTriangleMeshVsSphere = reversedCastShapeVsShape(castSphereVsTriangleMesh);
+const castTriangleMeshVsSphere = /* @__PURE__ */ reversedCastShapeVsShape(castSphereVsTriangleMesh);

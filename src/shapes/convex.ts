@@ -40,15 +40,15 @@ import { getShapeSupportingFace } from './shapes';
 
 /* cast ray */
 
-const _castRayVsConvex_supportPool = createShapeSupportPool();
-const _castRayVsConvex_hit = createCastRayHit();
-const _castRayVsConvex_pos = vec3.create();
-const _castRayVsConvex_quat = quat.create();
-const _castRayVsConvex_scale = vec3.create();
-const _castRayVsConvex_rayOriginLocal = vec3.create();
-const _castRayVsConvex_rayDirectionLocal = vec3.create();
-const _castRayVsConvex_invQuat = quat.create();
-const _castRayVsConvex_gjkResult = createGjkCastRayResult();
+const _castRayVsConvex_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _castRayVsConvex_hit = /* @__PURE__ */ createCastRayHit();
+const _castRayVsConvex_pos = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_quat = /* @__PURE__ */ quat.create();
+const _castRayVsConvex_scale = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_rayOriginLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_rayDirectionLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsConvex_gjkResult = /* @__PURE__ */ createGjkCastRayResult();
 
 /** cast ray implementation for convex shapes */
 export function castRayVsConvex(
@@ -127,16 +127,16 @@ export function castRayVsConvex(
 
 /* collide point */
 
-const _collidePointVsConvex_quatB = quat.create();
-const _collidePointVsConvex_scaleB = vec3.create();
-const _collidePointVsConvex_localPoint = vec3.create();
-const _collidePointVsConvex_pointSupport = createPointSupport();
-const _collidePointVsConvex_convexSupportPool = createShapeSupportPool();
-const _collidePointVsConvex_gjkResult = createGjkClosestPoints();
-const _collidePointVsConvex_initialDirection = vec3.create();
-const _collidePointVsConvex_scaledAABB = box3.create();
-const _collidePointVsConvex_scaleVec = vec3.create();
-const _collidePointHit = createCollidePointHit();
+const _collidePointVsConvex_quatB = /* @__PURE__ */ quat.create();
+const _collidePointVsConvex_scaleB = /* @__PURE__ */ vec3.create();
+const _collidePointVsConvex_localPoint = /* @__PURE__ */ vec3.create();
+const _collidePointVsConvex_pointSupport = /* @__PURE__ */ createPointSupport();
+const _collidePointVsConvex_convexSupportPool = /* @__PURE__ */ createShapeSupportPool();
+const _collidePointVsConvex_gjkResult = /* @__PURE__ */ createGjkClosestPoints();
+const _collidePointVsConvex_initialDirection = /* @__PURE__ */ vec3.create();
+const _collidePointVsConvex_scaledAABB = /* @__PURE__ */ box3.create();
+const _collidePointVsConvex_scaleVec = /* @__PURE__ */ vec3.create();
+const _collidePointHit = /* @__PURE__ */ createCollidePointHit();
 
 /** collide point implementation for convex shapes */
 export function collidePointVsConvex(
@@ -218,44 +218,44 @@ export function collidePointVsConvex(
 
 /* collide convex vs convex */
 
-const _collideConvex_supportPoolA = createShapeSupportPool();
-const _collideConvex_supportPoolB = createShapeSupportPool();
+const _collideConvex_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
+const _collideConvex_supportPoolB = /* @__PURE__ */ createShapeSupportPool();
 
-const _collideConvex_simplex = simplex.createSimplex();
-const _collideConvex_penetrationDepth = createPenetrationDepth();
+const _collideConvex_simplex = /* @__PURE__ */ simplex.createSimplex();
+const _collideConvex_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
 
-const _collideConvex_transformedSupportB = createTransformedSupport();
+const _collideConvex_transformedSupportB = /* @__PURE__ */ createTransformedSupport();
 
-const _collideConvex_addRadiusSupport: AddConvexRadiusSupport = createAddConvexRadiusSupport();
-const _collideConvex_transformedSupport = createTransformedSupport();
+const _collideConvex_addRadiusSupport: AddConvexRadiusSupport = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _collideConvex_transformedSupport = /* @__PURE__ */ createTransformedSupport();
 
-const _collideConvex_penetrationAxis = vec3.create();
-const _collideConvex_vectorAB = vec3.create();
+const _collideConvex_penetrationAxis = /* @__PURE__ */ vec3.create();
+const _collideConvex_vectorAB = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_inverseQuatA = quat.create();
-const _collideConvex_relativePos = vec3.create();
-const _collideConvex_relativeRot = quat.create();
+const _collideConvex_inverseQuatA = /* @__PURE__ */ quat.create();
+const _collideConvex_relativePos = /* @__PURE__ */ vec3.create();
+const _collideConvex_relativeRot = /* @__PURE__ */ quat.create();
 
-const _collideConvex_aabbShapeExpand = vec3.create();
-const _collideConvex_aabbShapeA = box3.create();
-const _collideConvex_aabbShapeB = box3.create();
-const _collideConvex_obb3ShapeB = obb3.create();
+const _collideConvex_aabbShapeExpand = /* @__PURE__ */ vec3.create();
+const _collideConvex_aabbShapeA = /* @__PURE__ */ box3.create();
+const _collideConvex_aabbShapeB = /* @__PURE__ */ box3.create();
+const _collideConvex_obb3ShapeB = /* @__PURE__ */ obb3.create();
 
-const _collideConvex_posA = vec3.create();
-const _collideConvex_quatA = quat.create();
-const _collideConvex_scaleA = vec3.create();
-const _collideConvex_posB = vec3.create();
-const _collideConvex_quatB = quat.create();
-const _collideConvex_scaleB = vec3.create();
+const _collideConvex_posA = /* @__PURE__ */ vec3.create();
+const _collideConvex_quatA = /* @__PURE__ */ quat.create();
+const _collideConvex_scaleA = /* @__PURE__ */ vec3.create();
+const _collideConvex_posB = /* @__PURE__ */ vec3.create();
+const _collideConvex_quatB = /* @__PURE__ */ quat.create();
+const _collideConvex_scaleB = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_contactA = vec3.create();
-const _collideConvex_contactB = vec3.create();
+const _collideConvex_contactA = /* @__PURE__ */ vec3.create();
+const _collideConvex_contactB = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_temp_faceDirA = vec3.create();
-const _collideConvex_temp_faceDirB = vec3.create();
-const _collideConvex_temp_invRelativeRot = quat.create();
+const _collideConvex_temp_faceDirA = /* @__PURE__ */ vec3.create();
+const _collideConvex_temp_faceDirB = /* @__PURE__ */ vec3.create();
+const _collideConvex_temp_invRelativeRot = /* @__PURE__ */ quat.create();
 
-const _collideConvex_hit = createCollideShapeHit();
+const _collideConvex_hit = /* @__PURE__ */ createCollideShapeHit();
 
 /**
  * World-space entry point for convex vs convex collision detection.
@@ -547,35 +547,35 @@ export function collideConvexVsConvexLocal(
 
 /* cast convex vs convex */
 
-const castConvex_supportPoolA = createShapeSupportPool();
-const castConvex_supportPoolB = createShapeSupportPool();
+const castConvex_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
+const castConvex_supportPoolB = /* @__PURE__ */ createShapeSupportPool();
 
-const _castConvex_gjkResult = createGjkCastShapeResult();
+const _castConvex_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 
-const _castConvex_posAInB = vec3.create();
-const _castConvex_quatAInB = quat.create();
-const _castConvex_positionDifference = vec3.create();
-const _castConvex_inverseQuaternionB = quat.create();
+const _castConvex_posAInB = /* @__PURE__ */ vec3.create();
+const _castConvex_quatAInB = /* @__PURE__ */ quat.create();
+const _castConvex_positionDifference = /* @__PURE__ */ vec3.create();
+const _castConvex_inverseQuaternionB = /* @__PURE__ */ quat.create();
 
-const _castConvex_posA = vec3.create();
-const _castConvex_quatA = quat.create();
-const _castConvex_scaleA = vec3.create();
-const _castConvex_displacementA = vec3.create();
-const _castConvex_posB = vec3.create();
-const _castConvex_quatB = quat.create();
-const _castConvex_scaleB = vec3.create();
-const _castConvex_displacementInB = vec3.create();
+const _castConvex_posA = /* @__PURE__ */ vec3.create();
+const _castConvex_quatA = /* @__PURE__ */ quat.create();
+const _castConvex_scaleA = /* @__PURE__ */ vec3.create();
+const _castConvex_displacementA = /* @__PURE__ */ vec3.create();
+const _castConvex_posB = /* @__PURE__ */ vec3.create();
+const _castConvex_quatB = /* @__PURE__ */ quat.create();
+const _castConvex_scaleB = /* @__PURE__ */ vec3.create();
+const _castConvex_displacementInB = /* @__PURE__ */ vec3.create();
 
-const _castConvex_contactPointA = vec3.create();
-const _castConvex_contactPointWorldB = vec3.create();
-const _castConvex_convexWorldPositionA = vec3.create();
-const _castConvex_convexWorldQuaternionA = quat.create();
-const _castConvex_convexQueryNormal = vec3.create();
-const _castConvex_convexDisplacementScaled = vec3.create();
-const _castConvex_convexPosAInBAtContact = vec3.create();
-const _castConvex_convexInvQuatAInB = quat.create();
+const _castConvex_contactPointA = /* @__PURE__ */ vec3.create();
+const _castConvex_contactPointWorldB = /* @__PURE__ */ vec3.create();
+const _castConvex_convexWorldPositionA = /* @__PURE__ */ vec3.create();
+const _castConvex_convexWorldQuaternionA = /* @__PURE__ */ quat.create();
+const _castConvex_convexQueryNormal = /* @__PURE__ */ vec3.create();
+const _castConvex_convexDisplacementScaled = /* @__PURE__ */ vec3.create();
+const _castConvex_convexPosAInBAtContact = /* @__PURE__ */ vec3.create();
+const _castConvex_convexInvQuatAInB = /* @__PURE__ */ quat.create();
 
-const _castConvex_castShapeHit = createCastShapeHit();
+const _castConvex_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 
 export function castConvexVsConvex(
     collector: CastShapeCollector,

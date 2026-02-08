@@ -55,10 +55,10 @@ export function allocateTriangle(): Triangle {
     };
 }
 
-const _vectorAB = vec3.create();
-const _y10 = vec3.create();
-const _y20 = vec3.create();
-const _y21 = vec3.create();
+const _vectorAB = /* @__PURE__ */ vec3.create();
+const _y10 = /* @__PURE__ */ vec3.create();
+const _y20 = /* @__PURE__ */ vec3.create();
+const _y21 = /* @__PURE__ */ vec3.create();
 
 export function triangleIsFacing(triangle: Triangle, position: Vec3): boolean {
     vec3.subtract(_vectorAB, position, triangle.centroid);

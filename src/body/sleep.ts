@@ -7,11 +7,11 @@ import type { RigidBody } from './rigid-body';
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 export const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
 
-const _getSleepTestPoints_extent = vec3.create();
-const _getSleepTestPoints_tempVec = vec3.create();
-const _getSleepTestPoints_xAxis = vec3.fromValues(1, 0, 0);
-const _getSleepTestPoints_yAxis = vec3.fromValues(0, 1, 0);
-const _getSleepTestPoints_zAxis = vec3.fromValues(0, 0, 1);
+const _getSleepTestPoints_extent = /* @__PURE__ */ vec3.create();
+const _getSleepTestPoints_tempVec = /* @__PURE__ */ vec3.create();
+const _getSleepTestPoints_xAxis = /* @__PURE__ */ vec3.fromValues(1, 0, 0);
+const _getSleepTestPoints_yAxis = /* @__PURE__ */ vec3.fromValues(0, 1, 0);
+const _getSleepTestPoints_zAxis = /* @__PURE__ */ vec3.fromValues(0, 0, 1);
 
 /**
  * get the 3 test points for sleep detection:

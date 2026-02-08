@@ -220,12 +220,12 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     }
 }
 
-const _acceleration_forcesAccel = vec3.create();
-const _acceleration_gravityAccel = vec3.create();
-const _acceleration_linearAccel = vec3.create();
-const _acceleration_angularAccel = vec3.create();
-const _acceleration_rotation = mat4.create();
-const _acceleration_worldInverseInertia = mat4.create();
+const _acceleration_forcesAccel = /* @__PURE__ */ vec3.create();
+const _acceleration_gravityAccel = /* @__PURE__ */ vec3.create();
+const _acceleration_linearAccel = /* @__PURE__ */ vec3.create();
+const _acceleration_angularAccel = /* @__PURE__ */ vec3.create();
+const _acceleration_rotation = /* @__PURE__ */ mat4.create();
+const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
@@ -648,12 +648,12 @@ class NarrowphaseWithoutReductionCollector implements CollideShapeCollector {
     }
 }
 
-const NARROWPHASE_REDUCTION_COLLECTOR = new NarrowphaseWithReductionCollector();
-const NARROWPHASE_WITHOUT_REDUCTION_COLLECTOR = new NarrowphaseWithoutReductionCollector();
+const NARROWPHASE_REDUCTION_COLLECTOR = /* @__PURE__ */ new NarrowphaseWithReductionCollector();
+const NARROWPHASE_WITHOUT_REDUCTION_COLLECTOR = /* @__PURE__ */ new NarrowphaseWithoutReductionCollector();
 
-const _narrowphase_collideSettings = createDefaultCollideShapeSettings();
-const _narrowphase_worldSpaceNormal = vec3.create();
-const _narrowphase_tempManifold = manifold.createContactManifold();
+const _narrowphase_collideSettings = /* @__PURE__ */ createDefaultCollideShapeSettings();
+const _narrowphase_worldSpaceNormal = /* @__PURE__ */ vec3.create();
+const _narrowphase_tempManifold = /* @__PURE__ */ manifold.createContactManifold();
 
 /**
  * performs narrowphase collision detection for a body pair, returns whether any constraints were created
@@ -987,10 +987,10 @@ function wakeBodiesInUserConstraints(world: World): void {
     }
 }
 
-const _velocity_rotationVector = vec3.create();
-const _velocity_axis = vec3.create();
-const _velocity_rotationQuat = quat.create();
-const _velocity_displacement = vec3.create();
+const _velocity_rotationVector = /* @__PURE__ */ vec3.create();
+const _velocity_axis = /* @__PURE__ */ vec3.create();
+const _velocity_rotationQuat = /* @__PURE__ */ quat.create();
+const _velocity_displacement = /* @__PURE__ */ vec3.create();
 
 /** integrates velocities into positions (p += v*dt) and angular velocities into orientations */
 function velocityIntegrationUpdate(world: World, timeStep: number): void {
@@ -1094,12 +1094,12 @@ function calculateBodyMotion(out: Vec3, body: RigidBody, deltaTime: number): voi
     vec3.set(out, 0, 0, 0);
 }
 
-const _ccd_relativeDisplacement = vec3.create();
-const _ccd_expandedAABB = box3.create();
-const _ccd_shapeExtent = vec3.create();
-const _ccd_normal = vec3.create();
-const _ccd_ray = raycast3.create();
-const _ccd_bodyBMotion = vec3.create();
+const _ccd_relativeDisplacement = /* @__PURE__ */ vec3.create();
+const _ccd_expandedAABB = /* @__PURE__ */ box3.create();
+const _ccd_shapeExtent = /* @__PURE__ */ vec3.create();
+const _ccd_normal = /* @__PURE__ */ vec3.create();
+const _ccd_ray = /* @__PURE__ */ raycast3.create();
+const _ccd_bodyBMotion = /* @__PURE__ */ vec3.create();
 
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
 class CCDCastShapeCollector implements CastShapeCollector {
@@ -1323,9 +1323,9 @@ class CCDBodyVisitor implements BodyVisitor {
     }
 }
 
-const CCD_BODY_VISITOR = new CCDBodyVisitor();
+const CCD_BODY_VISITOR = /* @__PURE__ */ new CCDBodyVisitor();
 
-const _ccd_filter = filter.createEmpty();
+const _ccd_filter = /* @__PURE__ */ filter.createEmpty();
 
 /** handle CCD contact added event - calculates material properties and fires contact listener callbacks */
 function onCCDContactAdded(
@@ -1430,8 +1430,8 @@ function onCCDContactAdded(
     }
 }
 
-const _findCCDContacts_sweptAABB = box3.create();
-const _findCCDContacts_contactManifold = manifold.createContactManifold();
+const _findCCDContacts_sweptAABB = /* @__PURE__ */ box3.create();
+const _findCCDContacts_contactManifold = /* @__PURE__ */ manifold.createContactManifold();
 
 /** finds earliest collision for each CCD body, done after velocity integration */
 function findCCDContacts(world: World, timeStep: number, listener: Listener | undefined): void {
@@ -1530,19 +1530,19 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
     }
 }
 
-const _applyCCD_bodyAPosAtHit = vec3.create();
-const _applyCCD_r1PlusU = vec3.create();
-const _applyCCD_r2 = vec3.create();
-const _applyCCD_v1 = vec3.create();
-const _applyCCD_v2 = vec3.create();
-const _applyCCD_relVel = vec3.create();
-const _applyCCD_rotationA = mat4.create();
-const _applyCCD_rotationB = mat4.create();
-const _applyCCD_invInertiaA = mat4.create();
-const _applyCCD_invInertiaB = mat4.create();
-const _applyCCD_normalScaled = vec3.create();
-const _applyCCD_tangentVel = vec3.create();
-const _applyCCD_frictionDir = vec3.create();
+const _applyCCD_bodyAPosAtHit = /* @__PURE__ */ vec3.create();
+const _applyCCD_r1PlusU = /* @__PURE__ */ vec3.create();
+const _applyCCD_r2 = /* @__PURE__ */ vec3.create();
+const _applyCCD_v1 = /* @__PURE__ */ vec3.create();
+const _applyCCD_v2 = /* @__PURE__ */ vec3.create();
+const _applyCCD_relVel = /* @__PURE__ */ vec3.create();
+const _applyCCD_rotationA = /* @__PURE__ */ mat4.create();
+const _applyCCD_rotationB = /* @__PURE__ */ mat4.create();
+const _applyCCD_invInertiaA = /* @__PURE__ */ mat4.create();
+const _applyCCD_invInertiaB = /* @__PURE__ */ mat4.create();
+const _applyCCD_normalScaled = /* @__PURE__ */ vec3.create();
+const _applyCCD_tangentVel = /* @__PURE__ */ vec3.create();
+const _applyCCD_frictionDir = /* @__PURE__ */ vec3.create();
 
 /** apply collision impulse for CCD contact using constraint solver infrastructure, does a single solve iteration using @see AxisConstraintPart */
 function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody): void {
@@ -1714,7 +1714,7 @@ function sortCCDBodies(state: ccd.CCD): void {
     }
 }
 
-const _resolveCCDContacts_movement = vec3.create();
+const _resolveCCDContacts_movement = /* @__PURE__ */ vec3.create();
 
 /** resolve CCD contacts in chronological order, moves bodies to their collision points and applies impulses */
 function resolveCCDContacts(world: World): void {

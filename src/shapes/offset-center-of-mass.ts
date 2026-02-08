@@ -82,9 +82,9 @@ function computeOffsetCenterOfMassCenterOfMass(out: Vec3, shape: OffsetCenterOfM
     vec3.add(out, shape.shape.centerOfMass, shape.offset);
 }
 
-const _childMassProperties = massProperties.create();
-const _supportingFace_scaledOffset = vec3.create();
-const _supportingFace_transformedOffset = vec3.create();
+const _childMassProperties = /* @__PURE__ */ massProperties.create();
+const _supportingFace_scaledOffset = /* @__PURE__ */ vec3.create();
+const _supportingFace_transformedOffset = /* @__PURE__ */ vec3.create();
 
 export const def = defineShape<OffsetCenterOfMassShape>({
     type: ShapeType.OFFSET_CENTER_OF_MASS,

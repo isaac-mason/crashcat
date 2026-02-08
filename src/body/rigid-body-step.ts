@@ -40,8 +40,8 @@ export function subPositionStep(body: RigidBody, linearVelocityTimesDeltaTime: V
     motionProperties.applyTranslationDOFConstraint(body.centerOfMassPosition, body.motionProperties.allowedDegreesOfFreedom);
 }
 
-const _addRotationStep_axis = vec3.create();
-const _addRotationStep_rotation = quat.create();
+const _addRotationStep_axis = /* @__PURE__ */ vec3.create();
+const _addRotationStep_rotation = /* @__PURE__ */ quat.create();
 
 /**
  * Update rotation using an Euler step (used during position solver).

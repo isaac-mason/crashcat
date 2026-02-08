@@ -28,7 +28,7 @@ export function cloneFace(face: Face): Face {
     };
 }
 
-const _transformVertex = vec3.create();
+const _transformVertex = /* @__PURE__ */ vec3.create();
 
 export function transformFace(face: Face, position: Vec3, quaternion: Quat, scale: Vec3): void {
     for (let i = 0; i < face.numVertices; i++) {

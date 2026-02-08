@@ -92,7 +92,7 @@ export function update(shape: ScaledShape): void {
     shape.volume = computeScaledVolume(shape);
 }
 
-const _childMassProperties = massProperties.create();
+const _childMassProperties = /* @__PURE__ */ massProperties.create();
 
 export const def = defineShape<ScaledShape>({
     type: ShapeType.SCALED,

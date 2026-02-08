@@ -1,11 +1,11 @@
 import { type Vec3, vec3 } from 'mathcat';
 import { createFace, type Face } from '../utils/face';
 
-const _clipPlane_diff = vec3.create();
-const _clipPlane_e1 = vec3.create();
-const _clipPlane_e2 = vec3.create();
-const _clipPlane_e12 = vec3.create();
-const _clipPlane_intersection = vec3.create();
+const _clipPlane_diff = /* @__PURE__ */ vec3.create();
+const _clipPlane_e1 = /* @__PURE__ */ vec3.create();
+const _clipPlane_e2 = /* @__PURE__ */ vec3.create();
+const _clipPlane_e12 = /* @__PURE__ */ vec3.create();
+const _clipPlane_intersection = /* @__PURE__ */ vec3.create();
 
 /**
  * Clips a polygon against a half-space plane using Sutherland-Hodgeman algorithm.
@@ -85,12 +85,12 @@ export function clipPolyVsPlane(out: Face, inPolygon: Face, inPlaneOrigin: Vec3,
     }
 }
 
-const _clipPoly_tmpFace1 = createFace();
-const _clipPoly_tmpFace2 = createFace();
-const _clipPoly_clipE1 = vec3.create();
-const _clipPoly_clipE2 = vec3.create();
-const _clipPoly_edge = vec3.create();
-const _clipPoly_clipNormal = vec3.create();
+const _clipPoly_tmpFace1 = /* @__PURE__ */ createFace();
+const _clipPoly_tmpFace2 = /* @__PURE__ */ createFace();
+const _clipPoly_clipE1 = /* @__PURE__ */ vec3.create();
+const _clipPoly_clipE2 = /* @__PURE__ */ vec3.create();
+const _clipPoly_edge = /* @__PURE__ */ vec3.create();
+const _clipPoly_clipNormal = /* @__PURE__ */ vec3.create();
 
 /**
  * Clips one polygon against another using Sutherland-Hodgeman algorithm.
@@ -159,25 +159,25 @@ export function clipPolyVsPoly(out: Face, inPolygonToClip: Face, inClippingPolyg
     }
 }
 
-const _clipEdge_edge = vec3.create();
-const _clipEdge_edgeNormal = vec3.create();
-const _clipEdge_p0 = vec3.create();
-const _clipEdge_p1 = vec3.create();
-const _clipEdge_p2 = vec3.create();
-const _clipEdge_polygonNormal = vec3.create();
-const _clipEdge_diff1 = vec3.create();
-const _clipEdge_diff2 = vec3.create();
-const _clipEdge_v1 = vec3.create();
-const _clipEdge_v2 = vec3.create();
-const _clipEdge_v12 = vec3.create();
-const _clipEdge_e1 = vec3.create();
-const _clipEdge_e2 = vec3.create();
-const _clipEdge_diff = vec3.create();
-const _clipEdge_e12 = vec3.create();
-const _clipEdge_clippedPoint = vec3.create();
-const _clipEdge_clippedDiff = vec3.create();
-const _clipEdge_v0v1 = vec3.create();
-const _clipEdge_v0v2 = vec3.create();
+const _clipEdge_edge = /* @__PURE__ */ vec3.create();
+const _clipEdge_edgeNormal = /* @__PURE__ */ vec3.create();
+const _clipEdge_p0 = /* @__PURE__ */ vec3.create();
+const _clipEdge_p1 = /* @__PURE__ */ vec3.create();
+const _clipEdge_p2 = /* @__PURE__ */ vec3.create();
+const _clipEdge_polygonNormal = /* @__PURE__ */ vec3.create();
+const _clipEdge_diff1 = /* @__PURE__ */ vec3.create();
+const _clipEdge_diff2 = /* @__PURE__ */ vec3.create();
+const _clipEdge_v1 = /* @__PURE__ */ vec3.create();
+const _clipEdge_v2 = /* @__PURE__ */ vec3.create();
+const _clipEdge_v12 = /* @__PURE__ */ vec3.create();
+const _clipEdge_e1 = /* @__PURE__ */ vec3.create();
+const _clipEdge_e2 = /* @__PURE__ */ vec3.create();
+const _clipEdge_diff = /* @__PURE__ */ vec3.create();
+const _clipEdge_e12 = /* @__PURE__ */ vec3.create();
+const _clipEdge_clippedPoint = /* @__PURE__ */ vec3.create();
+const _clipEdge_clippedDiff = /* @__PURE__ */ vec3.create();
+const _clipEdge_v0v1 = /* @__PURE__ */ vec3.create();
+const _clipEdge_v0v2 = /* @__PURE__ */ vec3.create();
 
 /**
  * Clips a polygon against an edge. The edge is projected onto the polygon's plane,

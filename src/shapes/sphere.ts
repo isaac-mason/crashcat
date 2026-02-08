@@ -266,7 +266,7 @@ function getSphereSupportFunction(pool: SphereSupportPool, shape: SphereShape, m
 
 /* collide point */
 
-const _collidePointHit = createCollidePointHit();
+const _collidePointHit = /* @__PURE__ */ createCollidePointHit();
 
 function collidePointVsSphere(
     collector: CollidePointCollector,
@@ -310,11 +310,10 @@ function collidePointVsSphere(
 
 /* collide shape */
 
-const _collideSphereVsSphere_hit = createCollideShapeHit();
-
-const _collideSphereVsSphere_contactA = vec3.create();
-const _collideSphereVsSphere_contactB = vec3.create();
-const _collideSphereVsSphere_contactNormal = vec3.create();
+const _collideSphereVsSphere_hit = /* @__PURE__ */ createCollideShapeHit();
+const _collideSphereVsSphere_contactA = /* @__PURE__ */ vec3.create();
+const _collideSphereVsSphere_contactB = /* @__PURE__ */ vec3.create();
+const _collideSphereVsSphere_contactNormal = /* @__PURE__ */ vec3.create();
 
 export function collideSphereVsSphere(
     collector: CollideShapeCollector,

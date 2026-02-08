@@ -50,13 +50,13 @@ export type TriangleMeshBuildResult = {
     bvh: triangleMeshBvh.TriangleMeshBVH;
 };
 
-const _a = vec3.create();
-const _b = vec3.create();
-const _c = vec3.create();
-const _edge1 = vec3.create();
-const _edge2 = vec3.create();
-const _crossProduct = vec3.create();
-const _normal = vec3.create();
+const _a = /* @__PURE__ */ vec3.create();
+const _b = /* @__PURE__ */ vec3.create();
+const _c = /* @__PURE__ */ vec3.create();
+const _edge1 = /* @__PURE__ */ vec3.create();
+const _edge2 = /* @__PURE__ */ vec3.create();
+const _crossProduct = /* @__PURE__ */ vec3.create();
+const _normal = /* @__PURE__ */ vec3.create();
 
 /** build a triangle mesh from positions and indices */
 export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): TriangleMeshBuildResult {
@@ -247,8 +247,8 @@ function deduplicateVertices(inputPositions: number[]): {
     return { positions, indexMap };
 }
 
-const _normal0 = vec3.create();
-const _normal1 = vec3.create();
+const _normal0 = /* @__PURE__ */ vec3.create();
+const _normal1 = /* @__PURE__ */ vec3.create();
 
 /*
  * Compute which edges are "active" (sharp) based on dihedral angles.

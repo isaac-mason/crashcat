@@ -13,7 +13,7 @@ import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 
-const constraintPool = pool(createContactConstraint);
+const constraintPool = /* @__PURE__ */ pool(createContactConstraint);
 
 /** state for contact constraint solving, holds all active constraints and manages constraint lifecycle */
 export type ContactConstraints = {
@@ -256,11 +256,11 @@ function calculateFrictionBias(settings: ContactSettings, rA: Vec3, tangent: Vec
     return tangent[0] * svx + tangent[1] * svy + tangent[2] * svz;
 }
 
-const _calcBias_relativeVelocity = vec3.create();
-const _calcBias_v1 = vec3.create();
-const _calcBias_v2 = vec3.create();
-const _calcBias_diff = vec3.create();
-const _calcBias_relativeAcceleration = vec3.create();
+const _calcBias_relativeVelocity = /* @__PURE__ */ vec3.create();
+const _calcBias_v1 = /* @__PURE__ */ vec3.create();
+const _calcBias_v2 = /* @__PURE__ */ vec3.create();
+const _calcBias_diff = /* @__PURE__ */ vec3.create();
+const _calcBias_relativeAcceleration = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculate the normal velocity bias for a contact constraint.
@@ -441,20 +441,20 @@ function computeTangents(normal: Vec3, tangent1: Vec3, tangent2: Vec3): void {
     vec3.cross(tangent2, normal, tangent1);
 }
 
-const _addContactConstraint_invQuatA = quat.create();
-const _addContactConstraint_invQuatB = quat.create();
-const _addContactConstraint_relativePointOnA = vec3.create();
-const _addContactConstraint_relativePointOnB = vec3.create();
-const _addContactConstraint_worldPosA = vec3.create();
-const _addContactConstraint_worldPosB = vec3.create();
-const _addContactConstraint_localPosA = vec3.create();
-const _addContactConstraint_localPosB = vec3.create();
-const _addContactConstraint_midpoint = vec3.create();
-const _addContactConstraint_rA = vec3.create();
-const _addContactConstraint_rB = vec3.create();
-const _addContactConstraint_invInertiaA = mat4.create();
-const _addContactConstraint_invInertiaB = mat4.create();
-const _addContactConstraint_contactSettings = createContactSettings();
+const _addContactConstraint_invQuatA = /* @__PURE__ */ quat.create();
+const _addContactConstraint_invQuatB = /* @__PURE__ */ quat.create();
+const _addContactConstraint_relativePointOnA = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_relativePointOnB = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_worldPosA = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_worldPosB = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_localPosA = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_localPosB = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_midpoint = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_rA = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_rB = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
+const _addContactConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
+const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
 
 /** add a contact constraint from a new manifold */
 export function addContactConstraint(
@@ -1009,18 +1009,18 @@ export function storeAppliedImpulses(contactConstraints: ContactConstraints, con
     }
 }
 
-const _solvePos_penetrationVector = vec3.create();
-const _solvePos_pointA = vec3.create();
-const _solvePos_pointB = vec3.create();
-const _solvePos_worldRa = vec3.create();
-const _solvePos_worldRb = vec3.create();
-const _solvePos_midpoint = vec3.create();
-const _solvePos_rA = vec3.create();
-const _solvePos_rB = vec3.create();
-const _solvePos_invInertiaA = mat4.create();
-const _solvePos_invInertiaB = mat4.create();
-const _solvePos_rotA = mat4.create();
-const _solvePos_rotB = mat4.create();
+const _solvePos_penetrationVector = /* @__PURE__ */ vec3.create();
+const _solvePos_pointA = /* @__PURE__ */ vec3.create();
+const _solvePos_pointB = /* @__PURE__ */ vec3.create();
+const _solvePos_worldRa = /* @__PURE__ */ vec3.create();
+const _solvePos_worldRb = /* @__PURE__ */ vec3.create();
+const _solvePos_midpoint = /* @__PURE__ */ vec3.create();
+const _solvePos_rA = /* @__PURE__ */ vec3.create();
+const _solvePos_rB = /* @__PURE__ */ vec3.create();
+const _solvePos_invInertiaA = /* @__PURE__ */ mat4.create();
+const _solvePos_invInertiaB = /* @__PURE__ */ mat4.create();
+const _solvePos_rotA = /* @__PURE__ */ mat4.create();
+const _solvePos_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Solve position constraints for a specific island. Only processes constraints at the given indices.

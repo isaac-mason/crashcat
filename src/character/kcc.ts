@@ -369,7 +369,7 @@ export type CharacterListener = {
     onContactRemoved?: (character: KCC, body: RigidBody, subShapeId: number) => void;
 };
 
-const _create_supportingVolume = vec4.create();
+const _create_supportingVolume = /* @__PURE__ */ vec4.create();
 
 /** default settings for kinematic character controller when settings are not specified */
 const DEFAULT_KCC_SETTINGS = {
@@ -746,7 +746,7 @@ function createConstraintsPool(capacity: number = DEFAULT_CONSTRAINT_POOL_SIZE):
 }
 
 /** Module-level constraints pool - constraints are ephemeral within moveShape() so no per-character ownership needed */
-const _constraintsPool: ConstraintsPool = createConstraintsPool(DEFAULT_CONSTRAINT_POOL_SIZE);
+const _constraintsPool: ConstraintsPool = /* @__PURE__ */ createConstraintsPool(DEFAULT_CONSTRAINT_POOL_SIZE);
 
 /** acquires a constraint from the pool */
 function acquireConstraint(pool: ConstraintsPool): CharacterConstraint {
@@ -887,11 +887,11 @@ export function isSupported(character: KCC): boolean {
     return character.ground.state === GroundState.ON_GROUND || character.ground.state === GroundState.ON_STEEP_GROUND;
 }
 
-const _groundVel_axis = vec3.create();
-const _groundVel_rotQuat = quat.create();
-const _groundVel_offset = vec3.create();
-const _groundVel_newPosition = vec3.create();
-const _groundVel_result = vec3.create();
+const _groundVel_axis = /* @__PURE__ */ vec3.create();
+const _groundVel_rotQuat = /* @__PURE__ */ quat.create();
+const _groundVel_offset = /* @__PURE__ */ vec3.create();
+const _groundVel_newPosition = /* @__PURE__ */ vec3.create();
+const _groundVel_result = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculates the ground velocity at the character's position for a kinematic body.
@@ -956,31 +956,31 @@ function calculateCharacterGroundVelocity(
     return _groundVel_result;
 }
 
-const _characterCollideSettings: CollideShapeSettings = createDefaultCollideShapeSettings();
-const _characterCastSettings: CastShapeSettings = createDefaultCastShapeSettings();
+const _characterCollideSettings: CollideShapeSettings = /* @__PURE__ */ createDefaultCollideShapeSettings();
+const _characterCastSettings: CastShapeSettings = /* @__PURE__ */ createDefaultCastShapeSettings();
 
-const _getContacts_shapePos = vec3.create();
-const _getContacts_paddingOffset = vec3.create();
+const _getContacts_shapePos = /* @__PURE__ */ vec3.create();
+const _getContacts_paddingOffset = /* @__PURE__ */ vec3.create();
 
-const _paddingCorrection_characterSupportPool = createShapeSupportPool();
-const _paddingCorrection_polygonSupport = createPolygonSupport();
-const _paddingCorrection_addConvexRadius = createAddConvexRadiusSupport();
-const _paddingCorrection_face = createFace();
-const _paddingCorrection_gjkResult = createGjkCastShapeResult();
-const _paddingCorrection_negativeNormal = vec3.create();
-const _paddingCorrection_scale = vec3.fromValues(1, 1, 1);
+const _paddingCorrection_characterSupportPool = /* @__PURE__ */ createShapeSupportPool();
+const _paddingCorrection_polygonSupport = /* @__PURE__ */ createPolygonSupport();
+const _paddingCorrection_addConvexRadius = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _paddingCorrection_face = /* @__PURE__ */ createFace();
+const _paddingCorrection_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
+const _paddingCorrection_negativeNormal = /* @__PURE__ */ vec3.create();
+const _paddingCorrection_scale = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
 const _paddingCorrection_fractionWrapper = { value: 0 };
-const _correctFraction_tempPos = vec3.create();
-const _correctFraction_tempQuat = quat.create();
+const _correctFraction_tempPos = /* @__PURE__ */ vec3.create();
+const _correctFraction_tempQuat = /* @__PURE__ */ quat.create();
 
-const _contactVelocity_r = vec3.create();
-const _contactVelocity_angularComponent = vec3.create();
-const _contactVelocity_adjustedLinear = vec3.create();
-const _contactVelocity_adjustedAngular = vec3.create();
-const _contactVelocity_staticLinear = vec3.create();
-const _contactVelocity_staticAngular = vec3.create();
+const _contactVelocity_r = /* @__PURE__ */ vec3.create();
+const _contactVelocity_angularComponent = /* @__PURE__ */ vec3.create();
+const _contactVelocity_adjustedLinear = /* @__PURE__ */ vec3.create();
+const _contactVelocity_adjustedAngular = /* @__PURE__ */ vec3.create();
+const _contactVelocity_staticLinear = /* @__PURE__ */ vec3.create();
+const _contactVelocity_staticAngular = /* @__PURE__ */ vec3.create();
 
-const _surfaceNormal_temp = vec3.create();
+const _surfaceNormal_temp = /* @__PURE__ */ vec3.create();
 
 /** character collide shape collector - collects hits into ContactsPool */
 const characterCollideCollector = {
@@ -1337,7 +1337,7 @@ function sortContactsForDeterminism(contacts: CharacterContact[]): void {
     contacts.sort(compareContactsForDeterminism);
 }
 
-const SCALE_V1 = vec3.fromValues(1, 1, 1);
+const SCALE_V1 = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
 
 /**
  * Gets contacts at the given position using broadphase + narrowphase collision detection.
@@ -1724,9 +1724,9 @@ function removeConflictingContacts(contacts: CharacterContact[], characterPaddin
     }
 }
 
-const _determineConstraints_contactVelocity = vec3.create();
-const _determineConstraints_penetrationRecovery = vec3.create();
-const _determineConstraints_horizontalNormal = vec3.create();
+const _determineConstraints_contactVelocity = /* @__PURE__ */ vec3.create();
+const _determineConstraints_penetrationRecovery = /* @__PURE__ */ vec3.create();
+const _determineConstraints_horizontalNormal = /* @__PURE__ */ vec3.create();
 
 /**
  * Converts contacts to movement constraints.
@@ -1821,11 +1821,11 @@ function determineConstraints(
     }
 }
 
-const _applyImpulse_worldImpulse = vec3.create();
-const _applyImpulse_downComponent = vec3.create();
-const _applyImpulse_r = vec3.create(); // vector from center of mass to contact point
-const _applyImpulse_jacobian = vec3.create(); // r × normal
-const _applyImpulse_invIJ = vec3.create(); // I⁻¹ * jacobian (world space)
+const _applyImpulse_worldImpulse = /* @__PURE__ */ vec3.create();
+const _applyImpulse_downComponent = /* @__PURE__ */ vec3.create();
+const _applyImpulse_r = /* @__PURE__ */ vec3.create(); // vector from center of mass to contact point
+const _applyImpulse_jacobian = /* @__PURE__ */ vec3.create(); // r × normal
+const _applyImpulse_invIJ = /* @__PURE__ */ vec3.create(); // I⁻¹ * jacobian (world space)
 
 const IMPULSE_DAMPING_FACTOR = 0.9;
 const IMPULSE_PENETRATION_RESOLUTION_FACTOR = 0.4;
@@ -1932,13 +1932,13 @@ function applyImpulseToBody(
     rigidBody.addImpulseAtPosition(world, body, _applyImpulse_worldImpulse, contact.position);
 }
 
-const _solveConstraints_newVelocity = vec3.create();
-const _solveConstraints_edgeDirection = vec3.create();
-const _solveConstraints_lastVelocity = vec3.create();
-const _solveConstraints_verticalPlaneNormal = vec3.create();
-const _solveConstraints_relativeVelocity = vec3.create();
-const _solveConstraints_perpVelocity1 = vec3.create();
-const _solveConstraints_perpVelocity2 = vec3.create();
+const _solveConstraints_newVelocity = /* @__PURE__ */ vec3.create();
+const _solveConstraints_edgeDirection = /* @__PURE__ */ vec3.create();
+const _solveConstraints_lastVelocity = /* @__PURE__ */ vec3.create();
+const _solveConstraints_verticalPlaneNormal = /* @__PURE__ */ vec3.create();
+const _solveConstraints_relativeVelocity = /* @__PURE__ */ vec3.create();
+const _solveConstraints_perpVelocity1 = /* @__PURE__ */ vec3.create();
+const _solveConstraints_perpVelocity2 = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculates the time of impact (TOI) for a constraint.
@@ -2343,13 +2343,13 @@ function supportingVolumeSignedDistance(point: Vec3, plane: Vec4): number {
     return point[0] * plane[0] + point[1] * plane[1] + point[2] * plane[2] + plane[3];
 }
 
-const _updateSupporting_avgNormal = vec3.create();
-const _updateSupporting_avgVelocity = vec3.create();
-const _updateSupporting_contactLocalPos = vec3.create();
-const _updateSupporting_invQ = quat.create();
+const _updateSupporting_avgNormal = /* @__PURE__ */ vec3.create();
+const _updateSupporting_avgVelocity = /* @__PURE__ */ vec3.create();
+const _updateSupporting_contactLocalPos = /* @__PURE__ */ vec3.create();
+const _updateSupporting_invQ = /* @__PURE__ */ quat.create();
 
-const _updateSupporting_downVelocity = vec3.create();
-const _updateSupporting_displacement = vec3.create();
+const _updateSupporting_downVelocity = /* @__PURE__ */ vec3.create();
+const _updateSupporting_displacement = /* @__PURE__ */ vec3.create();
 const _updateSupporting_ignoredContacts: CharacterContact[] = [];
 
 /**
@@ -2610,7 +2610,7 @@ function updateSupportingContact(
     }
 }
 
-const _cancelVelocity_normal = vec3.create();
+const _cancelVelocity_normal = /* @__PURE__ */ vec3.create();
 
 /**
  * Cancels velocity component toward steep slopes.
@@ -2671,7 +2671,7 @@ function cancelVelocityTowardsSteepSlopes(
     }
 }
 
-const _hasSteepSlopes_horizontal = vec3.create();
+const _hasSteepSlopes_horizontal = /* @__PURE__ */ vec3.create();
 
 /**
  * Checks if there are steep slopes facing the movement direction.
@@ -2728,11 +2728,11 @@ function hasSteepSlopesToWalk(character: KCC, linearVelocity: Vec3): boolean {
     return false;
 }
 
-const _moveShape_movementDirection = vec3.create();
-const _moveShape_displacement = vec3.create();
-const _moveShape_sweepContact = createCharacterContact();
+const _moveShape_movementDirection = /* @__PURE__ */ vec3.create();
+const _moveShape_displacement = /* @__PURE__ */ vec3.create();
+const _moveShape_sweepContact = /* @__PURE__ */ createCharacterContact();
 const _moveShape_ignoredContacts: CharacterContact[] = [];
-const _moveShape_velocity = vec3.create();
+const _moveShape_velocity = /* @__PURE__ */ vec3.create();
 
 /**
  * Core movement with collision resolution.
@@ -2868,7 +2868,7 @@ function resetContactTracking(character: KCC): void {
     }
 }
 
-const _validateContact_negatedNormal = vec3.create();
+const _validateContact_negatedNormal = /* @__PURE__ */ vec3.create();
 
 /**
  * validates a contact with the listener.
@@ -2901,7 +2901,7 @@ function validateContact(
     );
 }
 
-const _contactAdded_negatedNormal = vec3.create();
+const _contactAdded_negatedNormal = /* @__PURE__ */ vec3.create();
 
 /**
  * Fires contact added or persisted callback based on tracking state.
@@ -3087,9 +3087,9 @@ function finalizeContactTracking(
     releaseAllListenerContacts(character.listenerContacts);
 }
 
-const _innerBody_shapeOffsetRotated = vec3.create();
-const _innerBody_paddingOffset = vec3.create();
-const _innerBody_position = vec3.create();
+const _innerBody_shapeOffsetRotated = /* @__PURE__ */ vec3.create();
+const _innerBody_paddingOffset = /* @__PURE__ */ vec3.create();
+const _innerBody_position = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculates the inner body position.
@@ -3219,7 +3219,7 @@ export function updateGroundVelocity(world: World, character: KCC, listener?: Ch
     vec3.copy(character.ground.velocity, groundVel);
 }
 
-const _refreshContacts_movementDirection = vec3.create();
+const _refreshContacts_movementDirection = /* @__PURE__ */ vec3.create();
 
 /**
  * Refreshes the contacts for a character at its current position.
@@ -3300,7 +3300,7 @@ export function canWalkStairs(character: KCC, linearVelocity: Vec3): boolean {
     return hasSteepSlopesToWalk(character, linearVelocity);
 }
 
-const _setShape_movementDirection = vec3.create();
+const _setShape_movementDirection = /* @__PURE__ */ vec3.create();
 
 /**
  * Changes the shape of the character, checking for penetration first.
@@ -3387,7 +3387,7 @@ export function setShape(
     return true;
 }
 
-const _move_gravityImpulse = vec3.create();
+const _move_gravityImpulse = /* @__PURE__ */ vec3.create();
 
 /**
  * Low-level movement function - moves character with collision resolution.
@@ -3463,7 +3463,7 @@ export function move(
     }
 }
 
-const _moveToContact_movementDirection = vec3.create();
+const _moveToContact_movementDirection = /* @__PURE__ */ vec3.create();
 
 /**
  * Moves character to a contact position and updates state.
@@ -3551,8 +3551,8 @@ function moveToContact(
     updateInnerBodyTransform(world, character);
 }
 
-const _stickToFloor_contact = createCharacterContact();
-const _stickToFloor_newPosition = vec3.create();
+const _stickToFloor_contact = /* @__PURE__ */ createCharacterContact();
+const _stickToFloor_newPosition = /* @__PURE__ */ vec3.create();
 
 /**
  * Sticks character to floor when leaving slopes.
@@ -3602,16 +3602,16 @@ export function stickToFloor(
     return true;
 }
 
-const _walkStairs_contact = createCharacterContact();
-const _walkStairs_testContact = createCharacterContact();
-const _walkStairs_up = vec3.create();
-const _walkStairs_down = vec3.create();
-const _walkStairs_upPosition = vec3.create();
-const _walkStairs_newPosition = vec3.create();
-const _walkStairs_testPosition = vec3.create();
-const _walkStairs_horizontalMovement = vec3.create();
-const _walkStairs_characterVelocity = vec3.create();
-const _walkStairs_horizontalVelocity = vec3.create();
+const _walkStairs_contact = /* @__PURE__ */ createCharacterContact();
+const _walkStairs_testContact = /* @__PURE__ */ createCharacterContact();
+const _walkStairs_up = /* @__PURE__ */ vec3.create();
+const _walkStairs_down = /* @__PURE__ */ vec3.create();
+const _walkStairs_upPosition = /* @__PURE__ */ vec3.create();
+const _walkStairs_newPosition = /* @__PURE__ */ vec3.create();
+const _walkStairs_testPosition = /* @__PURE__ */ vec3.create();
+const _walkStairs_horizontalMovement = /* @__PURE__ */ vec3.create();
+const _walkStairs_characterVelocity = /* @__PURE__ */ vec3.create();
+const _walkStairs_horizontalVelocity = /* @__PURE__ */ vec3.create();
 const _walkStairs_steepSlopeNormalsPool: Vec3[] = [];
 for (let i = 0; i < 16; i++) {
     _walkStairs_steepSlopeNormalsPool.push(vec3.create());
@@ -3830,15 +3830,15 @@ export function walkStairs(
     return true;
 }
 
-const _update_oldPosition = vec3.create();
-const _update_desiredVelocity = vec3.create();
-const _update_canceledVelocity = vec3.create();
-const _update_desiredHorizontalStep = vec3.create();
-const _update_achievedHorizontalStep = vec3.create();
-const _update_stepForward = vec3.create();
-const _update_stepForwardNormalized = vec3.create();
-const _update_stepForwardTest = vec3.create();
-const _update_groundHorizontal = vec3.create();
+const _update_oldPosition = /* @__PURE__ */ vec3.create();
+const _update_desiredVelocity = /* @__PURE__ */ vec3.create();
+const _update_canceledVelocity = /* @__PURE__ */ vec3.create();
+const _update_desiredHorizontalStep = /* @__PURE__ */ vec3.create();
+const _update_achievedHorizontalStep = /* @__PURE__ */ vec3.create();
+const _update_stepForward = /* @__PURE__ */ vec3.create();
+const _update_stepForwardNormalized = /* @__PURE__ */ vec3.create();
+const _update_stepForwardTest = /* @__PURE__ */ vec3.create();
+const _update_groundHorizontal = /* @__PURE__ */ vec3.create();
 
 /**
  * Main update function - moves character with full collision handling.

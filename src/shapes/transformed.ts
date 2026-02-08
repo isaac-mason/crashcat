@@ -60,7 +60,7 @@ function computeTransformedVolume(shape: TransformedShape): number {
     return shape.shape.volume;
 }
 
-const _computeTransformedLocalBounds_corner = vec3.create();
+const _computeTransformedLocalBounds_corner = /* @__PURE__ */ vec3.create();
 
 function computeTransformedLocalBounds(out: Box3, shape: TransformedShape): void {
     // start with empty bounds
@@ -112,15 +112,15 @@ export function update(shape: TransformedShape): void {
     shape.volume = computeTransformedVolume(shape);
 }
 
-const _rotationMat = mat4.create();
-const _childMassProperties = massProperties.create();
+const _rotationMat = /* @__PURE__ */ mat4.create();
+const _childMassProperties = /* @__PURE__ */ massProperties.create();
 
-const _surfaceNormal_invRotation = quat.create();
-const _surfaceNormal_forwardRotation = quat.create();
+const _surfaceNormal_invRotation = /* @__PURE__ */ quat.create();
+const _surfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
-const _supportingFace_vec3 = vec3.create();
-const _supportingFace_quat = quat.create();
-const _supportingFace_localDirection = vec3.create();
+const _supportingFace_vec3 = /* @__PURE__ */ vec3.create();
+const _supportingFace_quat = /* @__PURE__ */ quat.create();
+const _supportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 export const def = defineShape<TransformedShape>({
     type: ShapeType.TRANSFORMED,
@@ -204,14 +204,14 @@ export const def = defineShape<TransformedShape>({
 
 /* cast ray */
 
-const _castRayVsTransformed_pos = vec3.create();
-const _castRayVsTransformed_quat = quat.create();
-const _castRayVsTransformed_worldPos = vec3.create();
-const _castRayVsTransformed_worldQuat = quat.create();
-const _castRayVsTransformed_rayOriginLocal = vec3.create();
-const _castRayVsTransformed_rayDirectionLocal = vec3.create();
-const _castRayVsTransformed_invQuat = quat.create();
-const _castRayVsTransformed_tempRay = raycast3.create();
+const _castRayVsTransformed_pos = /* @__PURE__ */ vec3.create();
+const _castRayVsTransformed_quat = /* @__PURE__ */ quat.create();
+const _castRayVsTransformed_worldPos = /* @__PURE__ */ vec3.create();
+const _castRayVsTransformed_worldQuat = /* @__PURE__ */ quat.create();
+const _castRayVsTransformed_rayOriginLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsTransformed_rayDirectionLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsTransformed_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsTransformed_tempRay = /* @__PURE__ */ raycast3.create();
 
 function castRayVsTransformed(
     collector: CastRayCollector,
@@ -286,11 +286,11 @@ function castRayVsTransformed(
 
 /* collide point */
 
-const _collidePointVsTransformed_posB = vec3.create();
-const _collidePointVsTransformed_quatB = quat.create();
-const _collidePointVsTransformed_transformedTranslation = vec3.create();
-const _collidePointVsTransformed_worldPos = vec3.create();
-const _collidePointVsTransformed_worldRot = quat.create();
+const _collidePointVsTransformed_posB = /* @__PURE__ */ vec3.create();
+const _collidePointVsTransformed_quatB = /* @__PURE__ */ quat.create();
+const _collidePointVsTransformed_transformedTranslation = /* @__PURE__ */ vec3.create();
+const _collidePointVsTransformed_worldPos = /* @__PURE__ */ vec3.create();
+const _collidePointVsTransformed_worldRot = /* @__PURE__ */ quat.create();
 
 function collidePointVsTransformed(
     collector: CollidePointCollector,
@@ -351,11 +351,11 @@ function collidePointVsTransformed(
 
 /* collide shape */
 
-const _collideTransformedVsShape_posA = vec3.create();
-const _collideTransformedVsShape_quatA = quat.create();
-const _collideTransformedVsShape_transformedTranslation = vec3.create();
-const _collideTransformedVsShape_worldPos = vec3.create();
-const _collideTransformedVsShape_worldRot = quat.create();
+const _collideTransformedVsShape_posA = /* @__PURE__ */ vec3.create();
+const _collideTransformedVsShape_quatA = /* @__PURE__ */ quat.create();
+const _collideTransformedVsShape_transformedTranslation = /* @__PURE__ */ vec3.create();
+const _collideTransformedVsShape_worldPos = /* @__PURE__ */ vec3.create();
+const _collideTransformedVsShape_worldRot = /* @__PURE__ */ quat.create();
 
 function collideTransformedVsShape(
     collector: CollideShapeCollector,
@@ -437,11 +437,11 @@ function collideTransformedVsShape(
     );
 }
 
-const _collideShapeVsTransformed_posB = vec3.create();
-const _collideShapeVsTransformed_quatB = quat.create();
-const _collideShapeVsTransformed_transformedTranslation = vec3.create();
-const _collideShapeVsTransformed_worldPos = vec3.create();
-const _collideShapeVsTransformed_worldRot = quat.create();
+const _collideShapeVsTransformed_posB = /* @__PURE__ */ vec3.create();
+const _collideShapeVsTransformed_quatB = /* @__PURE__ */ quat.create();
+const _collideShapeVsTransformed_transformedTranslation = /* @__PURE__ */ vec3.create();
+const _collideShapeVsTransformed_worldPos = /* @__PURE__ */ vec3.create();
+const _collideShapeVsTransformed_worldRot = /* @__PURE__ */ quat.create();
 
 function collideShapeVsTransformed(
     collector: CollideShapeCollector,
@@ -525,13 +525,13 @@ function collideShapeVsTransformed(
 
 /* cast shape */
 
-const _castTransformedVsShape_castDecorated_temp = vec3.create();
-const _castTransformedVsShape_worldPos = vec3.create();
-const _castTransformedVsShape_worldRot = quat.create();
-const _castTransformedVsShape_transformDisplacementA = vec3.create();
-const _castTransformedVsShape_posA = vec3.create();
-const _castTransformedVsShape_quatA = quat.create();
-const _castTransformedVsShape_displacementA = vec3.create();
+const _castTransformedVsShape_castDecorated_temp = /* @__PURE__ */ vec3.create();
+const _castTransformedVsShape_worldPos = /* @__PURE__ */ vec3.create();
+const _castTransformedVsShape_worldRot = /* @__PURE__ */ quat.create();
+const _castTransformedVsShape_transformDisplacementA = /* @__PURE__ */ vec3.create();
+const _castTransformedVsShape_posA = /* @__PURE__ */ vec3.create();
+const _castTransformedVsShape_quatA = /* @__PURE__ */ quat.create();
+const _castTransformedVsShape_displacementA = /* @__PURE__ */ vec3.create();
 
 function castTransformedVsShape(
     collector: CastShapeCollector,
@@ -624,11 +624,11 @@ function castTransformedVsShape(
     );
 }
 
-const _castShapeVsTransformed_castDecorated_temp = vec3.create();
-const _castShapeVsTransformed_worldPos = vec3.create();
-const _castShapeVsTransformed_worldRot = quat.create();
-const _castShapeVsTransformed_posB = vec3.create();
-const _castShapeVsTransformed_quatB = quat.create();
+const _castShapeVsTransformed_castDecorated_temp = /* @__PURE__ */ vec3.create();
+const _castShapeVsTransformed_worldPos = /* @__PURE__ */ vec3.create();
+const _castShapeVsTransformed_worldRot = /* @__PURE__ */ quat.create();
+const _castShapeVsTransformed_posB = /* @__PURE__ */ vec3.create();
+const _castShapeVsTransformed_quatB = /* @__PURE__ */ quat.create();
 
 function castShapeVsTransformed(
     collector: CastShapeCollector,

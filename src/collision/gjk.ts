@@ -28,7 +28,7 @@ function createClosestPointResult(): ClosestPointResult {
     };
 }
 
-const _barycentric_line = createBarycentricCoordinatesResult();
+const _barycentric_line = /* @__PURE__ */ createBarycentricCoordinatesResult();
 
 export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void {
     computeBarycentricCoordinates2d(_barycentric_line, a, b, squaredTolerance);
@@ -59,18 +59,18 @@ export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: V
     }
 }
 
-const _ac_tri = vec3.create();
-const _ab_tri = vec3.create();
-const _bc_tri = vec3.create();
-const _a_tri = vec3.create();
-const _c_tri = vec3.create();
-const _n_tri = vec3.create();
-const _ap_tri = vec3.create();
-const _bp_tri = vec3.create();
-const _cp_tri = vec3.create();
-const _closestPoint_tri = vec3.create();
-const _q_tri = vec3.create();
-const _tempVector_tri = vec3.create();
+const _ac_tri = /* @__PURE__ */ vec3.create();
+const _ab_tri = /* @__PURE__ */ vec3.create();
+const _bc_tri = /* @__PURE__ */ vec3.create();
+const _a_tri = /* @__PURE__ */ vec3.create();
+const _c_tri = /* @__PURE__ */ vec3.create();
+const _n_tri = /* @__PURE__ */ vec3.create();
+const _ap_tri = /* @__PURE__ */ vec3.create();
+const _bp_tri = /* @__PURE__ */ vec3.create();
+const _cp_tri = /* @__PURE__ */ vec3.create();
+const _closestPoint_tri = /* @__PURE__ */ vec3.create();
+const _q_tri = /* @__PURE__ */ vec3.create();
+const _tempVector_tri = /* @__PURE__ */ vec3.create();
 
 export function computeClosestPointOnTriangle(
     out: ClosestPointResult,
@@ -402,15 +402,15 @@ export function computeClosestPointOnTriangle(
     out.point[2] = _n_tri[2] * scale;
 }
 
-const _ab_planes = vec3.create();
-const _ac_planes = vec3.create();
-const _ad_planes = vec3.create();
-const _bd_planes = vec3.create();
-const _bc_planes = vec3.create();
-const _ab_cross_ac = vec3.create();
-const _ac_cross_ad = vec3.create();
-const _ad_cross_ab = vec3.create();
-const _bd_cross_bc = vec3.create();
+const _ab_planes = /* @__PURE__ */ vec3.create();
+const _ac_planes = /* @__PURE__ */ vec3.create();
+const _ad_planes = /* @__PURE__ */ vec3.create();
+const _bd_planes = /* @__PURE__ */ vec3.create();
+const _bc_planes = /* @__PURE__ */ vec3.create();
+const _ab_cross_ac = /* @__PURE__ */ vec3.create();
+const _ac_cross_ad = /* @__PURE__ */ vec3.create();
+const _ad_cross_ab = /* @__PURE__ */ vec3.create();
+const _bd_cross_bc = /* @__PURE__ */ vec3.create();
 const _signP = { x: 0, y: 0, z: 0, w: 0 };
 const _signD = { x: 0, y: 0, z: 0, w: 0 };
 
@@ -516,7 +516,7 @@ function isOriginOutsideOfTrianglePlanes(out: TrianglePlaneFlags, a: Vec3, b: Ve
     out.w = 1;
 }
 
-const _otherResult_tet = createClosestPointResult();
+const _otherResult_tet = /* @__PURE__ */ createClosestPointResult();
 const _originOutOfPlanes: TrianglePlaneFlags = { x: 0, y: 0, z: 0, w: 0 };
 
 export function computeClosestPointOnTetrahedron(
@@ -629,21 +629,21 @@ export function computeClosestPointOnTetrahedron(
 const GJK_TOLERANCE = 1e-5;
 const GJK_MAX_ITERATIONS = 100;
 
-const _p = vec3.create();
-const _q = vec3.create();
-const _w = vec3.create();
-const _x = vec3.create();
-const _v = vec3.create();
-const _directionA = vec3.create();
-const _directionB = vec3.create();
-const _pq = vec3.create();
-const _prevV = vec3.create();
-const _normalizedV = vec3.create();
-const _simplex = createSimplex();
-const _bary = createBarycentricCoordinatesResult();
-const _closestPoint = createClosestPointResult();
-const _closestPointToSimplex = createClosestPointToSimplexResult();
-const _transformedSupportA = createTransformedSupport();
+const _p = /* @__PURE__ */ vec3.create();
+const _q = /* @__PURE__ */ vec3.create();
+const _w = /* @__PURE__ */ vec3.create();
+const _x = /* @__PURE__ */ vec3.create();
+const _v = /* @__PURE__ */ vec3.create();
+const _directionA = /* @__PURE__ */ vec3.create();
+const _directionB = /* @__PURE__ */ vec3.create();
+const _pq = /* @__PURE__ */ vec3.create();
+const _prevV = /* @__PURE__ */ vec3.create();
+const _normalizedV = /* @__PURE__ */ vec3.create();
+const _simplex = /* @__PURE__ */ createSimplex();
+const _bary = /* @__PURE__ */ createBarycentricCoordinatesResult();
+const _closestPoint = /* @__PURE__ */ createClosestPointResult();
+const _closestPointToSimplex = /* @__PURE__ */ createClosestPointToSimplexResult();
+const _transformedSupportA = /* @__PURE__ */ createTransformedSupport();
 
 type ClosestPointToSimplexResult = {
     point: Vec3;
@@ -1413,7 +1413,7 @@ export function createGjkClosestPoints(): GjkClosestPoints {
     };
 }
 
-const _closestPointsInSimplex_diff = vec3.create();
+const _closestPointsInSimplex_diff = /* @__PURE__ */ vec3.create();
 
 /**
  * Get closest points between two convex shapes using GJK.

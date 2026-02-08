@@ -39,14 +39,14 @@ export function createClosestPointOnTriangleResult(): ClosestPointOnTriangleResu
         feature: 0,
     };
 }
-const _cpt_ab = vec3.create();
-const _cpt_ac = vec3.create();
-const _cpt_bc = vec3.create();
-const _cpt_ap = vec3.create();
-const _cpt_bp = vec3.create();
-const _cpt_cp = vec3.create();
-const _cpt_n = vec3.create();
-const _cpt_q = vec3.create();
+const _cpt_ab = /* @__PURE__ */ vec3.create();
+const _cpt_ac = /* @__PURE__ */ vec3.create();
+const _cpt_bc = /* @__PURE__ */ vec3.create();
+const _cpt_ap = /* @__PURE__ */ vec3.create();
+const _cpt_bp = /* @__PURE__ */ vec3.create();
+const _cpt_cp = /* @__PURE__ */ vec3.create();
+const _cpt_n = /* @__PURE__ */ vec3.create();
+const _cpt_q = /* @__PURE__ */ vec3.create();
 
 /**
  * Get the closest point on a triangle to the origin.

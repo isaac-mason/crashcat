@@ -97,12 +97,12 @@ export function isActive(part: DualAxisConstraintPart): boolean {
     );
 }
 
-const _calc_invEffectiveMass = mat2.create();
-const _calc_invI = mat4.create();
-const _calc_crossN1 = vec3.create();
-const _calc_crossN2 = vec3.create();
-const _calc_invI_crossN1 = vec3.create();
-const _calc_invI_crossN2 = vec3.create();
+const _calc_invEffectiveMass = /* @__PURE__ */ mat2.create();
+const _calc_invI = /* @__PURE__ */ mat4.create();
+const _calc_crossN1 = /* @__PURE__ */ vec3.create();
+const _calc_crossN2 = /* @__PURE__ */ vec3.create();
+const _calc_invI_crossN1 = /* @__PURE__ */ vec3.create();
+const _calc_invI_crossN2 = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculate constraint properties for the dual axis constraint.
@@ -197,8 +197,8 @@ export function calculateConstraintProperties(
     }
 }
 
-const _warmStart_impulse = vec3.create();
-const _warmStart_scaledLambda = vec3.create();
+const _warmStart_impulse = /* @__PURE__ */ vec3.create();
+const _warmStart_scaledLambda = /* @__PURE__ */ vec3.create();
 
 /**
  * Warm start the velocity constraint by applying cached impulses.
@@ -255,8 +255,8 @@ export function warmStart(
 
 const _sv_jv: [number, number] = [0, 0];
 const _sv_lambda: [number, number] = [0, 0];
-const _sv_impulse = vec3.create();
-const _sv_angularImpulse = vec3.create();
+const _sv_impulse = /* @__PURE__ */ vec3.create();
+const _sv_angularImpulse = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the velocity constraint.
@@ -357,10 +357,10 @@ export function solveVelocityConstraint(
     return true;
 }
 
-const _sp_c = vec2.create();
-const _sp_lambda = vec2.create();
-const _sp_impulse = vec3.create();
-const _sp_angularImpulse = vec3.create();
+const _sp_c = /* @__PURE__ */ vec2.create();
+const _sp_lambda = /* @__PURE__ */ vec2.create();
+const _sp_impulse = /* @__PURE__ */ vec3.create();
+const _sp_angularImpulse = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the position constraint.

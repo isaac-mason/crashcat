@@ -294,11 +294,11 @@ export function getHalfConeAngle(constraint: ConeConstraint): number {
     return Math.acos(constraint.cosHalfConeAngle);
 }
 
-const _cone_rotA = mat4.create();
-const _cone_rotB = mat4.create();
-const _cone_twist1 = vec3.create();
-const _cone_twist2 = vec3.create();
-const _cone_rotAxis = vec3.create();
+const _cone_rotA = /* @__PURE__ */ mat4.create();
+const _cone_rotB = /* @__PURE__ */ mat4.create();
+const _cone_twist1 = /* @__PURE__ */ vec3.create();
+const _cone_twist2 = /* @__PURE__ */ vec3.create();
+const _cone_rotAxis = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculate rotation constraint properties.

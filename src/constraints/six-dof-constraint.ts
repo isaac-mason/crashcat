@@ -35,7 +35,7 @@ import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-con
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
 
-const _twist_temp = quat.create();
+const _twist_temp = /* @__PURE__ */ quat.create();
 
 /** extract the twist component of a quaternion around a specific axis */
 function getTwistAroundAxis(q: Quat, axis: Vec3, outTwist: Quat): void {
@@ -332,16 +332,16 @@ function cacheHasSpringLimits(constraint: SixDOFConstraint): void {
         constraint.limitsSpringSettings[2].frequencyOrStiffness > 0;
 }
 
-const _c_to_b1 = mat3.create();
-const _c_to_b2 = mat3.create();
-const _axisZ1 = vec3.create();
-const _axisZ2 = vec3.create();
-const _create_axisX1 = vec3.create();
-const _create_axisY1 = vec3.create();
-const _create_axisX2 = vec3.create();
-const _create_axisY2 = vec3.create();
-const _create_invQuatA = quat.create();
-const _create_invQuatB = quat.create();
+const _c_to_b1 = /* @__PURE__ */ mat3.create();
+const _c_to_b2 = /* @__PURE__ */ mat3.create();
+const _axisZ1 = /* @__PURE__ */ vec3.create();
+const _axisZ2 = /* @__PURE__ */ vec3.create();
+const _create_axisX1 = /* @__PURE__ */ vec3.create();
+const _create_axisY1 = /* @__PURE__ */ vec3.create();
+const _create_axisX2 = /* @__PURE__ */ vec3.create();
+const _create_axisY2 = /* @__PURE__ */ vec3.create();
+const _create_invQuatA = /* @__PURE__ */ quat.create();
+const _create_invQuatB = /* @__PURE__ */ quat.create();
 
 /** Create a SixDOF constraint */
 export function create(world: World, settings: SixDOFConstraintSettings): SixDOFConstraint {
@@ -521,27 +521,27 @@ export function get(world: World, id: ConstraintId): SixDOFConstraint | undefine
     return constraint;
 }
 
-const _setup_rotA = mat4.create();
-const _setup_rotB = mat4.create();
-const _setup_r1PlusU = vec3.create();
-const _setup_r2 = vec3.create();
-const _setup_u = vec3.create();
-const _setup_q = quat.create();
-const _setup_c1ToWorld = quat.create();
-const _setup_c2ToWorld = quat.create();
-const _setup_wsAxisMat = mat4.create();
-const _setup_rotationError = vec3.create();
-const _setup_diff = quat.create();
-const _setup_qConj = quat.create();
-const _setup_projectedDiff = quat.create();
-const _setup_targetOrientation = quat.create();
-const _setup_qSwing = quat.create();
-const _setup_qTwist = quat.create();
-const _setup_invInertiaA = mat4.create();
-const _setup_invInertiaB = mat4.create();
+const _setup_rotA = /* @__PURE__ */ mat4.create();
+const _setup_rotB = /* @__PURE__ */ mat4.create();
+const _setup_r1PlusU = /* @__PURE__ */ vec3.create();
+const _setup_r2 = /* @__PURE__ */ vec3.create();
+const _setup_u = /* @__PURE__ */ vec3.create();
+const _setup_q = /* @__PURE__ */ quat.create();
+const _setup_c1ToWorld = /* @__PURE__ */ quat.create();
+const _setup_c2ToWorld = /* @__PURE__ */ quat.create();
+const _setup_wsAxisMat = /* @__PURE__ */ mat4.create();
+const _setup_rotationError = /* @__PURE__ */ vec3.create();
+const _setup_diff = /* @__PURE__ */ quat.create();
+const _setup_qConj = /* @__PURE__ */ quat.create();
+const _setup_projectedDiff = /* @__PURE__ */ quat.create();
+const _setup_targetOrientation = /* @__PURE__ */ quat.create();
+const _setup_qSwing = /* @__PURE__ */ quat.create();
+const _setup_qTwist = /* @__PURE__ */ quat.create();
+const _setup_invInertiaA = /* @__PURE__ */ mat4.create();
+const _setup_invInertiaB = /* @__PURE__ */ mat4.create();
 
-const _getPositionConstraintProperties_p1 = vec3.create();
-const _getPositionConstraintProperties_p2 = vec3.create();
+const _getPositionConstraintProperties_p1 = /* @__PURE__ */ vec3.create();
+const _getPositionConstraintProperties_p2 = /* @__PURE__ */ vec3.create();
 
 function getPositionConstraintProperties(constraint: SixDOFConstraint, bodies: Bodies, outR1PlusU: Vec3, outR2: Vec3, outU: Vec3): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -566,9 +566,9 @@ function getPositionConstraintProperties(constraint: SixDOFConstraint, bodies: B
     vec3.subtract(outU, p2, p1);
 }
 
-const AXIS_X = vec3.fromValues(1, 0, 0);
-const AXIS_Y = vec3.fromValues(0, 1, 0);
-const AXIS_Z = vec3.fromValues(0, 0, 1);
+const AXIS_X = /* @__PURE__ */ vec3.fromValues(1, 0, 0);
+const AXIS_Y = /* @__PURE__ */ vec3.fromValues(0, 1, 0);
+const AXIS_Z = /* @__PURE__ */ vec3.fromValues(0, 0, 1);
 
 /** Setup velocity constraint */
 export function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: number): void {
@@ -1092,17 +1092,17 @@ export function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, delt
     }
 }
 
-const _pos_invInitialOrientation = quat.create();
-const _pos_q = quat.create();
-const _pos_c1ToWorld = quat.create();
-const _pos_translationAxis = vec3.create();
-const _pos_transLimitsMin = vec3.create();
-const _pos_localSpacePosition1WithOffset = vec3.create();
-const _pos_rotLimitsMinEuler = euler.create();
-const _solvePosition_rotLimitsMin = quat.create();
-const _solvePosition_constraintToBody1WithOffset = quat.create();
-const _solvePosition_c2ToWorld = quat.create();
-const _solvePosition_unitAxis = vec3.create();
+const _pos_invInitialOrientation = /* @__PURE__ */ quat.create();
+const _pos_q = /* @__PURE__ */ quat.create();
+const _pos_c1ToWorld = /* @__PURE__ */ quat.create();
+const _pos_translationAxis = /* @__PURE__ */ vec3.create();
+const _pos_transLimitsMin = /* @__PURE__ */ vec3.create();
+const _pos_localSpacePosition1WithOffset = /* @__PURE__ */ vec3.create();
+const _pos_rotLimitsMinEuler = /* @__PURE__ */ euler.create();
+const _solvePosition_rotLimitsMin = /* @__PURE__ */ quat.create();
+const _solvePosition_constraintToBody1WithOffset = /* @__PURE__ */ quat.create();
+const _solvePosition_c2ToWorld = /* @__PURE__ */ quat.create();
+const _solvePosition_unitAxis = /* @__PURE__ */ vec3.create();
 
 /** Solve position constraint */
 export function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime: number, baumgarte: number): boolean {

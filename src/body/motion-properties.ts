@@ -101,10 +101,10 @@ export function create(): MotionProperties {
     };
 }
 
-const _momentArm = vec3.create();
-const _torque = vec3.create();
-const _linearDelta = vec3.create();
-const _angularDelta = vec3.create();
+const _momentArm = /* @__PURE__ */ vec3.create();
+const _torque = /* @__PURE__ */ vec3.create();
+const _linearDelta = /* @__PURE__ */ vec3.create();
+const _angularDelta = /* @__PURE__ */ vec3.create();
 
 /** Adds a force to the force accumulator. */
 export function addForce(motionProperties: MotionProperties, force: Vec3): void {
@@ -178,16 +178,16 @@ export function addImpulseAtPosition(
 const EPSILON = 1e-10;
 const MAX_JACOBI_ITERATIONS = 50;
 
-const _decomposePrincipalMomentsOfInertia_mat3 = mat3.create();
-const _decomposePrincipalMomentsOfInertia_tempDiagonal = vec3.create();
-const _decomposePrincipalMomentsOfInertia_tempRotation = mat3.create();
-const _decomposePrincipalMomentsOfInertia_axisX = vec3.create();
-const _decomposePrincipalMomentsOfInertia_axisY = vec3.create();
-const _decomposePrincipalMomentsOfInertia_axisZ = vec3.create();
-const _decomposePrincipalMomentsOfInertia_cross = vec3.create();
-const _decomposePrincipalMomentsOfInertia_b = vec3.create();
-const _decomposePrincipalMomentsOfInertia_z = vec3.create();
-const _decomposePrincipalMomentsOfInertia_indices = new Uint8Array(3);
+const _decomposePrincipalMomentsOfInertia_mat3 = /* @__PURE__ */ mat3.create();
+const _decomposePrincipalMomentsOfInertia_tempDiagonal = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_tempRotation = /* @__PURE__ */ mat3.create();
+const _decomposePrincipalMomentsOfInertia_axisX = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_axisY = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_axisZ = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_cross = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_b = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_z = /* @__PURE__ */ vec3.create();
+const _decomposePrincipalMomentsOfInertia_indices = /* @__PURE__ */ new Uint8Array(3);
 
 /**
  * Decomposes the inertia tensor into principal moments (eigenvalues) and rotation matrix (eigenvectors)
@@ -413,8 +413,8 @@ export function decomposePrincipalMomentsOfInertia(inertia: Mat4, outRotation: M
     return converged;
 }
 
-const _setMassProperties_rotation = mat3.create();
-const _setMassProperties_diagonal = vec3.create();
+const _setMassProperties_rotation = /* @__PURE__ */ mat3.create();
+const _setMassProperties_diagonal = /* @__PURE__ */ vec3.create();
 
 export function setMassProperties(motionProperties: MotionProperties, allowedDOFs: number, massProperties: MassProperties) {
     // store allowed DOFs
@@ -480,9 +480,9 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
     );
 }
 
-const _getInverseInertia_inertiaRotMat4 = mat4.create();
-const _getInverseInertia_rotation = mat4.create();
-const _getInverseInertia_rotationScaled = mat4.create();
+const _getInverseInertia_inertiaRotMat4 = /* @__PURE__ */ mat4.create();
+const _getInverseInertia_rotation = /* @__PURE__ */ mat4.create();
+const _getInverseInertia_rotationScaled = /* @__PURE__ */ mat4.create();
 
 /**
  * Computes the world-space inverse inertia matrix for a given body rotation.
@@ -708,7 +708,7 @@ export function scaleToMass(motionProperties: MotionProperties, newMass: number)
     motionProperties.invMass = newInvMass;
 }
 
-const _moveKinematic_axis = vec3.create();
+const _moveKinematic_axis = /* @__PURE__ */ vec3.create();
 
 /**
  * Set velocity of body such that it will be rotate/translate by inDeltaPosition/Rotation in inDeltaTime seconds.
@@ -781,10 +781,10 @@ function getAxisAngleFromQuat(outAxis: Vec3, q: Quat): void {
     }
 }
 
-const _multiplyWorldSpaceInverseInertiaByVector_combinedQuat = quat.create();
-const _multiplyWorldSpaceInverseInertiaByVector_rotation = mat3.create();
-const _multiplyWorldSpaceInverseInertiaByVector_maskedV = vec3.create();
-const _multiplyWorldSpaceInverseInertiaByVector_temp = vec3.create();
+const _multiplyWorldSpaceInverseInertiaByVector_combinedQuat = /* @__PURE__ */ quat.create();
+const _multiplyWorldSpaceInverseInertiaByVector_rotation = /* @__PURE__ */ mat3.create();
+const _multiplyWorldSpaceInverseInertiaByVector_maskedV = /* @__PURE__ */ vec3.create();
+const _multiplyWorldSpaceInverseInertiaByVector_temp = /* @__PURE__ */ vec3.create();
 
 /**
  * Multiplies a vector by the world-space inverse inertia matrix more efficiently than computing the full matrix.
@@ -836,7 +836,7 @@ export function multiplyWorldSpaceInverseInertiaByVector(
     return out;
 }
 
-const _getPointVelocityCOM_angularContrib = vec3.create();
+const _getPointVelocityCOM_angularContrib = /* @__PURE__ */ vec3.create();
 
 /**
  * Get velocity of a point on the body (point relative to center of mass).
@@ -854,14 +854,14 @@ export function getPointVelocityCOM(out: Vec3, motionProperties: MotionPropertie
     return out;
 }
 
-const _applyGyroscopicForce_localInertia = vec3.create();
-const _applyGyroscopicForce_localAngularVelocity = vec3.create();
-const _applyGyroscopicForce_localMomentum = vec3.create();
-const _applyGyroscopicForce_newLocalMomentum = vec3.create();
-const _applyGyroscopicForce_crossProduct = vec3.create();
-const _applyGyroscopicForce_inertiaSpaceToWorldSpace = quat.create();
-const _applyGyroscopicForce_conjugated = quat.create();
-const _applyGyroscopicForce_newLocalAngularVelocity = vec3.create();
+const _applyGyroscopicForce_localInertia = /* @__PURE__ */ vec3.create();
+const _applyGyroscopicForce_localAngularVelocity = /* @__PURE__ */ vec3.create();
+const _applyGyroscopicForce_localMomentum = /* @__PURE__ */ vec3.create();
+const _applyGyroscopicForce_newLocalMomentum = /* @__PURE__ */ vec3.create();
+const _applyGyroscopicForce_crossProduct = /* @__PURE__ */ vec3.create();
+const _applyGyroscopicForce_inertiaSpaceToWorldSpace = /* @__PURE__ */ quat.create();
+const _applyGyroscopicForce_conjugated = /* @__PURE__ */ quat.create();
+const _applyGyroscopicForce_newLocalAngularVelocity = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply the gyroscopic force (aka Dzhanibekov effect, see https://en.wikipedia.org/wiki/Tennis_racket_theorem)

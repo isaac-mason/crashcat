@@ -277,7 +277,7 @@ function createInvertedCollector() {
     return collector;
 }
 
-const _invertedCollector = createInvertedCollector();
+const _invertedCollector = /* @__PURE__ */ createInvertedCollector();
 
 /**
  * Wraps a collision function to swap shape A and B arguments.

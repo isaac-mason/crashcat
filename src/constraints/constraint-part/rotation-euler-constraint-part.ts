@@ -75,12 +75,12 @@ export function getInvInitialOrientation(rotation1: Quat, rotation2: Quat): Quat
     return result;
 }
 
-const _getInvInitialOrientationXY_constraint1 = mat3.create();
-const _getInvInitialOrientationXY_constraint2 = mat3.create();
-const _getInvInitialOrientationXY_z1 = vec3.create();
-const _getInvInitialOrientationXY_z2 = vec3.create();
-const _getInvInitialOrientationXY_q1 = quat.create();
-const _getInvInitialOrientationXY_q2 = quat.create();
+const _getInvInitialOrientationXY_constraint1 = /* @__PURE__ */ mat3.create();
+const _getInvInitialOrientationXY_constraint2 = /* @__PURE__ */ mat3.create();
+const _getInvInitialOrientationXY_z1 = /* @__PURE__ */ vec3.create();
+const _getInvInitialOrientationXY_z2 = /* @__PURE__ */ vec3.create();
+const _getInvInitialOrientationXY_q1 = /* @__PURE__ */ quat.create();
+const _getInvInitialOrientationXY_q2 = /* @__PURE__ */ quat.create();
 
 /**
  * Return inverse of initial rotation from body 1 to body 2 in body 1 space,
@@ -137,7 +137,7 @@ export function getInvInitialOrientationXY(axisX1: Vec3, axisY1: Vec3, axisX2: V
     return result;
 }
 
-const _calc_invEffectiveMass = mat4.create();
+const _calc_invEffectiveMass = /* @__PURE__ */ mat4.create();
 
 /**
  * Calculate constraint properties for the rotation constraint.
@@ -196,10 +196,10 @@ export function warmStart(
     applyVelocityStep(part, bodyA, bodyB, part.totalLambda);
 }
 
-const _solveVel_jv = vec3.create();
-const _solveVel_lambda = vec3.create();
-const _solveVel_w1 = vec3.create();
-const _solveVel_w2 = vec3.create();
+const _solveVel_jv = /* @__PURE__ */ vec3.create();
+const _solveVel_lambda = /* @__PURE__ */ vec3.create();
+const _solveVel_w1 = /* @__PURE__ */ vec3.create();
+const _solveVel_w2 = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve the velocity constraint.
@@ -246,8 +246,8 @@ export function solveVelocityConstraint(part: RotationEulerConstraintPart, bodyA
     return applyVelocityStep(part, bodyA, bodyB, lambda);
 }
 
-const _applyVel_angularImpulseA = vec3.create();
-const _applyVel_angularImpulseB = vec3.create();
+const _applyVel_angularImpulseA = /* @__PURE__ */ vec3.create();
+const _applyVel_angularImpulseB = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply an angular impulse to both bodies.
@@ -282,11 +282,11 @@ function applyVelocityStep(
     return true;
 }
 
-const _solvePos_diff = quat.create();
-const _solvePos_error = vec3.create();
-const _solvePos_lambda = vec3.create();
-const _solvePos_angularStep = vec3.create();
-const _solvePos_q1Conj = quat.create();
+const _solvePos_diff = /* @__PURE__ */ quat.create();
+const _solvePos_error = /* @__PURE__ */ vec3.create();
+const _solvePos_lambda = /* @__PURE__ */ vec3.create();
+const _solvePos_angularStep = /* @__PURE__ */ vec3.create();
+const _solvePos_q1Conj = /* @__PURE__ */ quat.create();
 
 /**
  * Solve the position constraint using Baumgarte stabilization.
