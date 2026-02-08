@@ -902,7 +902,7 @@ function castConvexVsTriangleMesh(
 
                 _subShapeIdBuilder.value = _subShapeIdB;
                 _subShapeIdBuilder.currentBit = _subShapeIdBitsB;
-                subShape.pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, meshData.triangleCount, triangleIndex);
+                subShape.pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, triangleIndex, meshData.triangleCount);
 
                 _castShapeHit.subShapeIdB = _subShapeIdBuilder.value;
                 _castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
@@ -1310,7 +1310,7 @@ function collideConvexVsTriangleMesh(
                 // push sub shape id for triangle
                 _subShapeIdBuilder.value = subShapeIdB;
                 _subShapeIdBuilder.currentBit = subShapeIdBitsB;
-                subShape.pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, meshShape.data.triangleCount, triangleIndex);
+                subShape.pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, triangleIndex, meshShape.data.triangleCount);
 
                 // report collision
                 vec3.copy(_collideShapeHit.pointA, _worldPointA);
@@ -1645,8 +1645,8 @@ function collideSphereVsTriangleMesh(
                 subShape.pushIndex(
                     _collideSphereVsTriangleMesh_subShapeIdBuilder,
                     _collideSphereVsTriangleMesh_subShapeIdBuilder,
-                    meshShape.data.triangleCount,
                     triangleIndex,
+                    meshShape.data.triangleCount,
                 );
 
                 // create collision result
@@ -1840,8 +1840,8 @@ function castSphereVsTriangleMeshAddHit(
     subShape.pushIndex(
         _castSphereVsTriangleMesh_subShapeIdBuilder,
         _castSphereVsTriangleMesh_subShapeIdBuilder,
-        meshShape.data.triangleCount,
         triangleIndex,
+        meshShape.data.triangleCount,
     );
 
     // create cast result

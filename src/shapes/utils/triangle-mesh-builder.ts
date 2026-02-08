@@ -140,10 +140,9 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
     /* remove duplicate triangles */
     let finalTriangleCount = 0;
 
-    const seen = new Set<bigint>();
+    const seen = new Set<string>();
     let writeIdx = 0;
 
-    console.time('Deduplicate triangles');
     for (let readIdx = 0; readIdx < validTriangleCount; readIdx++) {
         const readOffset = readIdx * TRIANGLE_STRIDE;
         const ia = triangleBuffer[readOffset + OFFSET_INDEX_A];
@@ -175,8 +174,7 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
             }
         }
 
-        // pack 4 values into one bigint, 32 bits each
-        const key = (BigInt(iaCanon) << 96n) | (BigInt(ibCanon) << 64n) | (BigInt(icCanon) << 32n) | BigInt(materialId + 1);
+        const key = `${iaCanon},${ibCanon},${icCanon},${materialId}`;
 
         if (!seen.has(key)) {
             seen.add(key);
@@ -190,8 +188,6 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
             writeIdx++;
         }
     }
-    console.timeEnd('Deduplicate triangles');
-
     finalTriangleCount = writeIdx;
 
     // trim buffer to actual unique count
@@ -228,7 +224,7 @@ function deduplicateVertices(inputPositions: number[]): {
     indexMap: number[];
 } {
     const vertexCount = Math.floor(inputPositions.length / 3);
-    const vertexMap = new Map<bigint, number>();
+    const vertexMap = new Map<string, number>();
     const positions: number[] = [];
     const indexMap = new Array<number>(vertexCount);
     let uniqueCount = 0;
@@ -237,7 +233,7 @@ function deduplicateVertices(inputPositions: number[]): {
         const qx = Math.round(inputPositions[i * 3] * WELD_GRID_INV);
         const qy = Math.round(inputPositions[i * 3 + 1] * WELD_GRID_INV);
         const qz = Math.round(inputPositions[i * 3 + 2] * WELD_GRID_INV);
-        const key = (BigInt(qx) << 96n) | (BigInt(qy) << 48n) | BigInt(qz);
+        const key = `${qx},${qy},${qz}`;
 
         let idx = vertexMap.get(key);
         if (idx === undefined) {
