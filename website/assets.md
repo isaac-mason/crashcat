@@ -1,0 +1,1 @@
+https://sketchfab.com/3d-models/low-poly-chevrolet-chevy-nova-1be961388f3f4a858f9413232656c957#download
