@@ -15,7 +15,6 @@ import {
     sphere,
     transformed,
     triangleMesh,
-    collisionDispatch,
 } from '../../src';
 
 const settings = createDefaultCollideShapeSettings();
@@ -91,8 +90,6 @@ describe('collideShapeVsShape - Sphere vs Sphere', () => {
     });
 
     test('should detect collision between nearly touching spheres', () => {
-        console.log("collisionDispatch", collisionDispatch)
-
         const shapeA = sphere.create({ radius: 1.0 });
         const posA = vec3.fromValues(0, 0, 0);
         const quatA = quat.create();
