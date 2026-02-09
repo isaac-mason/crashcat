@@ -39,6 +39,7 @@
         "format": "biome format --write src/. tst/.",
         "lint": "biome lint --write src/. tst/.",
         "test": "vitest ./src ./tst",
+        "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
         "docs": "(cd docs && node ./build.js)",
         "typedoc": "typedoc --tsconfig ./tsconfig.json --name \"crashcat docs\" --out ./dist-typedoc ./src/index.ts ./three/index.ts"
     },

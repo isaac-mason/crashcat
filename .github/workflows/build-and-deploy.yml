@@ -44,6 +44,8 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Run tree-shaking test
+        run: pnpm run test-tree-shaking
   deploy:
     environment:
       name: github-pages
