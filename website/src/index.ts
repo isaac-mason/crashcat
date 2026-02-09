@@ -240,10 +240,10 @@ const WRECKING_BALL_RADIUS = 2;
 const ROPE_SEGMENT_LENGTH = 1.5;
 const ROPE_SEGMENT_RADIUS = 0.08;
 const ROPE_SEGMENTS = 6; // more segments = longer rope = ball hangs higher at rest
-const WRECKING_BALL_HEIGHT = 16; // anchor height above ground
+const WRECKING_BALL_HEIGHT = 14; // anchor height above ground
 const WRECKING_BALL_START_ANGLE = Math.PI / 3; // start swinging from ~60 degrees
 
-/* ── geometries ── */
+/* geometries */
 
 const groundGeometry = new THREE.BoxGeometry(GROUND_WIDTH, 0.1, TILE_DEPTH);
 const roadGeometry = new THREE.BoxGeometry(ROAD_WIDTH, 0.12, TILE_DEPTH);
@@ -606,7 +606,6 @@ function spawnTile(index: number): Tile {
                 objectLayer: OBJECT_LAYER_MOVING,
                 motionType: MotionType.DYNAMIC,
                 position: [segX, segY, ballZ],
-                mass: 0.5,
                 friction: 0.3,
             });
 
@@ -641,7 +640,7 @@ function spawnTile(index: number): Tile {
             objectLayer: OBJECT_LAYER_MOVING,
             motionType: MotionType.DYNAMIC,
             position: [ballX, ballY, ballZ],
-            mass: 50,
+            mass: 40,
             friction: 0.5,
             restitution: 0.3,
         });
