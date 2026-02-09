@@ -15,6 +15,7 @@ for (const path of htmlFiles) {
 }
 
 export default defineConfig({
+    base: './',
     root: './',
     build: {
         outDir: './dist',
@@ -22,7 +23,6 @@ export default defineConfig({
             input,
         },
         target: 'esnext',
-        sourcemap: true,
     },
     server: {
         open: '/index.html',
