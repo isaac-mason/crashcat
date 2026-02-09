@@ -30,22 +30,23 @@ jobs:
       - name: Build root project
         run: pnpm run build
 
-      - name: Build examples
-        run: |
-          cd examples
-          pnpm install
-          pnpm run build
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./examples/dist
-
       - name: Run tests
         run: pnpm test
 
       - name: Run tree-shaking test
         run: pnpm run test-tree-shaking
+
+      - name: Build website
+        run: |
+          cd website
+          pnpm install
+          ./build.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./website/dist
+
   deploy:
     environment:
       name: github-pages
