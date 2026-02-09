@@ -315,7 +315,6 @@ export function calculateConstraintPropertiesWithFrequencyAndDamping(
 
 /**
  * Calculate constraint properties with stiffness and damping (soft constraint).
- *
  * @param part the constraint part to initialize
  * @param deltaTime time step
  * @param bodyA first body
@@ -380,7 +379,6 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
 /**
  * Calculate constraint properties using SpringSettings.
  * Selects the appropriate calculation method based on the spring mode.
- *
  * @param part the constraint part to initialize
  * @param deltaTime time step
  * @param bodyA first body

@@ -436,7 +436,7 @@ export function solvePosition(
     deltaTime: number,
     baumgarteFactor: number,
 ): boolean {
-    // Skip position correction if spring is active (handled by velocity bias)
+    // skip position correction if spring is active (handled by velocity bias)
     if (constraint.limitsSpringSettings.frequencyOrStiffness > 0) {
         return false;
     }
@@ -446,13 +446,13 @@ export function solvePosition(
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 
-    // Calculate current distance along constraint normal
+    // calculate current distance along constraint normal
     const distance = vec3.dot(
         vec3.subtract(_distanceConstraint_delta, constraint.worldSpacePosition2, constraint.worldSpacePosition1),
         constraint.worldSpaceNormal,
     );
 
-    // Calculate position error
+    // calculate position error
     let positionError = 0;
     if (distance < constraint.minDistance) {
         positionError = distance - constraint.minDistance;
@@ -464,7 +464,7 @@ export function solvePosition(
         return false;
     }
 
-    // Recalculate constraint properties (bodies may have moved during position solve)
+    // recalculate constraint properties (bodies may have moved during position solve)
     calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 
     return axisConstraintPart.solvePositionConstraint(
