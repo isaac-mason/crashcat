@@ -215,7 +215,8 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     }
 
     /* clear all forces */
-    for (const body of rigidBody.iterate(world)) {
+    for (const body of world.bodies.pool) {
+        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
         rigidBody.clearForces(body);
     }
 }
@@ -229,7 +230,8 @@ const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of rigidBody.iterate(world)) {
+    for (const body of world.bodies.pool) {
+        if (body._pooled) continue;
         if (body.motionType !== MotionType.DYNAMIC) continue;
         if (body.sleeping) continue;
 
@@ -294,8 +296,8 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
 
 /** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
 function updateBodyPositions(world: World): void {
-    for (const body of rigidBody.iterate(world)) {
-        if (body.motionType === MotionType.STATIC) {
+    for (const body of world.bodies.pool) {
+        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) {
             continue;
         }
         rigidBody.updatePositionFromCenterOfMass(body);
@@ -994,9 +996,8 @@ const _velocity_displacement = /* @__PURE__ */ vec3.create();
 
 /** integrates velocities into positions (p += v*dt) and angular velocities into orientations */
 function velocityIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of rigidBody.iterate(world)) {
-        if (body.motionType === MotionType.STATIC) continue;
-        if (body.sleeping) continue;
+    for (const body of world.bodies.pool) {
+        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
 
         const mp = body.motionProperties;
 
