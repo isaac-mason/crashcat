@@ -4,7 +4,6 @@ import type { RigidBody } from 'crashcat';
 import {
     addBroadphaseLayer,
     addObjectLayer,
-    box,
     createWorld,
     createWorldSettings,
     enableCollision,
@@ -20,7 +19,7 @@ import * as debugUI from './debug/debug-ui';
 /* constants */
 
 const N = 100;
-const BOX_SIZE = 1.5;
+const SPHERE_RADIUS = 1.5;
 const COLORS = ['orange', 'hotpink', '#ffffff'];
 const LINEAR_DAMPING = 2;
 const ANGULAR_DAMPING = 4;
@@ -76,9 +75,9 @@ const world = createWorld(worldSettings);
 
 /* instanced mesh setup */
 
-const boxGeometry = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
-const boxMaterial = new THREE.MeshPhysicalMaterial({ roughness: 0.4 });
-const instancedMesh = new THREE.InstancedMesh(boxGeometry, boxMaterial, N);
+const sphereGeometry = new THREE.SphereGeometry(SPHERE_RADIUS, 32, 16);
+const sphereMaterial = new THREE.MeshPhysicalMaterial({ roughness: 0.4 });
+const instancedMesh = new THREE.InstancedMesh(sphereGeometry, sphereMaterial, N);
 instancedMesh.frustumCulled = false;
 scene.add(instancedMesh);
 
@@ -98,7 +97,7 @@ const position = new THREE.Vector3();
 const quaternion = new THREE.Quaternion();
 const scale = new THREE.Vector3(1, 1, 1);
 
-const boxShape = box.create({ halfExtents: vec3.fromValues(BOX_SIZE / 2, BOX_SIZE / 2, BOX_SIZE / 2), convexRadius: 0.1 });
+const sphereShape = sphere.create({ radius: SPHERE_RADIUS });
 
 function randomBetween(a: number, b: number): number {
     const min = Math.min(a, b);
@@ -113,7 +112,7 @@ for (let i = 0; i < N; i++) {
     const z = randomBetween(-10, 10);
 
     const body = rigidBody.create(world, {
-        shape: boxShape,
+        shape: sphereShape,
         objectLayer: OBJECT_LAYER_MOVING,
         motionType: MotionType.DYNAMIC,
         position: vec3.fromValues(x, y, z),
