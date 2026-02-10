@@ -722,7 +722,9 @@ function computeClosestPointToSimplex(
 
     // check if we found a closer point
     if (squaredDistance < prevSquaredDist) {
-        vec3.copy(result.point, _closestPoint.point);
+        result.point[0] = _closestPoint.point[0];
+        result.point[1] = _closestPoint.point[1];
+        result.point[2] = _closestPoint.point[2];
         result.squaredDistance = squaredDistance;
         result.pointSet = _closestPoint.pointSet;
         result.closestPointFound = true;
