@@ -15,6 +15,10 @@
         "title": "Kinematic Character Controller",
         "tags": ["world", "physics", "kcc", "character-controller", "kinematic", "movement"]
     },
+    "example-floating-character-controller": {
+        "title": "Floating Character Controller",
+        "tags": ["world", "physics", "character-controller", "dynamic", "movement", "spring-damper", "floating", "auto-balance", "slopes"]
+    },
     "example-pointer-ray": {
         "title": "Pointer Raycast",
         "tags": ["world", "physics", "raycast", "pointer", "kinematic", "shapes", "interactive"]
