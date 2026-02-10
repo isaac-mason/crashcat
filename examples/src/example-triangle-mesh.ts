@@ -11,7 +11,7 @@ import {
     createWorldSettings,
     enableCollision,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     sphere,
     triangleMesh,
@@ -63,7 +63,7 @@ scene.add(directionalLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

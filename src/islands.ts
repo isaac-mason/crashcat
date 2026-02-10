@@ -2,9 +2,10 @@ import type { Bodies } from './body/bodies';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
 import { INACTIVE_BODY_INDEX, sleep, updateSleepState } from './body/sleep';
-import type { ConstraintId } from './constraints/constraint-id';
+import type { ConstraintId, ConstraintType } from './constraints/constraint-id';
 import type { Constraints } from './constraints/constraints';
 import * as constraints from './constraints/constraints';
+import { userConstraintDefs } from './constraints/constraints';
 import type { ContactConstraints } from './constraints/contact-constraints';
 import type { Contacts } from './contacts';
 import { assert } from './utils/assert';
@@ -207,107 +208,19 @@ export function linkContactConstraints(
  * Link all user constraints to islands.
  * Iterates all constraint types and links active, enabled constraints.
  */
-export function linkUserConstraints(state: Islands, constraints: Constraints, bodies: Bodies): void {
-    // link point constraints
-    for (const constraint of constraints.pointConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
+export function linkUserConstraints(state: Islands, constraintsState: Constraints, bodies: Bodies): void {
+    for (const type in userConstraintDefs) {
+        const pool = constraintsState.pools[type as unknown as ConstraintType];
+        if (!pool) continue;
+        for (const constraint of pool.constraints) {
+            if (!constraint._pooled && constraint.enabled) {
+                const bodyA = bodies.pool[constraint.bodyIndexA];
+                const bodyB = bodies.pool[constraint.bodyIndexB];
 
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link distance constraints
-    for (const constraint of constraints.distanceConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link hinge constraints
-    for (const constraint of constraints.hingeConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link fixed constraints
-    for (const constraint of constraints.fixedConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link swing-twist constraints
-    for (const constraint of constraints.swingTwistConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link slider constraints
-    for (const constraint of constraints.sliderConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link cone constraints
-    for (const constraint of constraints.coneConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-            }
-        }
-    }
-
-    // link sixDOF constraints
-    for (const constraint of constraints.sixDOFConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            // only link if at least one body is active
-            if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
+                // only link if at least one body is active
+                if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
+                    linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
+                }
             }
         }
     }

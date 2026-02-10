@@ -1,9 +1,9 @@
 import type { Mat4, Quat, Vec3 } from 'mathcat';
 import { mat3, mat4, quat, vec3 } from 'mathcat';
+import * as motionProperties from '../../body/motion-properties';
+import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addRotationStep, subRotationStep } from '../../body/rigid-body-step';
-import { MotionType } from '../../body/motion-type';
-import * as motionProperties from '../../body/motion-properties';
 
 /**
  * RotationEulerConstraintPart removes 3 rotational degrees of freedom.
@@ -34,14 +34,14 @@ export type RotationEulerConstraintPart = {
 
 /** creates a new rotation euler constraint part */
 export function create(): RotationEulerConstraintPart {
-	const effectiveMass = mat4.create();
-	mat4.zero(effectiveMass);
-	return {
-		invI1: mat4.create(),
-		invI2: mat4.create(),
-		effectiveMass,
-		totalLambda: vec3.create(),
-	};
+    const effectiveMass = mat4.create();
+    mat4.zero(effectiveMass);
+    return {
+        invI1: mat4.create(),
+        invI2: mat4.create(),
+        effectiveMass,
+        totalLambda: vec3.create(),
+    };
 }
 
 /** deactivates the constraint part (resets state) */
@@ -106,7 +106,7 @@ export function getInvInitialOrientationXY(axisX1: Vec3, axisY1: Vec3, axisX2: V
     // Create Mat33 rotation matrices (column-major)
     // Mat44(Vec4(axisX, 0), Vec4(axisY, 0), Vec4(axisX.Cross(axisY), 0), Vec4(0, 0, 0, 1))
     // We use mat3 to avoid scaling extraction in mat4.getRotation
-    
+
     // biome-ignore format: pretty
     mat3.set(
         _getInvInitialOrientationXY_constraint1,
@@ -254,12 +254,7 @@ const _applyVel_angularImpulseB = /* @__PURE__ */ vec3.create();
  *
  * Angular impulse: Δw = I^-1 * λ
  */
-function applyVelocityStep(
-    part: RotationEulerConstraintPart,
-    bodyA: RigidBody,
-    bodyB: RigidBody,
-    lambda: Vec3,
-): boolean {
+function applyVelocityStep(part: RotationEulerConstraintPart, bodyA: RigidBody, bodyB: RigidBody, lambda: Vec3): boolean {
     // check for zero impulse
     if (vec3.squaredLength(lambda) === 0) {
         return false;

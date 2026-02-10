@@ -17,6 +17,7 @@ import type { PointConstraintPart } from './constraint-part/point-constraint-par
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part';
 import * as rotationEulerConstraintPart from './constraint-part/rotation-euler-constraint-part';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /**
  * Fixed constraint removes 6 DOF (3 translation + 3 rotation).
@@ -100,23 +101,23 @@ export type FixedConstraintSettings = {
 
 /** create a fixed constraint */
 export function create(world: World, settings: FixedConstraintSettings): FixedConstraint {
-    const fixedConstraints = world.constraints.fixedConstraints;
+    const pool = ensurePool<FixedConstraint>(world.constraints, ConstraintType.FIXED);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = fixedConstraints.nextSequence;
-    fixedConstraints.nextSequence = (fixedConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: FixedConstraint;
-    if (fixedConstraints.freeIndices.length > 0) {
-        index = fixedConstraints.freeIndices.pop()!;
-        constraint = fixedConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = fixedConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeFixedConstraint();
-        fixedConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -249,7 +250,7 @@ export function create(world: World, settings: FixedConstraintSettings): FixedCo
 
 /** remove a fixed constraint */
 export function remove(world: World, constraint: FixedConstraint): void {
-    const fixedConstraints = world.constraints.fixedConstraints;
+    const pool = ensurePool<FixedConstraint>(world.constraints, ConstraintType.FIXED);
     const bodies = world.bodies;
 
     // remove from bodies' constraintIds arrays
@@ -267,14 +268,15 @@ export function remove(world: World, constraint: FixedConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    fixedConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** get fixed constraint by id */
 export function get(world: World, id: ConstraintId): FixedConstraint | undefined {
-    const fixedConstraints = world.constraints.fixedConstraints;
+    const pool = world.constraints.pools[ConstraintType.FIXED] as ConstraintPool<FixedConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = fixedConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -284,11 +286,7 @@ export function get(world: World, id: ConstraintId): FixedConstraint | undefined
 const _fixedConstraint_rotA = /* @__PURE__ */ mat4.create();
 const _fixedConstraint_rotB = /* @__PURE__ */ mat4.create();
 
-/**
- * Setup velocity constraint for fixed constraint.
- * Called once per frame before velocity iterations.
- */
-export function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number): void {
+function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -319,11 +317,7 @@ export function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _delt
     );
 }
 
-/**
- * Warm start velocity constraint for fixed constraint.
- * Applies cached impulses from previous frame.
- */
-export function warmStartVelocity(constraint: FixedConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: FixedConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -334,12 +328,7 @@ export function warmStartVelocity(constraint: FixedConstraint, bodies: Bodies, w
     pointConstraintPart.warmStart(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 
-/**
- * Solve velocity constraint for fixed constraint.
- * Called during velocity iterations.
- * @returns True if any impulse was applied
- */
-export function solveVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number): boolean {
+function solveVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -354,12 +343,7 @@ export function solveVelocity(constraint: FixedConstraint, bodies: Bodies, _delt
     return rot || pos;
 }
 
-/**
- * Solve position constraint for fixed constraint.
- * Called during position iterations.
- * @returns True if any correction was applied
- */
-export function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number, baumgarteFactor: number): boolean {
+function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: number, baumgarteFactor: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -403,11 +387,7 @@ export function solvePosition(constraint: FixedConstraint, bodies: Bodies, _delt
     return rot || pos;
 }
 
-/**
- * Reset warm start for fixed constraint.
- * Called when constraint properties change significantly.
- */
-export function resetWarmStart(constraint: FixedConstraint): void {
+function resetWarmStart(constraint: FixedConstraint): void {
     rotationEulerConstraintPart.deactivate(constraint.rotationConstraintPart);
     pointConstraintPart.deactivate(constraint.pointConstraintPart);
 }
@@ -427,3 +407,22 @@ export function getTotalLambdaRotation(out: Vec3, constraint: FixedConstraint): 
     out[2] = constraint.rotationConstraintPart.totalLambda[2];
     return out;
 }
+
+/** the constraint definition for fixed constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<FixedConstraint>({
+        type: ConstraintType.FIXED,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

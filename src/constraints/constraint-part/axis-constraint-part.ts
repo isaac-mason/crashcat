@@ -1,5 +1,4 @@
 import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
-import type { MotionProperties } from '../../body/motion-properties';
 import {
     addAngularVelocityStep,
     addLinearVelocityStep,
@@ -224,9 +223,14 @@ export function calculateConstraintPropertiesWithMassOverride(
     axis: Vec3,
     bias: number,
 ): void {
-    // Scale inverse inertia matrices (reuse scratch matrices, 3x3 only)
-    mat4.multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
-    mat4.multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
+    // scale inverse inertia matrices only for dynamic bodies
+    // non-dynamic bodies don't contribute to inverse effective mass, so their inertia is never read
+    if (bodyA.motionType === MotionType.DYNAMIC) {
+        mat4.multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
+    }
+    if (bodyB.motionType === MotionType.DYNAMIC) {
+        mat4.multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
+    }
 
     const invEffectiveMass = calculateInverseEffectiveMass(
         part,
@@ -478,8 +482,6 @@ const _acp_ws_impulse = /* @__PURE__ */ vec3.create();
  * @param part the constraint part
  * @param bodyA first body
  * @param bodyB second body
- * @param mpA motion properties of body A (or null if static)
- * @param mpB motion properties of body B (or null if static)
  * @param invMassA inverse mass of body A
  * @param invMassB inverse mass of body B
  * @param axis constraint axis (same as used in calculateConstraintProperties)
@@ -489,20 +491,19 @@ export function warmStart(
     part: AxisConstraintPart,
     bodyA: RigidBody,
     bodyB: RigidBody,
-    mpA: MotionProperties | null,
-    mpB: MotionProperties | null,
     invMassA: number,
     invMassB: number,
     axis: Vec3,
     warmStartRatio: number,
 ): void {
-    // Scale previous frame's lambda
+    // scale previous frame's lambda
     part.totalLambda *= warmStartRatio;
 
     if (part.totalLambda === 0) return;
 
     // body a: subtract impulse (opposite direction)
-    if (bodyA.motionType === MotionType.DYNAMIC && mpA) {
+    if (bodyA.motionType === MotionType.DYNAMIC) {
+        const mpA = bodyA.motionProperties;
         // linear: v -= (axis × totalLambda) × invMassA
         vec3.scale(_acp_ws_impulse, axis, part.totalLambda * invMassA);
         subLinearVelocityStep(mpA, _acp_ws_impulse);
@@ -513,7 +514,8 @@ export function warmStart(
     }
 
     // body b: add impulse
-    if (bodyB.motionType === MotionType.DYNAMIC && mpB) {
+    if (bodyB.motionType === MotionType.DYNAMIC) {
+        const mpB = bodyB.motionProperties;
         // linear: v += (axis × totalLambda) × invMassB
         vec3.scale(_acp_ws_impulse, axis, part.totalLambda * invMassB);
         addLinearVelocityStep(mpB, _acp_ws_impulse);
@@ -576,19 +578,19 @@ export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB
     let jv: number;
     if (mpA && mpB) {
         jv = vec3.dot(axis, mpA.linearVelocity) - vec3.dot(axis, mpB.linearVelocity);
-    } else if (bodyA.motionType !== MotionType.STATIC && mpA) {
+    } else if (mpA) {
         jv = vec3.dot(axis, mpA.linearVelocity);
-    } else if (bodyB.motionType !== MotionType.STATIC && mpB) {
+    } else if (mpB) {
         jv = -vec3.dot(axis, mpB.linearVelocity);
     } else {
         jv = 0;
     }
 
     // calculate jacobian multiplied by angular velocity
-    if (bodyA.motionType !== MotionType.STATIC && mpA) {
+    if (mpA) {
         jv += vec3.dot(part.r1PlusUxAxis, mpA.angularVelocity);
     }
-    if (bodyB.motionType !== MotionType.STATIC && mpB) {
+    if (mpB) {
         jv -= vec3.dot(part.r2xAxis, mpB.angularVelocity);
     }
 

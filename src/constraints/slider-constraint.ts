@@ -27,6 +27,7 @@ import type { RotationEulerConstraintPart } from './constraint-part/rotation-eul
 import * as rotationEulerConstraintPart from './constraint-part/rotation-euler-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /**
  * Slider constraint (prismatic) removes 5 DOF (2 translation perpendicular to slider + 3 rotation).
@@ -242,6 +243,7 @@ function getInvInitialOrientationXY(out: Quat, sliderAxis1: Vec3, normalAxis1: V
     quat.conjugate(_getInvInitialOrientationXY_q1Conj, _getInvInitialOrientationXY_q1);
 
     quat.multiply(out, _getInvInitialOrientationXY_q2, _getInvInitialOrientationXY_q1Conj);
+
     return out;
 }
 
@@ -257,23 +259,23 @@ const _create_anchor = /* @__PURE__ */ vec3.create();
 
 /** Create a slider constraint */
 export function create(world: World, settings: SliderConstraintSettings): SliderConstraint {
-    const sliderConstraints = world.constraints.sliderConstraints;
+    const pool = ensurePool<SliderConstraint>(world.constraints, ConstraintType.SLIDER);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = sliderConstraints.nextSequence;
-    sliderConstraints.nextSequence = (sliderConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: SliderConstraint;
-    if (sliderConstraints.freeIndices.length > 0) {
-        index = sliderConstraints.freeIndices.pop()!;
-        constraint = sliderConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = sliderConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeSliderConstraint();
-        sliderConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -410,7 +412,7 @@ export function create(world: World, settings: SliderConstraintSettings): Slider
 
 /** remove a slider constraint */
 export function remove(world: World, constraint: SliderConstraint): void {
-    const sliderConstraints = world.constraints.sliderConstraints;
+    const pool = ensurePool<SliderConstraint>(world.constraints, ConstraintType.SLIDER);
     const bodies = world.bodies;
 
     // remove from constraintIds arrays
@@ -428,14 +430,15 @@ export function remove(world: World, constraint: SliderConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    sliderConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** get slider constraint by id */
 export function get(world: World, id: ConstraintId): SliderConstraint | undefined {
-    const sliderConstraints = world.constraints.sliderConstraints;
+    const pool = world.constraints.pools[ConstraintType.SLIDER] as ConstraintPool<SliderConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = sliderConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -636,14 +639,10 @@ function calculatePositionLimitsConstraintProperties(
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
                 getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-            } else {
-                mat4.zero(_sliderConstraint_invInertiaA);
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
                 getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
-            } else {
-                mat4.zero(_sliderConstraint_invInertiaB);
             }
 
             axisConstraintPart.calculateConstraintPropertiesWithSettings(
@@ -670,14 +669,10 @@ function calculatePositionLimitsConstraintProperties(
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
                 getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-            } else {
-                mat4.zero(_sliderConstraint_invInertiaA);
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
                 getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
-            } else {
-                mat4.zero(_sliderConstraint_invInertiaB);
             }
 
             axisConstraintPart.calculateConstraintProperties(
@@ -715,13 +710,9 @@ function calculateMotorConstraintProperties(
 
     if (bodyA.motionType === MotionType.DYNAMIC) {
         getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-    } else {
-        mat4.zero(_sliderConstraint_invInertiaA);
     }
     if (bodyB.motionType === MotionType.DYNAMIC) {
         getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
-    } else {
-        mat4.zero(_sliderConstraint_invInertiaB);
     }
 
     // r1 + u for the axis constraint
@@ -793,8 +784,7 @@ function calculateMotorConstraintProperties(
     }
 }
 
-/** Setup velocity constraint for slider constraint, called once per frame before velocity iterations */
-export function setupVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: number): void {
+function setupVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -836,8 +826,7 @@ export function setupVelocity(constraint: SliderConstraint, bodies: Bodies, delt
     calculateMotorConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB, deltaTime);
 }
 
-/** Warm start velocity constraint for slider constraint, applies cached impulses from previous frame */
-export function warmStartVelocity(constraint: SliderConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: SliderConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -845,16 +834,14 @@ export function warmStartVelocity(constraint: SliderConstraint, bodies: Bodies, 
 
     // warm start motor
     if (axisConstraintPart.isActive(constraint.motorConstraintPart)) {
-        const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-        const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
+        const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
+        const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
         axisConstraintPart.warmStart(
             constraint.motorConstraintPart,
             bodyA,
             bodyB,
-            mpA,
-            mpB,
-            mpA?.invMass ?? 0,
-            mpB?.invMass ?? 0,
+            invMassA,
+            invMassB,
             constraint.worldSpaceSliderAxis,
             warmStartImpulseRatio,
         );
@@ -875,28 +862,21 @@ export function warmStartVelocity(constraint: SliderConstraint, bodies: Bodies, 
 
     // warm start limits
     if (axisConstraintPart.isActive(constraint.positionLimitsConstraintPart)) {
-        const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-        const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
+        const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
+        const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
         axisConstraintPart.warmStart(
             constraint.positionLimitsConstraintPart,
             bodyA,
             bodyB,
-            mpA,
-            mpB,
-            mpA?.invMass ?? 0,
-            mpB?.invMass ?? 0,
+            invMassA,
+            invMassB,
             constraint.worldSpaceSliderAxis,
             warmStartImpulseRatio,
         );
     }
 }
 
-/**
- * Solve velocity constraint for slider constraint.
- * Called during velocity iterations.
- * @returns True if any impulse was applied
- */
-export function solveVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: number): boolean {
+function solveVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -977,12 +957,7 @@ export function solveVelocity(constraint: SliderConstraint, bodies: Bodies, delt
     return motor || pos || rot || limit;
 }
 
-/**
- * Solve position constraint for slider constraint.
- * Called during position iterations.
- * @returns True if any correction was applied
- */
-export function solvePosition(constraint: SliderConstraint, bodies: Bodies, deltaTime: number, baumgarteFactor: number): boolean {
+function solvePosition(constraint: SliderConstraint, bodies: Bodies, deltaTime: number, baumgarteFactor: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -1062,8 +1037,7 @@ export function solvePosition(constraint: SliderConstraint, bodies: Bodies, delt
     return pos || rot || limit;
 }
 
-/** Reset warm start for slider constraint, call this when constraint properties change significantly */
-export function resetWarmStart(constraint: SliderConstraint): void {
+function resetWarmStart(constraint: SliderConstraint): void {
     dualAxisConstraintPart.deactivate(constraint.positionConstraintPart);
     rotationEulerConstraintPart.deactivate(constraint.rotationConstraintPart);
     axisConstraintPart.deactivate(constraint.positionLimitsConstraintPart);
@@ -1094,3 +1068,22 @@ export function getTotalLambdaRotation(out: Vec3, constraint: SliderConstraint):
 export function getTotalLambdaMotor(constraint: SliderConstraint): number {
     return axisConstraintPart.getTotalLambdaValue(constraint.motorConstraintPart);
 }
+
+/** the constraint definition for slider constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<SliderConstraint>({
+        type: ConstraintType.SLIDER,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

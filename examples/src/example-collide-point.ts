@@ -13,7 +13,7 @@ import {
     enableCollision,
     filter,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
 } from 'crashcat';
 import * as debugUI from './debug/debug-ui';
@@ -54,7 +54,7 @@ scene.add(directionalLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 worldSettings.gravity = vec3.fromValues(0, 0, 0);

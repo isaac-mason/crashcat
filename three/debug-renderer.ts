@@ -1,7 +1,19 @@
 import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
-import type { RigidBody, Shape, World } from 'crashcat';
-import { MotionType, rigidBody, ShapeType, triangleMeshBvh } from 'crashcat';
+import type {
+    ConeConstraint,
+    DistanceConstraint,
+    FixedConstraint,
+    HingeConstraint,
+    PointConstraint,
+    RigidBody,
+    Shape,
+    SixDOFConstraint,
+    SliderConstraint,
+    SwingTwistConstraint,
+    World,
+} from 'crashcat';
+import { ConstraintType, MotionType, rigidBody, ShapeType, triangleMeshBvh } from 'crashcat';
 
 export enum BodyColorMode {
     INSTANCE,
@@ -2710,7 +2722,9 @@ function drawConstraints(state: State, world: World): void {
     };
 
     // Draw hinge constraints
-    for (const constraint of constraints.hingeConstraints.constraints) {
+    const hingePool = constraints.pools[ConstraintType.HINGE];
+    if (hingePool) {
+    for (const constraint of hingePool.constraints as HingeConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -2788,9 +2802,12 @@ function drawConstraints(state: State, world: World): void {
             );
         }
     }
+    }
 
     // Draw swing-twist constraints
-    for (const constraint of constraints.swingTwistConstraints.constraints) {
+    const swingTwistPool = constraints.pools[ConstraintType.SWING_TWIST];
+    if (swingTwistPool) {
+    for (const constraint of swingTwistPool.constraints as SwingTwistConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -2864,9 +2881,12 @@ function drawConstraints(state: State, world: World): void {
             }
         }
     }
+    }
 
     // Draw distance constraints
-    for (const constraint of constraints.distanceConstraints.constraints) {
+    const distancePool = constraints.pools[ConstraintType.DISTANCE];
+    if (distancePool) {
+    for (const constraint of distancePool.constraints as DistanceConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -2977,9 +2997,12 @@ function drawConstraints(state: State, world: World): void {
             }
         }
     }
+    }
 
     // Draw cone constraints
-    for (const constraint of constraints.coneConstraints.constraints) {
+    const conePool = constraints.pools[ConstraintType.CONE];
+    if (conePool) {
+    for (const constraint of conePool.constraints as ConeConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -3047,9 +3070,12 @@ function drawConstraints(state: State, world: World): void {
             drawSwingConeLimits(positions, colors, pos1, axis1, perpX, perpY, halfConeAngle, halfConeAngle, size, yellowColor);
         }
     }
+    }
 
     // Draw fixed constraints
-    for (const constraint of constraints.fixedConstraints.constraints) {
+    const fixedPool = constraints.pools[ConstraintType.FIXED];
+    if (fixedPool) {
+    for (const constraint of fixedPool.constraints as FixedConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -3062,9 +3088,12 @@ function drawConstraints(state: State, world: World): void {
         addConstraintMarker(positions, colors, _transformPointOut, size * 0.1, blueColor);
         addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, blueColor);
     }
+    }
 
     // Draw point constraints
-    for (const constraint of constraints.pointConstraints.constraints) {
+    const pointPool = constraints.pools[ConstraintType.POINT];
+    if (pointPool) {
+    for (const constraint of pointPool.constraints as PointConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -3078,9 +3107,12 @@ function drawConstraints(state: State, world: World): void {
         addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, whiteColor);
         addConstraintLine(positions, colors, _transformPointOut, _transformPointOut2, whiteColor);
     }
+    }
 
     // Draw slider constraints
-    for (const constraint of constraints.sliderConstraints.constraints) {
+    const sliderPool = constraints.pools[ConstraintType.SLIDER];
+    if (sliderPool) {
+    for (const constraint of sliderPool.constraints as SliderConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -3144,9 +3176,12 @@ function drawConstraints(state: State, world: World): void {
             }
         }
     }
+    }
 
     // Draw six DOF constraints
-    for (const constraint of constraints.sixDOFConstraints.constraints) {
+    const sixDOFPool = constraints.pools[ConstraintType.SIX_DOF];
+    if (sixDOFPool) {
+    for (const constraint of sixDOFPool.constraints as SixDOFConstraint[]) {
         if (constraint._pooled || !constraint.enabled) continue;
 
         const bodyA = getBodyTransform(constraint.bodyIndexA);
@@ -3258,6 +3293,7 @@ function drawConstraints(state: State, world: World): void {
                 }
             }
         }
+    }
     }
 
     // Update geometry

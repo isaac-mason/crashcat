@@ -22,7 +22,7 @@ import {
     sliderConstraint,
     swingTwistConstraint,
     updateWorld,
-    registerAllShapes,
+    registerAll,
     SpringMode,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
@@ -63,7 +63,7 @@ scene.add(directionalLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

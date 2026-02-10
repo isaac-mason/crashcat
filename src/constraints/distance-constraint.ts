@@ -20,6 +20,7 @@ import type { AxisConstraintPart } from './constraint-part/axis-constraint-part'
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /** distance constraint removes 1 translational DOF (distance between two points) */
 export type DistanceConstraint = ConstraintBase & {
@@ -93,25 +94,25 @@ function resetConstraint(constraint: DistanceConstraint): void {
 
 /** create a distance constraint */
 export function create(world: World, settings: DistanceConstraintSettings): DistanceConstraint {
-    const distanceConstraints = world.constraints.distanceConstraints;
+    const pool = ensurePool<DistanceConstraint>(world.constraints, ConstraintType.DISTANCE);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = distanceConstraints.nextSequence;
-    distanceConstraints.nextSequence = (distanceConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: DistanceConstraint;
-    if (distanceConstraints.freeIndices.length > 0) {
+    if (pool.freeIndices.length > 0) {
         // reuse existing pooled constraint
-        index = distanceConstraints.freeIndices.pop()!;
-        constraint = distanceConstraints.constraints[index];
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
         // expand array
-        index = distanceConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeDistanceConstraint();
-        distanceConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -203,7 +204,7 @@ export function create(world: World, settings: DistanceConstraintSettings): Dist
 
 /** remove a distance constraint */
 export function remove(world: World, constraint: DistanceConstraint): void {
-    const distanceConstraints = world.constraints.distanceConstraints;
+    const pool = ensurePool<DistanceConstraint>(world.constraints, ConstraintType.DISTANCE);
     const bodies = world.bodies;
 
     // remove from bodies' constraintIds arrays
@@ -221,14 +222,15 @@ export function remove(world: World, constraint: DistanceConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    distanceConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** get distance constraint by id */
 export function get(world: World, id: ConstraintId): DistanceConstraint | undefined {
-    const distanceConstraints = world.constraints.distanceConstraints;
+    const pool = world.constraints.pools[ConstraintType.DISTANCE] as ConstraintPool<DistanceConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = distanceConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -250,7 +252,7 @@ function calculateDistanceConstraintProperties(
     bodyB: RigidBody,
     deltaTime: number,
 ): void {
-    // Update world space positions (the bodies may have moved)
+    // update world space positions (the bodies may have moved)
     // worldPos = centerOfMassPosition + rotation * localPos
     vec3.transformQuat(constraint.worldSpacePosition1, constraint.localSpacePosition1, bodyA.quaternion);
     vec3.add(constraint.worldSpacePosition1, constraint.worldSpacePosition1, bodyA.centerOfMassPosition);
@@ -258,7 +260,7 @@ function calculateDistanceConstraintProperties(
     vec3.transformQuat(constraint.worldSpacePosition2, constraint.localSpacePosition2, bodyB.quaternion);
     vec3.add(constraint.worldSpacePosition2, constraint.worldSpacePosition2, bodyB.centerOfMassPosition);
 
-    // Calculate world space normal (direction from point1 to point2)
+    // calculate world space normal (direction from point1 to point2)
     const delta = _distanceConstraint_delta;
     vec3.subtract(delta, constraint.worldSpacePosition2, constraint.worldSpacePosition1);
     const deltaLen = vec3.length(delta);
@@ -277,7 +279,7 @@ function calculateDistanceConstraintProperties(
     const r2 = _distanceConstraint_r2;
     vec3.subtract(r2, constraint.worldSpacePosition2, bodyB.centerOfMassPosition);
 
-    // Get inverse masses and inertias
+    // get inverse masses and inertias
     const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
     const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
     const invMassA = mpA ? mpA.invMass : 0;
@@ -290,16 +292,12 @@ function calculateDistanceConstraintProperties(
         const rotA = _distanceConstraint_rotA;
         mat4.fromQuat(rotA, bodyA.quaternion);
         getInverseInertiaForRotation(invInertiaA, mpA, rotA);
-    } else {
-        mat4.zero(invInertiaA);
     }
 
     if (mpB) {
         const rotB = _distanceConstraint_rotB;
         mat4.fromQuat(rotB, bodyB.quaternion);
         getInverseInertiaForRotation(invInertiaB, mpB, rotB);
-    } else {
-        mat4.zero(invInertiaB);
     }
 
     // determine constraint mode based on current distance vs limits
@@ -369,8 +367,7 @@ function calculateDistanceConstraintProperties(
     }
 }
 
-/** setup velocity constraint for distance constraint, called once per frame before velocity iterations */
-export function setupVelocity(constraint: DistanceConstraint, bodies: Bodies, deltaTime: number): void {
+function setupVelocity(constraint: DistanceConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -379,24 +376,19 @@ export function setupVelocity(constraint: DistanceConstraint, bodies: Bodies, de
     calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 }
 
-/** warm start velocity constraint for distance constraint, applies cached impulses from previous frame */
-export function warmStartVelocity(constraint: DistanceConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: DistanceConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 
-    const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-    const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
-    const invMassA = mpA ? mpA.invMass : 0;
-    const invMassB = mpB ? mpB.invMass : 0;
+    const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
+    const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
 
     axisConstraintPart.warmStart(
         constraint.axisConstraint,
         bodyA,
         bodyB,
-        mpA,
-        mpB,
         invMassA,
         invMassB,
         constraint.worldSpaceNormal,
@@ -404,8 +396,7 @@ export function warmStartVelocity(constraint: DistanceConstraint, bodies: Bodies
     );
 }
 
-/** solve velocity constraint for distance constraint, called during velocity iterations, returns true if an impulse was applied */
-export function solveVelocity(constraint: DistanceConstraint, bodies: Bodies): boolean {
+function solveVelocity(constraint: DistanceConstraint, bodies: Bodies, _deltaTime: number): boolean {
     if (!axisConstraintPart.isActive(constraint.axisConstraint)) {
         return false;
     }
@@ -425,12 +416,7 @@ export function solveVelocity(constraint: DistanceConstraint, bodies: Bodies): b
     );
 }
 
-/**
- * Solve position constraint for distance constraint (Baumgarte stabilization).
- * Called during position iterations.
- * @returns True if a correction was applied
- */
-export function solvePosition(
+function solvePosition(
     constraint: DistanceConstraint,
     bodies: Bodies,
     deltaTime: number,
@@ -477,11 +463,7 @@ export function solvePosition(
     );
 }
 
-/**
- * Reset warm start for distance constraint.
- * Called when constraint properties change significantly.
- */
-export function resetWarmStart(constraint: DistanceConstraint): void {
+function resetWarmStart(constraint: DistanceConstraint): void {
     axisConstraintPart.deactivate(constraint.axisConstraint);
 }
 
@@ -509,3 +491,21 @@ export function setDistance(constraint: DistanceConstraint, minDistance: number,
         constraint.maxDistance = avg;
     }
 }
+
+/** the constraint definition for distance constraint */
+export const def = /* @__PURE__ */ (() => defineUserConstraint<DistanceConstraint>({
+    type: ConstraintType.DISTANCE,
+    setupVelocity,
+    warmStartVelocity,
+    solveVelocity,
+    solvePosition,
+    resetWarmStart,
+    getIterationOverrides: (out, constraint) => {
+        out.velocity = constraint.numVelocityStepsOverride;
+        out.position = constraint.numPositionStepsOverride;
+    },
+    getSortFields: (out, constraint) => {
+        out.priority = constraint.constraintPriority;
+        out.index = constraint.index;
+    },
+}))();

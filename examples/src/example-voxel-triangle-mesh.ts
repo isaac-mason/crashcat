@@ -13,7 +13,7 @@ import {
     createWorldSettings,
     enableCollision,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     sphere,
     transformed,
@@ -25,7 +25,7 @@ import * as debugUI from './debug/debug-ui';
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

@@ -148,22 +148,11 @@ export function updateStats(ui: DebugUI, world: World): void {
 
     // count user constraints
     let userConstraintCount = 0;
-    userConstraintCount +=
-        world.constraints.pointConstraints.constraints.length - world.constraints.pointConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.distanceConstraints.constraints.length - world.constraints.distanceConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.hingeConstraints.constraints.length - world.constraints.hingeConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.fixedConstraints.constraints.length - world.constraints.fixedConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.swingTwistConstraints.constraints.length - world.constraints.swingTwistConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.sliderConstraints.constraints.length - world.constraints.sliderConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.coneConstraints.constraints.length - world.constraints.coneConstraints.freeIndices.length;
-    userConstraintCount +=
-        world.constraints.sixDOFConstraints.constraints.length - world.constraints.sixDOFConstraints.freeIndices.length;
+    for (const pool of Object.values(world.constraints.pools)) {
+        if (pool) {
+            userConstraintCount += pool.constraints.length - pool.freeIndices.length;
+        }
+    }
     ui.stats.userConstraints.count = userConstraintCount;
 
     ui.stats.broadphase.numPairs = world.broadphase.pairs.n;

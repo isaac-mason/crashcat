@@ -20,12 +20,12 @@ import {
     sphere,
     transformed,
     triangleMesh,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { createShapeHelper } from 'crashcat/three';
 import { loadGLTFPoints } from './utils/gltf.js';
 
-registerAllShapes();
+registerAll();
 
 let state: ReturnType<typeof init>;
 

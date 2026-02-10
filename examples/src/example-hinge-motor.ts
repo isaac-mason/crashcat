@@ -15,7 +15,7 @@ import {
     motorSettings,
     MotionType,
     MotorState,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     updateWorld,
 } from 'crashcat';
@@ -61,7 +61,7 @@ scene.add(spotLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 worldSettings.gravity = vec3.fromValues(0, -40, 0);

@@ -16,7 +16,7 @@ import {
     enableCollision,
     filter,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     sphere,
     updateWorld,
@@ -93,7 +93,7 @@ scene.add(rimLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

@@ -17,7 +17,7 @@ import {
     createDefaultCastShapeSettings,
     EMPTY_SUB_SHAPE_ID,
     type Face,
-    registerAllShapes,
+    registerAll,
     sphere,
     transformed,
     triangleMesh,
@@ -26,7 +26,7 @@ import { createShapeHelper } from 'crashcat/three';
 import { createFaceGeometry } from './debug/face';
 import { loadGLTFPoints } from './utils/gltf';
 
-registerAllShapes();
+registerAll();
 
 let state: ReturnType<typeof init>;
 

@@ -3,10 +3,10 @@ import { quat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
-import { box, getShapeSupportingFace, convexHull, registerAllShapes, type Shape, scaled, transformed } from 'crashcat';
+import { box, getShapeSupportingFace, convexHull, registerAll, type Shape, scaled, transformed } from 'crashcat';
 import { createShapeHelper } from 'crashcat/three';
 
-registerAllShapes();
+registerAll();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1a1a);

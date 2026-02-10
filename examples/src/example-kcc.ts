@@ -24,7 +24,7 @@ import {
     transformed,
     triangleMesh,
     updateWorld,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import * as debugUI from './debug/debug-ui';
@@ -36,7 +36,7 @@ enum CharacterShapeType {
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

@@ -11,27 +11,26 @@ import {
     distanceConstraint,
     enableCollision,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     sphere,
-    updateWorld,
+    updateWorld
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import { quat, vec3 } from 'mathcat';
 import { GLTFLoader } from 'three/examples/jsm/Addons.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import * as THREE from 'three/webgpu';
 import { cameraPosition, Discard, float, Fn, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';
+import * as THREE from 'three/webgpu';
 
 /* resources */
 
 const gltfLoader = new GLTFLoader();
 const assetsGLTF = await gltfLoader.loadAsync('/assets.glb');
 
-
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 vec3.set(worldSettings.gravity, 0, -20, 0);
@@ -134,7 +133,7 @@ directionalLight.shadow.mapSize.width = 1024;
 directionalLight.shadow.mapSize.height = 1024;
 directionalLight.shadow.camera.near = 1;
 directionalLight.shadow.camera.far = 200;
-directionalLight.shadow.camera.left = -12;
+directionalLight.shadow.camera.left = -20;
 directionalLight.shadow.camera.right = 12;
 directionalLight.shadow.camera.top = 10;
 directionalLight.shadow.camera.bottom = -130;

@@ -3,12 +3,7 @@ import { mat3, mat4, quat, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';
-import {
-    type ConstraintBase,
-    ConstraintSpace,
-    makeConstraintBase,
-    removeConstraintIdFromBody,
-} from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
 import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
@@ -28,6 +23,7 @@ import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { clampSwingTwist, getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /**
  * SwingTwistConstraint is a sophisticated constraint for humanoid ragdoll joints.
@@ -182,23 +178,23 @@ const _create_c_to_b2 = /* @__PURE__ */ mat3.create();
 
 /** Create a swing-twist constraint */
 export function create(world: World, settings: SwingTwistConstraintSettings): SwingTwistConstraint {
-    const swingTwistConstraints = world.constraints.swingTwistConstraints;
+    const pool = ensurePool<SwingTwistConstraint>(world.constraints, ConstraintType.SWING_TWIST);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = swingTwistConstraints.nextSequence;
-    swingTwistConstraints.nextSequence = (swingTwistConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: SwingTwistConstraint;
-    if (swingTwistConstraints.freeIndices.length > 0) {
-        index = swingTwistConstraints.freeIndices.pop()!;
-        constraint = swingTwistConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = swingTwistConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeSwingTwistConstraint();
-        swingTwistConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -346,7 +342,7 @@ function updateLimits(constraint: SwingTwistConstraint): void {
 
 /** Remove a swing-twist constraint */
 export function remove(world: World, constraint: SwingTwistConstraint): void {
-    const swingTwistConstraints = world.constraints.swingTwistConstraints;
+    const pool = ensurePool<SwingTwistConstraint>(world.constraints, ConstraintType.SWING_TWIST);
     const bodies = world.bodies;
 
     // remove from bodies' constraintIds arrays
@@ -364,14 +360,15 @@ export function remove(world: World, constraint: SwingTwistConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    swingTwistConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** Get swing-twist constraint by id */
 export function get(world: World, id: ConstraintId): SwingTwistConstraint | undefined {
-    const swingTwistConstraints = world.constraints.swingTwistConstraints;
+    const pool = world.constraints.pools[ConstraintType.SWING_TWIST] as ConstraintPool<SwingTwistConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = swingTwistConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -484,11 +481,7 @@ const _setup_constraintBody2ToWorld = /* @__PURE__ */ quat.create();
 const _setup_q = /* @__PURE__ */ quat.create();
 const _setup_c1Conj = /* @__PURE__ */ quat.create();
 
-/**
- * Setup velocity constraint for swing-twist constraint.
- * Called once per frame before velocity iterations.
- */
-export function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTime: number): void {
+function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -667,10 +660,7 @@ export function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, 
     }
 }
 
-/**
- * Warm start velocity constraint for swing-twist constraint.
- */
-export function warmStartVelocity(constraint: SwingTwistConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: SwingTwistConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -684,11 +674,7 @@ export function warmStartVelocity(constraint: SwingTwistConstraint, bodies: Bodi
     pointConstraintPart.warmStart(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 
-/**
- * Solve velocity constraint for swing-twist constraint.
- * @returns True if any impulse was applied
- */
-export function solveVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTime: number): boolean {
+function solveVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -758,16 +744,7 @@ const _solvePosition_c1ToWorld = /* @__PURE__ */ quat.create();
 const _solvePosition_c2ToWorld = /* @__PURE__ */ quat.create();
 const _solvePosition_c1Conj = /* @__PURE__ */ quat.create();
 
-/**
- * Solve position constraint for swing-twist constraint.
- * @returns True if any correction was applied
- */
-export function solvePosition(
-    constraint: SwingTwistConstraint,
-    bodies: Bodies,
-    _deltaTime: number,
-    baumgarteFactor: number,
-): boolean {
+function solvePosition(constraint: SwingTwistConstraint, bodies: Bodies, _deltaTime: number, baumgarteFactor: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -812,8 +789,7 @@ export function solvePosition(
     return impulse;
 }
 
-/** Reset warm start for swing-twist constraint */
-export function resetWarmStart(constraint: SwingTwistConstraint): void {
+function resetWarmStart(constraint: SwingTwistConstraint): void {
     for (const part of constraint.motorConstraintParts) {
         angleConstraintPart.deactivate(part);
     }
@@ -851,3 +827,22 @@ export function getTotalLambdaMotor(out: Vec3, constraint: SwingTwistConstraint)
     out[2] = constraint.motorConstraintParts[2].totalLambda;
     return out;
 }
+
+/** the constraint definition for swing-twist constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<SwingTwistConstraint>({
+        type: ConstraintType.SWING_TWIST,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

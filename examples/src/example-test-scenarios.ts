@@ -33,13 +33,13 @@ import {
     triangleMesh,
     updateWorld,
     type World,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import * as debugUI from './debug/debug-ui';
 import { loadGLTF } from './utils/gltf';
 
-registerAllShapes();
+registerAll();
 
 /* constraint-connected body pair filtering */
 

@@ -16,7 +16,7 @@ import {
     enableCollision,
     filter,
     MotionType,
-    registerAllShapes,
+    registerAll,
     type RigidBody,
     rigidBody,
     type Shape,
@@ -249,7 +249,7 @@ function removeShapeCasterObject(sc: ShapeCasterObject) {
     state.scene.remove(sc.rootObject);
 }
 
-registerAllShapes();
+registerAll();
 
 function initWorld() {
     const worldSettings = createWorldSettings();

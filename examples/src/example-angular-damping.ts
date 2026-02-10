@@ -8,7 +8,7 @@ import {
     createWorld,
     createWorldSettings,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     updateWorld,
 } from 'crashcat';
@@ -50,7 +50,7 @@ scene.add(directionalLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 

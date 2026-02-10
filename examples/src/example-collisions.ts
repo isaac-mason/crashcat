@@ -11,7 +11,7 @@ import {
     createWorldSettings,
     enableCollision,
     MotionType,
-    registerAllShapes,
+    registerAll,
     rigidBody,
     sphere,
     updateWorld,
@@ -20,7 +20,7 @@ import {
 import { debugRenderer } from 'crashcat/three';
 import * as debugUI from './debug/debug-ui';
 
-registerAllShapes();
+registerAll();
 
 /* rendering */
 

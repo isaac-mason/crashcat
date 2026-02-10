@@ -23,7 +23,7 @@ import {
     updateWorld,
     massProperties,
     motionProperties,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import * as debugUI from './debug/debug-ui';
@@ -468,7 +468,7 @@ scene.add(directionalLight);
 
 /* physics world */
 
-registerAllShapes();
+registerAll();
 
 const worldSettings = createWorldSettings();
 worldSettings.gravity = [0, -20, 0];

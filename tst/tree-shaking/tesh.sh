@@ -10,3 +10,11 @@ if grep -q "type: ShapeType.TRIANGLE_MESH" dist/output.js; then
 else
     echo "Success: String 'type: ShapeType.TRIANGLE_MESH' not found in output, tree shaking succeeded"
 fi
+
+# should not find string "type: ConstraintType.CONE"
+if grep -q "type: ConstraintType.CONE" dist/output.js; then
+    echo "Error: Found string 'type: ConstraintType.CONE' in output, tree shaking failed"
+    exit 1
+else
+    echo "Success: String 'type: ConstraintType.CONE' not found in output, tree shaking succeeded"
+fi

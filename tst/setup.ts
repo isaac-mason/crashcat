@@ -1,4 +1,4 @@
-import { registerAllShapes } from '../src/shapes/register-all';
+import { registerAll } from '../src/register-all';
 
-// register all built-in shapes before running tests
-registerAllShapes();
+// register all built-in shapes and constraints before running tests
+registerAll();

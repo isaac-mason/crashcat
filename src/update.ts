@@ -22,8 +22,10 @@ import {
     createDefaultCollideShapeSettings,
 } from './collision/narrowphase';
 import { combineMaterial } from './constraints/combine-material';
+import type { ConstraintType } from './constraints/constraint-id';
 import * as axisConstraintPart from './constraints/constraint-part/axis-constraint-part';
 import * as constraints from './constraints/constraints';
+import { userConstraintDefs } from './constraints/constraints';
 import * as contactConstraints from './constraints/contact-constraints';
 import * as contacts from './contacts';
 import * as filter from './filter';
@@ -260,9 +262,9 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
 
         // enforce translation DOF constraints (zero out locked axes)
         const allowedTranslation = mp.allowedDegreesOfFreedom & 0b111;
-        if (!(allowedTranslation & 0b001)) mp.linearVelocity[0] = 0; // X locked
-        if (!(allowedTranslation & 0b010)) mp.linearVelocity[1] = 0; // Y locked
-        if (!(allowedTranslation & 0b100)) mp.linearVelocity[2] = 0; // Z locked
+        if (!(allowedTranslation & 0b001)) mp.linearVelocity[0] = 0; // x locked
+        if (!(allowedTranslation & 0b010)) mp.linearVelocity[1] = 0; // y locked
+        if (!(allowedTranslation & 0b100)) mp.linearVelocity[2] = 0; // z locked
 
         // angular acceleration: α = I^-1 * τ
         mat4.fromQuat(_acceleration_rotation, body.quaternion);
@@ -823,166 +825,27 @@ function narrowphase(
  * when one body wakes, the wake propagates through the constraint chain frame-by-frame.
  */
 function wakeBodiesInUserConstraints(world: World): void {
-    const { constraints, bodies } = world;
+    const { constraints: constraintsState, bodies } = world;
 
-    // note: we repeat ourselves below to avoid polymorphic/megamorphic IC reads.
-    // this is a bit annoying but important for performance.
+    // iterate over all constraint pools and wake bodies
+    for (const type in userConstraintDefs) {
+        const pool = constraintsState.pools[type as unknown as ConstraintType];
+        if (!pool) continue;
+        for (const constraint of pool.constraints) {
+            if (!constraint._pooled && constraint.enabled) {
+                const bodyA = bodies.pool[constraint.bodyIndexA];
+                const bodyB = bodies.pool[constraint.bodyIndexB];
 
-    // wake point constraint bodies
-    for (const constraint of constraints.pointConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
+                const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
+                const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
 
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake distance constraint bodies
-    for (const constraint of constraints.distanceConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake hinge constraint bodies
-    for (const constraint of constraints.hingeConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake fixed constraint bodies
-    for (const constraint of constraints.fixedConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake swing-twist constraint bodies
-    for (const constraint of constraints.swingTwistConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake slider constraint bodies
-    for (const constraint of constraints.sliderConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake cone constraint bodies
-    for (const constraint of constraints.coneConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
-                }
-            }
-        }
-    }
-
-    // wake sixDOF constraint bodies
-    for (const constraint of constraints.sixDOFConstraints.constraints) {
-        if (!constraint._pooled && constraint.enabled) {
-            const bodyA = bodies.pool[constraint.bodyIndexA];
-            const bodyB = bodies.pool[constraint.bodyIndexB];
-
-            const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
-            const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
-
-            if (hasActiveBody && hasDynamicBody) {
-                if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyA);
-                }
-                if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
-                    rigidBody.wake(world, bodyB);
+                if (hasActiveBody && hasDynamicBody) {
+                    if (bodyA.sleeping && bodyA.motionType === MotionType.DYNAMIC) {
+                        rigidBody.wake(world, bodyA);
+                    }
+                    if (bodyB.sleeping && bodyB.motionType === MotionType.DYNAMIC) {
+                        rigidBody.wake(world, bodyB);
+                    }
                 }
             }
         }
@@ -1591,15 +1454,11 @@ function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: R
     if (bodyA.motionType === MotionType.DYNAMIC) {
         mat4.fromQuat(_applyCCD_rotationA, bodyA.quaternion);
         motionProperties.getInverseInertiaForRotation(_applyCCD_invInertiaA, bodyA.motionProperties, _applyCCD_rotationA);
-    } else {
-        mat4.zero(_applyCCD_invInertiaA);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
         mat4.fromQuat(_applyCCD_rotationB, bodyB.quaternion);
         motionProperties.getInverseInertiaForRotation(_applyCCD_invInertiaB, bodyB.motionProperties, _applyCCD_rotationB);
-    } else {
-        mat4.zero(_applyCCD_invInertiaB);
     }
 
     // setup constraint properties with r1_plus_u

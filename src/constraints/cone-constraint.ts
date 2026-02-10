@@ -18,6 +18,7 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /**
  * Cone constraint constrains 2 bodies to a single point and limits the swing between twist axes within a cone.
@@ -113,9 +114,7 @@ export type ConeConstraintSettings = {
     numPositionStepsOverride?: number;
 };
 
-/**
- * Get a normalized perpendicular vector to the given vector.
- */
+/** get a normalized perpendicular vector to the given vector */
 function getNormalizedPerpendicular(out: Vec3, v: Vec3): Vec3 {
     // find the smallest component and cross with that basis vector
     const ax = Math.abs(v[0]);
@@ -139,23 +138,23 @@ function getNormalizedPerpendicular(out: Vec3, v: Vec3): Vec3 {
 
 /** Create a cone constraint */
 export function create(world: World, settings: ConeConstraintSettings): ConeConstraint {
-    const coneConstraints = world.constraints.coneConstraints;
+    const pool = ensurePool<ConeConstraint>(world.constraints, ConstraintType.CONE);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = coneConstraints.nextSequence;
-    coneConstraints.nextSequence = (coneConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: ConeConstraint;
-    if (coneConstraints.freeIndices.length > 0) {
-        index = coneConstraints.freeIndices.pop()!;
-        constraint = coneConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = coneConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeConeConstraint();
-        coneConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -228,7 +227,7 @@ export function create(world: World, settings: ConeConstraintSettings): ConeCons
         }
     }
 
-    // Track constraint on both bodies
+    // track constraint on both bodies
     bodyA.constraintIds.push(constraint.id);
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
@@ -237,12 +236,12 @@ export function create(world: World, settings: ConeConstraintSettings): ConeCons
     return constraint;
 }
 
-/** Remove a cone constraint */
+/** remove a cone constraint */
 export function remove(world: World, constraint: ConeConstraint): void {
-    const coneConstraints = world.constraints.coneConstraints;
+    const pool = ensurePool<ConeConstraint>(world.constraints, ConstraintType.CONE);
     const bodies = world.bodies;
 
-    // Remove from bodies' constraintIds arrays
+    // remove from bodies' constraintIds arrays
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
     if (bodyA && !bodyA._pooled) {
@@ -257,14 +256,15 @@ export function remove(world: World, constraint: ConeConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    coneConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** Get cone constraint by id */
 export function get(world: World, id: ConstraintId): ConeConstraint | undefined {
-    const coneConstraints = world.constraints.coneConstraints;
+    const pool = world.constraints.pools[ConstraintType.CONE] as ConstraintPool<ConeConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = coneConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -273,23 +273,19 @@ export function get(world: World, id: ConstraintId): ConeConstraint | undefined 
 
 /**
  * Set the half cone angle.
- * @param constraint - The constraint to modify
- * @param halfConeAngle - Half cone angle in radians (0 to π)
+ * @param constraint the constraint to modify
+ * @param halfConeAngle half cone angle in radians (0 to π)
  */
 export function setHalfConeAngle(constraint: ConeConstraint, halfConeAngle: number): void {
     constraint.cosHalfConeAngle = Math.cos(Math.max(0, Math.min(Math.PI, halfConeAngle)));
 }
 
-/**
- * Get the cosine of half cone angle.
- */
+/** get the cosine of half cone angle */
 export function getCosHalfConeAngle(constraint: ConeConstraint): number {
     return constraint.cosHalfConeAngle;
 }
 
-/**
- * Get the half cone angle in radians.
- */
+/** get the half cone angle in radians */
 export function getHalfConeAngle(constraint: ConeConstraint): number {
     return Math.acos(constraint.cosHalfConeAngle);
 }
@@ -305,26 +301,26 @@ const _cone_rotAxis = /* @__PURE__ */ vec3.create();
  * Determines if cone limit is violated and sets up angle constraint.
  */
 function calculateRotationConstraintProperties(constraint: ConeConstraint, bodyA: RigidBody, bodyB: RigidBody): void {
-    // Get twist axes in world space
+    // get twist axes in world space
     vec3.transformQuat(_cone_twist1, constraint.localSpaceTwistAxis1, bodyA.quaternion);
     vec3.transformQuat(_cone_twist2, constraint.localSpaceTwistAxis2, bodyB.quaternion);
 
-    // Calculate dot product between twist axes
+    // calculate dot product between twist axes
     constraint.cosTheta = vec3.dot(_cone_twist1, _cone_twist2);
 
-    // Check if outside cone limit
+    // check if outside cone limit
     if (constraint.cosTheta < constraint.cosHalfConeAngle) {
-        // Rotation axis is t2 × t1 (cross product)
+        // rotation axis is t2 × t1 (cross product)
         vec3.cross(_cone_rotAxis, _cone_twist2, _cone_twist1);
 
-        // If we can't find a rotation axis (twist axes nearly parallel), use last frame's axis
+        // if we can't find a rotation axis (twist axes nearly parallel), use last frame's axis
         const len = vec3.length(_cone_rotAxis);
         if (len > 1e-6) {
             vec3.scale(constraint.worldSpaceRotationAxis, _cone_rotAxis, 1 / len);
         }
         // else keep previous worldSpaceRotationAxis
 
-        // Setup angle constraint
+        // setup angle constraint
         angleConstraintPart.calculateConstraintProperties(
             constraint.angleConstraintPart,
             bodyA,
@@ -332,16 +328,12 @@ function calculateRotationConstraintProperties(constraint: ConeConstraint, bodyA
             constraint.worldSpaceRotationAxis,
         );
     } else {
-        // Inside cone - no angular constraint needed
+        // inside cone - no angular constraint needed
         angleConstraintPart.deactivate(constraint.angleConstraintPart);
     }
 }
 
-/**
- * Setup velocity constraint for cone constraint.
- * Called once per frame before velocity iterations.
- */
-export function setupVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number): void {
+function setupVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -364,41 +356,32 @@ export function setupVelocity(constraint: ConeConstraint, bodies: Bodies, _delta
     calculateRotationConstraintProperties(constraint, bodyA, bodyB);
 }
 
-/**
- * Warm start velocity constraint for cone constraint.
- * Applies cached impulses from previous frame.
- */
-export function warmStartVelocity(constraint: ConeConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: ConeConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 
-    // Warm start point constraint
+    // warm start point constraint
     pointConstraintPart.warmStart(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 
-    // Warm start angle constraint
+    // warm start angle constraint
     if (angleConstraintPart.isActive(constraint.angleConstraintPart)) {
         angleConstraintPart.warmStart(constraint.angleConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
     }
 }
 
-/**
- * Solve velocity constraint for cone constraint.
- * Called during velocity iterations.
- * @returns True if any impulse was applied
- */
-export function solveVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number): boolean {
+function solveVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 
-    // Solve point constraint
+    // solve point constraint
     const pos = pointConstraintPart.solveVelocityConstraint(constraint.pointConstraintPart, bodyA, bodyB);
 
-    // Solve angle constraint (cone limit)
-    // Lambda must be >= 0 (can only push bodies apart, not pull them together)
+    // solve angle constraint (cone limit)
+    // lambda must be >= 0 (can only push bodies apart, not pull them together)
     let rot = false;
     if (angleConstraintPart.isActive(constraint.angleConstraintPart)) {
         rot = angleConstraintPart.solveVelocityConstraint(
@@ -414,12 +397,7 @@ export function solveVelocity(constraint: ConeConstraint, bodies: Bodies, _delta
     return pos || rot;
 }
 
-/**
- * Solve position constraint for cone constraint.
- * Called during position iterations.
- * @returns True if any correction was applied
- */
-export function solvePosition(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number, baumgarteFactor: number): boolean {
+function solvePosition(constraint: ConeConstraint, bodies: Bodies, _deltaTime: number, baumgarteFactor: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -457,10 +435,7 @@ export function solvePosition(constraint: ConeConstraint, bodies: Bodies, _delta
     return pos || rot;
 }
 
-/**
- * Reset warm start for cone constraint.
- */
-export function resetWarmStart(constraint: ConeConstraint): void {
+function resetWarmStart(constraint: ConeConstraint): void {
     pointConstraintPart.deactivate(constraint.pointConstraintPart);
     angleConstraintPart.deactivate(constraint.angleConstraintPart);
 }
@@ -477,3 +452,22 @@ export function getTotalLambdaPosition(out: Vec3, constraint: ConeConstraint): V
 export function getTotalLambdaRotation(constraint: ConeConstraint): number {
     return constraint.angleConstraintPart.totalLambda;
 }
+
+/** the constraint definition for cone constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<ConeConstraint>({
+        type: ConstraintType.CONE,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

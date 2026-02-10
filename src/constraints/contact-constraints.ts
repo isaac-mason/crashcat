@@ -454,6 +454,8 @@ const _addContactConstraint_rA = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_rB = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
 const _addContactConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
+const _addContactConstraint_rotA = /* @__PURE__ */ mat4.create();
+const _addContactConstraint_rotB = /* @__PURE__ */ mat4.create();
 const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
 
 /** add a contact constraint from a new manifold */
@@ -555,25 +557,35 @@ export function addContactConstraint(
         constraint.invMassB = bodyB.motionProperties.invMass * contactSettings.invMassScale2;
         constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
         constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
-        const invInertiaA = _addContactConstraint_invInertiaA;
-        const invInertiaB = _addContactConstraint_invInertiaB;
-        const rotA = mat4.create();
-        const rotB = mat4.create();
-        mat4.fromQuat(rotA, bodyA.quaternion);
-        mat4.fromQuat(rotB, bodyB.quaternion);
-        getInverseInertiaForRotation(invInertiaA, bodyA.motionProperties, rotA);
-        getInverseInertiaForRotation(invInertiaB, bodyB.motionProperties, rotB);
 
-        // apply invInertiaScale1/2 to inertia matrices (element-wise)
-        if (contactSettings.invInertiaScale1 === 1 && contactSettings.invInertiaScale2 === 1) {
-            // no scaling needed
-            mat4.copy(constraint.invInertiaA, invInertiaA);
-            mat4.copy(constraint.invInertiaB, invInertiaB);
-        } else {
-            // apply scaling
-            for (let i = 0; i < 16; ++i) {
-                constraint.invInertiaA[i] = invInertiaA[i] * contactSettings.invInertiaScale1;
-                constraint.invInertiaB[i] = invInertiaB[i] * contactSettings.invInertiaScale2;
+        // compute inverse inertia only for dynamic bodies (static/kinematic don't contribute)
+        if (bodyA.motionType === MotionType.DYNAMIC) {
+            mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+            getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, _addContactConstraint_rotA);
+            const scale1 = contactSettings.invInertiaScale1;
+            if (scale1 !== 1) {
+                for (let j = 0; j < 16; j++) {
+                    constraint.invInertiaA[j] = _addContactConstraint_invInertiaA[j] * scale1;
+                }
+            } else {
+                for (let j = 0; j < 16; j++) {
+                    constraint.invInertiaA[j] = _addContactConstraint_invInertiaA[j];
+                }
+            }
+        }
+
+        if (bodyB.motionType === MotionType.DYNAMIC) {
+            mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
+            getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, _addContactConstraint_rotB);
+            const scale2 = contactSettings.invInertiaScale2;
+            if (scale2 !== 1) {
+                for (let j = 0; j < 16; j++) {
+                    constraint.invInertiaB[j] = _addContactConstraint_invInertiaB[j] * scale2;
+                }
+            } else {
+                for (let j = 0; j < 16; j++) {
+                    constraint.invInertiaB[j] = _addContactConstraint_invInertiaB[j];
+                }
             }
         }
 
@@ -585,16 +597,17 @@ export function addContactConstraint(
             constraint.numContactPoints++;
 
             // get relative contact points from manifold
-            const relativePointOnA = vec3.fromBuffer(
-                _addContactConstraint_relativePointOnA,
-                contactManifold.relativeContactPointsOnA,
-                i * 3,
-            );
-            const relativePointOnB = vec3.fromBuffer(
-                _addContactConstraint_relativePointOnB,
-                contactManifold.relativeContactPointsOnB,
-                i * 3,
-            );
+            const contactPointIndex = i * 3;
+
+            const relativePointOnA = _addContactConstraint_relativePointOnA;
+            relativePointOnA[0] = contactManifold.relativeContactPointsOnA[contactPointIndex];
+            relativePointOnA[1] = contactManifold.relativeContactPointsOnA[contactPointIndex + 1];
+            relativePointOnA[2] = contactManifold.relativeContactPointsOnA[contactPointIndex + 2];
+
+            const relativePointOnB = _addContactConstraint_relativePointOnB;
+            relativePointOnB[0] = contactManifold.relativeContactPointsOnB[contactPointIndex];
+            relativePointOnB[1] = contactManifold.relativeContactPointsOnB[contactPointIndex + 1];
+            relativePointOnB[2] = contactManifold.relativeContactPointsOnB[contactPointIndex + 2];
 
             // get world positions from manifold
             vec3.add(cp.positionA, contactManifold.baseOffset, relativePointOnA);
@@ -777,11 +790,7 @@ export function addContactConstraint(
     return false;
 }
 
-/**
- * Create a new WorldContactPoint with all fields initialized.
- * Positions at origin, constraints zeroed, no cached point.
- */
-export function createWorldContactPoint(): WorldContactPoint {
+function createWorldContactPoint(): WorldContactPoint {
     return {
         positionA: vec3.create(),
         positionB: vec3.create(),
@@ -792,19 +801,6 @@ export function createWorldContactPoint(): WorldContactPoint {
         tangentConstraint2: axisConstraintPart.create(),
     };
 }
-
-/**
- * Reset a WorldContactPoint to zero values.
- */
-// export function resetWorldContactPoint(point: WorldContactPoint): void {
-//     vec3.set(point.positionA, 0, 0, 0);
-//     vec3.set(point.positionB, 0, 0, 0);
-//     vec3.set(point.localPositionA, 0, 0, 0);
-//     vec3.set(point.localPositionB, 0, 0, 0);
-//     axisConstraintPart.resetAxisConstraintPart(point.normalConstraint);
-//     axisConstraintPart.resetAxisConstraintPart(point.tangentConstraint1);
-//     axisConstraintPart.resetAxisConstraintPart(point.tangentConstraint2);
-// }
 
 function createContactConstraint(): ContactConstraint {
     return {
@@ -850,8 +846,6 @@ export function warmStartVelocityConstraints(
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
         const { normal, tangent1, tangent2 } = constraint;
-        const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-        const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
 
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
@@ -862,8 +856,6 @@ export function warmStartVelocityConstraints(
                     cp.tangentConstraint1,
                     bodyA,
                     bodyB,
-                    mpA,
-                    mpB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent1,
@@ -874,8 +866,6 @@ export function warmStartVelocityConstraints(
                     cp.tangentConstraint2,
                     bodyA,
                     bodyB,
-                    mpA,
-                    mpB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent2,
@@ -888,8 +878,6 @@ export function warmStartVelocityConstraints(
                 cp.normalConstraint,
                 bodyA,
                 bodyB,
-                mpA,
-                mpB,
                 constraint.invMassA,
                 constraint.invMassB,
                 normal,
@@ -930,7 +918,7 @@ export function solveVelocityConstraintsForIsland(
             continue;
         }
 
-        // solve ALL friction constraints for this constraint
+        // solve friction constraints for this constraint
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
             if (axisConstraintPart.isActive(cp.tangentConstraint1) || axisConstraintPart.isActive(cp.tangentConstraint2)) {
@@ -968,7 +956,7 @@ export function solveVelocityConstraintsForIsland(
             }
         }
 
-        // solve ALL normal (non-penetration) constraints
+        // solve normal (non-penetration) constraints
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
@@ -989,7 +977,6 @@ export function solveVelocityConstraintsForIsland(
 /**
  * Store solved impulses back to Contact array for warm starting next frame.
  * Must be called after solveVelocityConstraints to persist the solved lambda values.
- *
  * @param contactConstraints contact constraint state
  * @param contactsState contacts state
  */
@@ -1081,10 +1068,15 @@ export function solvePositionConstraintsForIsland(
             }
 
             // get current world-space inverse inertia (rotation may have changed)
-            mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
-            mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
-            getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
-            getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+            // only compute for dynamic bodies - static/kinematic don't contribute to inverse effective mass
+            if (bodyA.motionType === MotionType.DYNAMIC) {
+                mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
+                getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
+            }
+            if (bodyB.motionType === MotionType.DYNAMIC) {
+                mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
+                getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+            }
 
             // calculate midpoint and moment arms
             vec3.add(_solvePos_midpoint, _solvePos_pointA, _solvePos_pointB);

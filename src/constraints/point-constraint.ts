@@ -15,6 +15,7 @@ import {
 } from './constraint-id';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /** point constraint removes 3 translational DOF */
 export type PointConstraint = ConstraintBase & {
@@ -63,25 +64,25 @@ export type PointConstraintSettings = {
 
 /** create a point constraint */
 export function create(world: World, settings: PointConstraintSettings): PointConstraint {
-    const pointConstraints = world.constraints.pointConstraints;
+    const pool = ensurePool<PointConstraint>(world.constraints, ConstraintType.POINT);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = pointConstraints.nextSequence;
-    pointConstraints.nextSequence = (pointConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: PointConstraint;
-    if (pointConstraints.freeIndices.length > 0) {
+    if (pool.freeIndices.length > 0) {
         // reuse existing pooled constraint
-        index = pointConstraints.freeIndices.pop()!;
-        constraint = pointConstraints.constraints[index];
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
         // expand array
-        index = pointConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makePointConstraint();
-        pointConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -138,7 +139,7 @@ export function create(world: World, settings: PointConstraintSettings): PointCo
 
 /** remove a point constraint */
 export function remove(world: World, constraint: PointConstraint): void {
-    const pointConstraints = world.constraints.pointConstraints;
+    const pool = ensurePool<PointConstraint>(world.constraints, ConstraintType.POINT);
     const bodies = world.bodies;
 
     // remove from bodies' constraintIds arrays
@@ -157,14 +158,15 @@ export function remove(world: World, constraint: PointConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    pointConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** get point constraint by id */
 export function get(world: World, id: ConstraintId): PointConstraint | undefined {
-    const pointConstraints = world.constraints.pointConstraints;
+    const pool = world.constraints.pools[ConstraintType.POINT] as ConstraintPool<PointConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = pointConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -174,11 +176,7 @@ export function get(world: World, id: ConstraintId): PointConstraint | undefined
 const _setupPointConstraintVelocity_rotA = /* @__PURE__ */ mat4.create();
 const _setupPointConstraintVelocity_rotB = /* @__PURE__ */ mat4.create();
 
-/**
- * Setup velocity constraint - calculate constraint properties from current body poses
- * Called once per frame before velocity iterations
- */
-export function setupVelocity(constraint: PointConstraint, bodies: Bodies): void {
+function setupVelocity(constraint: PointConstraint, bodies: Bodies, _deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -199,11 +197,7 @@ export function setupVelocity(constraint: PointConstraint, bodies: Bodies): void
     );
 }
 
-/**
- * Warm start velocity constraint - apply cached impulses from previous frame
- * Called after setup, before velocity iterations
- */
-export function warmStartVelocity(constraint: PointConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: PointConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -212,11 +206,7 @@ export function warmStartVelocity(constraint: PointConstraint, bodies: Bodies, w
     pointConstraintPart.warmStart(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 
-/**
- * Solve velocity constraint - iteratively enforce velocity constraint
- * Called during velocity iterations
- */
-export function solveVelocity(constraint: PointConstraint, bodies: Bodies): boolean {
+function solveVelocity(constraint: PointConstraint, bodies: Bodies, _deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -226,11 +216,7 @@ export function solveVelocity(constraint: PointConstraint, bodies: Bodies): bool
 const _solvePointConstraintPosition_rotA = /* @__PURE__ */ mat4.create();
 const _solvePointConstraintPosition_rotB = /* @__PURE__ */ mat4.create();
 
-/**
- * Solve position constraint - Baumgarte stabilization for position drift
- * Called during position iterations
- */
-export function solvePosition(constraint: PointConstraint, bodies: Bodies, baumgarte: number): boolean {
+function solvePosition(constraint: PointConstraint, bodies: Bodies, _deltaTime: number, baumgarte: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -251,11 +237,7 @@ export function solvePosition(constraint: PointConstraint, bodies: Bodies, baumg
     return pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarte);
 }
 
-/**
- * Reset warm start - clears accumulated impulses
- * Called when warm start needs to be invalidated (e.g., constraint properties changed significantly)
- */
-export function resetWarmStart(constraint: PointConstraint): void {
+function resetWarmStart(constraint: PointConstraint): void {
     pointConstraintPart.deactivate(constraint.pointConstraintPart);
 }
 
@@ -266,3 +248,22 @@ export function resetWarmStart(constraint: PointConstraint): void {
 export function getTotalLambda(constraint: PointConstraint): Vec3 {
     return constraint.pointConstraintPart.totalLambda;
 }
+
+/** the constraint definition for point constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<PointConstraint>({
+        type: ConstraintType.POINT,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

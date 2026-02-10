@@ -1,7 +1,7 @@
 /** @module crashcat */
 
-export * from './shapes/register';
-export * from './shapes/register-all';
+export * from './register';
+export * from './register-all';
 export * from './shapes/shapes';
 export * from './shapes/convex';
 export type { BoxShape, BoxShapeSettings } from './shapes/box';
@@ -73,6 +73,7 @@ export { type MotorSettings, MotorState } from './constraints/constraint-part/mo
 export * as springSettings from './constraints/constraint-part/spring-settings';
 export { SpringMode, type SpringSettings } from './constraints/constraint-part/spring-settings';
 export { ConstraintSpace } from './constraints/constraint-base';
+export { ConstraintType } from './constraints/constraint-id';
 export type { ConeConstraint, ConeConstraintSettings } from './constraints/cone-constraint';
 export * as coneConstraint from './constraints/cone-constraint';
 export { SwingType } from './constraints/constraint-part/swing-twist-constraint-part';
@@ -91,6 +92,20 @@ export type { SliderConstraint, SliderConstraintSettings } from './constraints/s
 export * as sliderConstraint from './constraints/slider-constraint';
 export type { SwingTwistConstraint, SwingTwistConstraintSettings } from './constraints/swing-twist-constraint';
 export * as swingTwistConstraint from './constraints/swing-twist-constraint';
+
+// two-body constraint registry
+export type {
+    UserConstraintDef as TwoBodyConstraintDef,
+    Constraint as TwoBodyConstraint,
+    ConstraintPool,
+    ConstraintTypeRegistry,
+} from './constraints/constraints';
+export {
+    defineUserConstraint as defineTwoBodyConstraint,
+    userConstraintDefs as twoBodyConstraintDefs,
+    registerUserConstraintDef as registerTwoBodyConstraintDef,
+    ensurePool as getOrCreatePool,
+} from './constraints/constraints';
 
 export type { Contact } from './contacts';
 export * as contacts from './contacts';

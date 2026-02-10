@@ -266,7 +266,7 @@ export function calculateConstraintPropertiesWithSettings(
 
 const _ws_angularDelta = /* @__PURE__ */ vec3.create();
 
-/** Apply warm start impulse from previous frame */
+/** apply warm start impulse from previous frame */
 export function warmStart(
     part: AngleConstraintPart,
     bodyA: RigidBody,

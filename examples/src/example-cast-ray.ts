@@ -22,7 +22,7 @@ import {
     sphere,
     triangleMesh,
     type World,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import * as debugUI from './debug/debug-ui';
@@ -200,7 +200,7 @@ function removeRaycasterObject(rc: RaycasterObject) {
     state.scene.remove(rc.rootObject);
 }
 
-registerAllShapes();
+registerAll();
 
 function initWorld() {
     const worldSettings = createWorldSettings();

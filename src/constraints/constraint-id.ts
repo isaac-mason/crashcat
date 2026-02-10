@@ -31,6 +31,9 @@ export enum ConstraintType {
 	CONE = 5,
 	SWING_TWIST = 6,
 	SIX_DOF = 7,
+	USER_1 = 8,
+	USER_2 = 9,
+	USER_3 = 10,
 }
 
 /** serializes a constraint index, type, and sequence number into a packed ConstraintId */

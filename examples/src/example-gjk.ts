@@ -20,11 +20,11 @@ import {
     setTransformedSupport,
     setTriangleSupport,
     sphere,
-    registerAllShapes,
+    registerAll,
 } from 'crashcat';
 import { loadGLTFPoints } from './utils/gltf.js';
 
-registerAllShapes();
+registerAll();
 
 const GUI_SHAPE_OPTIONS = {
     Sphere: 'sphere',

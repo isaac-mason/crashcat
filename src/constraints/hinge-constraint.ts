@@ -4,13 +4,7 @@ import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import {
-    type ConstraintBase,
-    ConstraintSpace,
-    makeConstraintBase,
-    removeConstraintIdFromBody,
-} from './constraint-base';
-import { MotorState } from './constraint-part/motor-settings';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
 import {
     type ConstraintId,
     ConstraintType,
@@ -26,10 +20,12 @@ import type { HingeRotationConstraintPart } from './constraint-part/hinge-rotati
 import * as hingeRotationConstraintPart from './constraint-part/hinge-rotation-constraint-part';
 import type { MotorSettings } from './constraint-part/motor-settings';
 import * as motorSettings from './constraint-part/motor-settings';
+import { MotorState } from './constraint-part/motor-settings';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 
 /**
  * Hinge constraint removes 5 DOF (3 translation + 2 rotation).
@@ -242,23 +238,23 @@ function resetConstraint(constraint: HingeConstraint): void {
 
 /** create a hinge constraint */
 export function create(world: World, settings: HingeConstraintSettings): HingeConstraint {
-    const hingeConstraints = world.constraints.hingeConstraints;
+    const pool = ensurePool<HingeConstraint>(world.constraints, ConstraintType.HINGE);
     const bodies = world.bodies;
 
     // get next sequence
-    const sequence = hingeConstraints.nextSequence;
-    hingeConstraints.nextSequence = (hingeConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     // get constraint from pool
     let index: number;
     let constraint: HingeConstraint;
-    if (hingeConstraints.freeIndices.length > 0) {
-        index = hingeConstraints.freeIndices.pop()!;
-        constraint = hingeConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = hingeConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeHingeConstraint();
-        hingeConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -391,7 +387,7 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
 
 /** remove a hinge constraint */
 export function remove(world: World, constraint: HingeConstraint): void {
-    const hingeConstraints = world.constraints.hingeConstraints;
+    const pool = ensurePool<HingeConstraint>(world.constraints, ConstraintType.HINGE);
     const bodies = world.bodies;
 
     // remove from bodies constraintIds arrays
@@ -409,14 +405,15 @@ export function remove(world: World, constraint: HingeConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    hingeConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** get hinge constraint by id */
 export function get(world: World, id: ConstraintId): HingeConstraint | undefined {
-    const hingeConstraints = world.constraints.hingeConstraints;
+    const pool = world.constraints.pools[ConstraintType.HINGE] as ConstraintPool<HingeConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = hingeConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -460,9 +457,7 @@ export function setTargetAngularVelocity(constraint: HingeConstraint, velocity: 
  * @param angle target angle in radians
  */
 export function setTargetAngle(constraint: HingeConstraint, angle: number): void {
-    constraint.targetAngle = constraint.hasLimits
-        ? Math.max(constraint.limitsMin, Math.min(constraint.limitsMax, angle))
-        : angle;
+    constraint.targetAngle = constraint.hasLimits ? Math.max(constraint.limitsMin, Math.min(constraint.limitsMax, angle)) : angle;
 }
 
 /**
@@ -481,9 +476,7 @@ const _hingeConstraint_q1 = /* @__PURE__ */ quat.create();
 const _hingeConstraint_q2 = /* @__PURE__ */ quat.create();
 const _hingeConstraint_qRel = /* @__PURE__ */ quat.create();
 
-/**
- * Calculate the current hinge angle theta.
- */
+/** calculate the current hinge angle theta */
 function calculateA1AndTheta(constraint: HingeConstraint, bodyA: RigidBody, bodyB: RigidBody): void {
     if (!constraint.hasLimits && constraint.motorState === MotorState.OFF && constraint.maxFrictionTorque <= 0) {
         return;
@@ -515,28 +508,28 @@ function calculateA1AndTheta(constraint: HingeConstraint, bodyA: RigidBody, body
     constraint.theta = qw === 0 ? Math.PI : 2 * Math.atan(axisDot / qw);
 }
 
-/** Center angle around zero (wrap to [-PI, PI]). */
+/** center angle around zero (wrap to [-PI, PI]). */
 function centerAngleAroundZero(angle: number): number {
     while (angle > Math.PI) angle -= 2 * Math.PI;
     while (angle < -Math.PI) angle += 2 * Math.PI;
     return angle;
 }
 
-/** Get the smallest angle to the closest limit. */
+/** get the smallest angle to the closest limit. */
 function getSmallestAngleToLimit(constraint: HingeConstraint): number {
     const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
     const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
     return Math.abs(distToMin) < Math.abs(distToMax) ? distToMin : distToMax;
 }
 
-/** Check if min limit is the closest limit. */
+/** check if min limit is the closest limit. */
 function isMinLimitClosest(constraint: HingeConstraint): boolean {
     const distToMin = centerAngleAroundZero(constraint.theta - constraint.limitsMin);
     const distToMax = centerAngleAroundZero(constraint.theta - constraint.limitsMax);
     return Math.abs(distToMin) < Math.abs(distToMax);
 }
 
-/** Calculate rotation limits constraint properties. */
+/** calculate rotation limits constraint properties. */
 function calculateRotationLimitsConstraintProperties(
     constraint: HingeConstraint,
     bodyA: RigidBody,
@@ -560,7 +553,7 @@ function calculateRotationLimitsConstraintProperties(
     }
 }
 
-/** Calculate motor constraint properties. */
+/** calculate motor constraint properties. */
 function calculateMotorConstraintProperties(
     constraint: HingeConstraint,
     bodyA: RigidBody,
@@ -612,11 +605,7 @@ function calculateMotorConstraintProperties(
     }
 }
 
-/**
- * Setup velocity constraint for hinge constraint.
- * Called once per frame before velocity iterations.
- */
-export function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: number): void {
+function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -660,8 +649,7 @@ export function setupVelocity(constraint: HingeConstraint, bodies: Bodies, delta
     calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 }
 
-/* Warm start velocity constraint for hinge constraint, applies cached impulses from previous frame */
-export function warmStartVelocity(constraint: HingeConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
+function warmStartVelocity(constraint: HingeConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -674,12 +662,7 @@ export function warmStartVelocity(constraint: HingeConstraint, bodies: Bodies, w
     angleConstraintPart.warmStart(constraint.rotationLimitsConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 
-/**
- * Solve velocity constraint for hinge constraint.
- * Called during velocity iterations.
- * @returns True if any impulse was applied
- */
-export function solveVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: number): boolean {
+function solveVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -755,12 +738,7 @@ export function solveVelocity(constraint: HingeConstraint, bodies: Bodies, delta
     return motor || pos || rot || limit;
 }
 
-/**
- * Solve position constraint for hinge constraint.
- * Called during position iterations.
- * @returns True if any correction was applied
- */
-export function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: number, baumgarteFactor: number): boolean {
+function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: number, baumgarteFactor: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -826,10 +804,28 @@ export function solvePosition(constraint: HingeConstraint, bodies: Bodies, delta
     return pos || rot || limit;
 }
 
-/** Reset warm start for hinge constraint, call when constraint properties change significantly */
-export function resetWarmStart(constraint: HingeConstraint): void {
+function resetWarmStart(constraint: HingeConstraint): void {
     angleConstraintPart.deactivate(constraint.motorConstraintPart);
     pointConstraintPart.deactivate(constraint.pointConstraintPart);
     hingeRotationConstraintPart.deactivate(constraint.rotationConstraintPart);
     angleConstraintPart.deactivate(constraint.rotationLimitsConstraintPart);
 }
+
+/** the constraint definition for hinge constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<HingeConstraint>({
+        type: ConstraintType.HINGE,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();

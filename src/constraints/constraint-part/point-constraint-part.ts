@@ -1,9 +1,9 @@
 import type { Mat4, Vec3 } from 'mathcat';
 import { mat4, vec3 } from 'mathcat';
+import * as motionProperties from '../../body/motion-properties';
+import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addPositionStep, addRotationStep, subPositionStep, subRotationStep } from '../../body/rigid-body-step';
-import { MotionType } from '../../body/motion-type';
-import * as motionProperties from '../../body/motion-properties';
 
 /**
  * PointConstraintPart removes 3 translational degrees of freedom.

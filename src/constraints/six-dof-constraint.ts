@@ -5,12 +5,7 @@ import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
-import {
-    type ConstraintBase,
-    ConstraintSpace,
-    makeConstraintBase,
-    removeConstraintIdFromBody,
-} from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
 import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
@@ -33,6 +28,7 @@ import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
+import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
 import { getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
 
 const _twist_temp = /* @__PURE__ */ quat.create();
@@ -156,19 +152,11 @@ function makeSixDOFConstraint(): SixDOFConstraint {
         rotationMotorActive: false,
         rotationPositionMotorActive: 0,
         hasSpringLimits: false,
-        translationConstraintPart: [
-            axisConstraintPart.create(),
-            axisConstraintPart.create(),
-            axisConstraintPart.create(),
-        ],
+        translationConstraintPart: [axisConstraintPart.create(), axisConstraintPart.create(), axisConstraintPart.create()],
         pointConstraintPart: pointConstraintPart.create(),
         swingTwistConstraintPart: swingTwistConstraintPart.create(),
         rotationConstraintPart: rotationEulerConstraintPart.create(),
-        motorTranslationConstraintPart: [
-            axisConstraintPart.create(),
-            axisConstraintPart.create(),
-            axisConstraintPart.create(),
-        ],
+        motorTranslationConstraintPart: [axisConstraintPart.create(), axisConstraintPart.create(), axisConstraintPart.create()],
         motorRotationConstraintPart: [angleConstraintPart.create(), angleConstraintPart.create(), angleConstraintPart.create()],
     };
 }
@@ -345,21 +333,21 @@ const _create_invQuatB = /* @__PURE__ */ quat.create();
 
 /** Create a SixDOF constraint */
 export function create(world: World, settings: SixDOFConstraintSettings): SixDOFConstraint {
-    const sixDOFConstraints = world.constraints.sixDOFConstraints;
+    const pool = ensurePool<SixDOFConstraint>(world.constraints, ConstraintType.SIX_DOF);
     const bodies = world.bodies;
 
-    const sequence = sixDOFConstraints.nextSequence;
-    sixDOFConstraints.nextSequence = (sixDOFConstraints.nextSequence + 1) & SEQUENCE_MASK;
+    const sequence = pool.nextSequence;
+    pool.nextSequence = (pool.nextSequence + 1) & SEQUENCE_MASK;
 
     let index: number;
     let constraint: SixDOFConstraint;
-    if (sixDOFConstraints.freeIndices.length > 0) {
-        index = sixDOFConstraints.freeIndices.pop()!;
-        constraint = sixDOFConstraints.constraints[index];
+    if (pool.freeIndices.length > 0) {
+        index = pool.freeIndices.pop()!;
+        constraint = pool.constraints[index];
     } else {
-        index = sixDOFConstraints.constraints.length;
+        index = pool.constraints.length;
         constraint = makeSixDOFConstraint();
-        sixDOFConstraints.constraints.push(constraint);
+        pool.constraints.push(constraint);
     }
 
     // reset pooled state
@@ -492,7 +480,7 @@ export function create(world: World, settings: SixDOFConstraintSettings): SixDOF
 
 /** Remove a SixDOF constraint */
 export function remove(world: World, constraint: SixDOFConstraint): void {
-    const sixDOFConstraints = world.constraints.sixDOFConstraints;
+    const pool = ensurePool<SixDOFConstraint>(world.constraints, ConstraintType.SIX_DOF);
     const bodies = world.bodies;
 
     const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -507,14 +495,15 @@ export function remove(world: World, constraint: SixDOFConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
-    sixDOFConstraints.freeIndices.push(constraint.index);
+    pool.freeIndices.push(constraint.index);
 }
 
 /** Get SixDOF constraint by id */
 export function get(world: World, id: ConstraintId): SixDOFConstraint | undefined {
-    const sixDOFConstraints = world.constraints.sixDOFConstraints;
+    const pool = world.constraints.pools[ConstraintType.SIX_DOF] as ConstraintPool<SixDOFConstraint> | undefined;
+    if (!pool) return undefined;
     const index = getConstraintIdIndex(id);
-    const constraint = sixDOFConstraints.constraints[index];
+    const constraint = pool.constraints[index];
     if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) {
         return undefined;
     }
@@ -543,7 +532,13 @@ const _setup_invInertiaB = /* @__PURE__ */ mat4.create();
 const _getPositionConstraintProperties_p1 = /* @__PURE__ */ vec3.create();
 const _getPositionConstraintProperties_p2 = /* @__PURE__ */ vec3.create();
 
-function getPositionConstraintProperties(constraint: SixDOFConstraint, bodies: Bodies, outR1PlusU: Vec3, outR2: Vec3, outU: Vec3): void {
+function getPositionConstraintProperties(
+    constraint: SixDOFConstraint,
+    bodies: Bodies,
+    outR1PlusU: Vec3,
+    outR2: Vec3,
+    outU: Vec3,
+): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
 
@@ -570,8 +565,7 @@ const AXIS_X = /* @__PURE__ */ vec3.fromValues(1, 0, 0);
 const AXIS_Y = /* @__PURE__ */ vec3.fromValues(0, 1, 0);
 const AXIS_Z = /* @__PURE__ */ vec3.fromValues(0, 0, 1);
 
-/** Setup velocity constraint */
-export function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: number): void {
+function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
@@ -624,15 +618,11 @@ export function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, delt
             if (bodyA.motionType === MotionType.DYNAMIC) {
                 mat4.fromQuat(_setup_rotA, bodyA.quaternion);
                 getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA);
-            } else {
-                mat4.zero(invInertiaA);
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
                 mat4.fromQuat(_setup_rotB, bodyB.quaternion);
                 getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB);
-            } else {
-                mat4.zero(invInertiaB);
             }
 
             // setup limit constraint
@@ -890,16 +880,13 @@ export function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, delt
     }
 }
 
-/** Warm start velocity constraint */
-export function warmStartVelocity(constraint: SixDOFConstraint, bodies: Bodies, warmStartRatio: number): void {
+function warmStartVelocity(constraint: SixDOFConstraint, bodies: Bodies, warmStartRatio: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 
-    const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-    const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
-    const invMassA = mpA?.invMass ?? 0;
-    const invMassB = mpB?.invMass ?? 0;
+    const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
+    const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
 
     // warm start translation motors
     if (constraint.translationMotorActive) {
@@ -909,8 +896,6 @@ export function warmStartVelocity(constraint: SixDOFConstraint, bodies: Bodies, 
                     constraint.motorTranslationConstraintPart[i],
                     bodyA,
                     bodyB,
-                    mpA,
-                    mpB,
                     invMassA,
                     invMassB,
                     constraint.translationAxis[i],
@@ -946,8 +931,6 @@ export function warmStartVelocity(constraint: SixDOFConstraint, bodies: Bodies, 
                     constraint.translationConstraintPart[i],
                     bodyA,
                     bodyB,
-                    mpA,
-                    mpB,
                     invMassA,
                     invMassB,
                     constraint.translationAxis[i],
@@ -958,14 +941,7 @@ export function warmStartVelocity(constraint: SixDOFConstraint, bodies: Bodies, 
     }
 }
 
-/**
- * Reset warm start (deactivate all constraint parts and clear accumulated impulses).
- * Call this when:
- * - Bodies wake from sleep
- * - Constraint properties are modified
- * - Shapes change
- */
-export function resetWarmStart(constraint: SixDOFConstraint): void {
+function resetWarmStart(constraint: SixDOFConstraint): void {
     // deactivate translation motor parts
     for (let i = 0; i < 3; i++) {
         axisConstraintPart.deactivate(constraint.motorTranslationConstraintPart[i]);
@@ -987,11 +963,10 @@ export function resetWarmStart(constraint: SixDOFConstraint): void {
     }
 }
 
-/** Solve velocity constraint */
-export function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: number): void {
+function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
-    if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
+    if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 
     // solve translation motors
     if (constraint.translationMotorActive) {
@@ -1090,6 +1065,8 @@ export function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, delt
             }
         }
     }
+
+    return false;
 }
 
 const _pos_invInitialOrientation = /* @__PURE__ */ quat.create();
@@ -1104,8 +1081,7 @@ const _solvePosition_constraintToBody1WithOffset = /* @__PURE__ */ quat.create()
 const _solvePosition_c2ToWorld = /* @__PURE__ */ quat.create();
 const _solvePosition_unitAxis = /* @__PURE__ */ vec3.create();
 
-/** Solve position constraint */
-export function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime: number, baumgarte: number): boolean {
+function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime: number, baumgarte: number): boolean {
     const bodyA = bodies.pool[constraint.bodyIndexA];
     const bodyB = bodies.pool[constraint.bodyIndexB];
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
@@ -1350,3 +1326,22 @@ export function setLimitedAxis(constraint: SixDOFConstraint, axis: number, min: 
     else updateRotationLimits(constraint);
     updateFixedFreeAxis(constraint);
 }
+
+/** the constraint definition for six-dof constraint */
+export const def = /* @__PURE__ */ (() =>
+    defineUserConstraint<SixDOFConstraint>({
+        type: ConstraintType.SIX_DOF,
+        setupVelocity,
+        warmStartVelocity,
+        solveVelocity,
+        solvePosition,
+        resetWarmStart,
+        getIterationOverrides: (out, constraint) => {
+            out.velocity = constraint.numVelocityStepsOverride;
+            out.position = constraint.numPositionStepsOverride;
+        },
+        getSortFields: (out, constraint) => {
+            out.priority = constraint.constraintPriority;
+            out.index = constraint.index;
+        },
+    }))();
