@@ -26,7 +26,7 @@ export type CastRayHit = {
 export function createCastRayHit(): CastRayHit {
     return {
         status: CastRayStatus.NOT_COLLIDING,
-        fraction: 0,
+        fraction: 1.0,
         subShapeId: EMPTY_SUB_SHAPE_ID,
         bodyIdB: -1,
         materialId: -1,
@@ -116,7 +116,7 @@ export class AnyCastRayCollector implements CastRayCollector {
     reset(): void {
         this.bodyIdB = -1;
         this.hit.status = CastRayStatus.NOT_COLLIDING;
-        this.hit.fraction = 0;
+        this.hit.fraction = 1.0;
         this.hit.subShapeId = EMPTY_SUB_SHAPE_ID;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
     }
@@ -149,7 +149,7 @@ export class ClosestCastRayCollector implements CastRayCollector {
     reset(): void {
         this.bodyIdB = -1;
         this.hit.status = CastRayStatus.NOT_COLLIDING;
-        this.hit.fraction = 0;
+        this.hit.fraction = 1.0;
         this.hit.subShapeId = EMPTY_SUB_SHAPE_ID;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
     }

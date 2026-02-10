@@ -52,7 +52,7 @@ export type CastShapeHit = {
 export function createCastShapeHit(): CastShapeHit {
     return {
         status: CastShapeStatus.NOT_COLLIDING,
-        fraction: 0,
+        fraction: 1.0,
         pointA: vec3.create(),
         pointB: vec3.create(),
         penetrationDepth: 0,
@@ -187,6 +187,7 @@ export class AnyCastShapeCollector implements CastShapeCollector {
     reset(): void {
         this.bodyIdB = -1;
         this.hit.status = CastShapeStatus.NOT_COLLIDING;
+        this.hit.fraction = 1.0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
     }
 }
@@ -218,6 +219,7 @@ export class ClosestCastShapeCollector implements CastShapeCollector {
     reset(): void {
         this.bodyIdB = -1;
         this.hit.status = CastShapeStatus.NOT_COLLIDING;
+        this.hit.fraction = 1.0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
     }
 }
