@@ -3,7 +3,7 @@ import { mat3, mat4, quat, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
@@ -23,7 +23,7 @@ import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { clampSwingTwist, getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /**
  * SwingTwistConstraint is a sophisticated constraint for humanoid ragdoll joints.
@@ -830,7 +830,7 @@ export function getTotalLambdaMotor(out: Vec3, constraint: SwingTwistConstraint)
 
 /** the constraint definition for swing-twist constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<SwingTwistConstraint>({
+    defineConstraint<SwingTwistConstraint>({
         type: ConstraintType.SWING_TWIST,
         setupVelocity,
         warmStartVelocity,

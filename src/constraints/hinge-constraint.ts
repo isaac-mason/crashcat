@@ -4,7 +4,7 @@ import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -25,7 +25,7 @@ import type { PointConstraintPart } from './constraint-part/point-constraint-par
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /**
  * Hinge constraint removes 5 DOF (3 translation + 2 rotation).
@@ -813,7 +813,7 @@ function resetWarmStart(constraint: HingeConstraint): void {
 
 /** the constraint definition for hinge constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<HingeConstraint>({
+    defineConstraint<HingeConstraint>({
         type: ConstraintType.HINGE,
         setupVelocity,
         warmStartVelocity,

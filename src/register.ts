@@ -1,4 +1,4 @@
-import { registerUserConstraintDef, type UserConstraintDef } from './constraints/constraints';
+import { registerConstraintDef, type ConstraintDef } from './constraints/constraints';
 import * as support from './collision/support';
 import { type ShapeDef, shapeDefs } from './shapes/shapes';
 
@@ -17,8 +17,8 @@ export function registerShapes(defs: Array<ShapeDef<any>>): void {
 }
 
 /** register two-body constraint definitions */
-export function registerConstraints(defs: Array<UserConstraintDef<any>>): void {
+export function registerConstraints(defs: Array<ConstraintDef<any>>): void {
     for (const def of defs) {
-        registerUserConstraintDef(def);
+        registerConstraintDef(def);
     }
 }

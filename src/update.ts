@@ -11,6 +11,7 @@ import * as ccd from './ccd';
 import {
     type CastShapeCollector,
     type CastShapeHit,
+    type CastShapeSettings,
     type CollideShapeCollector,
     type CollideShapeHit,
     castShapeVsShape,
@@ -25,7 +26,6 @@ import { combineMaterial } from './constraints/combine-material';
 import type { ConstraintType } from './constraints/constraint-id';
 import * as axisConstraintPart from './constraints/constraint-part/axis-constraint-part';
 import * as constraints from './constraints/constraints';
-import { userConstraintDefs } from './constraints/constraints';
 import * as contactConstraints from './constraints/contact-constraints';
 import * as contacts from './contacts';
 import * as filter from './filter';
@@ -308,30 +308,42 @@ function updateBodyPositions(world: World): void {
 }
 
 /** collide shape collector for narrowphase with manifold reduction */
-class NarrowphaseWithReductionCollector implements CollideShapeCollector {
-    bodyIdB = -1;
+const narrowphaseWithReductionCollector: CollideShapeCollector & {
+    world: World;
+    bodyA: RigidBody;
+    bodyB: RigidBody;
+    listener: Listener | undefined;
+    deltaTime: number;
+    manifolds: manifold.ContactManifold[];
+    maxManifolds: number;
+    validateBodyPair: boolean;
+    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    reset(): void;
+    finalizeAndCreateConstraints(): boolean;
+} = {
+    bodyIdB: -1,
 
-    earlyOutFraction = Number.MAX_VALUE;
+    earlyOutFraction: Number.MAX_VALUE,
 
     // state configured via setup()
-    world: World = null!;
-    bodyA: RigidBody = null!;
-    bodyB: RigidBody = null!;
-    listener: Listener | undefined = undefined;
-    deltaTime: number = null!;
+    world: null! as World,
+    bodyA: null! as RigidBody,
+    bodyB: null! as RigidBody,
+    listener: undefined,
+    deltaTime: null! as number,
 
     // accumulated manifolds (max 32)
-    manifolds: manifold.ContactManifold[] = [];
-    maxManifolds = 32;
+    manifolds: [],
+    maxManifolds: 32,
 
     // validation state
-    validateBodyPair = true;
+    validateBodyPair: true,
 
     reset(): void {
-        this.world = null!;
-        this.bodyA = null!;
-        this.bodyB = null!;
-    }
+        this.world = null! as World;
+        this.bodyA = null! as RigidBody;
+        this.bodyB = null! as RigidBody;
+    },
 
     setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
         // release all accumulated manifolds back to pool
@@ -347,12 +359,12 @@ class NarrowphaseWithReductionCollector implements CollideShapeCollector {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
-    }
+    },
 
     addHit(hit: CollideShapeHit): void {
         // validate contact first (before any processing)
         if (this.validateBodyPair && this.listener?.onContactValidate) {
-            const result = this.listener.onContactValidate(this.bodyA!, this.bodyB!, this.bodyA!.position, hit);
+            const result = this.listener.onContactValidate(this.bodyA, this.bodyB, this.bodyA.position, hit);
 
             switch (result) {
                 case ContactValidateResult.ACCEPT_CONTACT:
@@ -372,7 +384,7 @@ class NarrowphaseWithReductionCollector implements CollideShapeCollector {
             }
         }
 
-        const baseOffset = this.bodyA!.position;
+        const baseOffset = this.bodyA.position;
         const normalThreshold = this.world.settings.narrowphase.normalCosMaxDeltaRotation;
         const maxContactDistance =
             this.world.settings.narrowphase.speculativeContactDistance + this.world.settings.narrowphase.manifoldTolerance;
@@ -482,11 +494,11 @@ class NarrowphaseWithReductionCollector implements CollideShapeCollector {
         if (foundManifold.numContactPoints > 32) {
             manifold.pruneContactPoints(foundManifold, foundManifold.worldSpaceNormal);
         }
-    }
+    },
 
     addMiss(): void {
         // no-op
-    }
+    },
 
     finalizeAndCreateConstraints(): boolean {
         // finalizes accumulated manifolds and creates contact constraints.
@@ -520,40 +532,51 @@ class NarrowphaseWithReductionCollector implements CollideShapeCollector {
         }
 
         return constraintsCreated;
-    }
+    },
 
     shouldEarlyOut(): boolean {
         return this.earlyOutFraction <= 0;
-    }
-}
+    },
+};
 
 /** collide shape collector for narrowphase without manifold reduction */
-class NarrowphaseWithoutReductionCollector implements CollideShapeCollector {
-    bodyIdB = -1;
+const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
+    world: World;
+    bodyA: RigidBody;
+    bodyB: RigidBody;
+    listener: Listener | undefined;
+    deltaTime: number;
+    constraintsCreated: boolean;
+    validateBodyPair: boolean;
+    _tempManifold: manifold.ContactManifold;
+    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    reset(): void;
+} = {
+    bodyIdB: -1,
 
-    earlyOutFraction = Number.MAX_VALUE;
+    earlyOutFraction: Number.MAX_VALUE,
 
     // state configured via setup()
-    world: World = null!;
-    bodyA: RigidBody = null!;
-    bodyB: RigidBody = null!;
-    listener: Listener | undefined = undefined;
-    deltaTime: number = null!;
+    world: null! as World,
+    bodyA: null! as RigidBody,
+    bodyB: null! as RigidBody,
+    listener: undefined,
+    deltaTime: null! as number,
 
     // track if any constraints were created
-    constraintsCreated = false;
+    constraintsCreated: false,
 
     // validation state
-    validateBodyPair = true;
+    validateBodyPair: true,
 
     // scratch objects
-    _tempManifold = manifold.createContactManifold();
+    _tempManifold: manifold.createContactManifold(),
 
     reset(): void {
-        this.world = null!;
-        this.bodyA = null!;
-        this.bodyB = null!;
-    }
+        this.world = null! as World;
+        this.bodyA = null! as RigidBody;
+        this.bodyB = null! as RigidBody;
+    },
 
     setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
         this.constraintsCreated = false;
@@ -565,12 +588,12 @@ class NarrowphaseWithoutReductionCollector implements CollideShapeCollector {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
-    }
+    },
 
     addHit(hit: CollideShapeHit): void {
         // validate contact first (before any processing)
         if (this.validateBodyPair && this.listener?.onContactValidate) {
-            const result = this.listener.onContactValidate(this.bodyA!, this.bodyB!, this.bodyA!.position, hit);
+            const result = this.listener.onContactValidate(this.bodyA, this.bodyB, this.bodyA.position, hit);
 
             switch (result) {
                 case ContactValidateResult.ACCEPT_CONTACT:
@@ -641,19 +664,16 @@ class NarrowphaseWithoutReductionCollector implements CollideShapeCollector {
             );
             this.constraintsCreated = this.constraintsCreated || created;
         }
-    }
+    },
 
     addMiss(): void {
         // no-op
-    }
+    },
 
     shouldEarlyOut(): boolean {
         return this.earlyOutFraction <= 0;
-    }
-}
-
-const NARROWPHASE_REDUCTION_COLLECTOR = /* @__PURE__ */ new NarrowphaseWithReductionCollector();
-const NARROWPHASE_WITHOUT_REDUCTION_COLLECTOR = /* @__PURE__ */ new NarrowphaseWithoutReductionCollector();
+    },
+};
 
 const _narrowphase_collideSettings = /* @__PURE__ */ createDefaultCollideShapeSettings();
 const _narrowphase_worldSpaceNormal = /* @__PURE__ */ vec3.create();
@@ -701,10 +721,7 @@ function narrowphase(
 
     if (useManifoldReduction) {
         // use reduction collector - accumulates manifolds, creates constraints after
-        const collector = NARROWPHASE_REDUCTION_COLLECTOR;
-
-        // setup collector for this body pair
-        collector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -713,54 +730,51 @@ function narrowphase(
         if (useEnhancedEdgeRemoval) {
             // biome-ignore format: pretty
             collideShapeVsShapeWithInternalEdgeRemoval(
-                collector,
+                narrowphaseWithReductionCollector,
                 collideSettings,
                 // body a
                 bodyA.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyA.position[0],   bodyA.position[1],   bodyA.position[2],
+                bodyA.position[0], bodyA.position[1], bodyA.position[2],
                 bodyA.quaternion[0], bodyA.quaternion[1], bodyA.quaternion[2], bodyA.quaternion[3],
                 1, 1, 1,
                 // body b
                 bodyB.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyB.position[0],   bodyB.position[1],   bodyB.position[2],
+                bodyB.position[0], bodyB.position[1], bodyB.position[2],
                 bodyB.quaternion[0], bodyB.quaternion[1], bodyB.quaternion[2], bodyB.quaternion[3],
                 1, 1, 1,
             );
         } else {
             // biome-ignore format: pretty
             collideShapeVsShape(
-                collector,
+                narrowphaseWithReductionCollector,
                 collideSettings,
                 // body a
                 bodyA.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyA.position[0],   bodyA.position[1],   bodyA.position[2],
+                bodyA.position[0], bodyA.position[1], bodyA.position[2],
                 bodyA.quaternion[0], bodyA.quaternion[1], bodyA.quaternion[2], bodyA.quaternion[3],
                 1, 1, 1,
                 // body b
                 bodyB.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyB.position[0],   bodyB.position[1],   bodyB.position[2],
+                bodyB.position[0], bodyB.position[1], bodyB.position[2],
                 bodyB.quaternion[0], bodyB.quaternion[1], bodyB.quaternion[2], bodyB.quaternion[3],
                 1, 1, 1,
             );
         }
 
         // finalize and create constraints
-        const constraintsCreated = collector.finalizeAndCreateConstraints();
+        const constraintsCreated = narrowphaseWithReductionCollector.finalizeAndCreateConstraints();
 
-        collector.reset();
+        narrowphaseWithReductionCollector.reset();
 
         // return whether any constraints were created
         return constraintsCreated;
     } else {
         // use non-reduction collector - creates constraints immediately in addHit
-        const collector = NARROWPHASE_WITHOUT_REDUCTION_COLLECTOR;
-
-        // setup collector for this body pair
-        collector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithoutReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -769,44 +783,44 @@ function narrowphase(
         if (useEnhancedEdgeRemoval) {
             // biome-ignore format: pretty
             collideShapeVsShapeWithInternalEdgeRemoval(
-                collector,
+                narrowphaseWithoutReductionCollector,
                 collideSettings,
                 // body a
                 bodyA.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyA.position[0],   bodyA.position[1],   bodyA.position[2],
+                bodyA.position[0], bodyA.position[1], bodyA.position[2],
                 bodyA.quaternion[0], bodyA.quaternion[1], bodyA.quaternion[2], bodyA.quaternion[3],
                 1, 1, 1,
                 // body b
                 bodyB.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyB.position[0],   bodyB.position[1],   bodyB.position[2],
+                bodyB.position[0], bodyB.position[1], bodyB.position[2],
                 bodyB.quaternion[0], bodyB.quaternion[1], bodyB.quaternion[2], bodyB.quaternion[3],
                 1, 1, 1,
             );
         } else {
             // biome-ignore format: pretty
             collideShapeVsShape(
-                collector,
+                narrowphaseWithoutReductionCollector,
                 collideSettings,
                 // body a
                 bodyA.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyA.position[0],   bodyA.position[1],   bodyA.position[2],
+                bodyA.position[0], bodyA.position[1], bodyA.position[2],
                 bodyA.quaternion[0], bodyA.quaternion[1], bodyA.quaternion[2], bodyA.quaternion[3],
                 1, 1, 1,
                 // body b
                 bodyB.shape,
                 EMPTY_SUB_SHAPE_ID, 0,
-                bodyB.position[0],   bodyB.position[1],   bodyB.position[2],
+                bodyB.position[0], bodyB.position[1], bodyB.position[2],
                 bodyB.quaternion[0], bodyB.quaternion[1], bodyB.quaternion[2], bodyB.quaternion[3],
                 1, 1, 1,
             );
         }
 
-        const constraintsCreated = collector.constraintsCreated;
+        const constraintsCreated = narrowphaseWithoutReductionCollector.constraintsCreated;
 
-        collector.reset();
+        narrowphaseWithoutReductionCollector.reset();
 
         // return whether any constraints were created
         return constraintsCreated;
@@ -827,10 +841,9 @@ function narrowphase(
 function wakeBodiesInUserConstraints(world: World): void {
     const { constraints: constraintsState, bodies } = world;
 
-    // iterate over all constraint pools and wake bodies
-    for (const type in userConstraintDefs) {
-        const pool = constraintsState.pools[type as unknown as ConstraintType];
-        if (!pool) continue;
+    // iterate over all existing constraint pools and wake bodies
+    for (const type in constraintsState.pools) {
+        const pool = constraintsState.pools[type as unknown as ConstraintType]!;
         for (const constraint of pool.constraints) {
             if (!constraint._pooled && constraint.enabled) {
                 const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -966,18 +979,27 @@ const _ccd_ray = /* @__PURE__ */ raycast3.create();
 const _ccd_bodyBMotion = /* @__PURE__ */ vec3.create();
 
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
-class CCDCastShapeCollector implements CastShapeCollector {
+const ccdCastShapeCollector: CastShapeCollector & {
+    ccdBody: ccd.CCDBody;
+    bodyA: RigidBody;
+    bodyB: RigidBody;
+    timeStep: number;
+    hasHit: boolean;
+    hit: CastShapeHit;
+    setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void;
+    reset(): void;
+} = {
     // setup state
-    ccdBody: ccd.CCDBody = null!;
-    bodyA: RigidBody = null!;
-    bodyB: RigidBody = null!;
-    timeStep = 0;
+    ccdBody: null! as ccd.CCDBody,
+    bodyA: null! as RigidBody,
+    bodyB: null! as RigidBody,
+    timeStep: 0,
 
     // result state
-    bodyIdB = -1;
-    earlyOutFraction = Number.MAX_VALUE;
-    hasHit = false;
-    hit = createCastShapeHit();
+    bodyIdB: -1,
+    earlyOutFraction: Number.MAX_VALUE,
+    hasHit: false,
+    hit: createCastShapeHit(),
 
     setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void {
         this.hasHit = false;
@@ -987,15 +1009,15 @@ class CCDCastShapeCollector implements CastShapeCollector {
         this.bodyIdB = bodyB.id;
         this.timeStep = timeStep;
         this.earlyOutFraction = ccdBody.fractionPlusSlop;
-    }
+    },
 
     reset(): void {
         this.hasHit = false;
         this.earlyOutFraction = Number.MAX_VALUE;
-        this.ccdBody = null!;
-        this.bodyA = null!;
-        this.bodyB = null!;
-    }
+        this.ccdBody = null! as ccd.CCDBody;
+        this.bodyA = null! as RigidBody;
+        this.bodyB = null! as RigidBody;
+    },
 
     addHit(hit: CastShapeHit): void {
         const fraction = hit.fraction;
@@ -1030,6 +1052,7 @@ class CCDCastShapeCollector implements CastShapeCollector {
         // If bodyB also has CCD, it hasn't moved yet, so contact points need to be
         // adjusted for where bodyB will be at the time of collision
         calculateBodyMotion(_ccd_bodyBMotion, this.bodyB, this.timeStep);
+
         if (vec3.squaredLength(_ccd_bodyBMotion) > 1e-12) {
             // Scale by fraction (bodyB moves fraction * deltaTime before collision)
             vec3.scale(_ccd_bodyBMotion, _ccd_bodyBMotion, fraction);
@@ -1059,30 +1082,39 @@ class CCDCastShapeCollector implements CastShapeCollector {
 
         this.hasHit = true;
         this.earlyOutFraction = fractionPlusSlop;
-    }
+    },
 
     addMiss(): void {
         // no-op
-    }
+    },
 
     shouldEarlyOut(): boolean {
         return false;
-    }
-}
+    },
+};
 
 /** body visitor that processes potential CCD hits for a given CCDBody */
-class CCDBodyVisitor implements BodyVisitor {
-    shouldExit = false;
+/** body visitor that processes potential CCD hits for a given CCDBody */
+const ccdBodyVisitor: BodyVisitor & {
+    world: World;
+    ccdBody: ccd.CCDBody;
+    bodyA: RigidBody;
+    timeStep: number;
+    earlyOutFraction: number;
+    castSettings: CastShapeSettings;
+    setup(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, timeStep: number): void;
+    reset(): void;
+} = {
+    shouldExit: false,
 
     // state configured via setup()
-    world: World = null!;
-    ccdBody: ccd.CCDBody = null!;
-    bodyA: RigidBody = null!;
-    timeStep = 0;
-    earlyOutFraction = Number.MAX_VALUE;
+    world: null! as World,
+    ccdBody: null! as ccd.CCDBody,
+    bodyA: null! as RigidBody,
+    timeStep: 0,
+    earlyOutFraction: Number.MAX_VALUE,
 
-    collector = new CCDCastShapeCollector();
-    castSettings = createDefaultCastShapeSettings();
+    castSettings: createDefaultCastShapeSettings(),
 
     setup(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, timeStep: number): void {
         this.shouldExit = false;
@@ -1091,15 +1123,15 @@ class CCDBodyVisitor implements BodyVisitor {
         this.bodyA = bodyA;
         this.timeStep = timeStep;
         this.earlyOutFraction = ccdBody.fractionPlusSlop;
-    }
+    },
 
     reset(): void {
         this.shouldExit = false;
-        this.world = null!;
-        this.ccdBody = null!;
-        this.bodyA = null!;
+        this.world = null! as World;
+        this.ccdBody = null! as ccd.CCDBody;
+        this.bodyA = null! as RigidBody;
         this.earlyOutFraction = Number.MAX_VALUE;
-    }
+    },
 
     visit(bodyB: RigidBody): void {
         // self-collision filter
@@ -1153,11 +1185,10 @@ class CCDBodyVisitor implements BodyVisitor {
         }
 
         // narrowphase: shape cast
-        const collector = this.collector;
-        collector.setup(this.ccdBody, this.bodyA, bodyB, this.timeStep);
+        ccdCastShapeCollector.setup(this.ccdBody, this.bodyA, bodyB, this.timeStep);
 
         // reset collector's early-out to visitor's current best (optimization)
-        collector.earlyOutFraction = this.earlyOutFraction;
+        ccdCastShapeCollector.earlyOutFraction = this.earlyOutFraction;
 
         const settings = this.castSettings;
         settings.returnDeepestPoint = false;
@@ -1165,7 +1196,7 @@ class CCDBodyVisitor implements BodyVisitor {
 
         // biome-ignore format: pretty
         castShapeVsShape(
-            collector,
+            ccdCastShapeCollector,
             settings,
             this.bodyA.shape,
             EMPTY_SUB_SHAPE_ID, 0,
@@ -1181,13 +1212,11 @@ class CCDBodyVisitor implements BodyVisitor {
         );
 
         // update visitor's early-out based on narrowphase result
-        this.earlyOutFraction = Math.min(this.earlyOutFraction, collector.earlyOutFraction);
+        this.earlyOutFraction = Math.min(this.earlyOutFraction, ccdCastShapeCollector.earlyOutFraction);
 
-        collector.reset();
-    }
-}
-
-const CCD_BODY_VISITOR = /* @__PURE__ */ new CCDBodyVisitor();
+        ccdCastShapeCollector.reset();
+    },
+};
 
 const _ccd_filter = /* @__PURE__ */ filter.createEmpty();
 
@@ -1299,7 +1328,6 @@ const _findCCDContacts_contactManifold = /* @__PURE__ */ manifold.createContactM
 
 /** finds earliest collision for each CCD body, done after velocity integration */
 function findCCDContacts(world: World, timeStep: number, listener: Listener | undefined): void {
-    const visitor = CCD_BODY_VISITOR;
     const bodyFilter = _ccd_filter;
 
     // process each CCD body
@@ -1311,18 +1339,18 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
         ccd.computeSweptAABB(_findCCDContacts_sweptAABB, bodyA, ccdBody.deltaPosition);
 
         // setup visitor for this CCD body
-        visitor.setup(world, ccdBody, bodyA, timeStep);
+        ccdBodyVisitor.setup(world, ccdBody, bodyA, timeStep);
 
         // setup filter for this body's layers
         filter.setFromBody(bodyFilter, world.settings.layers, bodyA);
 
         // broadphase: cast swept AABB through tree
-        broadphase.castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, visitor);
+        broadphase.castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
 
         // create contact manifold if there was a hit
-        if (ccdBody.hitBodyIndex !== -1 && visitor.collector.hit) {
+        if (ccdBody.hitBodyIndex !== -1 && ccdCastShapeCollector.hasHit) {
             const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
-            const hit = visitor.collector.hit;
+            const hit = ccdCastShapeCollector.hit;
 
             // reset scratch manifold
             const contactManifold = _findCCDContacts_contactManifold;
@@ -1390,7 +1418,7 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
         }
 
         // clean up after use
-        visitor.reset();
+        ccdBodyVisitor.reset();
     }
 }
 

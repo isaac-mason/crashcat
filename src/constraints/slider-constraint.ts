@@ -6,7 +6,7 @@ import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -27,7 +27,7 @@ import type { RotationEulerConstraintPart } from './constraint-part/rotation-eul
 import * as rotationEulerConstraintPart from './constraint-part/rotation-euler-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /**
  * Slider constraint (prismatic) removes 5 DOF (2 translation perpendicular to slider + 3 rotation).
@@ -1071,7 +1071,7 @@ export function getTotalLambdaMotor(constraint: SliderConstraint): number {
 
 /** the constraint definition for slider constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<SliderConstraint>({
+    defineConstraint<SliderConstraint>({
         type: ConstraintType.SLIDER,
         setupVelocity,
         warmStartVelocity,

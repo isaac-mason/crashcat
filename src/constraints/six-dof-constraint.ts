@@ -5,7 +5,7 @@ import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
@@ -28,7 +28,7 @@ import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 import { getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
 
 const _twist_temp = /* @__PURE__ */ quat.create();
@@ -1329,7 +1329,7 @@ export function setLimitedAxis(constraint: SixDOFConstraint, axis: number, min: 
 
 /** the constraint definition for six-dof constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<SixDOFConstraint>({
+    defineConstraint<SixDOFConstraint>({
         type: ConstraintType.SIX_DOF,
         setupVelocity,
         warmStartVelocity,

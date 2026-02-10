@@ -1,9 +1,13 @@
 import type { Bodies } from '../body/bodies';
 import type { World } from '../world';
 import type { ConeConstraint } from './cone-constraint';
-import type { ConstraintBase } from './constraint-base';
-import { removeConstraintIdFromBody } from './constraint-base';
-import { type ConstraintId, ConstraintType, getConstraintIdIndex, getConstraintIdType } from './constraint-id';
+import {
+    type ConstraintId,
+    ConstraintType,
+    getConstraintIdIndex,
+    getConstraintIdType,
+    INVALID_CONSTRAINT_ID,
+} from './constraint-id';
 import type { DistanceConstraint } from './distance-constraint';
 import type { FixedConstraint } from './fixed-constraint';
 import type { HingeConstraint } from './hinge-constraint';
@@ -89,7 +93,7 @@ export type GetIterationOverridesFn<C extends ConstraintBase> = (out: Constraint
 export type GetSortFieldsFn<C extends ConstraintBase> = (out: ConstraintSortFields, constraint: C) => void;
 
 /** definition for a user constraint */
-export type UserConstraintDef<C extends ConstraintBase = ConstraintBase> = {
+export type ConstraintDef<C extends ConstraintBase = ConstraintBase> = {
     /** constraint type enum value */
     type: ConstraintType;
 
@@ -116,10 +120,10 @@ export type UserConstraintDef<C extends ConstraintBase = ConstraintBase> = {
 };
 
 /** options for defining a user constraint */
-export type UserConstraintDefOptions<C extends ConstraintBase> = UserConstraintDef<C>;
+export type ConstraintDefOptions<C extends ConstraintBase> = ConstraintDef<C>;
 
 /** define a user constraint def - ensures consistent shape */
-export function defineUserConstraint<C extends ConstraintBase>(options: UserConstraintDefOptions<C>): UserConstraintDef<C> {
+export function defineConstraint<C extends ConstraintBase>(options: ConstraintDefOptions<C>): ConstraintDef<C> {
     return {
         type: options.type,
         setupVelocity: options.setupVelocity,
@@ -133,11 +137,11 @@ export function defineUserConstraint<C extends ConstraintBase>(options: UserCons
 }
 
 /** global registry of constraint definitions keyed by ConstraintType */
-export const userConstraintDefs: Partial<Record<ConstraintType, UserConstraintDef>> = {};
+export const constraintDefs: Partial<Record<ConstraintType, ConstraintDef>> = {};
 
 /** register a constraint definition */
-export function registerUserConstraintDef(def: UserConstraintDef): void {
-    userConstraintDefs[def.type] = def;
+export function registerConstraintDef(def: ConstraintDef): void {
+    constraintDefs[def.type] = def;
 }
 
 /** get or create a constraint pool for a given type */
@@ -206,7 +210,7 @@ export function getConstraintIterationOverrides(
 ): void {
     const type = getConstraintIdType(constraintId);
     const index = getConstraintIdIndex(constraintId);
-    const def = userConstraintDefs[type];
+    const def = constraintDefs[type];
     const pool = constraints.pools[type];
     if (!pool || !def) {
         out.velocity = 0;
@@ -221,7 +225,7 @@ export function getConstraintIterationOverrides(
 export function getConstraintSortFields(out: ConstraintSortFields, constraints: Constraints, constraintId: ConstraintId): void {
     const type = getConstraintIdType(constraintId);
     const index = getConstraintIdIndex(constraintId);
-    const def = userConstraintDefs[type];
+    const def = constraintDefs[type];
     const pool = constraints.pools[type];
     if (!pool || !def) {
         out.priority = 0;
@@ -273,7 +277,7 @@ export function updateSleeping(constraintsState: Constraints, bodies: Bodies): v
 export function setupVelocityConstraints(constraintsState: Constraints, bodies: Bodies, deltaTime: number): void {
     for (const type in constraintsState.pools) {
         const pool = constraintsState.pools[type as unknown as ConstraintType]!;
-        const def = userConstraintDefs[pool.type]!;
+        const def = constraintDefs[pool.type]!;
         for (const constraint of pool.constraints) {
             if (!constraint._pooled && constraint.enabled && !constraint._sleeping) {
                 def.setupVelocity(constraint, bodies, deltaTime);
@@ -286,7 +290,7 @@ export function setupVelocityConstraints(constraintsState: Constraints, bodies: 
 export function warmStartVelocityConstraints(constraintsState: Constraints, bodies: Bodies, warmStartImpulseRatio: number): void {
     for (const type in constraintsState.pools) {
         const pool = constraintsState.pools[type as unknown as ConstraintType]!;
-        const def = userConstraintDefs[pool.type]!;
+        const def = constraintDefs[pool.type]!;
         for (const constraint of pool.constraints) {
             if (!constraint._pooled && constraint.enabled && !constraint._sleeping) {
                 def.warmStartVelocity(constraint, bodies, warmStartImpulseRatio);
@@ -305,7 +309,7 @@ export function solveVelocityConstraintsForIsland(
     for (const constraintId of constraintIds) {
         const type = getConstraintIdType(constraintId);
         const index = getConstraintIdIndex(constraintId);
-        const def = userConstraintDefs[type];
+        const def = constraintDefs[type];
         const pool = constraints.pools[type];
         if (!pool || !def) continue;
         const constraint = pool.constraints[index];
@@ -326,7 +330,7 @@ export function solvePositionConstraintsForIsland(
     for (const constraintId of constraintIds) {
         const type = getConstraintIdType(constraintId);
         const index = getConstraintIdIndex(constraintId);
-        const def = userConstraintDefs[type];
+        const def = constraintDefs[type];
         const pool = constraints.pools[type];
         if (!pool || !def) continue;
         const constraint = pool.constraints[index];
@@ -335,4 +339,81 @@ export function solvePositionConstraintsForIsland(
     }
 
     return appliedImpulse;
+} /** constraint space enum - where are constraint points specified */
+
+export enum ConstraintSpace {
+    /** points specified in world space */
+    WORLD = 0,
+    /** points specified relative to body */
+    LOCAL = 1,
+}
+/** base constraint fields shared by all constraint types */
+
+export type ConstraintBase = {
+    /** @internal whether this constraint is currently pooled, in which case it should be ignored */
+    _pooled: boolean;
+
+    /** @internal whether both bodies are sleeping (set each frame before constraint solving) */
+    _sleeping: boolean;
+
+    /** unique constraint identifier */
+    id: ConstraintId;
+
+    /** index from constraint ID */
+    index: number;
+
+    /** sequence number from constraint ID */
+    sequence: number;
+
+    /** whether constraint is enabled */
+    enabled: boolean;
+
+    /** constraint priority (higher = solved first) */
+    constraintPriority: number;
+
+    /** velocity iteration override (0 = use default) */
+    numVelocityStepsOverride: number;
+
+    /** position iteration override (0 = use default) */
+    numPositionStepsOverride: number;
+
+    /** user data */
+    userData: bigint;
+
+    /** index of first body */
+    bodyIndexA: number;
+
+    /** index of second body */
+    bodyIndexB: number;
+};
+/** helper to remove a constraint ID from a body's constraintIds array */
+
+export function removeConstraintIdFromBody(body: { constraintIds: ConstraintId[] }, constraintId: ConstraintId): void {
+    const idx = body.constraintIds.indexOf(constraintId);
+    if (idx !== -1) {
+        // swap-remove for O(1)
+        const last = body.constraintIds.length - 1;
+        if (idx !== last) {
+            body.constraintIds[idx] = body.constraintIds[last];
+        }
+        body.constraintIds.pop();
+    }
+}
+/** default constraint base fields */
+
+export function makeConstraintBase(): ConstraintBase {
+    return {
+        _pooled: true,
+        id: INVALID_CONSTRAINT_ID,
+        index: -1,
+        sequence: -1,
+        enabled: true,
+        constraintPriority: 0,
+        numVelocityStepsOverride: 0,
+        _sleeping: false,
+        numPositionStepsOverride: 0,
+        userData: 0n,
+        bodyIndexA: -1,
+        bodyIndexB: -1,
+    };
 }

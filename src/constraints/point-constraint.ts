@@ -3,7 +3,7 @@ import { mat4, quat, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -15,7 +15,7 @@ import {
 } from './constraint-id';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /** point constraint removes 3 translational DOF */
 export type PointConstraint = ConstraintBase & {
@@ -251,7 +251,7 @@ export function getTotalLambda(constraint: PointConstraint): Vec3 {
 
 /** the constraint definition for point constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<PointConstraint>({
+    defineConstraint<PointConstraint>({
         type: ConstraintType.POINT,
         setupVelocity,
         warmStartVelocity,

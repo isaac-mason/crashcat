@@ -5,7 +5,6 @@ import { INACTIVE_BODY_INDEX, sleep, updateSleepState } from './body/sleep';
 import type { ConstraintId, ConstraintType } from './constraints/constraint-id';
 import type { Constraints } from './constraints/constraints';
 import * as constraints from './constraints/constraints';
-import { userConstraintDefs } from './constraints/constraints';
 import type { ContactConstraints } from './constraints/contact-constraints';
 import type { Contacts } from './contacts';
 import { assert } from './utils/assert';
@@ -209,9 +208,8 @@ export function linkContactConstraints(
  * Iterates all constraint types and links active, enabled constraints.
  */
 export function linkUserConstraints(state: Islands, constraintsState: Constraints, bodies: Bodies): void {
-    for (const type in userConstraintDefs) {
-        const pool = constraintsState.pools[type as unknown as ConstraintType];
-        if (!pool) continue;
+    for (const type in constraintsState.pools) {
+        const pool = constraintsState.pools[type as unknown as ConstraintType]!;
         for (const constraint of pool.constraints) {
             if (!constraint._pooled && constraint.enabled) {
                 const bodyA = bodies.pool[constraint.bodyIndexA];

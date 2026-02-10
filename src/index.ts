@@ -64,15 +64,23 @@ export { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 
 export * from './constraints/combine-material';
 
+export type { ContactManifold } from './manifold';
+
 export type { ContactSettings } from './constraints/contact-constraints';
 export * as contactConstraints from './constraints/contact-constraints';
 
-export type { ConstraintBase } from './constraints/constraint-base';
+export * as constraints from './constraints/constraints';
+export type { 
+    ConstraintTypeRegistry,
+    Constraint,
+    ConstraintIterationOverrides,
+    ConstraintSortFields,
+} from './constraints/constraints';
+export { ConstraintSpace } from './constraints/constraints';
 export * as motorSettings from './constraints/constraint-part/motor-settings';
 export { type MotorSettings, MotorState } from './constraints/constraint-part/motor-settings';
 export * as springSettings from './constraints/constraint-part/spring-settings';
 export { SpringMode, type SpringSettings } from './constraints/constraint-part/spring-settings';
-export { ConstraintSpace } from './constraints/constraint-base';
 export { ConstraintType } from './constraints/constraint-id';
 export type { ConeConstraint, ConeConstraintSettings } from './constraints/cone-constraint';
 export * as coneConstraint from './constraints/cone-constraint';
@@ -92,20 +100,6 @@ export type { SliderConstraint, SliderConstraintSettings } from './constraints/s
 export * as sliderConstraint from './constraints/slider-constraint';
 export type { SwingTwistConstraint, SwingTwistConstraintSettings } from './constraints/swing-twist-constraint';
 export * as swingTwistConstraint from './constraints/swing-twist-constraint';
-
-// two-body constraint registry
-export type {
-    UserConstraintDef as TwoBodyConstraintDef,
-    Constraint as TwoBodyConstraint,
-    ConstraintPool,
-    ConstraintTypeRegistry,
-} from './constraints/constraints';
-export {
-    defineUserConstraint as defineTwoBodyConstraint,
-    userConstraintDefs as twoBodyConstraintDefs,
-    registerUserConstraintDef as registerTwoBodyConstraintDef,
-    ensurePool as getOrCreatePool,
-} from './constraints/constraints';
 
 export type { Contact } from './contacts';
 export * as contacts from './contacts';

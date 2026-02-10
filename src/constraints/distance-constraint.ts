@@ -6,7 +6,7 @@ import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -20,7 +20,7 @@ import type { AxisConstraintPart } from './constraint-part/axis-constraint-part'
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /** distance constraint removes 1 translational DOF (distance between two points) */
 export type DistanceConstraint = ConstraintBase & {
@@ -493,7 +493,7 @@ export function setDistance(constraint: DistanceConstraint, minDistance: number,
 }
 
 /** the constraint definition for distance constraint */
-export const def = /* @__PURE__ */ (() => defineUserConstraint<DistanceConstraint>({
+export const def = /* @__PURE__ */ (() => defineConstraint<DistanceConstraint>({
     type: ConstraintType.DISTANCE,
     setupVelocity,
     warmStartVelocity,

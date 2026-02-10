@@ -4,7 +4,7 @@ import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraint-base';
+import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -18,7 +18,7 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
-import { type ConstraintPool, defineUserConstraint, ensurePool } from './constraints';
+import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 
 /**
  * Cone constraint constrains 2 bodies to a single point and limits the swing between twist axes within a cone.
@@ -455,7 +455,7 @@ export function getTotalLambdaRotation(constraint: ConeConstraint): number {
 
 /** the constraint definition for cone constraint */
 export const def = /* @__PURE__ */ (() =>
-    defineUserConstraint<ConeConstraint>({
+    defineConstraint<ConeConstraint>({
         type: ConstraintType.CONE,
         setupVelocity,
         warmStartVelocity,
