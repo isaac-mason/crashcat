@@ -825,7 +825,8 @@ function updateCarMovement(dt: number) {
     carX += (targetX - carX) * Math.min(1, CAR_X_LERP * dt);
 
     // subtle yaw from lateral movement
-    const lateralV = (carX - prevX) / dt;
+    // guard against division by very small dt to prevent extreme lateral velocity values
+    const lateralV = dt > 0.001 ? (carX - prevX) / dt : 0;
     const yaw = Math.atan2(-lateralV, CAR_SPEED) * 0.5;
 
     vec3.set(_targetPos, carX, CAR_HALF_EXTENTS[1], carZ);
@@ -851,7 +852,8 @@ function updateCarMesh(now: number) {
 }
 
 function updateCatMesh(now: number, lateralV: number, dt: number) {
-    const normalizedLateral = lateralV / (CAR_SPEED * 0.5);
+    // clamp normalized lateral to prevent extreme values from affecting cat animation
+    const normalizedLateral = Math.max(-2, Math.min(2, lateralV / (CAR_SPEED * 0.5)));
     const targetRoll = -normalizedLateral * CAT_SWAY_ROLL;
     const targetYaw = -normalizedLateral * CAT_SWAY_YAW;
     const targetPitch = Math.abs(normalizedLateral) * CAT_SWAY_PITCH;
