@@ -848,9 +848,9 @@ function updateKccDebugVisualization(characterState: CharacterState) {
 
     // Show contacts
     if (kccDebugSettings.showContacts) {
-        const activeContacts = kcc.getActiveContacts(character.contacts);
+        const contacts = character.contacts;
 
-        for (const contact of activeContacts) {
+        for (const contact of contacts) {
             // Contact marker (yellow sphere)
             const markerGeometry = new THREE.SphereGeometry(0.1, 8, 8);
             const markerMaterial = new THREE.MeshBasicMaterial({

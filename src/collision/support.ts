@@ -82,11 +82,12 @@ export type TriangleSupport = {
 
 function triangleGetSupport(this: TriangleSupport, direction: Vec3, out: Vec3): void {
     const { a, b, c } = this;
+    const [dx, dy, dz] = direction;
 
     // project vertices on direction
-    const d1 = a[0] * direction[0] + a[1] * direction[1] + a[2] * direction[2];
-    const d2 = b[0] * direction[0] + b[1] * direction[1] + b[2] * direction[2];
-    const d3 = c[0] * direction[0] + c[1] * direction[1] + c[2] * direction[2];
+    const d1 = a[0] * dx + a[1] * dy + a[2] * dz;
+    const d2 = b[0] * dx + b[1] * dy + b[2] * dz;
+    const d3 = c[0] * dx + c[1] * dy + c[2] * dz;
 
     // return vertex with biggest projection
     if (d1 > d2) {

@@ -287,11 +287,10 @@ export type CapsuleNoConvexSupport = {
 function capsuleNoConvexGetSupport(this: CapsuleNoConvexSupport, direction: Vec3, out: Vec3): void {
     // a line segment along Y axis from (0, -halfHeight, 0) to (0, halfHeight, 0)
     // return top or bottom endpoint based on Y component of direction
-    if (direction[1] > 0) {
-        vec3.copy(out, this.halfHeightOfCylinder);
-    } else {
-        vec3.negate(out, this.halfHeightOfCylinder);
-    }
+    const halfHeight = this.halfHeightOfCylinder[1];
+    out[0] = 0;
+    out[1] = direction[1] > 0 ? halfHeight : -halfHeight;
+    out[2] = 0;
 }
 
 export function createCapsuleNoConvexSupport(): CapsuleNoConvexSupport {
@@ -313,7 +312,9 @@ export function setCapsuleNoConvexSupport(
     const scaledHalfHeight = absScale * halfHeightOfCylinder;
     const scaledRadius = absScale * radius;
 
-    vec3.set(out.halfHeightOfCylinder, 0, scaledHalfHeight, 0);
+    out.halfHeightOfCylinder[0] = 0;
+    out.halfHeightOfCylinder[1] = scaledHalfHeight;
+    out.halfHeightOfCylinder[2] = 0;
     out.convexRadius = scaledRadius;
 }
 
@@ -328,20 +329,22 @@ export type CapsuleWithConvexSupport = {
     getSupport(direction: Vec3, out: Vec3): void;
 };
 
-const _capsuleWithConvexGetSupport_radiusVec = /* @__PURE__ */ vec3.create();
-
 function capsuleWithConvexGetSupport(this: CapsuleWithConvexSupport, direction: Vec3, out: Vec3): void {
-    const length = vec3.length(direction);
-    const radiusVec =
-        length > 0
-            ? vec3.scale(_capsuleWithConvexGetSupport_radiusVec, direction, this.radius / length)
-            : vec3.zero(_capsuleWithConvexGetSupport_radiusVec);
+    const dx = direction[0];
+    const dy = direction[1];
+    const dz = direction[2];
+    const lengthSq = dx * dx + dy * dy + dz * dz;
+    const halfHeight = this.halfHeightOfCylinder[1];
 
-    // add radius in direction to the appropriate endpoint
-    if (direction[1] > 0) {
-        vec3.add(out, radiusVec, this.halfHeightOfCylinder);
+    if (lengthSq > 0) {
+        const s = this.radius / Math.sqrt(lengthSq);
+        out[0] = dx * s;
+        out[1] = dy * s + (dy > 0 ? halfHeight : -halfHeight);
+        out[2] = dz * s;
     } else {
-        vec3.subtract(out, radiusVec, this.halfHeightOfCylinder);
+        out[0] = 0;
+        out[1] = halfHeight;
+        out[2] = 0;
     }
 }
 
@@ -365,7 +368,9 @@ export function setCapsuleWithConvexSupport(
     const scaledHalfHeight = absScale * halfHeightOfCylinder;
     const scaledRadius = absScale * radius;
 
-    vec3.set(out.halfHeightOfCylinder, 0, scaledHalfHeight, 0);
+    out.halfHeightOfCylinder[0] = 0;
+    out.halfHeightOfCylinder[1] = scaledHalfHeight;
+    out.halfHeightOfCylinder[2] = 0;
     out.radius = scaledRadius;
     out.convexRadius = 0;
 }

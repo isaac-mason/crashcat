@@ -54,11 +54,7 @@ function ignoreSingleBodyChainedBodyFilter(body: RigidBody): boolean {
     return true;
 }
 
-/**
- * Kinematic character controller state.
- * Contains all data for a kinematic character including transform, movement,
- * configuration, and pooled storage for contacts and constraints.
- */
+/** KCC (kinematic character controller) state */
 export type KCC = {
     /** world-space position */
     position: Vec3;
@@ -129,8 +125,8 @@ export type KCC = {
           }
         | undefined;
 
-    /** contacts */
-    contacts: ContactsPool;
+    /** active contacts for current frame */
+    contacts: CharacterContact[];
 
     /** pool of listener contact tracking values */
     listenerContacts: ListenerContactsPool;
@@ -190,8 +186,6 @@ export type CharacterContact = {
     canPushCharacter: boolean;
     /** can character push body? (apply impulses) */
     canReceiveImpulses: boolean;
-    /** is this contact currently in the pool (not acquired)? */
-    pooled: boolean;
 };
 
 /** movement constraint derived from a contact, used during constraint solving */
@@ -210,8 +204,6 @@ export type CharacterConstraint = {
     planeDistance: number;
     /** is this a steep slope constraint? */
     isSteepSlope: boolean;
-    /** @internal is this constraint currently in the pool (not acquired)? */
-    _pooled: boolean;
 };
 
 /** information about the character's current ground contact */
@@ -466,8 +458,8 @@ export function create(settings: KCCSettings, position: Vec3, quaternion: Quat):
         innerRigidBodyId: INVALID_BODY_ID,
         innerRigidBody: settings.innerRigidBody,
 
-        // pools
-        contacts: createContactsPool(settings.maxNumHits ?? DEFAULT_KCC_SETTINGS.maxNumHits),
+        // contacts (active contacts for current frame, borrowed from module-scope free list)
+        contacts: [],
 
         // contact tracking
         listenerContacts: createListenerContactsPool(),
@@ -584,8 +576,8 @@ function createListenerContactsPool(capacity: number = DEFAULT_LISTENER_CONTACTS
 
 /** pack bodyId and subShapeId into a single 32-bit number */
 function packListenerContactKey(bodyId: BodyId, subShapeId: number): number {
-    // Use lower 16 bits for subShapeId, upper 16 bits for bodyId
-    // This works because body IDs are typically small integers and subShapeIds are also limited
+    // use lower 16 bits for subShapeId, upper 16 bits for bodyId
+    // this works because body IDs are typically small integers and subShapeIds are also limited
     return ((bodyId & 0xffff) << 16) | (subShapeId & 0xffff);
 }
 
@@ -597,7 +589,7 @@ function acquireListenerContact(pool: ListenerContactsPool): ListenerContactValu
         value = pool.pool[index];
         value.poolIndex = index;
     } else {
-        // Grow pool if needed
+        // grow pool if needed
         value = createListenerContactValue();
         value.poolIndex = pool.pool.length;
         pool.pool.push(value);
@@ -616,7 +608,7 @@ function releaseAllListenerContacts(pool: ListenerContactsPool): void {
 
 /** finds a listener contact by packed key, returns null if not found */
 function findListenerContact(pool: ListenerContactsPool, packedKey: number): ListenerContactValue | null {
-    // Linear scan through active contacts (non-pooled)
+    // linear scan through active contacts
     for (const value of pool.pool) {
         if (value.poolIndex !== -1 && value.packedKey === packedKey) {
             return value;
@@ -659,120 +651,50 @@ export function createDefaultUpdateSettings(): UpdateSettings {
     };
 }
 
-const DEFAULT_CONTACT_POOL_SIZE = 256; // matches maxNumHits
-const DEFAULT_CONSTRAINT_POOL_SIZE = 512; // 2x contacts (steep slopes create 2 constraints)
+/** contacts pool */
+const _contactsPool: CharacterContact[] = [];
 
-/** pool for managing CharacterContact objects with minimal allocations */
-type ContactsPool = {
-    /** all contacts (pooled and active) */
-    pool: CharacterContact[];
-    /** indices of free (pooled) contacts */
-    freeIndices: number[];
-};
-
-/** creates a new contacts pool with the given capacity */
-function createContactsPool(capacity: number = DEFAULT_CONTACT_POOL_SIZE): ContactsPool {
-    const contactsPool: ContactsPool = {
-        pool: [],
-        freeIndices: [],
-    };
-    for (let i = 0; i < capacity; i++) {
-        contactsPool.pool.push(createCharacterContact());
-        contactsPool.freeIndices.push(i);
-    }
-    return contactsPool;
-}
-
-/** acquires a contact from the pool */
-function acquireContact(contactsPool: ContactsPool): CharacterContact {
-    const index = contactsPool.freeIndices.pop();
-    let contact: CharacterContact;
-    if (index === undefined) {
-        // pool exhausted, allocate new
-        contact = createCharacterContact();
-        contactsPool.pool.push(contact);
-    } else {
-        contact = contactsPool.pool[index];
-    }
-    contact.pooled = false;
+/** acquires a contact from the free list or creates a new one */
+function acquireContact(contacts: CharacterContact[]): CharacterContact {
+    const contact = _contactsPool.pop() ?? createCharacterContact();
+    contacts.push(contact);
     return contact;
 }
 
-/** releases a contact at the given index back to the pool */
-function releaseContact(contactsPool: ContactsPool, index: number): void {
-    contactsPool.pool[index].pooled = true;
-    contactsPool.freeIndices.push(index);
-}
-
-/** releases all acquired contacts back to the pool */
-function releaseAllContacts(contactsPool: ContactsPool): void {
-    for (let i = 0; i < contactsPool.pool.length; i++) {
-        const contact = contactsPool.pool[i];
-        if (!contact.pooled) {
-            contact.pooled = true;
-            contactsPool.freeIndices.push(i);
-        }
+/** releases all contacts back to the free list */
+function releaseAllContacts(contacts: CharacterContact[]): void {
+    for (let i = 0; i < contacts.length; i++) {
+        _contactsPool.push(contacts[i]);
     }
+    contacts.length = 0;
 }
 
-/** returns array of active (non-pooled) contacts */
-export function getActiveContacts(contactsPool: ContactsPool): CharacterContact[] {
-    return contactsPool.pool.filter((c) => !c.pooled);
+/** releases a single contact at index back to free list (swap-remove for O(1)) */
+function releaseContact(contacts: CharacterContact[], index: number): void {
+    _contactsPool.push(contacts[index]);
+    contacts[index] = contacts[contacts.length - 1];
+    contacts.pop();
 }
 
-/** pool for managing CharacterConstraint objects with minimal allocations */
-type ConstraintsPool = {
-    /** all constraints (pooled and active) */
-    pool: CharacterConstraint[];
-    /** indices of free (pooled) constraints */
-    freeIndices: number[];
-};
+/** constraints free list (module-scope) */
+const _constraintsPool: CharacterConstraint[] = [];
 
-/** creates a new constraints pool with the given capacity */
-function createConstraintsPool(capacity: number = DEFAULT_CONSTRAINT_POOL_SIZE): ConstraintsPool {
-    const pool: ConstraintsPool = {
-        pool: [],
-        freeIndices: [],
-    };
-    for (let i = 0; i < capacity; i++) {
-        pool.pool.push(createEmptyCharacterConstraint());
-        pool.freeIndices.push(i);
-    }
-    return pool;
-}
+/** active constraints (module-scope, reused across calls) */
+const _activeConstraints: CharacterConstraint[] = [];
 
-/** Module-level constraints pool - constraints are ephemeral within moveShape() so no per-character ownership needed */
-const _constraintsPool: ConstraintsPool = /* @__PURE__ */ createConstraintsPool(DEFAULT_CONSTRAINT_POOL_SIZE);
-
-/** acquires a constraint from the pool */
-function acquireConstraint(pool: ConstraintsPool): CharacterConstraint {
-    const index = pool.freeIndices.pop();
-    let constraint: CharacterConstraint;
-    if (index === undefined) {
-        // Pool exhausted - allocate new (rare)
-        constraint = createEmptyCharacterConstraint();
-        pool.pool.push(constraint);
-    } else {
-        constraint = pool.pool[index];
-    }
-    constraint._pooled = false;
+/** acquires a constraint from the free list and adds to constraints array */
+function acquireConstraint(constraints: CharacterConstraint[]): CharacterConstraint {
+    const constraint = _constraintsPool.pop() ?? createEmptyCharacterConstraint();
+    constraints.push(constraint);
     return constraint;
 }
 
-/** releases all acquired constraints back to the pool */
-function releaseAllConstraints(pool: ConstraintsPool): void {
-    for (let i = 0; i < pool.pool.length; i++) {
-        const constraint = pool.pool[i];
-        if (!constraint._pooled) {
-            constraint._pooled = true;
-            pool.freeIndices.push(i);
-        }
+/** releases all constraints back to the free list */
+function releaseAllConstraints(constraints: CharacterConstraint[]): void {
+    for (let i = 0; i < constraints.length; i++) {
+        _constraintsPool.push(constraints[i]);
     }
-}
-
-/** returns array of active (non-pooled) constraints */
-function getActiveConstraints(pool: ConstraintsPool): CharacterConstraint[] {
-    return pool.pool.filter((c) => !c._pooled);
+    constraints.length = 0;
 }
 
 /**
@@ -796,7 +718,6 @@ function createCharacterContact(): CharacterContact {
         wasDiscarded: false,
         canPushCharacter: false,
         canReceiveImpulses: true,
-        pooled: true,
     };
 }
 
@@ -817,7 +738,6 @@ function resetContact(contact: CharacterContact): void {
     contact.wasDiscarded = false;
     contact.canPushCharacter = false;
     contact.canReceiveImpulses = true;
-    contact.pooled = true;
 }
 
 /** creates an empty CharacterConstraint with default values */
@@ -830,7 +750,6 @@ function createEmptyCharacterConstraint(): CharacterConstraint {
         planeNormal: vec3.create(),
         planeDistance: 0,
         isSteepSlope: false,
-        _pooled: true,
     };
 }
 
@@ -866,11 +785,11 @@ export function isSlopeTooSteep(character: KCC, normal: Vec3): boolean {
  * @param outQuaternion output for the orientation
  */
 export function getCenterOfMassTransform(character: KCC, outPosition: Vec3, outQuaternion: Quat): void {
-    // Rotate shapeOffset by character quaternion and add to position
+    // rotate shapeOffset by character quaternion and add to position
     vec3.transformQuat(outPosition, character.shapeOffset, character.quaternion);
     vec3.add(outPosition, outPosition, character.position);
 
-    // Quaternion is unchanged
+    // quaternion is unchanged
     quat.copy(outQuaternion, character.quaternion);
 }
 
@@ -978,11 +897,11 @@ const _contactVelocity_staticAngular = /* @__PURE__ */ vec3.create();
 
 const _surfaceNormal_temp = /* @__PURE__ */ vec3.create();
 
-/** character collide shape collector - collects hits into ContactsPool */
+/** character collide shape collector - collects hits into contacts array */
 const characterCollideCollector = {
     bodyIdB: -1,
     earlyOutFraction: Number.MAX_VALUE,
-    contactsPool: null! as ContactsPool,
+    contacts: null! as CharacterContact[],
     maxHits: 256,
     hitCount: 0,
     world: null! as World,
@@ -998,16 +917,14 @@ const characterCollideCollector = {
 
             // try to merge similar contacts if enabled
             if (this.hitReductionCosMaxAngle > -1) {
-                const pool = this.contactsPool.pool;
+                const contacts = this.contacts;
 
-                // loop backwards through pool to find similar active contacts
-                for (let i = pool.length - 1; i >= 0; i--) {
-                    const contactI = pool[i];
-                    if (contactI.pooled) continue; // skip inactive contacts
+                // loop backwards through contacts to find similar ones
+                for (let i = contacts.length - 1; i >= 0; i--) {
+                    const contactI = contacts[i];
 
                     for (let j = i - 1; j >= 0; j--) {
-                        const contactJ = pool[j];
-                        if (contactJ.pooled) continue; // skip inactive contacts
+                        const contactJ = contacts[j];
                         // check if same body (including subShapeId) and normals are similar
                         if (
                             contactI.bodyId === contactJ.bodyId &&
@@ -1016,15 +933,13 @@ const characterCollideCollector = {
                         ) {
                             // remove the contact with bigger distance (less penetrating)
                             if (contactI.distance > contactJ.distance) {
-                                // release i back to pool
-                                releaseContact(this.contactsPool, i);
+                                releaseContact(contacts, i);
                                 this.hitCount--;
 
-                                // break - can't continue with i since we just released it
+                                // break - can't continue with i since we just removed it
                                 break;
                             } else {
-                                // release j back to pool
-                                releaseContact(this.contactsPool, j);
+                                releaseContact(contacts, j);
                                 this.hitCount--;
 
                                 // continue checking other contacts against i
@@ -1045,7 +960,7 @@ const characterCollideCollector = {
             }
         }
 
-        const contact = acquireContact(this.contactsPool);
+        const contact = acquireContact(this.contacts);
 
         // position is the contact point on shape B (the world body)
         vec3.copy(contact.position, hit.pointB);
@@ -1148,7 +1063,7 @@ const characterCollideCollector = {
 
     reset(): void {
         this.bodyIdB = -1;
-        this.contactsPool = null!;
+        this.contacts = null!;
         this.maxHitsExceeded = false;
         this.maxHits = 256;
         this.hitCount = 0;
@@ -1329,7 +1244,7 @@ function compareContactsForDeterminism(a: CharacterContact, b: CharacterContact)
 }
 
 /** sorts contacts for determinism, ensures identical ordering across frames/runs */
-function sortContactsForDeterminism(contacts: CharacterContact[]): void {
+function sortContacts(contacts: CharacterContact[]): void {
     contacts.sort(compareContactsForDeterminism);
 }
 
@@ -1339,15 +1254,14 @@ const SCALE_V1 = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
  * Gets contacts at the given position using broadphase + narrowphase collision detection.
  * Includes deterministic sorting and hit reduction.
  *
- * Contacts are acquired from the provided pool.
- * Use getActiveContacts() to retrieve them.
+ * Contacts are acquired from the module-scope free list.
  *
  * @param world the physics world
  * @param character the character controller
  * @param position position to test
  * @param movementDirection normalized movement direction (for active edge handling)
  * @param filter collision filter
- * @param contactsPool pool to write contacts to
+ * @param contacts array to write contacts to (will be cleared first)
  */
 function getContactsAtPosition(
     world: World,
@@ -1356,10 +1270,10 @@ function getContactsAtPosition(
     movementDirection: Vec3,
     filter: Filter,
     listener: CharacterListener | undefined,
-    contactsPool: ContactsPool,
+    contacts: CharacterContact[],
 ): void {
-    // release any previously active contacts
-    releaseAllContacts(contactsPool);
+    // release any previously active contacts back to free list
+    releaseAllContacts(contacts);
 
     // calculate shape world position (position + rotated shapeOffset + characterPadding * up)
     vec3.transformQuat(_getContacts_shapePos, character.shapeOffset, character.quaternion);
@@ -1379,7 +1293,7 @@ function getContactsAtPosition(
     _characterCollideSettings.collideOnlyWithActiveEdges = true;
 
     // setup collector
-    characterCollideCollector.contactsPool = contactsPool;
+    characterCollideCollector.contacts = contacts;
     characterCollideCollector.world = world;
     characterCollideCollector.maxHits = character.maxNumHits;
     characterCollideCollector.hitCount = 0;
@@ -1427,16 +1341,13 @@ function getContactsAtPosition(
     // reset collector
     characterCollideCollector.reset();
 
-    // get active contacts for sorting
-    const activeContacts = getActiveContacts(contactsPool);
-
-    // sort contacts for determinism
-    sortContactsForDeterminism(activeContacts);
+    // sort active contacts for determinism
+    sortContacts(contacts);
 
     // reduce distance to contact by padding to ensure we stay away from objects
     // this makes collision detection cheaper and ensures proper spacing
-    for (const contact of activeContacts) {
-        contact.distance -= character.characterPadding;
+    for (let i = 0; i < contacts.length; i++) {
+        contacts[i].distance -= character.characterPadding;
     }
 }
 
@@ -1735,17 +1646,21 @@ const _determineConstraints_horizontalNormal = /* @__PURE__ */ vec3.create();
  * @param character the character controller
  * @param contacts array of contacts to convert
  * @param deltaTime time step
- * @param pool constraints pool to use
+ * @param constraints array to write constraints to (will be cleared first)
  */
-function determineConstraints(character: KCC, contacts: CharacterContact[], deltaTime: number, pool: ConstraintsPool): void {
-    // release any previously active constraints
-    releaseAllConstraints(pool);
+function determineConstraints(
+    character: KCC,
+    contacts: CharacterContact[],
+    deltaTime: number,
+    constraints: CharacterConstraint[],
+): void {
+    // release any previously active constraints back to free list
+    releaseAllConstraints(constraints);
 
     const invDeltaTime = deltaTime > 0 ? 1 / deltaTime : 0;
 
     for (const contact of contacts) {
         if (contact.wasDiscarded) continue;
-        if (contact.pooled) continue;
 
         // calculate contact velocity with penetration recovery
         const contactVelocity = vec3.copy(_determineConstraints_contactVelocity, contact.linearVelocity);
@@ -1761,7 +1676,7 @@ function determineConstraints(character: KCC, contacts: CharacterContact[], delt
         }
 
         // create main constraint
-        const constraint = acquireConstraint(pool);
+        const constraint = acquireConstraint(constraints);
         constraint.contact = contact;
         constraint.toi = 0;
         constraint.projectedVelocity = 0;
@@ -1787,7 +1702,7 @@ function determineConstraints(character: KCC, contacts: CharacterContact[], delt
                     vec3.normalize(_determineConstraints_horizontalNormal, _determineConstraints_horizontalNormal);
 
                     // create vertical wall constraint
-                    const verticalConstraint = acquireConstraint(pool);
+                    const verticalConstraint = acquireConstraint(constraints);
                     verticalConstraint.contact = contact;
                     verticalConstraint.toi = 0;
                     verticalConstraint.projectedVelocity = 0;
@@ -2088,11 +2003,9 @@ function solveConstraints(
     listener: CharacterListener | undefined,
     outDisplacement: Vec3,
     ioIgnoredContacts: CharacterContact[],
-    pool: ConstraintsPool,
+    constraints: CharacterConstraint[],
 ): number {
     vec3.zero(outDisplacement);
-
-    const constraints = getActiveConstraints(pool);
 
     if (constraints.length === 0) {
         // no constraints - move freely
@@ -2369,11 +2282,12 @@ function updateSupportingContact(
     lastDeltaTime: number,
     listener: CharacterListener | undefined,
 ): void {
-    const contacts = getActiveContacts(character.contacts);
+    const contacts = character.contacts;
 
     /* step 1: flag contacts as having collision if they're close enough */
     // skip contacts we're moving away from (unless skipContactVelocityCheck is true)
-    for (const contact of contacts) {
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (contact.wasDiscarded) continue;
         if (contact.hadCollision) continue; // already marked by moveShape
 
@@ -2558,7 +2472,7 @@ function updateSupportingContact(
                 // in such a way that we can't slide off - in this case we're also supported
 
                 // convert the contacts into constraints
-                determineConstraints(character, contacts, lastDeltaTime, _constraintsPool);
+                determineConstraints(character, contacts, lastDeltaTime, _activeConstraints);
 
                 // solve displacement using these constraints with -up velocity
                 // this checks if we would move at all when "falling"
@@ -2574,11 +2488,11 @@ function updateSupportingContact(
                     undefined, // no listener during corner check
                     _updateSupporting_displacement,
                     _updateSupporting_ignoredContacts,
-                    _constraintsPool,
+                    _activeConstraints,
                 );
 
                 // release constraints after use
-                releaseAllConstraints(_constraintsPool);
+                releaseAllConstraints(_activeConstraints);
 
                 // if we're blocked then we're supported, otherwise we're sliding
                 // threshold: displacement² < (0.6 * lastDeltaTime)²
@@ -2631,9 +2545,10 @@ function cancelVelocityTowardsSteepSlopes(character: KCC, desiredVelocity: Vec3,
         return;
     }
 
-    const contacts = getActiveContacts(character.contacts);
+    const contacts = character.contacts;
 
-    for (const contact of contacts) {
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (!contact.hadCollision || contact.wasDiscarded) continue;
 
         // only process steep slopes
@@ -2690,9 +2605,10 @@ function hasSteepSlopesToWalk(character: KCC, linearVelocity: Vec3): boolean {
         return false;
     }
 
-    const contacts = getActiveContacts(character.contacts);
+    const contacts = character.contacts;
 
-    for (const contact of contacts) {
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (!contact.hadCollision || contact.wasDiscarded) continue;
 
         // Only check steep slopes
@@ -2722,17 +2638,16 @@ const _moveShape_ignoredContacts: CharacterContact[] = [];
 const _moveShape_velocity = /* @__PURE__ */ vec3.create();
 
 /**
- * Core movement with collision resolution.
+ * core movement with collision resolution.
  *
- * Algorithm:
- * 1. For each collision iteration (up to maxCollisionIterations):
- *    a. Get contacts at current position
- *    b. Remove conflicting contacts (opposing penetration normals)
- *    c. Convert contacts to constraints
- *    d. Solve movement within constraints
- *    e. Verify path with sweep test
- *    f. Update position
- *    g. Early out if displacement is too small
+ * for each collision iteration (up to maxCollisionIterations):
+ *    - get contacts at current position
+ *    - remove conflicting contacts (opposing penetration normals)
+ *    - convert contacts to constraints
+ *    - solve movement within constraints
+ *    - verify path with sweep test
+ *    - update position
+ *    - early out if displacement is too small
  *
  * @param world the physics world
  * @param character the character controller
@@ -2774,14 +2689,14 @@ function moveShape(
         /* get contacts at current position */
         getContactsAtPosition(world, character, position, _moveShape_movementDirection, filter, listener, character.contacts);
 
-        const contacts = getActiveContacts(character.contacts);
+        const contacts = character.contacts;
 
         /* remove conflicting contacts (opposing penetration normals) */
         _moveShape_ignoredContacts.length = 0;
         removeConflictingContacts(contacts, character.characterPadding, _moveShape_ignoredContacts);
 
         /* convert contacts to constraints */
-        determineConstraints(character, contacts, deltaTime, _constraintsPool);
+        determineConstraints(character, contacts, deltaTime, _activeConstraints);
 
         /* solve movement within constraints */
         // pass ignoredContacts so rejected contacts are tracked
@@ -2794,7 +2709,7 @@ function moveShape(
             listener,
             _moveShape_displacement,
             _moveShape_ignoredContacts,
-            _constraintsPool,
+            _activeConstraints,
         );
 
         /* verify path with sweep test */
@@ -2831,7 +2746,7 @@ function moveShape(
     }
 
     // release constraints after all iterations
-    releaseAllConstraints(_constraintsPool);
+    releaseAllConstraints(_activeConstraints);
 }
 
 /**
@@ -2840,8 +2755,9 @@ function moveShape(
  */
 function resetContactTracking(character: KCC): void {
     // mark all current contacts with hadCollision as "not seen this frame"
-    const contacts = getActiveContacts(character.contacts);
-    for (const contact of contacts) {
+    const contacts = character.contacts;
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (contact.hadCollision) {
             const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
             const value = acquireListenerContact(character.listenerContacts);
@@ -3043,8 +2959,9 @@ function finalizeContactTracking(world: World, character: KCC, listener: Charact
         value.count = 0;
     }
 
-    const contacts = getActiveContacts(character.contacts);
-    for (const contact of contacts) {
+    const contacts = character.contacts;
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (contact.hadCollision) {
             const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
             const tracked = findListenerContact(character.listenerContacts, packedKey);
@@ -3254,8 +3171,9 @@ export function refreshContacts(world: World, character: KCC, filter: Filter, li
  * @returns true if the character has collided with the specified body
  */
 export function hasCollidedWith(character: KCC, bodyId: BodyId): boolean {
-    const contacts = getActiveContacts(character.contacts);
-    for (const contact of contacts) {
+    const contacts = character.contacts;
+    for (let i = 0; i < contacts.length; i++) {
+        const contact = contacts[i];
         if (contact.hadCollision && contact.bodyId === bodyId) {
             return true;
         }
@@ -3323,21 +3241,22 @@ export function setShape(
             vec3.zero(_setShape_movementDirection);
         }
 
-        // create temporary pool for testing new shape
-        const tempPool = createContactsPool(character.maxNumHits);
+        // create temporary contacts array for testing new shape
+        const tempContacts: CharacterContact[] = [];
 
-        // test collisions with new shape using temporary pool
+        // test collisions with new shape using temporary array
         const oldShape = character.shape;
         character.shape = newShape;
-        getContactsAtPosition(world, character, character.position, _setShape_movementDirection, filter, listener, tempPool);
+        getContactsAtPosition(world, character, character.position, _setShape_movementDirection, filter, listener, tempContacts);
         character.shape = oldShape;
 
-        // validate contacts in temporary pool
-        const tempContacts = getActiveContacts(tempPool);
-        for (const contact of tempContacts) {
+        // validate contacts
+        for (let i = 0; i < tempContacts.length; i++) {
+            const contact = tempContacts[i];
             // reject if penetrating deeper than threshold and not a sensor
             if (contact.distance < -maxPenetrationDepth && !contact.isSensor) {
-                // shape change rejected - discard temp pool
+                // shape change rejected - release temp contacts
+                releaseAllContacts(tempContacts);
                 return false;
             }
         }
@@ -3345,7 +3264,9 @@ export function setShape(
         // shape change is valid - track contact changes
         resetContactTracking(character);
         character.shape = newShape;
-        character.contacts = tempPool;
+        // release old contacts and use temp contacts
+        releaseAllContacts(character.contacts);
+        character.contacts = tempContacts;
         updateSupportingContact(world, character, true /* skipContactVelocityCheck */, character.lastDeltaTime, listener);
         finalizeContactTracking(world, character, listener);
     } else {
@@ -3496,9 +3417,10 @@ function moveToContact(
     );
 
     // ensure the contact we moved to is marked as colliding
-    const contacts = getActiveContacts(character.contacts);
+    const contacts = character.contacts;
     let foundContact = false;
-    for (const c of contacts) {
+    for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
         if (c.bodyId === contact.bodyId && c.subShapeId === contact.subShapeId) {
             c.hadCollision = true;
             foundContact = true;
@@ -3661,8 +3583,9 @@ export function walkStairs(
 
     // collect steep slopes we're pushing against
     _walkStairs_steepSlopeNormalsCount = 0;
-    const contacts = getActiveContacts(character.contacts);
-    for (const c of contacts) {
+    const contacts = character.contacts;
+    for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
         if (!c.hadCollision || c.wasDiscarded) continue;
         if (!isSlopeTooSteep(character, c.surfaceNormal)) continue;
 
