@@ -225,8 +225,8 @@ readmeText = readmeText.replace(renderSourceRegex, (fullMatch, modulePath, typeN
 });
 
 /* <Snippet source="./snippets/file.ts" select="group" /> */
-const snippetRegex = /<Snippet\s+source=["'](.+?)["']\s+select=["'](.+?)["']\s*\/>/g;
-readmeText = readmeText.replace(snippetRegex, (fullMatch, sourcePath, groupName) => {
+const snippetWithSelectRegex = /<Snippet\s+source=["'](.+?)["']\s+select=["'](.+?)["']\s*\/>/g;
+readmeText = readmeText.replace(snippetWithSelectRegex, (fullMatch, sourcePath, groupName) => {
     const absSourcePath = path.join(path.dirname(new URL(import.meta.url).pathname), sourcePath);
     if (!fs.existsSync(absSourcePath)) {
         console.warn(`Snippet source file not found: ${absSourcePath}`);
@@ -265,6 +265,25 @@ readmeText = readmeText.replace(snippetRegex, (fullMatch, sourcePath, groupName)
     // Remove any leading/trailing blank lines
     snippetCode = snippetCode.replace(/^\s*\n|\n\s*$/g, '');
     return `\`\`\`ts\n${snippetCode}\n\`\`\``;
+});
+
+/* <Snippet source="./file.ts" /> - without select, use entire file */
+const snippetWithoutSelectRegex = /<Snippet\s+source=["'](.+?)["']\s*\/>/g;
+readmeText = readmeText.replace(snippetWithoutSelectRegex, (fullMatch, sourcePath) => {
+    const absSourcePath = path.join(path.dirname(new URL(import.meta.url).pathname), sourcePath);
+    if (!fs.existsSync(absSourcePath)) {
+        console.warn(`Snippet source file not found: ${absSourcePath}`);
+        return fullMatch;
+    }
+    let sourceText = fs.readFileSync(absSourcePath, 'utf-8');
+    
+    // Remove any SNIPPET_START/SNIPPET_END markers from the entire file
+    sourceText = sourceText.replace(/^[ \t]*\/\*[ \t]*SNIPPET_START:[^\*]*\*\/.*\n?/gm, '');
+    sourceText = sourceText.replace(/^[ \t]*\/\*[ \t]*SNIPPET_END:[^\*]*\*\/.*\n?/gm, '');
+    
+    // Remove any leading/trailing blank lines
+    sourceText = sourceText.replace(/^\s*\n|\n\s*$/g, '');
+    return `\`\`\`ts\n${sourceText}\n\`\`\``;
 });
 
 /* write result */
