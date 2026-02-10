@@ -2,7 +2,7 @@ import type { Vec3 } from 'mathcat';
 import { quat, vec3 } from 'mathcat';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
-import type { Listener, RigidBody } from 'crashcat';
+import type { HingeConstraint, Listener, RigidBody } from 'crashcat';
 import {
     addBroadphaseLayer,
     addObjectLayer,
@@ -122,6 +122,15 @@ const chassisDepth = 6; // Z thickness of the central body
 
 let motorSpeed = 7;
 
+// collect crank hinge handles so we can update their target velocity when
+// `motorSpeed` changes (the gui only updates the variable currently)
+const crankHinges: HingeConstraint[] = [];
+
+function updateMotorTargets() {
+    for (const h of crankHinges) {
+        hingeConstraint.setTargetAngularVelocity(h, -motorSpeed);
+    }
+}
 // The body is rotated PI/2 around Z so that:
 //   local X (bodyHeight=2) -> world Y (height)
 //   local Y (bodyWidth=10) -> world -X (length)
@@ -231,7 +240,8 @@ function createLegSet(side: number, crankPhase: number): void {
 
     motorSettings.setTorqueLimit(crankHinge.motorSettings, 1e6);
     hingeConstraint.setMotorState(crankHinge, MotorState.VELOCITY);
-    hingeConstraint.setTargetAngularVelocity(crankHinge, -motorSpeed);
+    crankHinges.push(crankHinge);
+    updateMotorTargets();
 
     // --- Front leg ---
     const frontLeg = rigidBody.create(world, {
@@ -363,6 +373,7 @@ scene.add(debugRendererState.object3d);
 
 ui.gui.add({ motorSpeed }, 'motorSpeed', 1, 15, 0.5).name('Motor Speed').onChange((v: number) => {
     motorSpeed = v;
+    updateMotorTargets();
 });
 
 const maxDelta = 1 / 30;
