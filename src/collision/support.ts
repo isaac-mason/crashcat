@@ -1,4 +1,4 @@
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Quat, type Vec3, vec3 } from 'mathcat';
 import { type Shape, type ShapeDef, type ShapeType, shapeDefs } from '../shapes/shapes';
 import type { Face } from '../utils/face';
 
@@ -219,101 +219,53 @@ export function setPolygonSupport(out: PolygonSupport, face: Face): void {
 
 /* transformed support - applies a position + rotation to an inner support function */
 
-const _supportTransformed_localDirection = /* @__PURE__ */ vec3.create();
+// uses mat4 approach like jolt's TransformedConvexObject for efficiency:
+// - direction to local: multiply3x3Transposed (inverse rotation for orthonormal)
+// - support to world: multiply3x3 + translate
+// this is ~2x fewer operations than quaternion approach per getSupport call
+
+const _transformedSupport_localDirection = /* @__PURE__ */ vec3.create();
 
 export type TransformedSupport = {
     convexRadius: number;
     support: Support | null;
-    position: Vec3;
-    quaternion: Quat;
-    conjugateQuaternion: Quat; // pre-computed for performance
+    transform: Mat4; // rotation + translation matrix
     getSupport(direction: Vec3, out: Vec3): void;
     innerSupport: Support | null;
 };
 
 function transformedGetSupport(this: TransformedSupport, direction: Vec3, out: Vec3): void {
-    // destructure to avoid repeated property lookups
-    const { support: inner, conjugateQuaternion, quaternion, position } = this;
+    const { support: inner, transform: m } = this;
 
-    // transform direction to local space (inverse rotation)
-    // inline vec3.transformQuat using cross-product method for performance
-    const cqx = conjugateQuaternion[0];
-    const cqy = conjugateQuaternion[1];
-    const cqz = conjugateQuaternion[2];
-    const cqw = conjugateQuaternion[3];
+    // transform direction to local space using transposed 3x3 (inverse rotation)
+    // mat4.multiply3x3TransposedVec inlined for performance
     const dx = direction[0];
     const dy = direction[1];
     const dz = direction[2];
 
-    // uv = q × direction
-    let uvx = cqy * dz - cqz * dy;
-    let uvy = cqz * dx - cqx * dz;
-    let uvz = cqx * dy - cqy * dx;
-
-    // uuv = q × uv
-    let uuvx = cqy * uvz - cqz * uvy;
-    let uuvy = cqz * uvx - cqx * uvz;
-    let uuvz = cqx * uvy - cqy * uvx;
-
-    // scale: uv *= 2w, uuv *= 2
-    const w2 = cqw * 2;
-    uvx *= w2;
-    uvy *= w2;
-    uvz *= w2;
-    uuvx *= 2;
-    uuvy *= 2;
-    uuvz *= 2;
-
-    // result = direction + uv + uuv
-    _supportTransformed_localDirection[0] = dx + uvx + uuvx;
-    _supportTransformed_localDirection[1] = dy + uvy + uuvy;
-    _supportTransformed_localDirection[2] = dz + uvz + uuvz;
+    _transformedSupport_localDirection[0] = m[0] * dx + m[1] * dy + m[2] * dz;
+    _transformedSupport_localDirection[1] = m[4] * dx + m[5] * dy + m[6] * dz;
+    _transformedSupport_localDirection[2] = m[8] * dx + m[9] * dy + m[10] * dz;
 
     // get support point in local space
-    inner!.getSupport(_supportTransformed_localDirection, out);
+    inner!.getSupport(_transformedSupport_localDirection, out);
 
-    // transform support point to world space (rotation + translation)
-    // inline vec3.transformQuat using cross-product method for performance
-    const qx = quaternion[0];
-    const qy = quaternion[1];
-    const qz = quaternion[2];
-    const qw = quaternion[3];
+    // transform support point to world space: rotation + translation
+    // mat4.multiply3x3Vec + translation inlined for performance
     const sx = out[0];
     const sy = out[1];
     const sz = out[2];
 
-    // uv = q × support
-    uvx = qy * sz - qz * sy;
-    uvy = qz * sx - qx * sz;
-    uvz = qx * sy - qy * sx;
-
-    // uuv = q × uv
-    uuvx = qy * uvz - qz * uvy;
-    uuvy = qz * uvx - qx * uvz;
-    uuvz = qx * uvy - qy * uvx;
-
-    // scale: uv *= 2w, uuv *= 2
-    const qw2 = qw * 2;
-    uvx *= qw2;
-    uvy *= qw2;
-    uvz *= qw2;
-    uuvx *= 2;
-    uuvy *= 2;
-    uuvz *= 2;
-
-    // result = support + uv + uuv + position
-    out[0] = sx + uvx + uuvx + position[0];
-    out[1] = sy + uvy + uuvy + position[1];
-    out[2] = sz + uvz + uuvz + position[2];
+    out[0] = m[0] * sx + m[4] * sy + m[8] * sz + m[12];
+    out[1] = m[1] * sx + m[5] * sy + m[9] * sz + m[13];
+    out[2] = m[2] * sx + m[6] * sy + m[10] * sz + m[14];
 }
 
 export function createTransformedSupport(): TransformedSupport {
     return {
         convexRadius: 0,
         support: null,
-        position: vec3.create(),
-        quaternion: quat.create(),
-        conjugateQuaternion: quat.create(),
+        transform: mat4.create(),
         getSupport: transformedGetSupport,
         innerSupport: null,
     };
@@ -323,9 +275,7 @@ export function setTransformedSupport(out: TransformedSupport, position: Vec3, q
     out.support = innerSupport;
     out.innerSupport = innerSupport;
     out.convexRadius = innerSupport.convexRadius;
-    vec3.copy(out.position, position);
-    quat.copy(out.quaternion, quaternion);
-    quat.conjugate(out.conjugateQuaternion, quaternion);
+    mat4.fromRotationTranslation(out.transform, quaternion, position);
 }
 
 /* add convex radius to support function */
