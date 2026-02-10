@@ -454,6 +454,24 @@ type Tile = {
 
 const activeTiles = new Map<number, Tile>();
 
+function removeObstacle(obs: ObstacleEntry) {
+    rigidBody.remove(world, obs.body);
+    obstacleBatchRemove(obs.instanceId);
+}
+
+function removeWreckingBall(wb: WreckingBallEntry) {
+    for (const c of wb.constraints) {
+        distanceConstraint.remove(world, c);
+    }
+    rigidBody.remove(world, wb.anchorBody);
+    for (const seg of wb.ropeSegments) {
+        rigidBody.remove(world, seg.body);
+        obstacleBatchRemove(seg.instanceId);
+    }
+    rigidBody.remove(world, wb.ballBody);
+    obstacleBatchRemove(wb.ballInstanceId);
+}
+
 function spawnTile(index: number): Tile {
     const z = index * TILE_DEPTH;
 
@@ -480,7 +498,7 @@ function spawnTile(index: number): Tile {
     const obstacles: ObstacleEntry[] = [];
     
     // symmetrical pyramid crate stacks - centered, wider at bottom
-    const CRATE_GAP = 0.05; // small gap between crates
+    const CRATE_GAP = 0.05;
     const CRATE_SPACING = CRATE_SIZE + CRATE_GAP;
     for (let s = 0; s < CRATE_STACKS_PER_TILE; s++) {
         const halfRoad = ROAD_WIDTH / 2;
@@ -695,21 +713,29 @@ function despawnTile(tile: Tile) {
         batchRemove(id);
     }
     for (const obs of tile.obstacles) {
-        rigidBody.remove(world, obs.body);
-        obstacleBatchRemove(obs.instanceId);
+        removeObstacle(obs);
     }
-    // clean up wrecking balls
     for (const wb of tile.wreckingBalls) {
-        for (const c of wb.constraints) {
-            distanceConstraint.remove(world, c);
+        removeWreckingBall(wb);
+    }
+}
+
+// eagerly remove individual obstacles that are behind camera
+function cleanupObstaclesBehindCamera(tile: Tile, cameraZ: number) {
+    for (let i = tile.obstacles.length - 1; i >= 0; i--) {
+        const obs = tile.obstacles[i];
+        if (obs.body.position[2] > cameraZ) {
+            removeObstacle(obs);
+            tile.obstacles.splice(i, 1);
         }
-        rigidBody.remove(world, wb.anchorBody);
-        for (const seg of wb.ropeSegments) {
-            rigidBody.remove(world, seg.body);
-            obstacleBatchRemove(seg.instanceId);
+    }
+    
+    for (let i = tile.wreckingBalls.length - 1; i >= 0; i--) {
+        const wb = tile.wreckingBalls[i];
+        if (wb.ballBody.position[2] > cameraZ) {
+            removeWreckingBall(wb);
+            tile.wreckingBalls.splice(i, 1);
         }
-        rigidBody.remove(world, wb.ballBody);
-        obstacleBatchRemove(wb.ballInstanceId);
     }
 }
 
@@ -722,6 +748,8 @@ function updateTiles(carZ: number) {
         if (index < lo || index > hi) {
             despawnTile(tile);
             activeTiles.delete(index);
+        } else {
+            cleanupObstaclesBehindCamera(tile, camera.position.z);
         }
     }
 
@@ -789,11 +817,7 @@ const listener: Listener = {
     },
 };
 
-function update() {
-    const now = performance.now();
-    const dt = Math.min((now - prevTime) / 1000, 1 / 30);
-    prevTime = now;
-
+function updateCarMovement(dt: number) {
     carZ -= CAR_SPEED * dt;
 
     const targetX = pointerNormX * CAR_X_RANGE;
@@ -808,9 +832,10 @@ function update() {
     quat.setAxisAngle(_targetQuat, _yAxis, yaw);
     rigidBody.moveKinematic(carBody, _targetPos, _targetQuat, dt);
 
-    updateWorld(world, listener, dt);
+    return lateralV;
+}
 
-    // sync car mesh
+function updateCarMesh(now: number) {
     carObject.position.set(carBody.position[0], carBody.position[1] + 0.1, carBody.position[2]);
     carObject.quaternion.set(carBody.quaternion[0], carBody.quaternion[1], carBody.quaternion[2], carBody.quaternion[3]);
 
@@ -819,16 +844,14 @@ function update() {
     const envelope = hitStrength * Math.exp(-HIT_DECAY * timeSinceHit);
     if (envelope > 0.001) {
         const osc = Math.sin(HIT_FREQ * timeSinceHit);
-        // vertical bounce
         carObject.position.y += osc * envelope * HIT_Y_AMPLITUDE;
-        // roll toward hit direction (around z axis)
         carObject.rotation.z += osc * envelope * HIT_ROLL_AMPLITUDE * hitNormalX;
-        // pitch from frontal/rear impacts (around x axis)
         carObject.rotation.x += osc * envelope * HIT_PITCH_AMPLITUDE * hitNormalZ;
     }
+}
 
-    // cat sway — tilt head away from turning direction, with springy lerp
-    const normalizedLateral = lateralV / (CAR_SPEED * 0.5); // -1..1 ish
+function updateCatMesh(now: number, lateralV: number, dt: number) {
+    const normalizedLateral = lateralV / (CAR_SPEED * 0.5);
     const targetRoll = -normalizedLateral * CAT_SWAY_ROLL;
     const targetYaw = -normalizedLateral * CAT_SWAY_YAW;
     const targetPitch = Math.abs(normalizedLateral) * CAT_SWAY_PITCH;
@@ -836,7 +859,6 @@ function update() {
     catSwayYaw += (targetYaw - catSwayYaw) * Math.min(1, CAT_SWAY_LERP * dt);
     catSwayPitch += (targetPitch - catSwayPitch) * Math.min(1, CAT_SWAY_LERP * dt);
 
-    // reset cat to its base local transform
     catObject.position.copy(catBasePosition);
     catObject.rotation.copy(catBaseRotation);
 
@@ -844,7 +866,7 @@ function update() {
     catObject.rotation.y += catSwayYaw;
     catObject.rotation.x += catSwayPitch;
 
-    // cat hit reaction — separate wobble, more dramatic than chassis
+    // cat hit reaction
     const catTimeSinceHit = now / 1000 - catHitTime;
     const catEnvelope = catHitStrength * Math.exp(-CAT_HIT_DECAY * catTimeSinceHit);
     if (catEnvelope > 0.001) {
@@ -854,24 +876,13 @@ function update() {
         catObject.rotation.x += catOsc * catEnvelope * CAT_HIT_PITCH_AMPLITUDE * catHitNormalZ;
     }
 
-    // clamp cat rotation offsets to ±30 deg from base
-    catObject.rotation.x = Math.max(
-        catBaseRotation.x - CAT_MAX_ROT,
-        Math.min(catBaseRotation.x + CAT_MAX_ROT, catObject.rotation.x),
-    );
-    catObject.rotation.y = Math.max(
-        catBaseRotation.y - CAT_MAX_ROT,
-        Math.min(catBaseRotation.y + CAT_MAX_ROT, catObject.rotation.y),
-    );
-    catObject.rotation.z = Math.max(
-        catBaseRotation.z - CAT_MAX_ROT,
-        Math.min(catBaseRotation.z + CAT_MAX_ROT, catObject.rotation.z),
-    );
+    // clamp cat rotation
+    catObject.rotation.x = Math.max(catBaseRotation.x - CAT_MAX_ROT, Math.min(catBaseRotation.x + CAT_MAX_ROT, catObject.rotation.x));
+    catObject.rotation.y = Math.max(catBaseRotation.y - CAT_MAX_ROT, Math.min(catBaseRotation.y + CAT_MAX_ROT, catObject.rotation.y));
+    catObject.rotation.z = Math.max(catBaseRotation.z - CAT_MAX_ROT, Math.min(catBaseRotation.z + CAT_MAX_ROT, catObject.rotation.z));
+}
 
-    // tiles
-    updateTiles(carZ);
-
-    // sync obstacle batched mesh from physics
+function syncObstacleMeshes() {
     for (const [, tile] of activeTiles) {
         for (const obs of tile.obstacles) {
             const b = obs.body;
@@ -881,7 +892,6 @@ function update() {
                 b.quaternion[0], b.quaternion[1], b.quaternion[2], b.quaternion[3]
             );
         }
-        // sync wrecking balls
         for (const wb of tile.wreckingBalls) {
             for (const seg of wb.ropeSegments) {
                 const b = seg.body;
@@ -899,25 +909,38 @@ function update() {
             );
         }
     }
+}
 
-    // camera
+function updateCamera() {
     camera.position.x = 0;
     camera.position.y = 3;
     camera.position.z = carBody.position[2] + 8;
     camera.lookAt(carBody.position[0], 1, carZ - 10);
 
-    // keep directional light near the car
     directionalLight.position.set(carBody.position[0] + 10, 40, carZ + 5);
     directionalLight.target.position.set(carBody.position[0], 0, carZ - 50);
     directionalLight.target.updateMatrixWorld();
 
     stars.position.z = carBody.position[2];
+}
+
+function update() {
+    const now = performance.now();
+    const dt = Math.min((now - prevTime) / 1000, 1 / 30);
+    prevTime = now;
+
+    const lateralV = updateCarMovement(dt);
+    updateWorld(world, listener, dt);
+    updateCarMesh(now);
+    updateCatMesh(now, lateralV, dt);
+    updateTiles(carZ);
+    syncObstacleMeshes();
+    updateCamera();
 
     debugRenderer.update(debugRendererState, world);
     renderer.render(scene, camera);
     requestAnimationFrame(update);
 }
-scene.add(new THREE.DirectionalLightHelper(directionalLight, 5, 0xff0000));
 
 document.querySelector('#loading')!.remove();
 update();
