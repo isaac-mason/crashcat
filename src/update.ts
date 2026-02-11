@@ -701,7 +701,6 @@ function narrowphase(
     collideSettings.collideWithBackfaces = world.settings.narrowphase.collideWithBackfaces;
     collideSettings.collisionTolerance = world.settings.narrowphase.collisionTolerance;
     collideSettings.penetrationTolerance = world.settings.narrowphase.penetrationTolerance;
-    collideSettings.returnDeepestPoint = world.settings.narrowphase.returnDeepestPoint;
     collideSettings.collideOnlyWithActiveEdges = world.settings.narrowphase.collideOnlyWithActiveEdges;
 
     // set active edges direction using linear velocity difference

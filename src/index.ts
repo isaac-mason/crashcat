@@ -65,6 +65,7 @@ export { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 export * from './constraints/combine-material';
 
 export type { ContactManifold } from './manifold';
+export { getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB } from './manifold/manifold';
 
 export type { ContactSettings } from './constraints/contact-constraints';
 export * as contactConstraints from './constraints/contact-constraints';

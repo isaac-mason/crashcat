@@ -186,9 +186,6 @@ export type CollideShapeSettings = {
     /** a factor that determines the accuracy of the penetration depth calculation. If the change of the squared distance is less than tolerance * current_penetration_depth^2 the algorithm will terminate. (unit: dimensionless) */
     penetrationTolerance: number;
 
-    /** when true, and the shape is intersecting at the beginning of the cast (fraction = 0) then this will calculate the deepest penetration point (costing additional CPU time) */
-    returnDeepestPoint: boolean;
-
     /** if true, back-faces are considered for collision (otherwise they are ignored) */
     collideWithBackfaces: boolean;
 
@@ -207,7 +204,6 @@ export function createDefaultCollideShapeSettings(): CollideShapeSettings {
         maxSeparationDistance: 0,
         collisionTolerance: 1e-4,
         penetrationTolerance: 1e-4,
-        returnDeepestPoint: true,
         collideWithBackfaces: true,
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: vec3.create(),
@@ -222,7 +218,6 @@ export function copyCollideShapeSettings(
     out.maxSeparationDistance = source.maxSeparationDistance;
     out.collisionTolerance = source.collisionTolerance;
     out.penetrationTolerance = source.penetrationTolerance;
-    out.returnDeepestPoint = source.returnDeepestPoint;
     out.collideWithBackfaces = source.collideWithBackfaces;
     out.collideOnlyWithActiveEdges = source.collideOnlyWithActiveEdges;
     vec3.copy(out.activeEdgeMovementDirection, source.activeEdgeMovementDirection);
