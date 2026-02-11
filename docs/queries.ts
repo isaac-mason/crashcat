@@ -55,9 +55,11 @@ castRay(world, closestCollector, raySettings, rayOrigin, rayDirection, rayLength
 
 if (closestCollector.hit.status === CastRayStatus.COLLIDING) {
     const hitDistance = closestCollector.hit.fraction * rayLength;
-    const hitPoint = vec3.create();
-    vec3.scaleAndAdd(hitPoint, rayOrigin, rayDirection, hitDistance);
+    const hitPoint = vec3.scaleAndAdd(vec3.create(), rayOrigin, rayDirection, hitDistance);
+    const hitBody = rigidBody.get(world, closestCollector.hit.bodyIdB)!;
+    const surfaceNormal = rigidBody.getSurfaceNormal(vec3.create(), hitBody, hitPoint, closestCollector.hit.subShapeId);
     console.log('closest hit at', hitPoint);
+    console.log('surface normal:', surfaceNormal);
 }
 
 // any: finds the first hit (fast early-out, useful for line-of-sight checks)

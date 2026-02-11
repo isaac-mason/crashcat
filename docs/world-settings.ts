@@ -10,6 +10,9 @@ registerAll();
 // creation, and import it and below constants where needed.
 const worldSettings = createWorldSettings();
 
+// earth gravity
+worldSettings.gravity = [0, -9.81, 0];
+
 // we're first up going to define "broadphase layers".
 // for simple projects, a "moving" and "not moving" broadphase layer is a good start.
 export const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);

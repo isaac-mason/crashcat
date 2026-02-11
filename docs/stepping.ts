@@ -7,7 +7,7 @@ const world = createWorld(worldSettings);
 
 /* SNIPPET_START: variable-timestep */
 let lastTime = performance.now();
-const maxDelta = 1 / 30; // cap delta to prevent spiral of death
+const maxDelta = 1 / 30;
 
 function gameLoopVariableTimestep() {
     const currentTime = performance.now();

@@ -52,57 +52,37 @@ Below is a minimal example of creating a physics world with a static ground and 
 
 ## Physics World
 
-**Creating a World**
+A physics world contains all bodies, constraints, and simulation state. It manages collision detection, constraint solving, and integration.
 
-To create a world, first create world settings with `createWorldSettings()`.
+crashcat uses a two-tier layer system for finding potential collisions efficiently:
 
-This is a container for all global settings that affect the physics simulation, such as gravity, broadphase configuration, and solver settings.
+**Broadphase Layers** partition space for performance. Each broadphase layer has its own spatial acceleration structure (dynamic bvh tree). Bodies in different broadphase layers use separate trees, improving query performance.
 
-Then pass the settings to `createWorld()` to create the physics world instance.
+- simple approach: two layers - "moving" and "not moving"
+- advanced: separate by update frequency - static terrain, kinematic platforms, dynamic debris
+- each body belongs to exactly one broadphase layer
 
-**Broadphase Layers and Object Layers**
-
-crashcat uses a two-tier layer system for efficient collision detection and filtering:
-
-**Broadphase Layers** are for spatial partitioning and performance optimization. each broadphase layer has its own spatial acceleration structure (dynamic bvh tree). bodies in different broadphase layers use separate trees, which improves query performance.
-
-- for simple projects: two broadphase layers is a good start - "moving" and "not moving"
-- for complex projects: separate by update frequency (e.g., static terrain, kinematic platforms, dynamic debris)
-- bodies can only belong to one broadphase layer
-
-**Object Layers** are for collision filtering. they define which groups of bodies can collide with each other. each object layer belongs to a single broadphase layer.
+**Object Layers** control collision filtering. They define which bodies can collide with each other. Each object layer belongs to a single broadphase layer.
 
 - examples: "player", "enemy", "terrain", "projectile", "debris"
 - you define collision rules between object layers (e.g., "projectiles hit enemies but not other projectiles")
 - this is the primary mechanism for controlling what collides with what
-- finer-grained filtering can be done with collision groups/masks (see [Collision Groups and Masks](#collision-groups-and-masks))
 
 <Snippet source="./world-settings.ts" />
 
-**Gravity**
-
-Gravity is a 3d vector in m/s². The default is `[0, -9.81, 0]` (earth gravity). You can change magnitude and direction, or disable it entirely:
-
-```typescript
-worldSettings.gravity = [0, -20, 0]; // stronger gravity
-worldSettings.gravityEnabled = false; // disable globally
-```
-
-**Settings**
-
 See the `WorldSettings` type for all available settings and their documentation: https://crashcat.dev/docs/types/crashcat.WorldSettings.html
 
-**Stepping the Physics World**
+### Stepping the Simulation
 
 After creating a world, you advance the simulation by calling `updateWorld(world, listener, deltaTime)` in your game loop.
 
 The `deltaTime` parameter is the time in seconds to advance the simulation. For a 60 FPS game loop, this is typically `1/60` (≈0.0167 seconds).
 
-In simple use cases, you can use the actual frame time as delta:
+You can pass a listener to `updateWorld` to listen to and modify physics events, see the [Listener](#listener) section.
+
+For simple use cases, you can use the frame delta time directly to do variable time stepping:
 
 <Snippet source="./stepping.ts" select="variable-timestep" />
-
-Clamping `deltaTime` to a maximum value (e.g., 0.1 seconds) prevents instability when the game lags or is paused, which can cause a large delta that the physics engine can't handle properly.
 
 For maximum stability and determinism, use a fixed physics timestep with an accumulator:
 
@@ -111,12 +91,6 @@ For maximum stability and determinism, use a fixed physics timestep with an accu
 This decouples physics simulation rate from render frame rate. Physics always steps at exactly 60 Hz regardless of how fast rendering runs. For smooth visuals, interpolate body positions between physics steps using the `alpha` value.
 
 Read more on this here: https://gafferongames.com/post/fix_your_timestep/
-
-**Listening to collision events**
-
-You can pass a listener to `updateWorld` to receive callbacks when collisions start and end:
-
-See the [Listener](#listener) section for all available callbacks and advanced usage.
 
 ### Units and Scale
 
@@ -131,25 +105,6 @@ crashcat uses SI units and OpenGL conventions:
 - **Vectors**: [x, y, z] array tuples
 
 **Scale matters**: a box with `halfExtents: [100, 100, 100]` is a 100-meter cube (skyscraper-sized), which will appear to fall slowly relative to its size.
-
-**Recommended approach**:
-- Physics: use human scale (e.g., player capsule ~1.5m tall)
-- Rendering: scale to your display units when rendering
-
-```typescript
-// physics: meters
-const body = rigidBody.create(world, {
-    shape: capsule.create({ radius: 0.3, halfHeightOfCylinder: 0.7 }), // ~1.4m tall
-    position: [0, 10, 0], // 10 meters up
-});
-
-// rendering: scale to pixels (e.g., 50 pixels per meter)
-const renderPosition = [
-    body.position[0] * 50,
-    body.position[1] * 50,
-    body.position[2] * 50,
-];
-```
 
 If your renderer uses a different coordinate system (e.g., z-up, left-handed), transform coordinates when transferring data between crashcat and your renderer.
 
@@ -423,9 +378,9 @@ Shapes are JSON-serializable objects. You can generate complex shapes offline (e
 
 ## Listener
 
-<ExamplesTable ids="example-sensor" />
-
 The listener lets you react to and modify physics events during world updates. Pass a listener to `updateWorld()` to receive callbacks for collision events.
+
+<ExamplesTable ids="example-sensor,example-conveyor-belt" />
 
 ### Basic Usage
 
