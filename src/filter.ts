@@ -1,5 +1,6 @@
 import type { RigidBody } from './body/rigid-body';
 import type { Layers } from './layers';
+import type { World } from './world';
 
 export type Filter = {
     /** enabled object layers (1 = enabled, 0 = disabled) */
@@ -25,6 +26,11 @@ export function create(layers: Layers): Filter {
     };
     setAllEnabled(filter, layers);
     return filter;
+}
+
+/** create a layer filter with all layers enabled based on the world's layer settings */
+export function forWorld(world: World): Filter {
+    return create(world.settings.layers);
 }
 
 /** set filter to all layers enabled with full collision mask/group */
@@ -182,7 +188,7 @@ export function copy(out: Filter, source: Filter): void {
     for (let i = 0; i < source.enabledBroadphaseLayers.length; i++) {
         out.enabledBroadphaseLayers[i] = source.enabledBroadphaseLayers[i];
     }
-    
+
     // copy collision properties
     out.collisionGroup = source.collisionGroup;
     out.collisionMask = source.collisionMask;
