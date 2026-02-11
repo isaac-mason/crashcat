@@ -1434,6 +1434,8 @@ const _applyCCD_invInertiaB = /* @__PURE__ */ mat4.create();
 const _applyCCD_normalScaled = /* @__PURE__ */ vec3.create();
 const _applyCCD_tangentVel = /* @__PURE__ */ vec3.create();
 const _applyCCD_frictionDir = /* @__PURE__ */ vec3.create();
+const _applyCCD_normalConstraint = /* @__PURE__ */ axisConstraintPart.create();
+const _applyCCD_frictionConstraint = /* @__PURE__ */ axisConstraintPart.create();
 
 /** apply collision impulse for CCD contact using constraint solver infrastructure, does a single solve iteration using @see AxisConstraintPart */
 function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody): void {
@@ -1471,8 +1473,8 @@ function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: R
         normalVelocityBias = settings.combinedRestitution * normalVel;
     }
 
-    // setup normal constraint
-    const normalConstraint = axisConstraintPart.create();
+    // setup normal constraint (use scratch object to avoid allocation)
+    const normalConstraint = _applyCCD_normalConstraint;
 
     // get inverse masses with scaling from contact settings
     const invMassA = bodyA.motionType === MotionType.DYNAMIC ? settings.invMassScale1 * bodyA.motionProperties.invMass : 0;
@@ -1524,16 +1526,16 @@ function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: R
         vec3.subtract(_applyCCD_tangentVel, _applyCCD_relVel, _applyCCD_normalScaled);
         const tangentLenSq = vec3.squaredLength(_applyCCD_tangentVel);
 
-        // JoltPhysics uses 1.0e-12f for squared length check
         if (tangentLenSq > 1e-12) {
             const tangentLen = Math.sqrt(tangentLenSq);
             vec3.scale(_applyCCD_frictionDir, _applyCCD_tangentVel, 1.0 / tangentLen);
 
-            // get max friction from normal lambda (Coulomb friction cone)
+            // get max friction from normal lambda (coulomb friction cone)
             const normalLambda = axisConstraintPart.getTotalLambdaValue(normalConstraint);
             const maxFriction = settings.combinedFriction * normalLambda;
 
-            const frictionConstraint = axisConstraintPart.create();
+            // setup friction constraint (use scratch object to avoid allocation)
+            const frictionConstraint = _applyCCD_frictionConstraint;
             axisConstraintPart.calculateConstraintPropertiesWithMassOverride(
                 frictionConstraint,
                 bodyA,
