@@ -36,6 +36,9 @@ jobs:
       - name: Run tree-shaking test
         run: pnpm run test-tree-shaking
 
+      - name: Typecheck docs
+        run: pnpm run typecheck-docs
+
       - name: Build website
         run: |
           cd website
