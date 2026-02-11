@@ -285,90 +285,89 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
 ## Table of Contents
 
 - [Quick Start](#quick-start)
-- [Documentation](#documentation)
-  - [Physics World](#physics-world)
+- [Physics World](#physics-world)
   - [Units and Scale](#units-and-scale)
-  - [Rigid Bodies](#rigid-bodies)
-    - [Creation and Removal](#creation-and-removal)
-    - [Motion Types](#motion-types)
-    - [Position and Rotation](#position-and-rotation)
-    - [Velocity](#velocity)
-    - [Forces and Impulses](#forces-and-impulses)
-    - [Mass Properties](#mass-properties)
-    - [Damping](#damping)
-    - [Maximum Velocities](#maximum-velocities)
-    - [Degrees of Freedom](#degrees-of-freedom)
-    - [Sleeping](#sleeping)
-    - [Gravity Factor](#gravity-factor)
-    - [Moving Kinematic Bodies](#moving-kinematic-bodies)
-    - [Continuous Collision Detection](#continuous-collision-detection)
-    - [User Data](#user-data)
-    - [Collision Groups and Masks](#collision-groups-and-masks)
-    - [Material Properties](#material-properties)
-    - [Sensors](#sensors)
-    - [Updating Shape](#updating-shape)
-    - [Changing Object Layer](#changing-object-layer)
-    - [Changing Motion Type](#changing-motion-type)
-  - [Shapes](#shapes)
-    - [Convex Shapes](#convex-shapes)
-      - [Sphere](#sphere)
-      - [Box](#box)
-      - [Capsule](#capsule)
-      - [Cylinder](#cylinder)
-      - [Convex Hull](#convex-hull)
-    - [Triangle Mesh Shape](#triangle-mesh-shape)
-    - [Compound Shape](#compound-shape)
-    - [Decorator Shapes](#decorator-shapes)
-      - [Scaled](#scaled)
-      - [Offset Center of Mass](#offset-center-of-mass)
-    - [Reusing Shapes](#reusing-shapes)
-    - [Offline Shape Generation](#offline-shape-generation)
-  - [Listener](#listener)
-    - [Basic Usage](#basic-usage)
-    - [Body Pair Validation](#body-pair-validation)
-    - [Contact Validation](#contact-validation)
-    - [Modifying Contact Behavior](#modifying-contact-behavior)
-    - [Sensor Trigger Zones](#sensor-trigger-zones)
-  - [Queries](#queries)
-    - [Cast Ray](#cast-ray)
-    - [Cast Shape](#cast-shape)
-    - [Collide Point](#collide-point)
-    - [Collide Shape](#collide-shape)
-    - [Broadphase Queries](#broadphase-queries)
-    - [Shape vs Shape](#shape-vs-shape)
-    - [Query Filters](#query-filters)
-  - [Constraints](#constraints)
-    - [Creating and Removing Constraints](#creating-and-removing-constraints)
-    - [Constraint Types](#constraint-types)
-    - [Constraint Motors](#constraint-motors)
-    - [Constraint Limits](#constraint-limits)
-    - [Local vs World Space](#local-vs-world-space)
-  - [Character Controllers](#character-controllers)
-    - [Kinematic Character Controllers (KCC)](#kinematic-character-controllers-kcc)
-    - [Dynamic Character Controllers](#dynamic-character-controllers)
-  - [Multiple Physics Worlds](#multiple-physics-worlds)
-  - [World State Serialization](#world-state-serialization)
-  - [Tree Shaking](#tree-shaking)
-    - [Using `registerAll`](#using-registerall)
-    - [Using `registerShapes` and `registerConstraints`](#using-registershapes-and-registerconstraints)
-  - [Common Mistakes](#common-mistakes)
-    - [Shapes have no collision or constraints don't work](#shapes-have-no-collision-or-constraints-dont-work)
-    - [Body isn't affected by gravity](#body-isnt-affected-by-gravity)
-    - [Applying forces or impulses doesn't work](#applying-forces-or-impulses-doesnt-work)
-    - [Everything moves in slow motion](#everything-moves-in-slow-motion)
-  - [Optimization Tips](#optimization-tips)
-    - [Use simple shapes](#use-simple-shapes)
-    - [Reuse shapes](#reuse-shapes)
-    - [Sleep bodies on creation](#sleep-bodies-on-creation)
-    - [Try reducing solver iterations](#try-reducing-solver-iterations)
-    - [Consider moving the simulation to a Web Worker](#consider-moving-the-simulation-to-a-web-worker)
-  - [Determinism](#determinism)
-  - [Custom Shapes](#custom-shapes)
-  - [Library Integrations](#library-integrations)
-    - [Three.js Debug Renderer](#threejs-debug-renderer)
-  - [FAQ](#faq)
-    - [When should I use crashcat over a WASM physics library?](#when-should-i-use-crashcat-over-a-wasm-physics-library)
-    - [Can I use crashcat with [my favorite framework]?](#can-i-use-crashcat-with-my-favorite-framework)
+- [Rigid Bodies](#rigid-bodies)
+  - [Creation and Removal](#creation-and-removal)
+  - [Motion Types](#motion-types)
+  - [Position and Rotation](#position-and-rotation)
+  - [Velocity](#velocity)
+  - [Forces and Impulses](#forces-and-impulses)
+  - [Mass Properties](#mass-properties)
+  - [Damping](#damping)
+  - [Maximum Velocities](#maximum-velocities)
+  - [Degrees of Freedom](#degrees-of-freedom)
+  - [Sleeping](#sleeping)
+  - [Gravity Factor](#gravity-factor)
+  - [Moving Kinematic Bodies](#moving-kinematic-bodies)
+  - [Continuous Collision Detection](#continuous-collision-detection)
+  - [User Data](#user-data)
+  - [Collision Groups and Masks](#collision-groups-and-masks)
+  - [Material Properties](#material-properties)
+  - [Sensors](#sensors)
+  - [Updating Shape](#updating-shape)
+  - [Changing Object Layer](#changing-object-layer)
+  - [Changing Motion Type](#changing-motion-type)
+- [Shapes](#shapes)
+  - [Convex Shapes](#convex-shapes)
+    - [Sphere](#sphere)
+    - [Box](#box)
+    - [Capsule](#capsule)
+    - [Cylinder](#cylinder)
+    - [Convex Hull](#convex-hull)
+  - [Triangle Mesh Shape](#triangle-mesh-shape)
+  - [Compound Shape](#compound-shape)
+  - [Decorator Shapes](#decorator-shapes)
+    - [Scaled](#scaled)
+    - [Offset Center of Mass](#offset-center-of-mass)
+  - [Reusing Shapes](#reusing-shapes)
+  - [Offline Shape Generation](#offline-shape-generation)
+- [Listener](#listener)
+  - [Basic Usage](#basic-usage)
+  - [Body Pair Validation](#body-pair-validation)
+  - [Contact Validation](#contact-validation)
+  - [Modifying Contact Behavior](#modifying-contact-behavior)
+  - [Sensor Trigger Zones](#sensor-trigger-zones)
+- [Queries](#queries)
+  - [Cast Ray](#cast-ray)
+  - [Cast Shape](#cast-shape)
+  - [Collide Point](#collide-point)
+  - [Collide Shape](#collide-shape)
+  - [Broadphase Queries](#broadphase-queries)
+  - [Shape vs Shape](#shape-vs-shape)
+  - [Query Filters](#query-filters)
+- [Constraints](#constraints)
+  - [Creating and Removing Constraints](#creating-and-removing-constraints)
+  - [Constraint Types](#constraint-types)
+  - [Constraint Motors](#constraint-motors)
+  - [Constraint Limits](#constraint-limits)
+  - [Local vs World Space](#local-vs-world-space)
+- [Character Controllers](#character-controllers)
+  - [Kinematic Character Controllers (KCC)](#kinematic-character-controllers-kcc)
+  - [Dynamic Character Controllers](#dynamic-character-controllers)
+- [Multiple Physics Worlds](#multiple-physics-worlds)
+- [World State Serialization](#world-state-serialization)
+- [Tree Shaking](#tree-shaking)
+  - [Using `registerAll`](#using-registerall)
+  - [Using `registerShapes` and `registerConstraints`](#using-registershapes-and-registerconstraints)
+- [Common Mistakes](#common-mistakes)
+  - [Shapes have no collision or constraints don't work](#shapes-have-no-collision-or-constraints-dont-work)
+  - [Body isn't affected by gravity](#body-isnt-affected-by-gravity)
+  - [Applying forces or impulses doesn't work](#applying-forces-or-impulses-doesnt-work)
+  - [Everything moves in slow motion](#everything-moves-in-slow-motion)
+- [Optimization Tips](#optimization-tips)
+  - [Use simple shapes](#use-simple-shapes)
+  - [Reuse shapes](#reuse-shapes)
+  - [Sleep bodies on creation](#sleep-bodies-on-creation)
+  - [Try reducing solver iterations](#try-reducing-solver-iterations)
+  - [Consider moving the simulation to a Web Worker](#consider-moving-the-simulation-to-a-web-worker)
+- [Determinism](#determinism)
+- [Custom Shapes](#custom-shapes)
+- [Library Integrations](#library-integrations)
+  - [Three.js Debug Renderer](#threejs-debug-renderer)
+- [FAQ](#faq)
+  - [When should I use crashcat over a WASM physics library?](#when-should-i-use-crashcat-over-a-wasm-physics-library)
+  - [Can I use crashcat with [my favorite framework]?](#can-i-use-crashcat-with-my-favorite-framework)
 - [Community](#community)
 - [Acknowledgements](#acknowledgements)
 
@@ -460,9 +459,7 @@ for (let i = 0; i < 60 * 10; i++) {
 }
 ```
 
-## Documentation
-
-### Physics World
+## Physics World
 
 **Creating a World**
 
@@ -632,11 +629,11 @@ const renderPosition = [
 
 If your renderer uses a different coordinate system (e.g., z-up, left-handed), transform coordinates when transferring data between crashcat and your renderer.
 
-### Rigid Bodies
+## Rigid Bodies
 
 Rigid bodies are the fundamental simulation objects in crashcat. They have a shape, position, rotation, and physical properties like mass and friction.
 
-#### Creation and Removal
+### Creation and Removal
 
 ```ts
 // create a dynamic box
@@ -685,7 +682,7 @@ if (bodyById) {
 }
 ```
 
-#### Motion Types
+### Motion Types
 
 Bodies can be static, dynamic, or kinematic. Choose the type based on how the object should behave:
 
@@ -727,7 +724,7 @@ const kinematicBody = rigidBody.create(world, {
 });
 ```
 
-#### Position and Rotation
+### Position and Rotation
 
 The position of a rigid body represents its location (translation) in 3d world-space. The quaternion represents its orientation (rotation).
 
@@ -755,7 +752,7 @@ rigidBody.setQuaternion(world, kinematicBody, newQuaternion, false);
 
 For simple shapes (sphere, box, capsule), these are the same. For compound shapes or shapes with offset center of mass, they differ. The physics engine uses `centerOfMassPosition` internally for simulation.
 
-#### Velocity
+### Velocity
 
 Linear and angular velocity can be read directly from rigid body objects. The `rigidBody` namespace provides APIs for modifying velocities.
 
@@ -771,7 +768,7 @@ rigidBody.setLinearVelocity(world, dynamicBody, [5, 0, 0]); // shoot to the righ
 rigidBody.setAngularVelocity(world, dynamicBody, [0, 1, 0]); // spin around y-axis
 ```
 
-#### Forces and Impulses
+### Forces and Impulses
 
 Forces accumulate until the next physics step, then get cleared. Impulses apply instant velocity changes. Use `addForceAtPosition` or `addImpulseAtPosition` to generate rotation.
 
@@ -792,7 +789,7 @@ rigidBody.addImpulse(world, dynamicBody, impulse);
 rigidBody.addImpulseAtPosition(world, dynamicBody, impulse, worldPosition);
 ```
 
-#### Mass Properties
+### Mass Properties
 
 For most shapes, mass properties are computed automatically. For triangle meshes you need to provide them explicitly to use them with kinematic or static bodies.
 
@@ -828,7 +825,7 @@ const mass = 1 / body.motionProperties.invMass; // mass in kg
 const invMass = body.motionProperties.invMass; // 1/mass, used internally
 ```
 
-#### Damping
+### Damping
 
 Damping simulates air resistance or drag. Higher values make objects slow down faster.
 
@@ -847,7 +844,7 @@ dampedBody.motionProperties.linearDamping = 0.2;
 dampedBody.motionProperties.angularDamping = 0.2;
 ```
 
-#### Maximum Velocities
+### Maximum Velocities
 
 Clamping velocities prevents instability and tunneling from extreme speeds.
 
@@ -862,7 +859,7 @@ const fastBody = rigidBody.create(world, {
 });
 ```
 
-#### Degrees of Freedom
+### Degrees of Freedom
 
 Restricting degrees of freedom is useful for 2D games or objects that should only move on specific axes.
 
@@ -881,7 +878,7 @@ const platformerBody = rigidBody.create(world, {
 // dof args: translateX, translateY, translateZ, rotateX, rotateY, rotateZ
 ```
 
-#### Sleeping
+### Sleeping
 
 Sleeping improves performance by skipping simulation for bodies at rest.
 
@@ -906,11 +903,10 @@ You can also wake all sleeping bodies within a specific region:
 ```ts
 // wake all sleeping bodies within a region
 // useful after explosions, level loading, or regional activation
-const aabb = box3.fromValues([-10, 0, -10], [10, 20, 10]);
-rigidBody.wakeInAABB(world, aabb);
+rigidBody.wakeInAABB(world, [[-10, 0, -10], [10, 20, 10]]);
 ```
 
-#### Gravity Factor
+### Gravity Factor
 
 Gravity factor multiplies the world gravity for a specific body. Set to 0 for floating objects, less than 1 for lighter-than-normal gravity, or greater than 1 for heavier gravity.
 
@@ -935,7 +931,7 @@ const heavyBody = rigidBody.create(world, {
 heavyBody.motionProperties.gravityFactor = 0.5;
 ```
 
-#### Moving Kinematic Bodies
+### Moving Kinematic Bodies
 
 `moveKinematic` takes a target position and quaternion, and computes the velocities needed to reach them, ensuring physical interactions with dynamic bodies rather than a direct teleportation.
 
@@ -958,7 +954,7 @@ quat.setAxisAngle(targetQuaternion, vec3.fromValues(0, 1, 0), Math.PI / 4);
 rigidBody.moveKinematic(platform, targetPosition, targetQuaternion, deltaTime);
 ```
 
-#### Continuous Collision Detection
+### Continuous Collision Detection
 
 Use CCD for fast-moving objects like bullets or vehicles to prevent tunneling through thin walls.
 
@@ -974,7 +970,7 @@ const bullet = rigidBody.create(world, {
 // worldSettings.ccd.linearCastThreshold = 0.05;
 ```
 
-#### User Data
+### User Data
 
 User data lets you attach game-specific data to bodies for easy lookup during collision callbacks.
 
@@ -989,7 +985,7 @@ const player = rigidBody.create(world, {
 const entityId = player.userData as number;
 ```
 
-#### Collision Groups and Masks
+### Collision Groups and Masks
 
 Collision groups and masks provide fine-grained collision filtering using 32-bit bitmasks. This works alongside object layer filtering - both must pass for bodies to collide.
 
@@ -1026,7 +1022,7 @@ const debrisBody = rigidBody.create(world, {
 });
 ```
 
-#### Material Properties
+### Material Properties
 
 Friction and restitution control surface interaction. Combine modes determine how material properties mix when two bodies collide.
 
@@ -1061,7 +1057,7 @@ const customCombine = rigidBody.create(world, {
 });
 ```
 
-#### Sensors
+### Sensors
 
 Sensor bodies detect collisions without applying physical forces. Use them for trigger zones, pickups, or detection areas.
 
@@ -1084,7 +1080,7 @@ const listener: Listener = {
 };
 ```
 
-#### Updating Shape
+### Updating Shape
 
 You can change a body's shape after creation. This recalculates mass properties, inertia, and the axis-aligned bounding box.
 
@@ -1101,13 +1097,12 @@ changingBody.shape = sphere.create({ radius: 1.5 });
 rigidBody.updateShape(world, changingBody); // recalculates mass, inertia, aabb
 ```
 
-#### Changing Object Layer
+### Changing Object Layer
 
 Object layers control which bodies can collide. You can change a body's layer at runtime to modify collision behavior.
 
 ```ts
 // move a body to a different object layer
-// this is useful for changing collision behavior at runtime
 const movableBody = rigidBody.create(world, {
     shape: box.create({ halfExtents: [1, 1, 1] }),
     motionType: MotionType.DYNAMIC,
@@ -1118,7 +1113,7 @@ const movableBody = rigidBody.create(world, {
 rigidBody.setObjectLayer(world, movableBody, OBJECT_LAYER_NOT_MOVING);
 ```
 
-#### Changing Motion Type
+### Changing Motion Type
 
 You can change a body's motion type at runtime to switch between static, kinematic, and dynamic behavior.
 
@@ -1140,11 +1135,11 @@ rigidBody.setMotionType(world, switchableBody, MotionType.DYNAMIC, true);
 rigidBody.setMotionType(world, switchableBody, MotionType.STATIC, false);
 ```
 
-### Shapes
+## Shapes
 
 Shapes determine how rigid bodies collide with each other. crashcat provides primitive shapes, complex shapes like triangle meshes, and decorator shapes for advanced use cases.
 
-#### Convex Shapes
+### Convex Shapes
 
 A convex shape is one where, if you pick any two points inside the shape, the line segment between them is also inside the shape. This property enables fast collision detection with the GJK/EPA algorithms.
 
@@ -1152,7 +1147,7 @@ To speed up collision detection, all convex shapes use a convex radius. The shap
 
 This rounding improves performance and contact manifold quality, but makes geometry slightly less accurate. Adjust the radius to balance speed vs precision.
 
-##### Sphere
+#### Sphere
 
 The simplest and fastest convex shape.
 
@@ -1164,7 +1159,7 @@ sphere.create({ radius: 1 });
 sphere.create({ radius: 1, density: 1000 }); // kg/m³
 ```
 
-##### Box
+#### Box
 
 Defined by half extents from the center.
 
@@ -1176,7 +1171,7 @@ box.create({ halfExtents: [1, 2, 0.5] });
 box.create({ halfExtents: [1, 1, 1], density: 500 });
 ```
 
-##### Capsule
+#### Capsule
 
 A cylinder with hemispherical caps on each end.
 
@@ -1195,7 +1190,7 @@ capsule.create({
 });
 ```
 
-##### Cylinder
+#### Cylinder
 
 Defined by half height and radius.
 
@@ -1214,7 +1209,7 @@ cylinder.create({
 });
 ```
 
-##### Convex Hull
+#### Convex Hull
 
 The convex hull of a set of points.
 
@@ -1231,7 +1226,7 @@ convexHull.create({
 });
 ```
 
-#### Triangle Mesh Shape
+### Triangle Mesh Shape
 
 Triangle meshes represent complex geometry using triangles. Typically used for static terrain and level geometry.
 
@@ -1265,7 +1260,7 @@ rigidBody.create(world, {
 
 Avoid using triangle meshes for dynamic bodies. Performance is poor (collision detection against triangle meshes is usually more expensive), and fast-moving meshes can tunnel through other objects easily. Use convex hulls or compound shapes instead for dynamic objects.
 
-#### Compound Shape
+### Compound Shape
 
 Compound shapes combine multiple child shapes into a single shape. Useful for complex objects like vehicles or characters.
 
@@ -1302,11 +1297,11 @@ rigidBody.create(world, {
 });
 ```
 
-#### Decorator Shapes
+### Decorator Shapes
 
 Decorator shapes modify other shapes without changing their collision shape.
 
-##### Scaled
+#### Scaled
 
 Apply non-uniform scaling to any shape.
 
@@ -1324,7 +1319,7 @@ scaled.create({
 });
 ```
 
-##### Offset Center of Mass
+#### Offset Center of Mass
 
 Shift the center of mass without changing collision shape. Useful for improving stability of tall objects.
 
@@ -1343,7 +1338,7 @@ rigidBody.create(world, {
 });
 ```
 
-#### Reusing Shapes
+### Reusing Shapes
 
 Shapes can be created once and reused across multiple bodies. This saves memory and improves performance.
 
@@ -1367,7 +1362,7 @@ rigidBody.create(world, {
 });
 ```
 
-#### Offline Shape Generation
+### Offline Shape Generation
 
 Shapes are JSON-serializable objects. You can generate complex shapes offline (especially triangle meshes, which perform sanitization, active edge computation, and BVH construction) and load the JSON at runtime.
 
@@ -1393,7 +1388,7 @@ rigidBody.create(world, {
 });
 ```
 
-### Listener
+## Listener
 
 <table>
   <tr>
@@ -1408,7 +1403,7 @@ rigidBody.create(world, {
 
 The listener lets you react to and modify physics events during world updates. Pass a listener to `updateWorld()` to receive callbacks for collision events.
 
-#### Basic Usage
+### Basic Usage
 
 ```ts
 // create a listener to react to physics events
@@ -1430,7 +1425,7 @@ const listener: Listener = {
 updateWorld(world, listener, 1 / 60);
 ```
 
-#### Body Pair Validation
+### Body Pair Validation
 
 Runs before expensive narrowphase collision detection. Use this when filtering logic is too complex for object layers or collision groups/masks (which are faster). Prefer those simpler mechanisms when possible.
 
@@ -1451,7 +1446,7 @@ const validateListener: Listener = {
 };
 ```
 
-#### Contact Validation
+### Contact Validation
 
 Called after collision detection but before adding the contact constraint. Rejecting contacts here is expensive since narrowphase has already run - prefer `onBodyPairValidate` or object layer filtering where possible. Use this for special cases where you use the contact information (contact point, normal, etc) to make a decision, such as one-way platforms or material-based effects.
 
@@ -1475,7 +1470,7 @@ const contactValidateListener: Listener = {
 };
 ```
 
-#### Modifying Contact Behavior
+### Modifying Contact Behavior
 
 Adjust friction, restitution, and other properties for specific contacts.
 
@@ -1511,7 +1506,7 @@ const modifyContactListener: Listener = {
 };
 ```
 
-#### Sensor Trigger Zones
+### Sensor Trigger Zones
 
 Track bodies entering and exiting sensor bodies (trigger volumes).
 
@@ -1546,11 +1541,11 @@ const sensorListener: Listener = {
 };
 ```
 
-### Queries
+## Queries
 
 Queries let you ask questions about the physics world without running a full simulation step. Use them for raycasts, shape sweeps, overlap tests, and more.
 
-#### Cast Ray
+### Cast Ray
 
 Cast a ray through the world to find bodies along a line. Useful for line-of-sight checks, projectile trajectories, and mouse picking.
 
@@ -1607,7 +1602,7 @@ for (const hit of allCollector.hits) {
   </tr>
 </table>
 
-#### Cast Shape
+### Cast Shape
 
 Sweep a shape through the world to find what it would hit. Essential for character movement, projectile prediction, and object placement.
 
@@ -1664,7 +1659,7 @@ for (const hit of allShapeCollector.hits) {
   </tr>
 </table>
 
-#### Collide Point
+### Collide Point
 
 Test if a point is inside any bodies. Useful for trigger zones, item pickups, and spatial checks.
 
@@ -1700,7 +1695,7 @@ console.log('point is inside', allPointCollector.hits.length, 'bodies');
   </tr>
 </table>
 
-#### Collide Shape
+### Collide Shape
 
 Test if a shape overlaps any bodies. Perfect for area triggers, placement validation, and explosion radius checks.
 
@@ -1739,7 +1734,7 @@ console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
   </tr>
 </table>
 
-#### Broadphase Queries
+### Broadphase Queries
 
 For advanced scenarios, you can query the broadphase spatial acceleration structure directly. This is faster than narrowphase queries but less precise - it only tests axis-aligned bounding boxes (AABBs), not exact shapes.
 
@@ -1773,7 +1768,7 @@ const pointVisitor: BodyVisitor = {
 broadphase.intersectPoint(world, queryPoint, queryFilter, pointVisitor);
 ```
 
-#### Shape vs Shape
+### Shape vs Shape
 
 For advanced scenarios, you can query shape-vs-shape directly without the world.
 
@@ -1918,7 +1913,7 @@ These low-level functions operate on shapes directly:
   </tr>
 </table>
 
-#### Query Filters
+### Query Filters
 
 Filters control what queries can hit using object layers, broadphase layers, collision groups/masks, and custom callbacks.
 
@@ -1990,7 +1985,7 @@ export type Filter = {
 };
 ```
 
-### Constraints
+## Constraints
 
 <table>
   <tr>
@@ -2023,7 +2018,7 @@ export type Filter = {
 
 Constraints connect bodies together to create complex mechanical systems like ragdolls, vehicles, and articulated structures. crashcat supports 8 constraint types ranging from simple connections to fully configurable constraints.
 
-#### Creating and Removing Constraints
+### Creating and Removing Constraints
 
 ```ts
 const world = createWorld(createWorldSettings());
@@ -2059,7 +2054,7 @@ constraint.enabled = false;
 pointConstraint.remove(world, constraint);
 ```
 
-#### Constraint Types
+### Constraint Types
 
 crashcat supports the following constraint types:
 
@@ -2135,7 +2130,7 @@ const fixed = fixedConstraint.create(world, {
 - **SwingTwistConstraint**: Approximates shoulder-like movement with swing and twist limits.
 - **SixDOFConstraint**: Most configurable - specify limits per translation/rotation axis.
 
-#### Constraint Motors
+### Constraint Motors
 
 Some constraints support motors that apply forces/torques to drive bodies to a target velocity or position. There are two motor types:
 
@@ -2242,7 +2237,7 @@ sliderConstraint.setTargetPosition(positionSlider, 1.5); // meters
 - For linear motors (sliders): Use `setForceLimit()`. Units are Newtons (N). Formula: Force = Mass × Acceleration.
 - Common pattern: Set limits to large values (e.g., 1e6) or `[-Infinity, Infinity]` to let the motor achieve its target as fast as possible.
 
-#### Constraint Limits
+### Constraint Limits
 
 Hinges can limit rotation angle, sliders can limit position. Limits can use hard stops or soft springs.
 
@@ -2282,7 +2277,7 @@ limitedSlider.limitsSpringSettings.frequencyOrStiffness = 10; // Hz
 limitedSlider.limitsSpringSettings.damping = 0.7;
 ```
 
-#### Local vs World Space
+### Local vs World Space
 
 Constraint attachment points can be specified in world space or local space:
 
@@ -2306,11 +2301,11 @@ const localConstraint = pointConstraint.create(world, {
 });
 ```
 
-### Character Controllers
+## Character Controllers
 
 Character controllers handle player and NPC movement with features like ground detection, slope handling, and stair stepping. crashcat provides two approaches:
 
-#### Kinematic Character Controllers (KCC)
+### Kinematic Character Controllers (KCC)
 
 crashcat has a built-in `kcc` API that provides kinematic character controller functionality ideal for player characters that need precise movement.
 
@@ -2336,7 +2331,7 @@ A kinematic character controller by default is not visible to raycasts or collis
   </tr>
 </table>
 
-#### Dynamic Character Controllers
+### Dynamic Character Controllers
 
 For characters that should behave like physics objects (ragdolls, physics-based characters, simple AI), you can build a controller using a regular dynamic rigid body with constraints on rotation to keep it upright.
 
@@ -2355,21 +2350,21 @@ The below example shows how you can create a floating capsule character controll
   </tr>
 </table>
 
-### Multiple Physics Worlds
+## Multiple Physics Worlds
 
 The shape and constraints registry is global in crashcat, but you can create as many independent physics worlds as you need.
 
 This can be useful in some advanced scenarios, e.g. for space games, where a spaceship and it's movement might be simulated in one world, but the movement of characters inside the ship is simulated in another world with different gravity and scale.
 
-### World State Serialization
+## World State Serialization
 
 A physics world in crashcat is a simple JSON-serializable object. If need be, you can JSON.stringify and JSON.parse with the entire world state, including bodies, shapes, constraints, and settings. This can be useful for saving/loading game state for debugging, or more advanced use cases. Note that object references for e.g. sharing shapes across bodies will of course not survive serialization.
 
-### Tree Shaking
+## Tree Shaking
 
 crashcat is built to be highly tree-shakeable. By selectively registering only the shapes and constraints you need, modern bundlers can eliminate unused code and significantly reduce your bundle size.
 
-#### Using `registerAll`
+### Using `registerAll`
 
 The simplest approach is to use `registerAll()`, which registers all built-in shapes and constraints. This is convenient but includes everything in your bundle:
 
@@ -2381,7 +2376,7 @@ import { registerAll } from 'crashcat';
 registerAll();
 ```
 
-#### Using `registerShapes` and `registerConstraints`
+### Using `registerShapes` and `registerConstraints`
 
 During development, it can be easier to use `registerAll()` while exploring what shapes and constraints you need. Once your usage is more finalized, you can switch to selective registration reduce bundle size significantly.
 
@@ -2401,9 +2396,9 @@ registerConstraints([hingeConstraint.def, distanceConstraint.def]);
 
 With this approach, only the sphere, box, and capsule shapes will be included in your bundle. All other shapes (cylinder, convexHull, plane, triangleMesh, etc.) will be tree-shaken away.
 
-### Common Mistakes
+## Common Mistakes
 
-#### Shapes have no collision or constraints don't work
+### Shapes have no collision or constraints don't work
 
 If you create bodies but they fall through each other, or constraints don't connect properly, you may have forgotten to register shapes and constraints.
 
@@ -2423,7 +2418,7 @@ Without registration, shapes will behave as "empty" shapes with no collision, an
 
 See [Tree Shaking](#tree-shaking) for details on selective registration to reduce bundle size.
 
-#### Body isn't affected by gravity
+### Body isn't affected by gravity
 
 If you expect your body to fall but it doesn't, check the following:
 
@@ -2439,7 +2434,7 @@ If you expect your body to fall but it doesn't, check the following:
 - Triangle mesh shapes don't calculate mass automatically - you must provide mass properties explicitly for dynamic/kinematic triangle mesh bodies
 - If mass seems wrong, check your shape's `density` parameter or set mass properties explicitly using `massProperties.create()`
 
-#### Applying forces or impulses doesn't work
+### Applying forces or impulses doesn't work
 
 If forces/impulses have no effect, verify:
 
@@ -2448,7 +2443,7 @@ If forces/impulses have no effect, verify:
 - **Force magnitude is sufficient**: Try a very large force (e.g., `1e5`) to rule out magnitude issues. Remember Force = Mass × Acceleration, so heavier bodies need stronger forces
 - **Angular inertia for torques**: For rotational forces (`addTorque`, `addImpulseAtPosition`), the body needs non-zero angular inertia
 
-#### Everything moves in slow motion
+### Everything moves in slow motion
 
 A common mistake is using pixels or other non-SI units as the physics length unit.
 
@@ -2475,16 +2470,16 @@ const renderPosition = [
 ];
 ```
 
-### Optimization Tips
+## Optimization Tips
 
-#### Use simple shapes
+### Use simple shapes
 
 Use the simplest shapes that work for your use case. Collision detection cost roughly follows:
 - Sphere (fastest) → Box → Capsule → Cylinder → Convex Hull → Triangle Mesh (slowest)
 
 For complex objects, prefer compound shapes made of simple convex shapes over triangle meshes when possible and practical.
 
-#### Reuse shapes
+### Reuse shapes
 
 Create complex shapes (especially triangle meshes and convex hulls) once and reuse them across multiple bodies. Shape creation can be expensive, but using the same shape instance for many bodies is cheap.
 
@@ -2504,15 +2499,15 @@ for (let i = 0; i < 100; i++) {
 }
 ```
 
-#### Sleep bodies on creation
+### Sleep bodies on creation
 
 If you're spawning many bodies that start at rest (e.g., a pile of objects), create them with `allowSleeping: true` and they'll enter sleep state quickly, skipping simulation until disturbed. This is especially useful for scenes with many pre-placed objects.
 
-#### Try reducing solver iterations
+### Try reducing solver iterations
 
 The default solver iteration counts balance accuracy and performance. If you can accept less accurate physics, reduce `numVelocitySteps` and `numPositionSteps` in world settings. This directly affects simulation time.
 
-#### Consider moving the simulation to a Web Worker
+### Consider moving the simulation to a Web Worker
 
 For heavy simulations, consider running physics in a Web Worker to keep the main thread responsive.
 
@@ -2520,7 +2515,7 @@ This can be especially appropriate for creative website use cases where you want
 
 This is not always trivial for more complicated game developement scenarios, and so is more of a situational decision to make with respect to your wider engine architecture.
 
-### Determinism
+## Determinism
 
 The world simulation update has implementation considerations for determinism (such as contact sorting), but this is not deeply tested yet.
 
@@ -2537,7 +2532,7 @@ The world simulation update has implementation considerations for determinism (s
 - Using varying delta time steps
 - Using javascript functions like `Math.sin` or `Math.cos` that may have environment-dependent implementations
 
-### Custom Shapes
+## Custom Shapes
 
 crashcat has experimental functionality for defining custom shapes.
 
@@ -2556,13 +2551,13 @@ This is demonstrated in the below example, which creates a custom "voxel world" 
   </tr>
 </table>
 
-### Library Integrations
+## Library Integrations
 
 crashcat is agnostic of rendering or game engine library, so it will work well with any other javascript libraries - three.js, babylon.js, playcanvas, or your own engine.
 
 The examples use threejs for rendering, but the core crashcat apis are completely agnostic of any rendering or game engine libraries.
 
-#### Three.js Debug Renderer
+### Three.js Debug Renderer
 
 crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
 
@@ -2660,9 +2655,9 @@ The debug renderer uses batched rendering for efficiency, but visualizing many b
 
 For production builds, consider conditionally excluding the debug renderer from your bundle using tree-shaking.
 
-### FAQ
+## FAQ
 
-#### When should I use crashcat over a WASM physics library?
+### When should I use crashcat over a WASM physics library?
 
 crashcat is a good choice when:
 
@@ -2676,7 +2671,7 @@ crashcat is a good choice when:
 
 **When to choose WASM instead**: If you need absolute maximum performance for very large simulations (10k+ bodies), and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
 
-#### Can I use crashcat with [my favorite framework]?
+### Can I use crashcat with [my favorite framework]?
 
 Yes! crashcat is library-agnostic and will work well with three.js, babylon.js, playcanvas, or any other javascript library.
 

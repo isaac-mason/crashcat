@@ -16,7 +16,7 @@ import {
     sphere,
     type Listener,
 } from 'crashcat';
-import { box3, quat, vec3 } from 'mathcat';
+import { Box3, box3, quat, vec3 } from 'mathcat';
 
 const worldSettings = createWorldSettings();
 const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
@@ -227,8 +227,7 @@ rigidBody.wake(world, sleepyBody);
 /* SNIPPET_START: wake-in-aabb */
 // wake all sleeping bodies within a region
 // useful after explosions, level loading, or regional activation
-const aabb = box3.fromValues([-10, 0, -10], [10, 20, 10]);
-rigidBody.wakeInAABB(world, aabb);
+rigidBody.wakeInAABB(world, [[-10, 0, -10], [10, 20, 10]]);
 /* SNIPPET_END: wake-in-aabb */
 
 /* SNIPPET_START: gravity-factor */
@@ -387,7 +386,6 @@ rigidBody.updateShape(world, changingBody); // recalculates mass, inertia, aabb
 
 /* SNIPPET_START: set-object-layer */
 // move a body to a different object layer
-// this is useful for changing collision behavior at runtime
 const movableBody = rigidBody.create(world, {
     shape: box.create({ halfExtents: [1, 1, 1] }),
     motionType: MotionType.DYNAMIC,
