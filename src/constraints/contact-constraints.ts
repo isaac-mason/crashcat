@@ -898,16 +898,11 @@ export function solveVelocityConstraintsForIsland(
     bodies: Bodies,
     constraintIndices: number[],
 ): void {
-    if (constraintIndices.length === 0) {
-        return;
-    }
-
     // PGS (Projected Gauss-Seidel) solver - one pass
     // CRITICAL ORDER: Friction first, then normal (non-penetration is more important so solved last)
 
     for (const constraintIndex of constraintIndices) {
         const constraint = contactConstraints.constraints[constraintIndex];
-        if (!constraint) continue;
 
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
@@ -1028,10 +1023,6 @@ export function solvePositionConstraintsForIsland(
     baumgarteFactor: number,
     maxPenetrationDistance: number,
 ): boolean {
-    if (constraintIndices.length === 0) {
-        return false;
-    }
-
     let anyImpulseApplied = false;
 
     for (const constraintIndex of constraintIndices) {
@@ -1047,14 +1038,27 @@ export function solvePositionConstraintsForIsland(
             continue;
         }
 
+        // get transforms once per constraint (bodies may have moved since last iteration)
+        // build rotation matrices that will be reused for both transforming contact points and inverse inertia
+        mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
+        mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
+
+        // get inverse inertia for dynamic bodies (static/kinematic don't contribute)
+        if (bodyA.motionType === MotionType.DYNAMIC) {
+            getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
+        }
+        if (bodyB.motionType === MotionType.DYNAMIC) {
+            getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+        }
+
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
-            // transform contact points from local to world space
-            vec3.transformQuat(_solvePos_worldRa, cp.localPositionA, bodyA.quaternion);
+            // transform contact points from local to world space (bodies may have moved)
+            mat4.multiply3x3Vec(_solvePos_worldRa, _solvePos_rotA, cp.localPositionA);
             vec3.add(_solvePos_pointA, bodyA.centerOfMassPosition, _solvePos_worldRa);
 
-            vec3.transformQuat(_solvePos_worldRb, cp.localPositionB, bodyB.quaternion);
+            mat4.multiply3x3Vec(_solvePos_worldRb, _solvePos_rotB, cp.localPositionB);
             vec3.add(_solvePos_pointB, bodyB.centerOfMassPosition, _solvePos_worldRb);
 
             // calculate penetration vector and separation
@@ -1065,17 +1069,6 @@ export function solvePositionConstraintsForIsland(
             // early exit if not penetrating
             if (separation >= 0) {
                 continue;
-            }
-
-            // get current world-space inverse inertia (rotation may have changed)
-            // only compute for dynamic bodies - static/kinematic don't contribute to inverse effective mass
-            if (bodyA.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
-                getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
-            }
-            if (bodyB.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
-                getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
             }
 
             // calculate midpoint and moment arms

@@ -146,13 +146,22 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
 
             /* solve velocity constraints for this island */
             for (let i = 0; i < island.numVelocitySteps; i++) {
-                contactConstraints.solveVelocityConstraintsForIsland(
-                    world.contactConstraints,
-                    world.bodies,
-                    island.contactIndices,
-                );
+                if (island.contactIndices.length > 0) {
+                    contactConstraints.solveVelocityConstraintsForIsland(
+                        world.contactConstraints,
+                        world.bodies,
+                        island.contactIndices,
+                    );
+                }
 
-                constraints.solveVelocityConstraintsForIsland(world.constraints, world.bodies, island.constraintIds, timeStep);
+                if (island.constraintIds.length > 0) {
+                    constraints.solveVelocityConstraintsForIsland(
+                        world.constraints,
+                        world.bodies,
+                        island.constraintIds,
+                        timeStep,
+                    );
+                }
             }
         }
 
@@ -182,23 +191,29 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             }
 
             for (let i = 0; i < island.numPositionSteps; i++) {
-                let appliedImpulse = contactConstraints.solvePositionConstraintsForIsland(
-                    world.contactConstraints,
-                    world.bodies,
-                    island.contactIndices,
-                    world.settings.solver.penetrationSlop,
-                    world.settings.solver.baumgarteFactor,
-                    world.settings.solver.maxPenetrationDistance,
-                );
+                let appliedImpulse = false;
 
-                appliedImpulse =
-                    constraints.solvePositionConstraintsForIsland(
-                        world.constraints,
+                if (island.contactIndices.length > 0) {
+                    appliedImpulse = contactConstraints.solvePositionConstraintsForIsland(
+                        world.contactConstraints,
                         world.bodies,
-                        island.constraintIds,
+                        island.contactIndices,
+                        world.settings.solver.penetrationSlop,
                         world.settings.solver.baumgarteFactor,
-                        timeStep,
-                    ) || appliedImpulse;
+                        world.settings.solver.maxPenetrationDistance,
+                    );
+                }
+
+                if (island.constraintIds.length > 0) {
+                    appliedImpulse =
+                        constraints.solvePositionConstraintsForIsland(
+                            world.constraints,
+                            world.bodies,
+                            island.constraintIds,
+                            world.settings.solver.baumgarteFactor,
+                            timeStep,
+                        ) || appliedImpulse;
+                }
 
                 // early termination: island converged if no impulses applied
                 if (!appliedImpulse) {
