@@ -147,19 +147,25 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
       </a>
     </td>
     <td align="center">
+      <a href="https://crashcat.dev/examples#example-conveyor-belt">
+        <img src="./examples/public/screenshots/example-conveyor-belt.png" width="180" height="120" style="object-fit:cover;"/><br/>
+        Conveyor Belt
+      </a>
+    </td>
+    <td align="center">
       <a href="https://crashcat.dev/examples#example-linear-damping">
         <img src="./examples/public/screenshots/example-linear-damping.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Linear Damping
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-angular-damping">
         <img src="./examples/public/screenshots/example-angular-damping.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Angular Damping
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-gravity-factor">
         <img src="./examples/public/screenshots/example-gravity-factor.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -172,14 +178,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Mass Properties
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-add-impulse-at-position">
         <img src="./examples/public/screenshots/example-add-impulse-at-position.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Add Impulse at Position
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-ray">
         <img src="./examples/public/screenshots/example-cast-ray.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -192,14 +198,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Cast Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-point">
         <img src="./examples/public/screenshots/example-collide-point.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Collide Point
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-shape">
         <img src="./examples/public/screenshots/example-collide-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -212,14 +218,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Sensor
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-object-layer-filtering">
         <img src="./examples/public/screenshots/example-object-layer-filtering.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Object Layer Filtering
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collision-filtering">
         <img src="./examples/public/screenshots/example-collision-filtering.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -232,14 +238,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Collide Shape vs Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-point-vs-shape">
         <img src="./examples/public/screenshots/example-collide-point-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Collide Point vs Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-ray-vs-shape">
         <img src="./examples/public/screenshots/example-cast-ray-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -252,14 +258,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Cast Shape vs Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-gjk">
         <img src="./examples/public/screenshots/example-gjk.png" width="180" height="120" style="object-fit:cover;"/><br/>
         GJK Collision Detection
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-get-supporting-face">
         <img src="./examples/public/screenshots/example-get-supporting-face.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -270,6 +276,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
       <a href="https://crashcat.dev/examples#example-convex-hull-builder">
         <img src="./examples/public/screenshots/example-convex-hull-builder.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Convex Hull Builder
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="https://crashcat.dev/examples#example-cube-heap">
+        <img src="./examples/public/screenshots/example-cube-heap.png" width="180" height="120" style="object-fit:cover;"/><br/>
+        Cube Heap
       </a>
     </td>
     <td align="center">
@@ -494,8 +508,8 @@ crashcat uses SI units and OpenGL conventions:
 - **Time**: seconds (s)
 - **Force**: newtons (N)
 - **Gravity**: -9.81 m/s² (earth gravity)
-- **Coordinate System**: right-handed, y-up (positive y is "up")
-- **Vectors**: [x, y, z] array tuples
+- **Coordinate System**: positive y is "up" by default, OpenGL right-handed system
+- **Triangle Winding**: counter-clockwise (CCW) is front face
 
 **Scale matters**: a box with `halfExtents: [100, 100, 100]` is a 100-meter cube (skyscraper-sized), which will appear to fall slowly relative to its size.
 
@@ -503,7 +517,7 @@ If your renderer uses a different coordinate system (e.g., z-up, left-handed), t
 
 ## Rigid Bodies
 
-Rigid bodies are the fundamental simulation objects in crashcat. They have a shape, position, rotation, and physical properties like mass and friction.
+Rigid bodies are the fundamental simulation objects in crashcat. They have attached shapes that define their collision geometry, and properties that control their simulation behavior.
 
 ### Creation and Removal
 
@@ -1384,6 +1398,8 @@ rigidBody.create(world, {
 
 ## Listener
 
+The listener lets you react to and modify physics events during world updates. Pass a listener to `updateWorld()` to receive callbacks for collision events.
+
 <table>
   <tr>
   <td align="center">
@@ -1392,10 +1408,14 @@ rigidBody.create(world, {
       <strong>Sensor</strong>
     </a>
   </td>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-conveyor-belt">
+      <img src="./examples/public/screenshots/example-conveyor-belt.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Conveyor Belt</strong>
+    </a>
+  </td>
   </tr>
 </table>
-
-The listener lets you react to and modify physics events during world updates. Pass a listener to `updateWorld()` to receive callbacks for collision events.
 
 ### Basic Usage
 

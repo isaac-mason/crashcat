@@ -101,8 +101,8 @@ crashcat uses SI units and OpenGL conventions:
 - **Time**: seconds (s)
 - **Force**: newtons (N)
 - **Gravity**: -9.81 m/s² (earth gravity)
-- **Coordinate System**: right-handed, y-up (positive y is "up")
-- **Vectors**: [x, y, z] array tuples
+- **Coordinate System**: positive y is "up" by default, OpenGL right-handed system
+- **Triangle Winding**: counter-clockwise (CCW) is front face
 
 **Scale matters**: a box with `halfExtents: [100, 100, 100]` is a 100-meter cube (skyscraper-sized), which will appear to fall slowly relative to its size.
 
@@ -110,7 +110,7 @@ If your renderer uses a different coordinate system (e.g., z-up, left-handed), t
 
 ## Rigid Bodies
 
-Rigid bodies are the fundamental simulation objects in crashcat. They have a shape, position, rotation, and physical properties like mass and friction.
+Rigid bodies are the fundamental simulation objects in crashcat. They have attached shapes that define their collision geometry, and properties that control their simulation behavior.
 
 ### Creation and Removal
 
