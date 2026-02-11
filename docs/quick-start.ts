@@ -54,27 +54,9 @@ for (let i = 0; i < 5; i++) {
     });
 }
 
-// if we want to listen to and modify physics events, we can pass a "listener" as the second argument
-const listener: Listener = {
-    onBodyPairValidate: (bodyA: RigidBody, bodyB: RigidBody) => {
-        return true;
-    },
-    onContactValidate: (bodyA: RigidBody, bodyB: RigidBody, baseOffset: Vec3, hit: CollideShapeHit) => {
-        return ContactValidateResult.ACCEPT_ALL_CONTACTS_FOR_THIS_BODY_PAIR;
-    },
-    onContactAdded: (bodyA: RigidBody, bodyB: RigidBody, manifold: ContactManifold, settings: ContactSettings) => {
-        // ...
-    },
-    onContactPersisted: (bodyA: RigidBody, bodyB: RigidBody, manifold: ContactManifold, settings: ContactSettings) => {
-        // ...
-    },
-    onContactRemoved: (bodyIdA: number, bodyIdB: number, subShapeIdA: number, subShapeIdB: number) => {
-        // ...
-    },
-};
-
 // simulate 10 seconds
 for (let i = 0; i < 60 * 10; i++) {
   // typically you will do this in a loop, e.g. requestAnimationFrame or setInterval
-  updateWorld(world, listener, 1 / 60);
+  // pass 'undefined' for no physics listener
+  updateWorld(world, undefined, 1 / 60);
 }
