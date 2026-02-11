@@ -111,34 +111,3 @@ const modifyContactListener: Listener = {
     },
 };
 /* SNIPPET_END: modify-contact */
-
-/* SNIPPET_START: sensor */
-// track bodies entering/exiting a sensor (trigger zone)
-const sensorBody = rigidBody.create(world, {
-    shape: box.create({ halfExtents: [5, 5, 5] }),
-    motionType: MotionType.STATIC,
-    objectLayer: OBJECT_LAYER_NOT_MOVING,
-    sensor: true, // no collision forces
-});
-
-const bodiesInSensor = new Set<number>();
-
-const sensorListener: Listener = {
-    onContactAdded: (bodyA, bodyB) => {
-        const otherBody = bodyA.id === sensorBody.id ? bodyB : bodyA;
-        if (bodyA.id === sensorBody.id || bodyB.id === sensorBody.id) {
-            bodiesInSensor.add(otherBody.id);
-            console.log('body entered sensor:', otherBody.id);
-        }
-    },
-    onContactRemoved: (bodyIdA, bodyIdB) => {
-        if (bodyIdA === sensorBody.id) {
-            bodiesInSensor.delete(bodyIdB);
-            console.log('body exited sensor:', bodyIdB);
-        } else if (bodyIdB === sensorBody.id) {
-            bodiesInSensor.delete(bodyIdA);
-            console.log('body exited sensor:', bodyIdA);
-        }
-    },
-};
-/* SNIPPET_END: sensor */

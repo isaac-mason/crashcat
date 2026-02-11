@@ -217,17 +217,23 @@ Forces accumulate until the next physics step, then get cleared. Impulses apply 
 
 <Snippet source="./rigid-bodies.ts" select="forces" />
 
+<ExamplesTable ids="example-add-impulse-at-position" />
+
 ### Mass Properties
 
 For most shapes, mass properties are computed automatically. For triangle meshes you need to provide them explicitly to use them with kinematic or static bodies.
 
 <Snippet source="./rigid-bodies.ts" select="mass" />
 
+<ExamplesTable ids="example-mass-properties" />
+
 ### Damping
 
 Damping simulates air resistance or drag. Higher values make objects slow down faster.
 
 <Snippet source="./rigid-bodies.ts" select="damping" />
+
+<ExamplesTable ids="example-linear-damping,example-angular-damping" />
 
 ### Maximum Velocities
 
@@ -257,6 +263,8 @@ Gravity factor multiplies the world gravity for a specific body. Set to 0 for fl
 
 <Snippet source="./rigid-bodies.ts" select="gravity-factor" />
 
+<ExamplesTable ids="example-gravity-factor" />
+
 ### Moving Kinematic Bodies
 
 `moveKinematic` takes a target position and quaternion, and computes the velocities needed to reach them, ensuring physical interactions with dynamic bodies rather than a direct teleportation.
@@ -265,11 +273,15 @@ Prefer using `moveKinematic` over `setTransform` for kinematic bodies such as mo
 
 <Snippet source="./rigid-bodies.ts" select="move-kinematic" />
 
+<ExamplesTable ids="example-kinematic" />
+
 ### Continuous Collision Detection
 
 Use CCD for fast-moving objects like bullets or vehicles to prevent tunneling through thin walls.
 
 <Snippet source="./rigid-bodies.ts" select="ccd" />
+
+<ExamplesTable ids="example-ccd" />
 
 ### User Data
 
@@ -285,17 +297,23 @@ A collision occurs when `(groupA & maskB) != 0 AND (groupB & maskA) != 0`. Use t
 
 <Snippet source="./rigid-bodies.ts" select="collision-groups" />
 
+<ExamplesTable ids="example-collision-filtering" />
+
 ### Material Properties
 
 Friction and restitution control surface interaction. Combine modes determine how material properties mix when two bodies collide.
 
 <Snippet source="./rigid-bodies.ts" select="material" />
 
+<ExamplesTable ids="example-friction,example-restitution" />
+
 ### Sensors
 
 Sensor bodies detect collisions without applying physical forces. Use them for trigger zones, pickups, or detection areas.
 
 <Snippet source="./rigid-bodies.ts" select="sensor" />
+
+<ExamplesTable ids="example-sensor" />
 
 ### Updating Shape
 
@@ -318,6 +336,8 @@ You can change a body's motion type at runtime to switch between static, kinemat
 ## Shapes
 
 Shapes determine how rigid bodies collide with each other. crashcat provides primitive shapes, complex shapes like triangle meshes, and decorator shapes for advanced use cases.
+
+<ExamplesTable ids="example-shapes" />
 
 ### Convex Shapes
 
@@ -428,12 +448,6 @@ Called after collision detection but before adding the contact constraint. Rejec
 Adjust friction, restitution, and other properties for specific contacts.
 
 <Snippet source="./listeners.ts" select="modify-contact" />
-
-### Sensor Trigger Zones
-
-Track bodies entering and exiting sensor bodies (trigger volumes).
-
-<Snippet source="./listeners.ts" select="sensor" />
 
 ## Queries
 

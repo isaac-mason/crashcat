@@ -721,6 +721,17 @@ rigidBody.addImpulse(world, dynamicBody, impulse);
 rigidBody.addImpulseAtPosition(world, dynamicBody, impulse, worldPosition);
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-add-impulse-at-position">
+      <img src="./examples/public/screenshots/example-add-impulse-at-position.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Add Impulse at Position</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Mass Properties
 
 For most shapes, mass properties are computed automatically. For triangle meshes you need to provide them explicitly to use them with kinematic or static bodies.
@@ -757,6 +768,17 @@ const mass = 1 / body.motionProperties.invMass; // mass in kg
 const invMass = body.motionProperties.invMass; // 1/mass, used internally
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-mass-properties">
+      <img src="./examples/public/screenshots/example-mass-properties.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Mass Properties</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Damping
 
 Damping simulates air resistance or drag. Higher values make objects slow down faster.
@@ -775,6 +797,23 @@ const dampedBody = rigidBody.create(world, {
 dampedBody.motionProperties.linearDamping = 0.2;
 dampedBody.motionProperties.angularDamping = 0.2;
 ```
+
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-linear-damping">
+      <img src="./examples/public/screenshots/example-linear-damping.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Linear Damping</strong>
+    </a>
+  </td>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-angular-damping">
+      <img src="./examples/public/screenshots/example-angular-damping.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Angular Damping</strong>
+    </a>
+  </td>
+  </tr>
+</table>
 
 ### Maximum Velocities
 
@@ -863,6 +902,17 @@ const heavyBody = rigidBody.create(world, {
 heavyBody.motionProperties.gravityFactor = 0.5;
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-gravity-factor">
+      <img src="./examples/public/screenshots/example-gravity-factor.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Gravity Factor</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Moving Kinematic Bodies
 
 `moveKinematic` takes a target position and quaternion, and computes the velocities needed to reach them, ensuring physical interactions with dynamic bodies rather than a direct teleportation.
@@ -886,6 +936,17 @@ quat.setAxisAngle(targetQuaternion, vec3.fromValues(0, 1, 0), Math.PI / 4);
 rigidBody.moveKinematic(platform, targetPosition, targetQuaternion, deltaTime);
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-kinematic">
+      <img src="./examples/public/screenshots/example-kinematic.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Kinematic Body</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Continuous Collision Detection
 
 Use CCD for fast-moving objects like bullets or vehicles to prevent tunneling through thin walls.
@@ -901,6 +962,17 @@ const bullet = rigidBody.create(world, {
 // configure threshold in world settings (default 0.05 = 5%)
 // worldSettings.ccd.linearCastThreshold = 0.05;
 ```
+
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-ccd">
+      <img src="./examples/public/screenshots/example-ccd.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Continuous Collision Detection</strong>
+    </a>
+  </td>
+  </tr>
+</table>
 
 ### User Data
 
@@ -954,6 +1026,17 @@ const debrisBody = rigidBody.create(world, {
 });
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-collision-filtering">
+      <img src="./examples/public/screenshots/example-collision-filtering.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Collision Filtering</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Material Properties
 
 Friction and restitution control surface interaction. Combine modes determine how material properties mix when two bodies collide.
@@ -989,6 +1072,23 @@ const customCombine = rigidBody.create(world, {
 });
 ```
 
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-friction">
+      <img src="./examples/public/screenshots/example-friction.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Friction</strong>
+    </a>
+  </td>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-restitution">
+      <img src="./examples/public/screenshots/example-restitution.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Restitution</strong>
+    </a>
+  </td>
+  </tr>
+</table>
+
 ### Sensors
 
 Sensor bodies detect collisions without applying physical forces. Use them for trigger zones, pickups, or detection areas.
@@ -1011,6 +1111,17 @@ const listener: Listener = {
     },
 };
 ```
+
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-sensor">
+      <img src="./examples/public/screenshots/example-sensor.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Sensor</strong>
+    </a>
+  </td>
+  </tr>
+</table>
 
 ### Updating Shape
 
@@ -1070,6 +1181,17 @@ rigidBody.setMotionType(world, switchableBody, MotionType.STATIC, false);
 ## Shapes
 
 Shapes determine how rigid bodies collide with each other. crashcat provides primitive shapes, complex shapes like triangle meshes, and decorator shapes for advanced use cases.
+
+<table>
+  <tr>
+  <td align="center">
+    <a href="https://crashcat.dev/examples#example-shapes">
+      <img src="./examples/public/screenshots/example-shapes.png" width="200" height="133" style="object-fit:cover;"/><br/>
+      <strong>Shapes</strong>
+    </a>
+  </td>
+  </tr>
+</table>
 
 ### Convex Shapes
 
@@ -1433,41 +1555,6 @@ const modifyContactListener: Listener = {
 
             // example: apply damage based on penetration depth
             // const damage = manifold.penetrationDepth * 10;
-        }
-    },
-};
-```
-
-### Sensor Trigger Zones
-
-Track bodies entering and exiting sensor bodies (trigger volumes).
-
-```ts
-// track bodies entering/exiting a sensor (trigger zone)
-const sensorBody = rigidBody.create(world, {
-    shape: box.create({ halfExtents: [5, 5, 5] }),
-    motionType: MotionType.STATIC,
-    objectLayer: OBJECT_LAYER_NOT_MOVING,
-    sensor: true, // no collision forces
-});
-
-const bodiesInSensor = new Set<number>();
-
-const sensorListener: Listener = {
-    onContactAdded: (bodyA, bodyB) => {
-        const otherBody = bodyA.id === sensorBody.id ? bodyB : bodyA;
-        if (bodyA.id === sensorBody.id || bodyB.id === sensorBody.id) {
-            bodiesInSensor.add(otherBody.id);
-            console.log('body entered sensor:', otherBody.id);
-        }
-    },
-    onContactRemoved: (bodyIdA, bodyIdB) => {
-        if (bodyIdA === sensorBody.id) {
-            bodiesInSensor.delete(bodyIdB);
-            console.log('body exited sensor:', bodyIdB);
-        } else if (bodyIdB === sensorBody.id) {
-            bodiesInSensor.delete(bodyIdA);
-            console.log('body exited sensor:', bodyIdA);
         }
     },
 };
