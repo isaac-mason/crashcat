@@ -3,7 +3,6 @@ import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
 import { assert } from '../utils/assert';
 import type { Face } from '../utils/face';
 import { createFace } from '../utils/face';
-import { pool } from '../utils/pool';
 import { clipPolyVsEdge, clipPolyVsPoly } from './clip';
 
 /** Maximum number of contact points in a manifold after reduction */
@@ -70,8 +69,6 @@ export function createContactManifold(): ContactManifold {
         materialIdB: -1,
     };
 }
-
-export const contactManifoldPool = /* @__PURE__ */ pool(createContactManifold);
 
 export function resetContactManifold(manifold: ContactManifold): void {
     manifold.numContactPoints = 0;

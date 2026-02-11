@@ -329,7 +329,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     bodyB: RigidBody;
     listener: Listener | undefined;
     deltaTime: number;
-    manifolds: manifold.ContactManifold[];
+    manifoldsPool: manifold.ContactManifold[];
+    numManifolds: number;
     maxManifolds: number;
     validateBodyPair: boolean;
     setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
@@ -347,8 +348,9 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     listener: undefined,
     deltaTime: null! as number,
 
-    // accumulated manifolds (max 32)
-    manifolds: [],
+    // pre-allocated manifolds pool (all 32 slots allocated upfront)
+    manifoldsPool: Array.from({ length: 32 }, () => manifold.createContactManifold()),
+    numManifolds: 0,
     maxManifolds: 32,
 
     // validation state
@@ -361,11 +363,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     },
 
     setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
-        // release all accumulated manifolds back to pool
-        for (const m of this.manifolds) {
-            manifold.contactManifoldPool.release(m);
-        }
-        this.manifolds.length = 0;
+        // reset counter to reuse manifolds in pool (no allocations after warmup)
+        this.numManifolds = 0;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.validateBodyPair = true;
 
@@ -407,9 +406,10 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         // normalize hit normal
         vec3.normalize(_narrowphase_worldSpaceNormal, hit.penetrationAxis);
 
-        // try to find existing manifold with similar normal
+        // try to find existing manifold with similar normal in active range [0, numManifolds)
         let foundManifold: manifold.ContactManifold | null = null;
-        for (const m of this.manifolds) {
+        for (let i = 0; i < this.numManifolds; i++) {
+            const m = this.manifoldsPool[i];
             const dot = vec3.dot(_narrowphase_worldSpaceNormal, m.worldSpaceNormal);
             if (dot >= normalThreshold) {
                 foundManifold = m;
@@ -419,22 +419,22 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
 
         // create new manifold if needed, or accumulate into existing
         if (!foundManifold) {
-            if (this.manifolds.length >= this.maxManifolds) {
-                // array full - replace shallowest manifold if this hit is deeper
-                let shallowest = this.manifolds[0];
-                for (let i = 1; i < this.manifolds.length; i++) {
-                    if (this.manifolds[i].penetrationDepth < shallowest.penetrationDepth) {
-                        shallowest = this.manifolds[i];
+            if (this.numManifolds >= this.maxManifolds) {
+                // pool full - replace shallowest manifold if this hit is deeper
+                let shallowestIdx = 0;
+                for (let i = 1; i < this.numManifolds; i++) {
+                    if (this.manifoldsPool[i].penetrationDepth < this.manifoldsPool[shallowestIdx].penetrationDepth) {
+                        shallowestIdx = i;
                     }
                 }
 
-                if (hit.penetration < shallowest.penetrationDepth) {
+                if (hit.penetration < this.manifoldsPool[shallowestIdx].penetrationDepth) {
                     // this hit is shallower than shallowest manifold - skip it
                     return;
                 }
 
                 // replace shallowest manifold with this hit
-                foundManifold = shallowest;
+                foundManifold = this.manifoldsPool[shallowestIdx];
                 manifold.resetContactManifold(foundManifold);
                 vec3.copy(foundManifold.baseOffset, baseOffset);
                 vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
@@ -444,8 +444,9 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.materialIdA = hit.materialIdA;
                 foundManifold.materialIdB = hit.materialIdB;
             } else {
-                // create new manifold
-                foundManifold = manifold.contactManifoldPool.request();
+                // use next slot in pool (already allocated)
+                foundManifold = this.manifoldsPool[this.numManifolds];
+                this.numManifolds++;
                 manifold.resetContactManifold(foundManifold);
                 vec3.copy(foundManifold.baseOffset, baseOffset);
                 vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
@@ -454,7 +455,6 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.subShapeIdB = hit.subShapeIdB;
                 foundManifold.materialIdA = hit.materialIdA;
                 foundManifold.materialIdB = hit.materialIdB;
-                this.manifolds.push(foundManifold);
             }
         } else {
             // accumulate normal (will be normalized later before creating constraints)
@@ -522,7 +522,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
 
         let constraintsCreated = false;
 
-        for (const currentManifold of this.manifolds) {
+        for (let i = 0; i < this.numManifolds; i++) {
+            const currentManifold = this.manifoldsPool[i];
             // normalize accumulated normal (sum of all merged hit normals)
             vec3.normalize(currentManifold.worldSpaceNormal, currentManifold.worldSpaceNormal);
 
@@ -1233,6 +1234,7 @@ const ccdBodyVisitor: BodyVisitor & {
 };
 
 const _ccd_filter = /* @__PURE__ */ filter.createEmpty();
+const _onCCDContactAdded_swappedManifold = /* @__PURE__ */ manifold.createContactManifold();
 
 /** handle CCD contact added event - calculates material properties and fires contact listener callbacks */
 function onCCDContactAdded(
@@ -1271,8 +1273,8 @@ function onCCDContactAdded(
         orderedBodyA = bodyB;
         orderedBodyB = bodyA;
 
-        // swap manifold sub-shape IDs to match body swap
-        swappedManifold = manifold.contactManifoldPool.request();
+        // swap manifold sub-shape IDs to match body swap (use scratch object)
+        swappedManifold = _onCCDContactAdded_swappedManifold;
         manifold.resetContactManifold(swappedManifold);
         swappedManifold.subShapeIdA = contactManifold.subShapeIdB;
         swappedManifold.subShapeIdB = contactManifold.subShapeIdA;
@@ -1321,19 +1323,13 @@ function onCCDContactAdded(
 
     // swap mass/inertia scales back if we swapped bodies
     if (orderedBodyA !== bodyA) {
-        [contactSettings.invMassScale1, contactSettings.invMassScale2] = [
-            contactSettings.invMassScale2,
-            contactSettings.invMassScale1,
-        ];
-        [contactSettings.invInertiaScale1, contactSettings.invInertiaScale2] = [
-            contactSettings.invInertiaScale2,
-            contactSettings.invInertiaScale1,
-        ];
-    }
+        const tempMass = contactSettings.invMassScale1;
+        contactSettings.invMassScale1 = contactSettings.invMassScale2;
+        contactSettings.invMassScale2 = tempMass;
 
-    // release swapped manifold if we created one
-    if (swappedManifold !== contactManifold) {
-        manifold.contactManifoldPool.release(swappedManifold);
+        const tempInertia = contactSettings.invInertiaScale1;
+        contactSettings.invInertiaScale1 = contactSettings.invInertiaScale2;
+        contactSettings.invInertiaScale2 = tempInertia;
     }
 }
 
