@@ -19,7 +19,7 @@ import * as debugUI from './debug/debug-ui';
 /* constants */
 
 const N = 100;
-const SPHERE_RADIUS = 1.5;
+const SPHERE_RADIUS = 1;
 const COLORS = ['orange', 'hotpink', '#ffffff'];
 const LINEAR_DAMPING = 2;
 const ANGULAR_DAMPING = 4;
