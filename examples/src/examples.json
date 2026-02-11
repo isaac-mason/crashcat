@@ -63,6 +63,10 @@
         "title": "Friction",
         "tags": ["world", "physics", "friction", "contact-solver", "dynamics"]
     },
+    "example-conveyor-belt": {
+        "title": "Conveyor Belt",
+        "tags": ["world", "physics", "conveyor", "contact-listener", "surface-velocity", "friction", "dynamics"]
+    },
     "example-linear-damping": {
         "title": "Linear Damping",
         "tags": ["world", "physics", "linear-damping", "drag", "dynamics"]
