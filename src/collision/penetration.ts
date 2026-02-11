@@ -48,23 +48,39 @@ export function penetrationDepthStepGJK(
     // run GJK to find the closest points between shapes
     gjkClosestPoints(_gjk_closestPoints, supportA, supportB, tolerance, direction, combinedRadiusSquared);
 
-    // copy results to output
-    vec3.copy(outPenetrationDepth.pointA, _gjk_closestPoints.pointA);
-    vec3.copy(outPenetrationDepth.pointB, _gjk_closestPoints.pointB);
-    vec3.copy(outPenetrationDepth.penetrationAxis, _gjk_closestPoints.penetrationAxis);
-    copySimplex(outSimplex, _gjk_closestPoints.simplex);
-
     // check if shapes are separated by more than the combined convex radius
-    // first check GJK result, then verify with distance
     if (_gjk_closestPoints.squaredDistance > combinedRadiusSquared) {
         // shapes are separated - no collision
         // explicitly clear contact data to avoid stale data from previous collisions
-        vec3.set(outPenetrationDepth.pointA, 0, 0, 0);
-        vec3.set(outPenetrationDepth.pointB, 0, 0, 0);
-        vec3.set(outPenetrationDepth.penetrationAxis, 0, 0, 0);
+        outPenetrationDepth.pointA[0] = 0;
+        outPenetrationDepth.pointA[1] = 0;
+        outPenetrationDepth.pointA[2] = 0;
+        outPenetrationDepth.pointB[0] = 0;
+        outPenetrationDepth.pointB[1] = 0;
+        outPenetrationDepth.pointB[2] = 0;
+        outPenetrationDepth.penetrationAxis[0] = 0;
+        outPenetrationDepth.penetrationAxis[1] = 0;
+        outPenetrationDepth.penetrationAxis[2] = 0;
         outPenetrationDepth.status = PenetrationDepthStatus.NOT_COLLIDING;
         return;
     }
+
+    // copy results to output
+
+    // vec3.copy(outPenetrationDepth.pointA, _gjk_closestPoints.pointA);
+    outPenetrationDepth.pointA[0] = _gjk_closestPoints.pointA[0];
+    outPenetrationDepth.pointA[1] = _gjk_closestPoints.pointA[1];
+    outPenetrationDepth.pointA[2] = _gjk_closestPoints.pointA[2];
+    // vec3.copy(outPenetrationDepth.pointB, _gjk_closestPoints.pointB);
+    outPenetrationDepth.pointB[0] = _gjk_closestPoints.pointB[0];
+    outPenetrationDepth.pointB[1] = _gjk_closestPoints.pointB[1];
+    outPenetrationDepth.pointB[2] = _gjk_closestPoints.pointB[2];
+    // vec3.copy(outPenetrationDepth.penetrationAxis, _gjk_closestPoints.penetrationAxis);
+    outPenetrationDepth.penetrationAxis[0] = _gjk_closestPoints.penetrationAxis[0];
+    outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
+    outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
+
+    copySimplex(outSimplex, _gjk_closestPoints.simplex);
 
     if (_gjk_closestPoints.squaredDistance > 0.0) {
         // collision within convex radius - adjust contact points based on convex radii
