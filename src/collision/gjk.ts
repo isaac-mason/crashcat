@@ -1415,8 +1415,6 @@ export function createGjkClosestPoints(): GjkClosestPoints {
     };
 }
 
-const _closestPointsInSimplex_diff = /* @__PURE__ */ vec3.create();
-
 /**
  * Get closest points between two convex shapes using GJK.
  *
@@ -1446,11 +1444,9 @@ export function gjkClosestPoints(
     _simplex.size = 0;
 
     // length^2 of v
-    // vec3.copy(_closestPointToSimplex.point, direction);
     _closestPointToSimplex.point[0] = direction[0];
     _closestPointToSimplex.point[1] = direction[1];
     _closestPointToSimplex.point[2] = direction[2];
-    // _closestPointToSimplex.squaredDistance = vec3.squaredLength(direction);
     _closestPointToSimplex.squaredDistance =
         direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2];
     _closestPointToSimplex.pointSet = 0;
@@ -1461,11 +1457,9 @@ export function gjkClosestPoints(
     let iterations = 0;
     while (iterations++ < GJK_MAX_ITERATIONS) {
         // get support points for shape A and B in the direction of v
-        // vec3.copy(_directionA, _closestPointToSimplex.point);
         _directionA[0] = _closestPointToSimplex.point[0];
         _directionA[1] = _closestPointToSimplex.point[1];
         _directionA[2] = _closestPointToSimplex.point[2];
-        // vec3.negate(_directionB, _closestPointToSimplex.point);
         _directionB[0] = -_closestPointToSimplex.point[0];
         _directionB[1] = -_closestPointToSimplex.point[1];
         _directionB[2] = -_closestPointToSimplex.point[2];
@@ -1474,12 +1468,10 @@ export function gjkClosestPoints(
         supportB.getSupport(_directionB, _q);
 
         // get support point of the minkowski sum A - B of v
-        // vec3.subtract(_w, _p, _q);
         _w[0] = _p[0] - _q[0];
         _w[1] = _p[1] - _q[1];
         _w[2] = _p[2] - _q[2];
 
-        // const dot = vec3.dot(_closestPointToSimplex.point, _w);
         const dot =
             _closestPointToSimplex.point[0] * _w[0] +
             _closestPointToSimplex.point[1] * _w[1] +
@@ -1488,7 +1480,6 @@ export function gjkClosestPoints(
         // test if we have a separation of more than inMaxDistSq, in which case we terminate early
         if (dot < 0.0 && dot * dot > _closestPointToSimplex.squaredDistance * maxDistanceSquared) {
             out.squaredDistance = Number.MAX_VALUE;
-            // vec3.copy(out.penetrationAxis, _closestPointToSimplex.point);
             out.penetrationAxis[0] = _closestPointToSimplex.point[0];
             out.penetrationAxis[1] = _closestPointToSimplex.point[1];
             out.penetrationAxis[2] = _closestPointToSimplex.point[2];
@@ -1496,17 +1487,16 @@ export function gjkClosestPoints(
         }
 
         // store the point for later use
-        // vec3.copy(_simplex.points[_simplex.size].y, _w);
         const y = _simplex.points[_simplex.size].y;
         y[0] = _w[0];
         y[1] = _w[1];
         y[2] = _w[2];
-        // vec3.copy(_simplex.points[_simplex.size].p, _p);
+
         const p = _simplex.points[_simplex.size].p;
         p[0] = _p[0];
         p[1] = _p[1];
         p[2] = _p[2];
-        // vec3.copy(_simplex.points[_simplex.size].q, _q);
+
         const q = _simplex.points[_simplex.size].q;
         q[0] = _q[0];
         q[1] = _q[1];
@@ -1523,7 +1513,6 @@ export function gjkClosestPoints(
 
         // if there are 4 points, the origin is inside the tetrahedron and we're done
         if (_closestPointToSimplex.pointSet === 0xf) {
-            // vec3.zero(_closestPointToSimplex.point);
             _closestPointToSimplex.point[0] = 0;
             _closestPointToSimplex.point[1] = 0;
             _closestPointToSimplex.point[2] = 0;
@@ -1540,15 +1529,15 @@ export function gjkClosestPoints(
                     // copy point i to position newSize
                     const { y: srcY, p: srcP, q: srcQ } = _simplex.points[i];
                     const { y: dstY, p: dstP, q: dstQ } = _simplex.points[newSize];
-                    // vec3.copy(simplex.points[newSize].y, simplex.points[i].y);
+
                     dstY[0] = srcY[0];
                     dstY[1] = srcY[1];
                     dstY[2] = srcY[2];
-                    // vec3.copy(simplex.points[newSize].p, simplex.points[i].p);
+
                     dstP[0] = srcP[0];
                     dstP[1] = srcP[1];
                     dstP[2] = srcP[2];
-                    // vec3.copy(simplex.points[newSize].q, simplex.points[i].q);
+
                     dstQ[0] = srcQ[0];
                     dstQ[1] = srcQ[1];
                     dstQ[2] = srcQ[2];
@@ -1561,7 +1550,6 @@ export function gjkClosestPoints(
 
         // if v is very close to zero, we consider this a collision
         if (_closestPointToSimplex.squaredDistance <= squaredTolerance) {
-            // vec3.zero(_closestPointToSimplex.point);
             _closestPointToSimplex.point[0] = 0;
             _closestPointToSimplex.point[1] = 0;
             _closestPointToSimplex.point[2] = 0;
@@ -1574,14 +1562,12 @@ export function gjkClosestPoints(
         for (let i = 0; i < _simplex.size; i++) {
             const y = _simplex.points[i].y;
 
-            // const squaredLength = vec3.squaredLength(y);
             const squaredLength = y[0] * y[0] + y[1] * y[1] + y[2] * y[2];
 
             yMaxLengthSquared = Math.max(yMaxLengthSquared, squaredLength);
         }
 
         if (_closestPointToSimplex.squaredDistance <= GJK_TOLERANCE * yMaxLengthSquared) {
-            // vec3.zero(_closestPointToSimplex.point);
             _closestPointToSimplex.point[0] = 0;
             _closestPointToSimplex.point[1] = 0;
             _closestPointToSimplex.point[2] = 0;
@@ -1591,7 +1577,6 @@ export function gjkClosestPoints(
 
         // the next separation axis to test is the negative of the closest point of the Minkowski sum to the origin
         // note: this must be done before terminating as converged since the separating axis is -v
-        // vec3.negate(_closestPointToSimplex.point, _closestPointToSimplex.point);
         _closestPointToSimplex.point[0] = -_closestPointToSimplex.point[0];
         _closestPointToSimplex.point[1] = -_closestPointToSimplex.point[1];
         _closestPointToSimplex.point[2] = -_closestPointToSimplex.point[2];
@@ -1606,12 +1591,10 @@ export function gjkClosestPoints(
     }
 
     // extract the closest points
-    // vec3.zero(out.pointA);
     out.pointA[0] = 0;
     out.pointA[1] = 0;
     out.pointA[2] = 0;
 
-    // vec3.zero(out.pointB);
     out.pointB[0] = 0;
     out.pointB[1] = 0;
     out.pointB[2] = 0;
@@ -1622,7 +1605,6 @@ export function gjkClosestPoints(
     // return a large distance to indicate separation
     if (_simplex.size === 0) {
         out.squaredDistance = Number.MAX_VALUE;
-        // vec3.zero(out.penetrationAxis);
         out.penetrationAxis[0] = 0;
         out.penetrationAxis[1] = 0;
         out.penetrationAxis[2] = 0;
@@ -1632,77 +1614,58 @@ export function gjkClosestPoints(
     switch (_simplex.size) {
         case 1: {
             // single point in simplex
-            // vec3.copy(out.pointA, simplex.points[0].p);
-            out.pointA[0] = _simplex.points[0].p[0];
-            out.pointA[1] = _simplex.points[0].p[1];
-            out.pointA[2] = _simplex.points[0].p[2];
+            const { p, q } = _simplex.points[0];
 
-            // vec3.copy(out.pointB, simplex.points[0].q);
-            out.pointB[0] = _simplex.points[0].q[0];
-            out.pointB[1] = _simplex.points[0].q[1];
-            out.pointB[2] = _simplex.points[0].q[2];
+            out.pointA[0] = p[0];
+            out.pointA[1] = p[1];
+            out.pointA[2] = p[2];
+
+            out.pointB[0] = q[0];
+            out.pointB[1] = q[1];
+            out.pointB[2] = q[2];
             break;
         }
 
         case 2: {
             // line segment in simplex
-            computeBarycentricCoordinates2d(_bary, _simplex.points[0].y, _simplex.points[1].y, 1e-10);
+            const p0 = _simplex.points[0];
+            const p1 = _simplex.points[1];
+            computeBarycentricCoordinates2d(_bary, p0.y, p1.y, 1e-10);
 
-            // vec3.scaleAndAdd(out.pointA, out.pointA, simplex.points[0].p, _bary.u);
-            out.pointA[0] += _simplex.points[0].p[0] * _bary.u;
-            out.pointA[1] += _simplex.points[0].p[1] * _bary.u;
-            out.pointA[2] += _simplex.points[0].p[2] * _bary.u;
+            const p0p = p0.p;
+            const p1p = p1.p;
+            out.pointA[0] = p0p[0] * _bary.u + p1p[0] * _bary.v;
+            out.pointA[1] = p0p[1] * _bary.u + p1p[1] * _bary.v;
+            out.pointA[2] = p0p[2] * _bary.u + p1p[2] * _bary.v;
 
-            // vec3.scaleAndAdd(out.pointA, out.pointA, simplex.points[1].p, _bary.v);
-            out.pointA[0] += _simplex.points[1].p[0] * _bary.v;
-            out.pointA[1] += _simplex.points[1].p[1] * _bary.v;
-            out.pointA[2] += _simplex.points[1].p[2] * _bary.v;
-
-            // vec3.scaleAndAdd(out.pointB, out.pointB, simplex.points[0].q, _bary.u);
-            out.pointB[0] += _simplex.points[0].q[0] * _bary.u;
-            out.pointB[1] += _simplex.points[0].q[1] * _bary.u;
-            out.pointB[2] += _simplex.points[0].q[2] * _bary.u;
-
-            // vec3.scaleAndAdd(out.pointB, out.pointB, simplex.points[1].q, _bary.v);
-            out.pointB[0] += _simplex.points[1].q[0] * _bary.v;
-            out.pointB[1] += _simplex.points[1].q[1] * _bary.v;
-            out.pointB[2] += _simplex.points[1].q[2] * _bary.v;
+            const p0q = p0.q;
+            const p1q = p1.q;
+            out.pointB[0] = p0q[0] * _bary.u + p1q[0] * _bary.v;
+            out.pointB[1] = p0q[1] * _bary.u + p1q[1] * _bary.v;
+            out.pointB[2] = p0q[2] * _bary.u + p1q[2] * _bary.v;
             break;
         }
 
         case 3: {
             // triangle in simplex
-            computeBarycentricCoordinates3d(_bary, _simplex.points[0].y, _simplex.points[1].y, _simplex.points[2].y, 1e-10);
+            const p0 = _simplex.points[0];
+            const p1 = _simplex.points[1];
+            const p2 = _simplex.points[2];
+            computeBarycentricCoordinates3d(_bary, p0.y, p1.y, p2.y, 1e-10);
 
-            // vec3.scaleAndAdd(out.pointA, out.pointA, simplex.points[0].p, _bary.u);
-            out.pointA[0] += _simplex.points[0].p[0] * _bary.u;
-            out.pointA[1] += _simplex.points[0].p[1] * _bary.u;
-            out.pointA[2] += _simplex.points[0].p[2] * _bary.u;
+            const p0p = p0.p;
+            const p1p = p1.p;
+            const p2p = p2.p;
+            out.pointA[0] = p0p[0] * _bary.u + p1p[0] * _bary.v + p2p[0] * _bary.w;
+            out.pointA[1] = p0p[1] * _bary.u + p1p[1] * _bary.v + p2p[1] * _bary.w;
+            out.pointA[2] = p0p[2] * _bary.u + p1p[2] * _bary.v + p2p[2] * _bary.w;
 
-            // vec3.scaleAndAdd(out.pointA, out.pointA, simplex.points[1].p, _bary.v);
-            out.pointA[0] += _simplex.points[1].p[0] * _bary.v;
-            out.pointA[1] += _simplex.points[1].p[1] * _bary.v;
-            out.pointA[2] += _simplex.points[1].p[2] * _bary.v;
-
-            // vec3.scaleAndAdd(out.pointA, out.pointA, simplex.points[2].p, _bary.w);
-            out.pointA[0] += _simplex.points[2].p[0] * _bary.w;
-            out.pointA[1] += _simplex.points[2].p[1] * _bary.w;
-            out.pointA[2] += _simplex.points[2].p[2] * _bary.w;
-
-            // vec3.scaleAndAdd(out.pointB, out.pointB, simplex.points[0].q, _bary.u);
-            out.pointB[0] += _simplex.points[0].q[0] * _bary.u;
-            out.pointB[1] += _simplex.points[0].q[1] * _bary.u;
-            out.pointB[2] += _simplex.points[0].q[2] * _bary.u;
-
-            // vec3.scaleAndAdd(out.pointB, out.pointB, simplex.points[1].q, _bary.v);
-            out.pointB[0] += _simplex.points[1].q[0] * _bary.v;
-            out.pointB[1] += _simplex.points[1].q[1] * _bary.v;
-            out.pointB[2] += _simplex.points[1].q[2] * _bary.v;
-
-            // vec3.scaleAndAdd(out.pointB, out.pointB, simplex.points[2].q, _bary.w);
-            out.pointB[0] += _simplex.points[2].q[0] * _bary.w;
-            out.pointB[1] += _simplex.points[2].q[1] * _bary.w;
-            out.pointB[2] += _simplex.points[2].q[2] * _bary.w;
+            const p0q = p0.q;
+            const p1q = p1.q;
+            const p2q = p2.q;
+            out.pointB[0] = p0q[0] * _bary.u + p1q[0] * _bary.v + p2q[0] * _bary.w;
+            out.pointB[1] = p0q[1] * _bary.u + p1q[1] * _bary.v + p2q[1] * _bary.w;
+            out.pointB[2] = p0q[2] * _bary.u + p1q[2] * _bary.v + p2q[2] * _bary.w;
             break;
         }
 
@@ -1713,24 +1676,7 @@ export function gjkClosestPoints(
         }
     }
 
-    // compute squared distance and penetration axis
-    // penetration axis points from A to B (direction to push B out of collision with A)
-    const diff = _closestPointsInSimplex_diff;
-    // vec3.subtract(diff, out.pointB, out.pointA);
-    diff[0] = out.pointB[0] - out.pointA[0];
-    diff[1] = out.pointB[1] - out.pointA[1];
-    diff[2] = out.pointB[2] - out.pointA[2];
-
-    // out.squaredDistance = vec3.squaredLength(diff);
-    out.squaredDistance = diff[0] * diff[0] + diff[1] * diff[1] + diff[2] * diff[2];
-
-    // vec3.copy(out.penetrationAxis, diff);
-    out.penetrationAxis[0] = diff[0];
-    out.penetrationAxis[1] = diff[1];
-    out.penetrationAxis[2] = diff[2];
-
     // store the separating axis / penetration axis
-    // vec3.copy(out.penetrationAxis, _closestPointToSimplex.point);
     out.penetrationAxis[0] = _closestPointToSimplex.point[0];
     out.penetrationAxis[1] = _closestPointToSimplex.point[1];
     out.penetrationAxis[2] = _closestPointToSimplex.point[2];
