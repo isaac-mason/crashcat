@@ -744,6 +744,38 @@ If your environment uses a different coordinate system, you will need to transfo
 
 The examples use threejs for rendering, but the core crashcat apis are completely agnostic of any rendering or game engine libraries.
 
+#### Three.js Debug Renderer
+
+crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+
+**Basic Usage**
+
+<Snippet source="./debug-renderer.ts" select="basic-usage" />
+
+**Options**
+
+The debug renderer supports visualizing various aspects of the physics simulation:
+
+<Snippet source="./debug-renderer.ts" select="options" />
+
+**Body Color Modes**
+
+Different color modes help visualize different aspects of the simulation:
+
+<Snippet source="./debug-renderer.ts" select="color-modes" />
+
+**Runtime Updates**
+
+Debug renderer options can be modified at runtime to toggle different visualizations on and off:
+
+<Snippet source="./debug-renderer.ts" select="runtime-updates" />
+
+**Performance Considerations**
+
+The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
+
+For production builds, consider conditionally excluding the debug renderer from your bundle using tree-shaking.
+
 ### FAQ
 
 #### When should I use crashcat over a WASM physics library?

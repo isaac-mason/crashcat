@@ -366,6 +366,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
   - [Determinism](#determinism)
   - [Custom Shapes](#custom-shapes)
   - [Library Integrations](#library-integrations)
+    - [Three.js Debug Renderer](#threejs-debug-renderer)
   - [FAQ](#faq)
     - [When should I use crashcat over a WASM physics library?](#when-should-i-use-crashcat-over-a-wasm-physics-library)
 - [Community](#community)
@@ -2539,6 +2540,104 @@ crashcat uses standard OpenGL conventions:
 If your environment uses a different coordinate system, you will need to transform coordinates going into and out of crashcat.
 
 The examples use threejs for rendering, but the core crashcat apis are completely agnostic of any rendering or game engine libraries.
+
+#### Three.js Debug Renderer
+
+crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+
+**Basic Usage**
+
+```ts
+// create debug renderer with default options
+const options = debugRenderer.createDefaultOptions();
+const state = debugRenderer.init(options);
+
+// add to scene
+scene.add(state.object3d);
+
+// update each frame after physics step
+function _animate() {
+    // ... update physics ...
+
+    debugRenderer.update(state, world);
+
+    // ... render scene ...
+}
+```
+
+**Options**
+
+The debug renderer supports visualizing various aspects of the physics simulation:
+
+```ts
+// customize what to visualize
+const customOptions = debugRenderer.createDefaultOptions();
+
+// body visualization
+customOptions.bodies.enabled = true;
+customOptions.bodies.wireframe = false;
+customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
+customOptions.bodies.showLinearVelocity = false;
+customOptions.bodies.showAngularVelocity = false;
+
+// contact points
+customOptions.contacts.enabled = true;
+
+// contact constraints
+customOptions.contactConstraints.enabled = true;
+
+// constraints (hinges, sliders, etc.)
+customOptions.constraints.enabled = true;
+customOptions.constraints.drawLimits = true;
+customOptions.constraints.size = 0.5;
+
+// broadphase debug visualization
+customOptions.broadphaseDbvt.enabled = false;
+customOptions.broadphaseDbvt.showLeafNodes = true;
+customOptions.broadphaseDbvt.showNonLeafNodes = true;
+
+// triangle mesh bvh visualization
+customOptions.triangleMeshBvh.enabled = false;
+customOptions.triangleMeshBvh.showLeafNodes = true;
+customOptions.triangleMeshBvh.showNonLeafNodes = true;
+```
+
+**Body Color Modes**
+
+Different color modes help visualize different aspects of the simulation:
+
+```ts
+// different body color modes for debugging
+
+// unique color per body instance
+customOptions.bodies.color = debugRenderer.BodyColorMode.INSTANCE;
+
+// color by motion type (static, dynamic, kinematic)
+customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
+
+// color by sleeping state
+customOptions.bodies.color = debugRenderer.BodyColorMode.SLEEPING;
+
+// color by simulation island
+customOptions.bodies.color = debugRenderer.BodyColorMode.ISLAND;
+```
+
+**Runtime Updates**
+
+Debug renderer options can be modified at runtime to toggle different visualizations on and off:
+
+```ts
+// options can be modified at runtime
+state.options.bodies.wireframe = true;
+state.options.contacts.enabled = true;
+state.options.constraints.enabled = false;
+```
+
+**Performance Considerations**
+
+The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
+
+For production builds, consider conditionally excluding the debug renderer from your bundle using tree-shaking.
 
 ### FAQ
 
