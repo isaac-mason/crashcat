@@ -1,5 +1,4 @@
 import { degreesToRadians, type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import { assert } from '../utils/assert';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
@@ -43,8 +42,6 @@ export function penetrationDepthStepGJK(
     direction: Vec3,
     tolerance: number,
 ): void {
-    assert(vec3.squaredLength(direction) >= tolerance * tolerance, 'direction must not be zero in penetrationDepthStepGJK');
-
     const combinedRadius = convexRadiusA + convexRadiusB;
     const combinedRadiusSquared = combinedRadius * combinedRadius;
 
