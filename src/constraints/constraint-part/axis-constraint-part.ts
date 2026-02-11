@@ -527,6 +527,7 @@ export function warmStart(
 }
 
 const _acp_sv_impulse = /* @__PURE__ */ vec3.create();
+const _acp_gtl_velDiff = /* @__PURE__ */ vec3.create();
 
 /**
  * Solve velocity constraint (one iteration).
@@ -561,6 +562,8 @@ export function solveVelocityConstraint(
  * Calculate what the total lambda would be (without applying impulse).
  * Part 1 of two-step solve process.
  *
+ * note: caller must check isActive() before calling this function
+ *
  * @param part the constraint part
  * @param bodyA first body
  * @param bodyB second body
@@ -568,16 +571,16 @@ export function solveVelocityConstraint(
  * @returns new total lambda (unclamped)
  */
 export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB: RigidBody, axis: Vec3): number {
-    if (!isActive(part)) return part.totalLambda;
-
     // get motion properties for non-static bodies (both dynamic and kinematic contribute velocity)
     const mpA = bodyA.motionType !== MotionType.STATIC ? bodyA.motionProperties : null;
     const mpB = bodyB.motionType !== MotionType.STATIC ? bodyB.motionProperties : null;
 
     // calculate jacobian multiplied by linear velocity
+    // optimization: compute velocity difference first, then single dot product (matches JoltPhysics)
     let jv: number;
     if (mpA && mpB) {
-        jv = vec3.dot(axis, mpA.linearVelocity) - vec3.dot(axis, mpB.linearVelocity);
+        vec3.subtract(_acp_gtl_velDiff, mpA.linearVelocity, mpB.linearVelocity);
+        jv = vec3.dot(axis, _acp_gtl_velDiff);
     } else if (mpA) {
         jv = vec3.dot(axis, mpA.linearVelocity);
     } else if (mpB) {
