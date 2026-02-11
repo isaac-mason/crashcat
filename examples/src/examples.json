@@ -143,6 +143,10 @@
         "title": "Convex Hull Builder",
         "tags": ["convex-hull", "shapes", "geometry", "builder"]
     },
+    "example-cube-heap": {
+        "title": "Cube Heap",
+        "tags": ["world", "physics", "cube-heap"]
+    },
     "example-test-scenarios": {
         "title": "Test Scenarios",
         "tags": ["tests", "scenarios"]
