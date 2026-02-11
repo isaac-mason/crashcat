@@ -77,12 +77,12 @@ let readmeText = fs.readFileSync(readmeTemplatePath, 'utf-8');
 /* <TOC /> */
 const tocRegex = /<TOC\s*\/>/g;
 const tocLines = [];
-const headingRegex = /^(#{2,6})\s+(.*)$/gm;
+const headingRegex = /^(#{2,5})\s+(.*)$/gm;
 for (const match of readmeText.matchAll(headingRegex)) {
-    const level = match[1].length - 1; // level 2-6 becomes 1-5
+    const level = match[1].length - 1;
     const title = match[2].trim();
     
-    // Skip "Table of Contents" heading
+    // skip "Table of Contents" heading
     if (title === 'Table of Contents') {
         continue;
     }

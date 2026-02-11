@@ -287,7 +287,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
 - [Quick Start](#quick-start)
 - [Documentation](#documentation)
   - [Physics World](#physics-world)
-    - [Listening to collision events](#listening-to-collision-events)
+  - [Units and Scale](#units-and-scale)
   - [Rigid Bodies](#rigid-bodies)
     - [Creation and Removal](#creation-and-removal)
     - [Motion Types](#motion-types)
@@ -321,7 +321,6 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
     - [Decorator Shapes](#decorator-shapes)
       - [Scaled](#scaled)
       - [Offset Center of Mass](#offset-center-of-mass)
-    - [Convex Radius](#convex-radius)
     - [Reusing Shapes](#reusing-shapes)
     - [Offline Shape Generation](#offline-shape-generation)
   - [Listener](#listener)
@@ -369,6 +368,7 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
     - [Three.js Debug Renderer](#threejs-debug-renderer)
   - [FAQ](#faq)
     - [When should I use crashcat over a WASM physics library?](#when-should-i-use-crashcat-over-a-wasm-physics-library)
+    - [Can I use crashcat with [my favorite framework]?](#can-i-use-crashcat-with-my-favorite-framework)
 - [Community](#community)
 - [Acknowledgements](#acknowledgements)
 
@@ -397,38 +397,25 @@ import {
 } from 'crashcat';
 import type { Vec3 } from 'mathcat';
 
-// we can use registerShapes and registerConstraints to granularly declare
-// which shapes and constraints we want to use for the best tree shaking.
-// but early in development, it's easier to just register everything.
+// register all shapes
 registerAll();
 
-// this is a container for all settings related to world simulation.
-// in a real project, you'd put this in a e.g. "physics-world-settings.ts" file seperate from the physics world
-// creation, and import it and below constants where needed.
+// create a simple world
 const worldSettings = createWorldSettings();
 
-// we're first up going to define "broadphase layers".
-// for simple projects, a "moving" and "not moving" broadphase layer is a good start.
-// a "broadphase layer" has it's own broadphase tree, so defining layers is a way to split up the broadphase tree for better performance.
 export const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
 export const BROADPHASE_LAYER_NOT_MOVING = addBroadphaseLayer(worldSettings);
 
-// next, we'll define some "object layers".
-// an "object layer" is a grouping of rigid bodies, that belongs to a single "broadphase layer".
-// we can set up rules for which "object layers" can collide with each other.
 export const OBJECT_LAYER_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_MOVING);
 export const OBJECT_LAYER_NOT_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_NOT_MOVING);
 
-// here we declare that "moving" objects should collide with "not moving" objects, and with other "moving" objects.
-// if we had more "object layers", e.g. "player", "debris", "terrain",we could set up more specific collision rules,
-// e.g. "debris" collides with "terrain" but not with "player".
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_NOT_MOVING);
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_MOVING);
 
-// time to create the physics world from the settings we've defined
+worldSettings.gravity = [0, -9.81, 0];
+
 const world = createWorld(worldSettings);
 
-// now we can start adding bodies and constraints to the world, and simulating it!
 
 // create a static ground
 rigidBody.create(world, {
@@ -477,37 +464,58 @@ for (let i = 0; i < 60 * 10; i++) {
 
 ### Physics World
 
+**Creating a World**
+
 To create a world, first create world settings with `createWorldSettings()`.
 
 This is a container for all global settings that affect the physics simulation, such as gravity, broadphase configuration, and solver settings.
 
 Then pass the settings to `createWorld()` to create the physics world instance.
 
+**Broadphase Layers and Object Layers**
+
+crashcat uses a two-tier layer system for efficient collision detection and filtering:
+
+**Broadphase Layers** are for spatial partitioning and performance optimization. each broadphase layer has its own spatial acceleration structure (dynamic bvh tree). bodies in different broadphase layers use separate trees, which improves query performance.
+
+- for simple projects: two broadphase layers is a good start - "moving" and "not moving"
+- for complex projects: separate by update frequency (e.g., static terrain, kinematic platforms, dynamic debris)
+- bodies can only belong to one broadphase layer
+
+**Object Layers** are for collision filtering. they define which groups of bodies can collide with each other. each object layer belongs to a single broadphase layer.
+
+- examples: "player", "enemy", "terrain", "projectile", "debris"
+- you define collision rules between object layers (e.g., "projectiles hit enemies but not other projectiles")
+- this is the primary mechanism for controlling what collides with what
+- finer-grained filtering can be done with collision groups/masks (see [Collision Groups and Masks](#collision-groups-and-masks))
+
 ```ts
 import { addBroadphaseLayer, addObjectLayer, createWorld, createWorldSettings, enableCollision, registerAll } from 'crashcat';
 
-// register all built-in shapes and constraints
+// we can use registerShapes and registerConstraints to granularly declare
+// which shapes and constraints we want to use for the best tree shaking.
+// but early in development, it's easier to just register everything.
 registerAll();
 
-// create world settings container
+// this is a container for all settings related to world simulation.
+// in a real project, you'd put this in a e.g. "physics-world-settings.ts" file seperate from the physics world
+// creation, and import it and below constants where needed.
 const worldSettings = createWorldSettings();
 
-// add broadphase layers
-// each broadphase layer has its own spatial acceleration structure
-// common approach: separate "moving" and "not moving" layers
-const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
-const BROADPHASE_LAYER_NOT_MOVING = addBroadphaseLayer(worldSettings);
+// we're first up going to define "broadphase layers".
+// for simple projects, a "moving" and "not moving" broadphase layer is a good start.
+export const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
+export const BROADPHASE_LAYER_NOT_MOVING = addBroadphaseLayer(worldSettings);
 
-// add object layers
-// object layers belong to a broadphase layer and let you define collision rules
-const OBJECT_LAYER_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_MOVING);
-const OBJECT_LAYER_NOT_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_NOT_MOVING);
+// next, we'll define some "object layers".
+export const OBJECT_LAYER_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_MOVING);
+export const OBJECT_LAYER_NOT_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_NOT_MOVING);
 
-// enable collisions between object layers
+// here we declare that "moving" objects should collide with "not moving" objects, and with other "moving" objects.
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_NOT_MOVING);
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_MOVING);
 
-// create the world from settings
+// time to create the physics world from the settings we've defined
 const world = createWorld(worldSettings);
 ```
 
@@ -583,11 +591,46 @@ This decouples physics simulation rate from render frame rate. Physics always st
 
 Read more on this here: https://gafferongames.com/post/fix_your_timestep/
 
-#### Listening to collision events
+**Listening to collision events**
 
 You can pass a listener to `updateWorld` to receive callbacks when collisions start and end:
 
 See the [Listener](#listener) section for all available callbacks and advanced usage.
+
+### Units and Scale
+
+crashcat uses SI units and OpenGL conventions:
+
+- **Length**: meters (m)
+- **Mass**: kilograms (kg)
+- **Time**: seconds (s)
+- **Force**: newtons (N)
+- **Gravity**: -9.81 m/s² (earth gravity)
+- **Coordinate System**: right-handed, y-up (positive y is "up")
+- **Vectors**: [x, y, z] array tuples
+
+**Scale matters**: a box with `halfExtents: [100, 100, 100]` is a 100-meter cube (skyscraper-sized), which will appear to fall slowly relative to its size.
+
+**Recommended approach**:
+- Physics: use human scale (e.g., player capsule ~1.5m tall)
+- Rendering: scale to your display units when rendering
+
+```typescript
+// physics: meters
+const body = rigidBody.create(world, {
+    shape: capsule.create({ radius: 0.3, halfHeightOfCylinder: 0.7 }), // ~1.4m tall
+    position: [0, 10, 0], // 10 meters up
+});
+
+// rendering: scale to pixels (e.g., 50 pixels per meter)
+const renderPosition = [
+    body.position[0] * 50,
+    body.position[1] * 50,
+    body.position[2] * 50,
+];
+```
+
+If your renderer uses a different coordinate system (e.g., z-up, left-handed), transform coordinates when transferring data between crashcat and your renderer.
 
 ### Rigid Bodies
 
@@ -644,11 +687,22 @@ if (bodyById) {
 
 #### Motion Types
 
-Static bodies act as if they have infinite mass and cannot move. They're not affected by forces and only collide with dynamic bodies.
+Bodies can be static, dynamic, or kinematic. Choose the type based on how the object should behave:
 
-Dynamic bodies are fully simulated - they respond to forces, gravity, and collisions with all body types.
+**Static**: immovable objects
+- **Use for**: terrain, walls, buildings, fixed obstacles
+- **Properties**: infinite mass, never moves, collides only with dynamic bodies
+- **Examples**: ground, level geometry, static platforms
 
-Kinematic bodies have user-controlled velocity that the physics engine will not modify. They push dynamic bodies realistically but aren't pushed back. Perfect for moving platforms and elevators.
+**Dynamic**: fully simulated objects  
+- **Use for**: player, projectiles, debris, physics objects
+- **Properties**: has mass, affected by forces/gravity, collides with all body types
+- **Examples**: falling boxes, bouncing balls, physics props, characters
+
+**Kinematic**: script-controlled objects
+- **Use for**: moving platforms, elevators, scripted animations, doors
+- **Properties**: user-controlled velocity, pushes dynamic bodies but isn't pushed back
+- **Examples**: elevator, moving platform, automated door
 
 ```ts
 // static: cannot move, infinite mass, not affected by forces
@@ -696,19 +750,14 @@ rigidBody.setQuaternion(world, kinematicBody, newQuaternion, false);
 
 **position vs centerOfMassPosition:**
 
-- `position`: Location of the shape's origin (where the collision geometry is)
+- `position`: Location of the shape's origin (where the collision shape is)
 - `centerOfMassPosition`: Location of the body's center of mass in world-space
 
-For most simple shapes (sphere, box, capsule), these are the same. For compound shapes or shapes with offset center of mass, they differ. The physics engine uses `centerOfMassPosition` internally for simulation.
-
-**When to use setTransform:**
-
-- Kinematic bodies: Use `setTransform` each frame to move them, or use `moveKinematic` for smoother motion
-- Dynamic bodies: Prefer using forces/impulses or setting velocity directly. Only use `setTransform` for teleportation (e.g., respawning)
+For simple shapes (sphere, box, capsule), these are the same. For compound shapes or shapes with offset center of mass, they differ. The physics engine uses `centerOfMassPosition` internally for simulation.
 
 #### Velocity
 
-Set velocity directly using the rigidBody APIs for jump mechanics, launching projectiles, or controlling character movement.
+Linear and angular velocity can be read directly from rigid body objects. The `rigidBody` namespace provides APIs for modifying velocities.
 
 ```ts
 // read velocities
@@ -1093,11 +1142,15 @@ rigidBody.setMotionType(world, switchableBody, MotionType.STATIC, false);
 
 ### Shapes
 
-Shapes define the collision geometry of rigid bodies. crashcat provides primitive shapes, complex shapes like triangle meshes, and decorator shapes for advanced use cases.
+Shapes determine how rigid bodies collide with each other. crashcat provides primitive shapes, complex shapes like triangle meshes, and decorator shapes for advanced use cases.
 
 #### Convex Shapes
 
 A convex shape is one where, if you pick any two points inside the shape, the line segment between them is also inside the shape. This property enables fast collision detection with the GJK/EPA algorithms.
+
+To speed up collision detection, all convex shapes use a convex radius. The shape is first shrunk by the convex radius, then inflated again by the same amount, resulting in a rounded shape.
+
+This rounding improves performance and contact manifold quality, but makes geometry slightly less accurate. Adjust the radius to balance speed vs precision.
 
 ##### Sphere
 
@@ -1210,7 +1263,7 @@ rigidBody.create(world, {
 
 **⚠️ Dynamic triangle meshes**
 
-Avoid using triangle meshes for dynamic bodies. Performance is poor (collision detection against triangle meshes is expensive), and fast-moving meshes can tunnel through other objects easily. Use convex hulls or compound shapes instead for dynamic objects.
+Avoid using triangle meshes for dynamic bodies. Performance is poor (collision detection against triangle meshes is usually more expensive), and fast-moving meshes can tunnel through other objects easily. Use convex hulls or compound shapes instead for dynamic objects.
 
 #### Compound Shape
 
@@ -1251,7 +1304,7 @@ rigidBody.create(world, {
 
 #### Decorator Shapes
 
-Decorator shapes modify other shapes without changing their collision geometry.
+Decorator shapes modify other shapes without changing their collision shape.
 
 ##### Scaled
 
@@ -1273,7 +1326,7 @@ scaled.create({
 
 ##### Offset Center of Mass
 
-Shift the center of mass without changing collision geometry. Useful for improving stability of tall objects.
+Shift the center of mass without changing collision shape. Useful for improving stability of tall objects.
 
 ```ts
 // shift center of mass without changing collision geometry
@@ -1288,31 +1341,6 @@ rigidBody.create(world, {
     motionType: MotionType.DYNAMIC,
     objectLayer: OBJECT_LAYER_MOVING,
 });
-```
-
-#### Convex Radius
-
-To speed up collision detection, all convex shapes use a convex radius. The shape is first shrunk by the convex radius, then inflated again by the same amount, resulting in a rounded shape.
-
-This rounding improves performance and contact manifold quality, but makes geometry slightly less accurate. Adjust the radius to balance speed vs precision.
-
-```ts
-// default convex radius is 0.05
-box.create({
-    halfExtents: [1, 1, 1],
-    convexRadius: 0.01, // sharper corners, more accurate geometry
-});
-
-box.create({
-    halfExtents: [1, 1, 1],
-    convexRadius: 0.2, // rounder corners, faster collision detection
-});
-
-// convex radius is subtracted from dimensions, then added back as rounding
-// a box with halfExtents [1, 1, 1] and convexRadius 0.05:
-// - core box shrinks to [0.95, 0.95, 0.95]
-// - 0.05 radius rounding is added to all edges
-// result: rounded box from [-1, -1, -1] to [1, 1, 1] with rounded corners
 ```
 
 #### Reusing Shapes
@@ -1993,7 +2021,7 @@ export type Filter = {
   </tr>
 </table>
 
-Constraints connect bodies together to create complex mechanical systems like ragdolls, vehicles, and articulated structures. crashcat supports 8 constraint types ranging from simple connections to fully configurable joints.
+Constraints connect bodies together to create complex mechanical systems like ragdolls, vehicles, and articulated structures. crashcat supports 8 constraint types ranging from simple connections to fully configurable constraints.
 
 #### Creating and Removing Constraints
 
@@ -2098,12 +2126,12 @@ const fixed = fixedConstraint.create(world, {
 
 **Available Constraints**:
 
-- **PointConstraint**: Connects two bodies at a point (removes 3 DOF). Like a ball joint.
+- **PointConstraint**: Connects two bodies at a point (removes 3 DOF). Like a ball-and-socket.
 - **DistanceConstraint**: Maintains distance between two points (removes 1 DOF). Like a rope or stick.
 - **HingeConstraint**: Allows rotation around an axis (removes 5 DOF). Like a door hinge or wheel axle.
 - **SliderConstraint**: Allows movement along an axis (removes 5 DOF). Like a piston or rail.
 - **FixedConstraint**: Completely locks two bodies together (removes 6 DOF). Like welding.
-- **ConeConstraint**: Limits rotation within a cone (removes 3 DOF). Like a shoulder joint.
+- **ConeConstraint**: Limits rotation within a cone (removes 3 DOF). Like a shoulder.
 - **SwingTwistConstraint**: Approximates shoulder-like movement with swing and twist limits.
 - **SixDOFConstraint**: Most configurable - specify limits per translation/rotation axis.
 
@@ -2391,7 +2419,7 @@ import { registerAll } from "crashcat";
 registerAll();
 ```
 
-Without registration, shapes will behave as "empty" shapes with no collision geometry, and constraints won't function properly.
+Without registration, shapes will behave as "empty" shapes with no collision, and constraints won't function properly.
 
 See [Tree Shaking](#tree-shaking) for details on selective registration to reduce bundle size.
 
@@ -2532,13 +2560,6 @@ This is demonstrated in the below example, which creates a custom "voxel world" 
 
 crashcat is agnostic of rendering or game engine library, so it will work well with any other javascript libraries - three.js, babylon.js, playcanvas, or your own engine.
 
-crashcat uses standard OpenGL conventions:
-
-- uses the right-handed coordinate system (y-up)
-- vectors are represented as `[x, y, z]` array tuples
-
-If your environment uses a different coordinate system, you will need to transform coordinates going into and out of crashcat.
-
 The examples use threejs for rendering, but the core crashcat apis are completely agnostic of any rendering or game engine libraries.
 
 #### Three.js Debug Renderer
@@ -2655,6 +2676,10 @@ crashcat is a good choice when:
 
 **When to choose WASM instead**: If you need absolute maximum performance for very large simulations (10k+ bodies), and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
 
+#### Can I use crashcat with [my favorite framework]?
+
+Yes! crashcat is library-agnostic and will work well with three.js, babylon.js, playcanvas, or any other javascript library.
+
 ## Community
 
 **webgamedev discord**
@@ -2665,9 +2690,10 @@ https://www.webgamedev.com/discord
 
 ## Acknowledgements
 
-This library stands on the shoulders of giants! Many ideas and inspirations were drawn from existing work, particularly:
+crashcat stands on the shoulders of giants! Many ideas and implementations were drawn from existing work:
 
 - JoltPhysics: https://github.com/jrouwe/joltphysics (narrowphase, constraint solver design)
 - Box2D: https://github.com/erincatto/box2d (contact management and solver design)
 - Bullet Physics: https://github.com/bulletphysics/bullet3 (broadphase, dbvt)
 - Bounce: https://codeberg.org/perplexdotgg/bounce (influenced crashcat's narrowphase design)
+- three-mesh-bvh: https://github.com/gkjohnson/three-mesh-bvh (referenced for triangle mesh bvh building and traversal)

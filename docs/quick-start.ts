@@ -18,38 +18,25 @@ import {
 } from 'crashcat';
 import type { Vec3 } from 'mathcat';
 
-// we can use registerShapes and registerConstraints to granularly declare
-// which shapes and constraints we want to use for the best tree shaking.
-// but early in development, it's easier to just register everything.
+// register all shapes
 registerAll();
 
-// this is a container for all settings related to world simulation.
-// in a real project, you'd put this in a e.g. "physics-world-settings.ts" file seperate from the physics world
-// creation, and import it and below constants where needed.
+// create a simple world
 const worldSettings = createWorldSettings();
 
-// we're first up going to define "broadphase layers".
-// for simple projects, a "moving" and "not moving" broadphase layer is a good start.
-// a "broadphase layer" has it's own broadphase tree, so defining layers is a way to split up the broadphase tree for better performance.
 export const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
 export const BROADPHASE_LAYER_NOT_MOVING = addBroadphaseLayer(worldSettings);
 
-// next, we'll define some "object layers".
-// an "object layer" is a grouping of rigid bodies, that belongs to a single "broadphase layer".
-// we can set up rules for which "object layers" can collide with each other.
 export const OBJECT_LAYER_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_MOVING);
 export const OBJECT_LAYER_NOT_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_NOT_MOVING);
 
-// here we declare that "moving" objects should collide with "not moving" objects, and with other "moving" objects.
-// if we had more "object layers", e.g. "player", "debris", "terrain",we could set up more specific collision rules,
-// e.g. "debris" collides with "terrain" but not with "player".
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_NOT_MOVING);
 enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_MOVING);
 
-// time to create the physics world from the settings we've defined
+worldSettings.gravity = [0, -9.81, 0];
+
 const world = createWorld(worldSettings);
 
-// now we can start adding bodies and constraints to the world, and simulating it!
 
 // create a static ground
 rigidBody.create(world, {

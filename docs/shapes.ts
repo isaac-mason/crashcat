@@ -175,25 +175,6 @@ rigidBody.create(world, {
 });
 /* SNIPPET_END: offset-center-of-mass */
 
-/* SNIPPET_START: convex-radius */
-// default convex radius is 0.05
-box.create({
-    halfExtents: [1, 1, 1],
-    convexRadius: 0.01, // sharper corners, more accurate geometry
-});
-
-box.create({
-    halfExtents: [1, 1, 1],
-    convexRadius: 0.2, // rounder corners, faster collision detection
-});
-
-// convex radius is subtracted from dimensions, then added back as rounding
-// a box with halfExtents [1, 1, 1] and convexRadius 0.05:
-// - core box shrinks to [0.95, 0.95, 0.95]
-// - 0.05 radius rounding is added to all edges
-// result: rounded box from [-1, -1, -1] to [1, 1, 1] with rounded corners
-/* SNIPPET_END: convex-radius */
-
 /* SNIPPET_START: reuse */
 // create a shape once
 const sharedBoxShape = box.create({ halfExtents: [1, 1, 1] });
