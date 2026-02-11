@@ -176,17 +176,17 @@ Bodies can be static, dynamic, or kinematic. Choose the type based on how the ob
 **Static**: immovable objects
 - **Use for**: terrain, walls, buildings, fixed obstacles
 - **Properties**: infinite mass, never moves, collides only with dynamic bodies
-- **Examples**: ground, level geometry, static platforms
+- **Examples**: ground, level geometry, walls, buildings
 
-**Dynamic**: fully simulated objects  
-- **Use for**: player, projectiles, debris, physics objects
+**Dynamic**: physical objects
+- **Use for**: objects that should respond naturally to physics forces and collisions
 - **Properties**: has mass, affected by forces/gravity, collides with all body types
-- **Examples**: falling boxes, bouncing balls, physics props, characters
+- **Examples**: falling boxes, bouncing balls, physics props, debris, projectiles
 
-**Kinematic**: script-controlled objects
-- **Use for**: moving platforms, elevators, scripted animations, doors
+**Kinematic**: nonphysical moving objects
+- **Use for**: objects that move via script/animation but should push dynamic bodies
 - **Properties**: user-controlled velocity, pushes dynamic bodies but isn't pushed back
-- **Examples**: elevator, moving platform, automated door
+- **Examples**: moving platforms, elevators, automated doors, scripted animations
 
 <Snippet source="./rigid-bodies.ts" select="motion-types" />
 

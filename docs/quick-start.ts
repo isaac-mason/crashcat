@@ -37,7 +37,6 @@ worldSettings.gravity = [0, -9.81, 0];
 
 const world = createWorld(worldSettings);
 
-
 // create a static ground
 rigidBody.create(world, {
     motionType: MotionType.STATIC,
