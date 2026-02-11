@@ -482,8 +482,6 @@ Constraints connect bodies together to create complex mechanical systems like ra
 
 crashcat supports the following constraint types:
 
-<Snippet source="./constraints.ts" select="types" />
-
 **Available Constraints**:
 
 - **PointConstraint**: Connects two bodies at a point (removes 3 DOF). Like a ball-and-socket.
@@ -494,6 +492,8 @@ crashcat supports the following constraint types:
 - **ConeConstraint**: Limits rotation within a cone (removes 3 DOF). Like a shoulder.
 - **SwingTwistConstraint**: Approximates shoulder-like movement with swing and twist limits.
 - **SixDOFConstraint**: Most configurable - specify limits per translation/rotation axis.
+
+<Snippet source="./constraints.ts" select="types" />
 
 ### Constraint Motors
 
@@ -539,8 +539,6 @@ Constraint attachment points can be specified in world space or local space:
 <Snippet source="./constraints.ts" select="local-vs-world" />
 
 ## Character Controllers
-
-Character controllers handle player and NPC movement with features like ground detection, slope handling, and stair stepping. crashcat provides two approaches:
 
 ### Kinematic Character Controllers (KCC)
 
@@ -652,11 +650,6 @@ A common mistake is using pixels or other non-SI units as the physics length uni
 
 crashcat uses **SI units** (meters, kilograms, seconds). The default gravity is `-9.81 m/s²` (earth gravity). If you create a box with `halfExtents: [100, 100, 100]`, you've made a **100-meter cube** (the size of a large building), which will fall very slowly relative to its size.
 
-**Solution**: Use a scaling factor between physics and rendering:
-
-- Physics: Use meters (e.g., player capsule with `radius: 0.5`, `halfHeightOfCylinder: 1` = 3m tall human)
-- Rendering: Scale up for pixels (multiply physics positions by scale factor, e.g., `position * 50` for 50 pixels per meter)
-
 ```typescript
 // physics: 1 meter = human-scale
 const body = rigidBody.create(world, {
@@ -755,33 +748,11 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
 
-**Basic Usage**
-
-<Snippet source="./debug-renderer.ts" select="basic-usage" />
-
-**Options**
-
-The debug renderer supports visualizing various aspects of the physics simulation:
-
-<Snippet source="./debug-renderer.ts" select="options" />
-
-**Body Color Modes**
-
-Different color modes help visualize different aspects of the simulation:
-
-<Snippet source="./debug-renderer.ts" select="color-modes" />
-
-**Runtime Updates**
-
-Debug renderer options can be modified at runtime to toggle different visualizations on and off:
-
-<Snippet source="./debug-renderer.ts" select="runtime-updates" />
-
-**Performance Considerations**
-
 The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
 
-For production builds, consider conditionally excluding the debug renderer from your bundle using tree-shaking.
+**Usage**
+
+<Snippet source="./debug-renderer.ts" />
 
 ## FAQ
 

@@ -1978,6 +1978,17 @@ pointConstraint.remove(world, constraint);
 
 crashcat supports the following constraint types:
 
+**Available Constraints**:
+
+- **PointConstraint**: Connects two bodies at a point (removes 3 DOF). Like a ball-and-socket.
+- **DistanceConstraint**: Maintains distance between two points (removes 1 DOF). Like a rope or stick.
+- **HingeConstraint**: Allows rotation around an axis (removes 5 DOF). Like a door hinge or wheel axle.
+- **SliderConstraint**: Allows movement along an axis (removes 5 DOF). Like a piston or rail.
+- **FixedConstraint**: Completely locks two bodies together (removes 6 DOF). Like welding.
+- **ConeConstraint**: Limits rotation within a cone (removes 3 DOF). Like a shoulder.
+- **SwingTwistConstraint**: Approximates shoulder-like movement with swing and twist limits.
+- **SixDOFConstraint**: Most configurable - specify limits per translation/rotation axis.
+
 ```ts
 // point constraint - connects two bodies at a point (removes 3 DOF)
 const point = pointConstraint.create(world, {
@@ -2038,17 +2049,6 @@ const fixed = fixedConstraint.create(world, {
     space: ConstraintSpace.LOCAL,
 });
 ```
-
-**Available Constraints**:
-
-- **PointConstraint**: Connects two bodies at a point (removes 3 DOF). Like a ball-and-socket.
-- **DistanceConstraint**: Maintains distance between two points (removes 1 DOF). Like a rope or stick.
-- **HingeConstraint**: Allows rotation around an axis (removes 5 DOF). Like a door hinge or wheel axle.
-- **SliderConstraint**: Allows movement along an axis (removes 5 DOF). Like a piston or rail.
-- **FixedConstraint**: Completely locks two bodies together (removes 6 DOF). Like welding.
-- **ConeConstraint**: Limits rotation within a cone (removes 3 DOF). Like a shoulder.
-- **SwingTwistConstraint**: Approximates shoulder-like movement with swing and twist limits.
-- **SixDOFConstraint**: Most configurable - specify limits per translation/rotation axis.
 
 ### Constraint Motors
 
@@ -2223,8 +2223,6 @@ const localConstraint = pointConstraint.create(world, {
 
 ## Character Controllers
 
-Character controllers handle player and NPC movement with features like ground detection, slope handling, and stair stepping. crashcat provides two approaches:
-
 ### Kinematic Character Controllers (KCC)
 
 crashcat has a built-in `kcc` API that provides kinematic character controller functionality ideal for player characters that need precise movement.
@@ -2369,11 +2367,6 @@ A common mistake is using pixels or other non-SI units as the physics length uni
 
 crashcat uses **SI units** (meters, kilograms, seconds). The default gravity is `-9.81 m/s²` (earth gravity). If you create a box with `halfExtents: [100, 100, 100]`, you've made a **100-meter cube** (the size of a large building), which will fall very slowly relative to its size.
 
-**Solution**: Use a scaling factor between physics and rendering:
-
-- Physics: Use meters (e.g., player capsule with `radius: 0.5`, `halfHeightOfCylinder: 1` = 3m tall human)
-- Rendering: Scale up for pixels (multiply physics positions by scale factor, e.g., `position * 50` for 50 pixels per meter)
-
 ```typescript
 // physics: 1 meter = human-scale
 const body = rigidBody.create(world, {
@@ -2481,9 +2474,18 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
 
-**Basic Usage**
+The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
+
+**Usage**
 
 ```ts
+import type { World } from 'crashcat';
+import { debugRenderer } from 'crashcat/three';
+import type * as THREE from 'three';
+
+declare const scene: THREE.Scene;
+declare const world: World;
+
 // create debug renderer with default options
 const options = debugRenderer.createDefaultOptions();
 const state = debugRenderer.init(options);
@@ -2492,88 +2494,53 @@ const state = debugRenderer.init(options);
 scene.add(state.object3d);
 
 // update each frame after physics step
-function _animate() {
+function animate() {
     // ... update physics ...
 
     debugRenderer.update(state, world);
 
     // ... render scene ...
 }
-```
 
-**Options**
-
-The debug renderer supports visualizing various aspects of the physics simulation:
-
-```ts
 // customize what to visualize
 const customOptions = debugRenderer.createDefaultOptions();
 
-// body visualization
+/* body visualization options */
 customOptions.bodies.enabled = true;
 customOptions.bodies.wireframe = false;
-customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
 customOptions.bodies.showLinearVelocity = false;
 customOptions.bodies.showAngularVelocity = false;
 
-// contact points
+// unique color per body instance
+customOptions.bodies.color = debugRenderer.BodyColorMode.INSTANCE;
+// color by motion type (static, dynamic, kinematic)
+customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
+// color by sleeping state
+customOptions.bodies.color = debugRenderer.BodyColorMode.SLEEPING;
+// color by simulation island
+customOptions.bodies.color = debugRenderer.BodyColorMode.ISLAND;
+
+/* contact points options */
 customOptions.contacts.enabled = true;
 
-// contact constraints
+/* contact constraints options */
 customOptions.contactConstraints.enabled = true;
 
-// constraints (hinges, sliders, etc.)
+/* constraints options (hinges, sliders, etc.) */
 customOptions.constraints.enabled = true;
 customOptions.constraints.drawLimits = true;
 customOptions.constraints.size = 0.5;
 
-// broadphase debug visualization
+/* broadphase options */
 customOptions.broadphaseDbvt.enabled = false;
 customOptions.broadphaseDbvt.showLeafNodes = true;
 customOptions.broadphaseDbvt.showNonLeafNodes = true;
 
-// triangle mesh bvh visualization
+/* triangle mesh bvh options */
 customOptions.triangleMeshBvh.enabled = false;
 customOptions.triangleMeshBvh.showLeafNodes = true;
 customOptions.triangleMeshBvh.showNonLeafNodes = true;
 ```
-
-**Body Color Modes**
-
-Different color modes help visualize different aspects of the simulation:
-
-```ts
-// different body color modes for debugging
-
-// unique color per body instance
-customOptions.bodies.color = debugRenderer.BodyColorMode.INSTANCE;
-
-// color by motion type (static, dynamic, kinematic)
-customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
-
-// color by sleeping state
-customOptions.bodies.color = debugRenderer.BodyColorMode.SLEEPING;
-
-// color by simulation island
-customOptions.bodies.color = debugRenderer.BodyColorMode.ISLAND;
-```
-
-**Runtime Updates**
-
-Debug renderer options can be modified at runtime to toggle different visualizations on and off:
-
-```ts
-// options can be modified at runtime
-state.options.bodies.wireframe = true;
-state.options.contacts.enabled = true;
-state.options.constraints.enabled = false;
-```
-
-**Performance Considerations**
-
-The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
-
-For production builds, consider conditionally excluding the debug renderer from your bundle using tree-shaking.
 
 ## FAQ
 
