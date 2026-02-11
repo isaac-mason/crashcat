@@ -11,7 +11,7 @@ function makeBody(
     maxX: number,
     maxY: number,
     maxZ: number,
-    collisionGroup = 0xffffffff,
+    collisionGroups = 0xffffffff,
     collisionMask = 0xffffffff,
 ) {
     const width = maxX - minX;
@@ -25,7 +25,7 @@ function makeBody(
         motionType: MotionType.DYNAMIC,
         objectLayer: 0,
         position: vec3.fromValues(centerX, centerY, centerZ),
-        collisionGroup,
+        collisionGroups,
         collisionMask,
     });
 }
@@ -200,7 +200,7 @@ describe('DBVT', () => {
 
             // Query with group 0b01, should only find body1
             const queryFilter = filter.create(world.settings.layers);
-            queryFilter.collisionGroup = 0b01;
+            queryFilter.collisionGroups = 0b01;
             queryFilter.collisionMask = 0b01;
             dbvt.intersectAABB(world, tree, queryAABB, queryFilter, visitor);
 

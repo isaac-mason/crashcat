@@ -12,7 +12,7 @@ function makeBody(
     maxY: number,
     maxZ: number,
     objectLayer = 0,
-    collisionGroup = 0xffffffff,
+    collisionGroups = 0xffffffff,
     collisionMask = 0xffffffff,
 ) {
     const width = maxX - minX;
@@ -26,7 +26,7 @@ function makeBody(
         motionType: MotionType.DYNAMIC,
         objectLayer,
         position: vec3.fromValues(centerX, centerY, centerZ),
-        collisionGroup,
+        collisionGroups,
         collisionMask,
     });
 }
@@ -451,7 +451,7 @@ describe('Broadphase Integration', () => {
             const layers = world.settings.layers;
             const testFilter = filter.create(layers);
             // Set the query filter to have group 0b0001 and mask 0b0010 (matching body1)
-            testFilter.collisionGroup = 0b0001;
+            testFilter.collisionGroups = 0b0001;
             testFilter.collisionMask = 0b0010;
 
             const hits: RigidBody[] = [];

@@ -10,7 +10,7 @@ export type Filter = {
     /** collision mask */
     collisionMask: number;
     /** collision group */
-    collisionGroup: number;
+    collisionGroups: number;
     /** body filter callback */
     bodyFilter: ((body: RigidBody) => boolean) | undefined;
 };
@@ -21,7 +21,7 @@ export function create(layers: Layers): Filter {
         enabledObjectLayers: [],
         enabledBroadphaseLayers: [],
         collisionMask: 0,
-        collisionGroup: 0,
+        collisionGroups: 0,
         bodyFilter: undefined,
     };
     setAllEnabled(filter, layers);
@@ -48,7 +48,7 @@ export function setAllEnabled(filter: Filter, layers: Layers): void {
     }
 
     filter.collisionMask = ~0;
-    filter.collisionGroup = ~0;
+    filter.collisionGroups = ~0;
     filter.bodyFilter = undefined;
 }
 
@@ -58,7 +58,7 @@ export function createEmpty(): Filter {
         enabledObjectLayers: [],
         enabledBroadphaseLayers: [],
         collisionMask: 0,
-        collisionGroup: 0,
+        collisionGroups: 0,
         bodyFilter: undefined,
     };
 }
@@ -175,7 +175,7 @@ export function setFromBody(filter: Filter, layers: Layers, body: RigidBody): vo
     }
 
     // set collision group and mask from body
-    filter.collisionGroup = body.collisionGroup;
+    filter.collisionGroups = body.collisionGroups;
     filter.collisionMask = body.collisionMask;
 }
 
@@ -190,7 +190,7 @@ export function copy(out: Filter, source: Filter): void {
     }
 
     // copy collision properties
-    out.collisionGroup = source.collisionGroup;
+    out.collisionGroups = source.collisionGroups;
     out.collisionMask = source.collisionMask;
 
     // copy body filter

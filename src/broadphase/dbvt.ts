@@ -647,9 +647,9 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
         // collision group/mask filtering
         if (
             !filter.shouldPairCollide(
-                queryFilter.collisionGroup,
+                queryFilter.collisionGroups,
                 queryFilter.collisionMask,
-                body.collisionGroup,
+                body.collisionGroups,
                 body.collisionMask,
             )
         ) {
@@ -711,9 +711,9 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
         // collision group/mask filtering
         if (
             !filter.shouldPairCollide(
-                queryFilter.collisionGroup,
+                queryFilter.collisionGroups,
                 queryFilter.collisionMask,
-                body.collisionGroup,
+                body.collisionGroups,
                 body.collisionMask,
             )
         ) {
@@ -834,9 +834,9 @@ export function castRay(
         // early out: collision group/mask filtering
         if (
             !filter.shouldPairCollide(
-                queryFilter.collisionGroup,
+                queryFilter.collisionGroups,
                 queryFilter.collisionMask,
-                body.collisionGroup,
+                body.collisionGroups,
                 body.collisionMask,
             )
         ) {
@@ -943,9 +943,9 @@ export function castAABB(
         // collision group/mask filtering
         if (
             !filter.shouldPairCollide(
-                queryFilter.collisionGroup,
+                queryFilter.collisionGroups,
                 queryFilter.collisionMask,
-                body.collisionGroup,
+                body.collisionGroups,
                 body.collisionMask,
             )
         ) {

@@ -81,7 +81,7 @@ export type RigidBodySettings = {
     restitutionCombineMode?: MaterialCombineMode;
 
     /** groups this body is part of @see DEFAULT_RIGID_BODY_SETTINGS */
-    collisionGroup?: number;
+    collisionGroups?: number;
     /** groups this body collides with @see DEFAULT_RIGID_BODY_SETTINGS */
     collisionMask?: number;
 
@@ -131,7 +131,7 @@ export const DEFAULT_RIGID_BODY_SETTINGS = {
     restitutionCombineMode: MaterialCombineMode.MAX,
     allowedDegreesOfFreedom: 0b111111,
     useManifoldReduction: true,
-    collisionGroup: 0xffffffff,
+    collisionGroups: 0xffffffff,
     collisionMask: 0xffffffff,
     sensor: false,
     enhancedInternalEdgeRemoval: false,
@@ -192,7 +192,7 @@ export type RigidBody = {
     restitutionCombineMode: MaterialCombineMode;
 
     /** collision group bitfield - "I am in these groups" */
-    collisionGroup: number;
+    collisionGroups: number;
 
     /** collision mask bitfield - "I collide with these groups" */
     collisionMask: number;
@@ -269,7 +269,7 @@ function makeRigidBody(): RigidBody {
         restitution: 0,
         frictionCombineMode: MaterialCombineMode.AVERAGE,
         restitutionCombineMode: MaterialCombineMode.AVERAGE,
-        collisionGroup: 0,
+        collisionGroups: 0,
         collisionMask: 0,
         useManifoldReduction: true,
         motionType: MotionType.STATIC,
@@ -348,7 +348,7 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     body.frictionCombineMode = o.frictionCombineMode ?? DEFAULT_RIGID_BODY_SETTINGS.frictionCombineMode;
     body.restitutionCombineMode = o.restitutionCombineMode ?? DEFAULT_RIGID_BODY_SETTINGS.restitutionCombineMode;
 
-    body.collisionGroup = o.collisionGroup ?? DEFAULT_RIGID_BODY_SETTINGS.collisionGroup;
+    body.collisionGroups = o.collisionGroups ?? DEFAULT_RIGID_BODY_SETTINGS.collisionGroups;
     body.collisionMask = o.collisionMask ?? DEFAULT_RIGID_BODY_SETTINGS.collisionMask;
 
     body.useManifoldReduction = o.useManifoldReduction ?? DEFAULT_RIGID_BODY_SETTINGS.useManifoldReduction;
@@ -1126,7 +1126,7 @@ export function wakeInAABB(world: World, aabb: Box3): void {
     // setup filter with all layers enabled
     filter.enableAllLayers(_wakeInAABB_filter, world.settings.layers);
     _wakeInAABB_filter.collisionMask = ~0;
-    _wakeInAABB_filter.collisionGroup = ~0;
+    _wakeInAABB_filter.collisionGroups = ~0;
 
     // setup visitor to collect sleeping bodies
     WakeInAABBVisitor.setup(world);

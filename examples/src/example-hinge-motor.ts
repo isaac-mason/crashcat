@@ -97,7 +97,7 @@ rigidBody.create(world, {
     position: vec3.fromValues(0, -5.5, 0),
     restitution: 0,
     friction: 0.5,
-    collisionGroup: GROUP_GROUND,
+    collisionGroups: GROUP_GROUND,
     collisionMask: GROUP_BODY | GROUP_GROUND,
 });
 
@@ -150,7 +150,7 @@ const chassisBody = rigidBody.create(world, {
     quaternion: bodyRotation,
     linearDamping: 0.4,
     friction: 0.5,
-    collisionGroup: GROUP_BODY,
+    collisionGroups: GROUP_BODY,
     collisionMask: GROUP_GROUND,
     allowSleeping: false,
 });
@@ -191,7 +191,7 @@ function createLegSet(side: number, crankPhase: number): void {
         quaternion: quatZ(Math.PI / 3),
         linearDamping: 0.4,
         friction: 0.5,
-        collisionGroup: GROUP_BODY,
+        collisionGroups: GROUP_BODY,
         collisionMask: GROUP_GROUND,
         allowSleeping: false,
     });
@@ -219,7 +219,7 @@ function createLegSet(side: number, crankPhase: number): void {
         quaternion: quatZ(crankPhase),
         linearDamping: 0.4,
         friction: 0.5,
-        collisionGroup: GROUP_BODY,
+        collisionGroups: GROUP_BODY,
         collisionMask: GROUP_GROUND,
         allowSleeping: false,
     });
@@ -252,7 +252,7 @@ function createLegSet(side: number, crankPhase: number): void {
         quaternion: quatZ(Math.PI / -6),
         linearDamping: 0.4,
         friction: 0.5,
-        collisionGroup: GROUP_BODY,
+        collisionGroups: GROUP_BODY,
         collisionMask: GROUP_GROUND,
         allowSleeping: false,
     });
@@ -280,7 +280,7 @@ function createLegSet(side: number, crankPhase: number): void {
         quaternion: quatZ(Math.PI / -2.5),
         linearDamping: 0.4,
         friction: 0.5,
-        collisionGroup: GROUP_BODY,
+        collisionGroups: GROUP_BODY,
         collisionMask: GROUP_GROUND,
         allowSleeping: false,
     });
@@ -308,7 +308,7 @@ function createLegSet(side: number, crankPhase: number): void {
         quaternion: quatZ(Math.PI / 4),
         linearDamping: 0.4,
         friction: 0.5,
-        collisionGroup: GROUP_BODY,
+        collisionGroups: GROUP_BODY,
         collisionMask: GROUP_GROUND,
         allowSleeping: false,
     });

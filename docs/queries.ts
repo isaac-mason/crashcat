@@ -1,21 +1,13 @@
 import {
     type BodyVisitor,
-    CastRayStatus,
-    CastShapeStatus,
-    MotionType,
-    type RigidBody,
-    type World,
     box,
     broadphase,
-    capsule,
+    CastRayStatus,
+    CastShapeStatus,
     castRay,
-    castRayVsShape,
     castShape,
-    castShapeVsShape,
     collidePoint,
-    collidePointVsShape,
     collideShape,
-    collideShapeVsShape,
     createAllCastRayCollector,
     createAllCastShapeCollector,
     createAllCollidePointCollector,
@@ -31,11 +23,14 @@ import {
     createDefaultCollidePointSettings,
     createDefaultCollideShapeSettings,
     filter,
+    MotionType,
+    type RigidBody,
     rigidBody,
     sphere,
+    type World,
 } from 'crashcat';
-import type { Box3, Vec3 } from 'mathcat';
-import { quat, raycast3, vec3 } from 'mathcat';
+import type { Box3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
 
 declare const world: World;
 declare const OBJECT_LAYER_DEBRIS: number;
@@ -98,7 +93,17 @@ const sweepShape = sphere.create({ radius: 0.5 });
 // closest: finds the nearest hit along the sweep
 const closestShapeCollector = createClosestCastShapeCollector();
 const shapeSettings = createDefaultCastShapeSettings();
-castShape(world, closestShapeCollector, shapeSettings, sweepShape, castPosition, castQuaternion, castScale, castDisplacement, queryFilter);
+castShape(
+    world,
+    closestShapeCollector,
+    shapeSettings,
+    sweepShape,
+    castPosition,
+    castQuaternion,
+    castScale,
+    castDisplacement,
+    queryFilter,
+);
 
 if (closestShapeCollector.hit.status === CastShapeStatus.COLLIDING) {
     const hitFraction = closestShapeCollector.hit.fraction;
@@ -110,7 +115,17 @@ if (closestShapeCollector.hit.status === CastShapeStatus.COLLIDING) {
 // any: finds the first hit (fast early-out)
 const anyShapeCollector = createAnyCastShapeCollector();
 anyShapeCollector.reset();
-castShape(world, anyShapeCollector, shapeSettings, sweepShape, castPosition, castQuaternion, castScale, castDisplacement, queryFilter);
+castShape(
+    world,
+    anyShapeCollector,
+    shapeSettings,
+    sweepShape,
+    castPosition,
+    castQuaternion,
+    castScale,
+    castDisplacement,
+    queryFilter,
+);
 
 if (anyShapeCollector.hit.status === CastShapeStatus.COLLIDING) {
     console.log('shape hit something');
@@ -119,7 +134,17 @@ if (anyShapeCollector.hit.status === CastShapeStatus.COLLIDING) {
 // all: collects every hit along the sweep
 const allShapeCollector = createAllCastShapeCollector();
 allShapeCollector.reset();
-castShape(world, allShapeCollector, shapeSettings, sweepShape, castPosition, castQuaternion, castScale, castDisplacement, queryFilter);
+castShape(
+    world,
+    allShapeCollector,
+    shapeSettings,
+    sweepShape,
+    castPosition,
+    castQuaternion,
+    castScale,
+    castDisplacement,
+    queryFilter,
+);
 
 for (const hit of allShapeCollector.hits) {
     if (hit.status === CastShapeStatus.COLLIDING) {
@@ -159,7 +184,16 @@ const queryScale = vec3.fromValues(1, 1, 1);
 // any: checks if the shape overlaps any body (fast early-out)
 const anyShapeOverlapCollector = createAnyCollideShapeCollector();
 const shapeOverlapSettings = createDefaultCollideShapeSettings();
-collideShape(world, anyShapeOverlapCollector, shapeOverlapSettings, queryShape, queryPosition, queryQuaternion, queryScale, queryFilter);
+collideShape(
+    world,
+    anyShapeOverlapCollector,
+    shapeOverlapSettings,
+    queryShape,
+    queryPosition,
+    queryQuaternion,
+    queryScale,
+    queryFilter,
+);
 
 if (anyShapeOverlapCollector.hit !== null) {
     console.log('shape overlaps body', anyShapeOverlapCollector.hit.bodyIdB);
@@ -168,7 +202,16 @@ if (anyShapeOverlapCollector.hit !== null) {
 // all: finds every body overlapping the shape
 const allShapeOverlapCollector = createAllCollideShapeCollector();
 allShapeOverlapCollector.reset();
-collideShape(world, allShapeOverlapCollector, shapeOverlapSettings, queryShape, queryPosition, queryQuaternion, queryScale, queryFilter);
+collideShape(
+    world,
+    allShapeOverlapCollector,
+    shapeOverlapSettings,
+    queryShape,
+    queryPosition,
+    queryQuaternion,
+    queryScale,
+    queryFilter,
+);
 
 console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
 /* SNIPPET_END: collide-shape */
@@ -178,7 +221,10 @@ console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
 // useful when you need custom traversal logic or want to avoid narrowphase overhead
 
 // intersectAABB: find all bodies whose AABBs overlap a box
-const queryAABB: Box3 = [vec3.fromValues(-5, -5, -5), vec3.fromValues(5, 5, 5)];
+const queryAABB: Box3 = [
+    [-5, -5, -5],
+    [5, 5, 5],
+];
 
 const aabbVisitor: BodyVisitor = {
     shouldExit: false,
@@ -203,111 +249,6 @@ const pointVisitor: BodyVisitor = {
 broadphase.intersectPoint(world, queryPoint, queryFilter, pointVisitor);
 /* SNIPPET_END: broadphase-query */
 
-/* SNIPPET_START: shape-vs-shape */
-// for advanced scenarios: query shape-vs-shape directly without the world
-// useful for custom spatial queries, editor tools, or when you manage bodies yourself
-
-const shapeA = capsule.create({ radius: 0.5, halfHeightOfCylinder: 1 });
-const shapeB = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
-
-const posA = vec3.fromValues(0, 0, 0);
-const quatA = quat.create();
-const scaleA = vec3.fromValues(1, 1, 1);
-
-const posB = vec3.fromValues(2, 0, 0);
-const quatB = quat.create();
-const scaleB = vec3.fromValues(1, 1, 1);
-
-// castRayVsShape: cast a ray against a specific shape
-const ray = raycast3.create();
-vec3.set(ray.origin, -5, 0, 0);
-vec3.set(ray.direction, 1, 0, 0);
-ray.length = 10;
-
-const rayVsShapeCollector = createClosestCastRayCollector();
-const rayVsShapeSettings = createDefaultCastRaySettings();
-
-// biome-ignore format: pretty
-castRayVsShape(
-    rayVsShapeCollector,
-    rayVsShapeSettings,
-    ray,
-    // shape b
-    shapeB,
-    0, 0, // subShapeId, subShapeIdBits
-    posB[0], posB[1], posB[2],
-    quatB[0], quatB[1], quatB[2], quatB[3],
-    scaleB[0], scaleB[1], scaleB[2],
-);
-
-// collidePointVsShape: test if a point is inside a specific shape
-const testPoint = vec3.fromValues(0.5, 0, 0);
-
-const pointVsShapeCollector = createAnyCollidePointCollector();
-const pointVsShapeSettings = createDefaultCollidePointSettings();
-
-// biome-ignore format: pretty
-collidePointVsShape(
-    pointVsShapeCollector,
-    pointVsShapeSettings,
-    // point
-    testPoint[0], testPoint[1], testPoint[2],
-    // shape b
-    shapeB,
-    0, 0, // subShapeId, subShapeIdBits
-    posB[0], posB[1], posB[2],
-    quatB[0], quatB[1], quatB[2], quatB[3],
-    scaleB[0], scaleB[1], scaleB[2],
-);
-
-// castShapeVsShape: sweep one shape against another
-const displacement = vec3.fromValues(5, 0, 0);
-
-const castShapeVsShapeCollector = createClosestCastShapeCollector();
-const castShapeVsShapeSettings = createDefaultCastShapeSettings();
-
-// biome-ignore format: pretty
-castShapeVsShape(
-    castShapeVsShapeCollector,
-    castShapeVsShapeSettings,
-    // shape a
-    shapeA,
-    0, 0, // subShapeIdA, subShapeIdBitsA
-    posA[0], posA[1], posA[2],
-    quatA[0], quatA[1], quatA[2], quatA[3],
-    scaleA[0], scaleA[1], scaleA[2],
-    displacement[0], displacement[1], displacement[2],
-    // shape b
-    shapeB,
-    0, 0, // subShapeIdB, subShapeIdBitsB
-    posB[0], posB[1], posB[2],
-    quatB[0], quatB[1], quatB[2], quatB[3],
-    scaleB[0], scaleB[1], scaleB[2],
-);
-
-// collideShapeVsShape: test if two shapes overlap
-const collideShapeVsShapeCollector = createAllCollideShapeCollector();
-const collideShapeVsShapeSettings = createDefaultCollideShapeSettings();
-
-// biome-ignore format: pretty
-collideShapeVsShape(
-    collideShapeVsShapeCollector,
-    collideShapeVsShapeSettings,
-    // shape a
-    shapeA,
-    0, 0, // subShapeIdA, subShapeIdBitsA
-    posA[0], posA[1], posA[2],
-    quatA[0], quatA[1], quatA[2], quatA[3],
-    scaleA[0], scaleA[1], scaleA[2],
-    // shape b
-    shapeB,
-    0, 0, // subShapeIdB, subShapeIdBitsB
-    posB[0], posB[1], posB[2],
-    quatB[0], quatB[1], quatB[2], quatB[3],
-    scaleB[0], scaleB[1], scaleB[2],
-);
-/* SNIPPET_END: shape-vs-shape */
-
 /* SNIPPET_START: filter */
 // filters control what queries can hit, using object layers and collision groups/masks
 
@@ -327,17 +268,17 @@ filter.disableAllLayers(worldQueryFilter, world.settings.layers);
 filter.enableObjectLayer(worldQueryFilter, world.settings.layers, OBJECT_LAYER_MOVING);
 
 // collision groups and masks (works alongside layer filtering)
-worldQueryFilter.collisionGroup = 0b0001; // query belongs to group 1
+worldQueryFilter.collisionGroups = 0b0001; // query belongs to group 1
 worldQueryFilter.collisionMask = 0b0010 | 0b0100; // query hits groups 2 and 4
 
 // custom body filter callback
 worldQueryFilter.bodyFilter = (body: RigidBody) => {
     // custom logic - exclude specific bodies
     if (body.userData === 'player') return false;
-    
+
     // only hit dynamic bodies
     if (body.motionType !== MotionType.DYNAMIC) return false;
-    
+
     return true;
 };
 

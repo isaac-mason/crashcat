@@ -299,7 +299,7 @@ const playerBody = rigidBody.create(world, {
     shape: sphere.create({ radius: 1 }),
     motionType: MotionType.DYNAMIC,
     objectLayer: OBJECT_LAYER_MOVING,
-    collisionGroup: GROUPS.player,
+    collisionGroups: GROUPS.player,
     collisionMask: GROUPS.enemy | GROUPS.projectile,
 });
 
@@ -308,7 +308,7 @@ const enemyBody = rigidBody.create(world, {
     shape: sphere.create({ radius: 1 }),
     motionType: MotionType.DYNAMIC,
     objectLayer: OBJECT_LAYER_MOVING,
-    collisionGroup: GROUPS.enemy,
+    collisionGroups: GROUPS.enemy,
     collisionMask: GROUPS.player | GROUPS.debris,
 });
 
@@ -317,7 +317,7 @@ const debrisBody = rigidBody.create(world, {
     shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
     motionType: MotionType.DYNAMIC,
     objectLayer: OBJECT_LAYER_MOVING,
-    collisionGroup: GROUPS.debris,
+    collisionGroups: GROUPS.debris,
     collisionMask: GROUPS.player | GROUPS.enemy | GROUPS.debris | GROUPS.projectile,
 });
 /* SNIPPET_END: collision-groups */

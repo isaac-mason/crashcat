@@ -479,16 +479,7 @@ For advanced scenarios, you can query the broadphase spatial acceleration struct
 
 ### Shape vs Shape
 
-For advanced scenarios, you can query shape-vs-shape directly without the world.
-
-<Snippet source="./queries.ts" select="shape-vs-shape" />
-
-These low-level functions operate on shapes directly:
-
-- `castRayVsShape`: Cast a ray against a specific shape
-- `collidePointVsShape`: Test if a point is inside a specific shape
-- `castShapeVsShape`: Sweep one shape against another
-- `collideShapeVsShape`: Test if two shapes overlap
+For advanced scenarios, you can query shape-vs-shape directly.
 
 <ExamplesTable ids="example-collide-shape-vs-shape,example-collide-point-vs-shape,example-cast-ray-vs-shape,example-cast-shape-vs-shape" />
 

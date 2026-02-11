@@ -1147,9 +1147,9 @@ const ccdBodyVisitor: BodyVisitor & {
         // collision group filter
         if (
             !filter.shouldPairCollide(
-                this.bodyA.collisionGroup,
+                this.bodyA.collisionGroups,
                 this.bodyA.collisionMask,
-                bodyB.collisionGroup,
+                bodyB.collisionGroups,
                 bodyB.collisionMask,
             )
         ) {

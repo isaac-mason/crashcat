@@ -100,7 +100,7 @@ rigidBody.create(world, {
     objectLayer: OBJECT_LAYER_NOT_MOVING,
     motionType: MotionType.STATIC,
     position: vec3.fromValues(0, 1.0, 0),
-    collisionGroup: GROUP_A,
+    collisionGroups: GROUP_A,
     collisionMask: MASK_A,
     friction: 0.5,
 });
@@ -111,7 +111,7 @@ rigidBody.create(world, {
     objectLayer: OBJECT_LAYER_NOT_MOVING,
     motionType: MotionType.STATIC,
     position: vec3.fromValues(0, 2.0, 0),
-    collisionGroup: GROUP_B,
+    collisionGroups: GROUP_B,
     collisionMask: MASK_B,
     friction: 0.5,
 });
@@ -142,7 +142,7 @@ for (let j = 0; j < 4; j++) {
                 objectLayer: OBJECT_LAYER_MOVING,
                 motionType: MotionType.DYNAMIC,
                 position: vec3.fromValues(x, y, z),
-                collisionGroup,
+                collisionGroups: collisionGroup,
                 collisionMask,
                 friction: 1,
                 restitution: 0.0,
