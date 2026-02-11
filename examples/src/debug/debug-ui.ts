@@ -144,7 +144,7 @@ export function updateStats(ui: DebugUI, world: World): void {
     ui.stats.bodies.activeBodies = world.bodies.activeBodyCount;
     ui.stats.bodies.poolSize = world.bodies.pool.length;
     ui.stats.contacts.count = world.contacts.contacts.length - world.contacts.contactsFreeIndices.length;
-    ui.stats.contactConstraints.count = world.contactConstraints.constraints.length;
+    ui.stats.contactConstraints.count = world.contactConstraints.count;
 
     // count user constraints
     let userConstraintCount = 0;

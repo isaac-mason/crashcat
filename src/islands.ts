@@ -187,8 +187,8 @@ export function linkContactConstraints(
     contacts: Contacts,
     bodies: Bodies,
 ): void {
-    for (let constraintIdx = 0; constraintIdx < contactConstraints.constraints.length; constraintIdx++) {
-        const constraint = contactConstraints.constraints[constraintIdx];
+    for (let constraintIdx = 0; constraintIdx < contactConstraints.count; constraintIdx++) {
+        const constraint = contactConstraints.pool[constraintIdx];
         const contact = contacts.contacts[constraint.contactIndex];
         const bodyA = bodies.pool[contact.bodyIndexA];
         const bodyB = bodies.pool[contact.bodyIndexB];

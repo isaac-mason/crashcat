@@ -1703,7 +1703,8 @@ function updateContacts(state: State, world: World): void {
 
     // count total contact points
     let totalContacts = 0;
-    for (const constraint of world.contactConstraints.constraints) {
+    for (let i = 0; i < world.contactConstraints.count; i++) {
+        const constraint = world.contactConstraints.pool[i];
         totalContacts += constraint.numContactPoints;
     }
 
@@ -1727,7 +1728,8 @@ function updateContacts(state: State, world: World): void {
     let cylinderIdx = 0;
     let coneIdx = 0;
 
-    for (const constraint of world.contactConstraints.constraints) {
+    for (let constraintIdx = 0; constraintIdx < world.contactConstraints.count; constraintIdx++) {
+        const constraint = world.contactConstraints.pool[constraintIdx];
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const contactPoint = constraint.contactPoints[i];
             const normal = constraint.normal;
@@ -1789,7 +1791,8 @@ function updateContactConstraints(state: State, world: World): void {
     let cylinderCount = 0;
     let coneCount = 0;
 
-    for (const constraint of world.contactConstraints.constraints) {
+    for (let i = 0; i < world.contactConstraints.count; i++) {
+        const constraint = world.contactConstraints.pool[i];
         if (constraint.numContactPoints === 0) continue;
 
         // 2 spheres per contact point
@@ -1821,7 +1824,8 @@ function updateContactConstraints(state: State, world: World): void {
     let cylinderIdx = 0;
     let coneIdx = 0;
 
-    for (const constraint of world.contactConstraints.constraints) {
+    for (let constraintIdx = 0; constraintIdx < world.contactConstraints.count; constraintIdx++) {
+        const constraint = world.contactConstraints.pool[constraintIdx];
         if (constraint.numContactPoints === 0) continue;
 
         // draw contact points with different sizes based on impulse transfer

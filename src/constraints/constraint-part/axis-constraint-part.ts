@@ -547,10 +547,8 @@ export function solveVelocityConstraint(
     minLambda: number,
     maxLambda: number,
 ): boolean {
-    const mpA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties : null;
-    const mpB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties : null;
-    const invMassA = mpA ? mpA.invMass : 0;
-    const invMassB = mpB ? mpB.invMass : 0;
+    const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
+    const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
 
     return solveVelocityConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, minLambda, maxLambda);
 }
@@ -569,24 +567,24 @@ export function solveVelocityConstraint(
  */
 export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB: RigidBody, axis: Vec3): number {
     // check motion types once upfront (avoids ternary operators and null checks)
-    const notStaticA = bodyA.motionType !== MotionType.STATIC;
-    const notStaticB = bodyB.motionType !== MotionType.STATIC;
+    const movingA = bodyA.motionType !== MotionType.STATIC;
+    const movingB = bodyB.motionType !== MotionType.STATIC;
     const mpA = bodyA.motionProperties;
     const mpB = bodyB.motionProperties;
 
     // calculate jacobian multiplied by linear velocity
     let jv: number;
-    if (notStaticA && notStaticB) {
+    if (movingA && movingB) {
         // vec3.subtract(_acp_gtl_velDiff, mpA.linearVelocity, mpB.linearVelocity);
         const dx = mpA.linearVelocity[0] - mpB.linearVelocity[0];
         const dy = mpA.linearVelocity[1] - mpB.linearVelocity[1];
         const dz = mpA.linearVelocity[2] - mpB.linearVelocity[2];
         // jv = vec3.dot(axis, _acp_gtl_velDiff);
         jv = axis[0] * dx + axis[1] * dy + axis[2] * dz;
-    } else if (notStaticA) {
+    } else if (movingA) {
         // jv = vec3.dot(axis, mpA.linearVelocity);
         jv = axis[0] * mpA.linearVelocity[0] + axis[1] * mpA.linearVelocity[1] + axis[2] * mpA.linearVelocity[2];
-    } else if (notStaticB) {
+    } else if (movingB) {
         // jv = -vec3.dot(axis, mpB.linearVelocity);
         jv = -(axis[0] * mpB.linearVelocity[0] + axis[1] * mpB.linearVelocity[1] + axis[2] * mpB.linearVelocity[2]);
     } else {
@@ -594,7 +592,7 @@ export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB
     }
 
     // calculate jacobian multiplied by angular velocity
-    if (notStaticA) {
+    if (movingA) {
         // jv += vec3.dot(part.r1PlusUxAxis, mpA.angularVelocity);
         jv +=
             part.r1PlusUxAxis[0] * mpA.angularVelocity[0] +
@@ -602,7 +600,7 @@ export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB
             part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
     }
 
-    if (notStaticB) {
+    if (movingB) {
         // jv -= vec3.dot(part.r2xAxis, mpB.angularVelocity);
         jv -=
             part.r2xAxis[0] * mpB.angularVelocity[0] +

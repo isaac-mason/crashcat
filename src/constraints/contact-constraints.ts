@@ -8,17 +8,17 @@ import * as contacts from '../contacts';
 import type { Listener } from '../listener';
 import type { ContactManifold } from '../manifold/manifold';
 import * as manifold from '../manifold/manifold';
-import { pool } from '../utils/pool';
 import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 
-const constraintPool = /* @__PURE__ */ pool(createContactConstraint);
-
 /** state for contact constraint solving, holds all active constraints and manages constraint lifecycle */
 export type ContactConstraints = {
-    /** array of active contact constraints (one per colliding body pair) */
-    constraints: ContactConstraint[];
+    /** pool of contact constraints (grows as needed, never shrinks) */
+    pool: ContactConstraint[];
+    
+    /** number of active constraints (first count entries in pool array are valid) */
+    count: number;
 };
 
 /**
@@ -181,7 +181,8 @@ export type ContactSettings = {
 /** creates emopty contact constraints state */
 export function init(): ContactConstraints {
     return {
-        constraints: [],
+        pool: [],
+        count: 0,
     };
 }
 
@@ -209,8 +210,12 @@ export function copyContactSettings(out: ContactSettings, source: ContactSetting
     out.invMassScale2 = source.invMassScale2;
     out.invInertiaScale1 = source.invInertiaScale1;
     out.invInertiaScale2 = source.invInertiaScale2;
-    vec3.copy(out.relativeLinearSurfaceVelocity, source.relativeLinearSurfaceVelocity);
-    vec3.copy(out.relativeAngularSurfaceVelocity, source.relativeAngularSurfaceVelocity);
+    out.relativeLinearSurfaceVelocity[0] = source.relativeLinearSurfaceVelocity[0];
+    out.relativeLinearSurfaceVelocity[1] = source.relativeLinearSurfaceVelocity[1];
+    out.relativeLinearSurfaceVelocity[2] = source.relativeLinearSurfaceVelocity[2];
+    out.relativeAngularSurfaceVelocity[0] = source.relativeAngularSurfaceVelocity[0];
+    out.relativeAngularSurfaceVelocity[1] = source.relativeAngularSurfaceVelocity[1];
+    out.relativeAngularSurfaceVelocity[2] = source.relativeAngularSurfaceVelocity[2];
     return out;
 }
 
@@ -227,8 +232,12 @@ function setContactSettings(
     settings.invMassScale2 = 1;
     settings.invInertiaScale1 = 1;
     settings.invInertiaScale2 = 1;
-    vec3.zero(settings.relativeLinearSurfaceVelocity);
-    vec3.zero(settings.relativeAngularSurfaceVelocity);
+    settings.relativeLinearSurfaceVelocity[0] = 0;
+    settings.relativeLinearSurfaceVelocity[1] = 0;
+    settings.relativeLinearSurfaceVelocity[2] = 0;
+    settings.relativeAngularSurfaceVelocity[0] = 0;
+    settings.relativeAngularSurfaceVelocity[1] = 0;
+    settings.relativeAngularSurfaceVelocity[2] = 0;
     return settings;
 }
 
@@ -405,25 +414,6 @@ function calculateNormalVelocityBias(
     return normalVelocityBias;
 }
 
-export function clear(contactConstraints: ContactConstraints): void {
-    for (const constraint of contactConstraints.constraints) {
-        constraintPool.release(constraint);
-    }
-    contactConstraints.constraints.length = 0;
-}
-
-function compareContactConstraints(a: ContactConstraint, b: ContactConstraint): number {
-    if (a.bodyIndexA !== b.bodyIndexA) return a.bodyIndexA - b.bodyIndexA;
-    if (a.bodyIndexB !== b.bodyIndexB) return a.bodyIndexB - b.bodyIndexB;
-    if (a.subShapeIdA !== b.subShapeIdA) return a.subShapeIdA - b.subShapeIdA;
-    return a.subShapeIdB - b.subShapeIdB;
-}
-
-/** sort contact constraints, required for determinism */
-export function sortContactConstraints(contactConstraints: ContactConstraints): void {
-    contactConstraints.constraints.sort(compareContactConstraints);
-}
-
 /** compute tangent vectors perpendicular to contact normal */
 function computeTangents(normal: Vec3, tangent1: Vec3, tangent2: Vec3): void {
     const x = normal[0];
@@ -492,9 +482,12 @@ export function addContactConstraint(
     // mark contact as processed this frame (for stale contact cleanup)
     contact.processedThisFrame = true;
 
+    // prepare inverse quaternions for local space transforms (used by both sensors and regular contacts)
+    const invQuatA = quat.conjugate(_addContactConstraint_invQuatA, bodyA.quaternion);
+    const invQuatB = quat.conjugate(_addContactConstraint_invQuatB, bodyB.quaternion);
+
     // transform the world space normal to body B's local space and store in contact
-    quat.conjugate(_addContactConstraint_invQuatB, bodyB.quaternion);
-    vec3.transformQuat(contact.contactNormal, contactManifold.worldSpaceNormal, _addContactConstraint_invQuatB);
+    vec3.transformQuat(contact.contactNormal, contactManifold.worldSpaceNormal, invQuatB);
     vec3.normalize(contact.contactNormal, contact.contactNormal);
     contact.numContactPoints = contactManifold.numContactPoints;
 
@@ -514,10 +507,6 @@ export function addContactConstraint(
         contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
     }
 
-    // prepare inverse quaternions for local space transforms (used by both sensors and regular contacts)
-    const invQuatA = quat.conjugate(_addContactConstraint_invQuatA, bodyA.quaternion);
-    const invQuatB = quat.conjugate(_addContactConstraint_invQuatB, bodyB.quaternion);
-
     // if one of the bodies is a sensor, don't actually create the constraint
     // one of the bodies must be dynamic and have mass to be able to create a contact constraint
     if (
@@ -525,9 +514,12 @@ export function addContactConstraint(
         ((bodyA.motionType === MotionType.DYNAMIC && bodyA.motionProperties.invMass !== 0) ||
             (bodyB.motionType === MotionType.DYNAMIC && bodyB.motionProperties.invMass !== 0))
     ) {
-        // add contact constraint
-        const constraint = constraintPool.request();
-        contactConstraints.constraints.push(constraint);
+        // add contact constraint (grow array if needed)
+        if (contactConstraints.count >= contactConstraints.pool.length) {
+            contactConstraints.pool.push(createContactConstraint());
+        }
+        const constraint = contactConstraints.pool[contactConstraints.count];
+        contactConstraints.count++;
 
         // set body indices and sub-shape IDs
         constraint.bodyIndexA = bodyA.index;
@@ -560,31 +552,31 @@ export function addContactConstraint(
 
         // compute inverse inertia only for dynamic bodies (static/kinematic don't contribute)
         if (bodyA.motionType === MotionType.DYNAMIC) {
-            mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
-            getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, _addContactConstraint_rotA);
+            const rotA = mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+            const invInertiaA = getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
             const scale1 = contactSettings.invInertiaScale1;
             if (scale1 !== 1) {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaA[j] = _addContactConstraint_invInertiaA[j] * scale1;
+                    constraint.invInertiaA[j] = invInertiaA[j] * scale1;
                 }
             } else {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaA[j] = _addContactConstraint_invInertiaA[j];
+                    constraint.invInertiaA[j] = invInertiaA[j];
                 }
             }
         }
 
         if (bodyB.motionType === MotionType.DYNAMIC) {
-            mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
-            getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, _addContactConstraint_rotB);
+            const rotB = mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
+            const invInertiaB = getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
             const scale2 = contactSettings.invInertiaScale2;
             if (scale2 !== 1) {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaB[j] = _addContactConstraint_invInertiaB[j] * scale2;
+                    constraint.invInertiaB[j] = invInertiaB[j] * scale2;
                 }
             } else {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaB[j] = _addContactConstraint_invInertiaB[j];
+                    constraint.invInertiaB[j] = invInertiaB[j];
                 }
             }
         }
@@ -842,7 +834,8 @@ export function warmStartVelocityConstraints(
     bodies: Bodies,
     warmStartRatio: number,
 ): void {
-    for (const constraint of contactConstraints.constraints) {
+    for (let i = 0; i < contactConstraints.count; i++) {
+        const constraint = contactConstraints.pool[i];
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
         const { normal, tangent1, tangent2 } = constraint;
@@ -902,32 +895,44 @@ export function solveVelocityConstraintsForIsland(
     // CRITICAL ORDER: Friction first, then normal (non-penetration is more important so solved last)
 
     for (const constraintIndex of constraintIndices) {
-        const constraint = contactConstraints.constraints[constraintIndex];
+        const constraint = contactConstraints.pool[constraintIndex];
 
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
-        const { normal, tangent1, tangent2, friction } = constraint;
+
+        // cache motion types to avoid repeated checks
+        const isDynamicA = bodyA.motionType === MotionType.DYNAMIC;
+        const isDynamicB = bodyB.motionType === MotionType.DYNAMIC;
 
         // skip if both bodies are static/kinematic
-        if (bodyA.motionType !== MotionType.DYNAMIC && bodyB.motionType !== MotionType.DYNAMIC) {
+        if (!isDynamicA && !isDynamicB) {
             continue;
         }
 
+        const { normal, tangent1, tangent2, friction } = constraint;
+
+        
         // solve friction constraints for this constraint
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
-            if (axisConstraintPart.isActive(cp.tangentConstraint1) || axisConstraintPart.isActive(cp.tangentConstraint2)) {
+            
+            // check if either friction constraint is active
+            if (
+                axisConstraintPart.isActive(cp.tangentConstraint1) ||
+                axisConstraintPart.isActive(cp.tangentConstraint2)
+            ) {
                 let lambda1 = axisConstraintPart.getTotalLambda(cp.tangentConstraint1, bodyA, bodyB, tangent1);
                 let lambda2 = axisConstraintPart.getTotalLambda(cp.tangentConstraint2, bodyA, bodyB, tangent2);
-                const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
 
+                // project onto friction cone: ||λ_friction|| ≤ μ × λ_normal
                 const maxFriction = friction * cp.normalConstraint.totalLambda;
+                const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
                 const maxFrictionSq = maxFriction * maxFriction;
 
                 if (frictionMagnitudeSq > maxFrictionSq) {
                     const scale = maxFriction / Math.sqrt(frictionMagnitudeSq);
-                    lambda1 = lambda1 * scale;
-                    lambda2 = lambda2 * scale;
+                    lambda1 *= scale;
+                    lambda2 *= scale;
                 }
 
                 axisConstraintPart.applyLambda(
@@ -955,15 +960,19 @@ export function solveVelocityConstraintsForIsland(
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
-            axisConstraintPart.solveVelocityConstraintWithMassOverride(
+            // inlined: solveVelocityConstraintWithMassOverride
+            const totalLambda = axisConstraintPart.getTotalLambda(cp.normalConstraint, bodyA, bodyB, normal);
+            // clamp to [0, ∞) → applyLambda
+            // contacts can only push, never pull
+            const clampedLambda = Math.max(0, totalLambda);
+            axisConstraintPart.applyLambda(
                 cp.normalConstraint,
                 bodyA,
                 bodyB,
                 constraint.invMassA,
                 constraint.invMassB,
                 normal,
-                0,
-                Infinity,
+                clampedLambda,
             );
         }
     }
@@ -976,7 +985,8 @@ export function solveVelocityConstraintsForIsland(
  * @param contactsState contacts state
  */
 export function storeAppliedImpulses(contactConstraints: ContactConstraints, contactsState: contacts.Contacts): void {
-    for (const constraint of contactConstraints.constraints) {
+    for (let i = 0; i < contactConstraints.count; i++) {
+        const constraint = contactConstraints.pool[i];
         const contact = contactsState.contacts[constraint.contactIndex];
 
         for (let i = 0; i < constraint.numContactPoints; i++) {
@@ -1026,7 +1036,7 @@ export function solvePositionConstraintsForIsland(
     let anyImpulseApplied = false;
 
     for (const constraintIndex of constraintIndices) {
-        const constraint = contactConstraints.constraints[constraintIndex];
+        const constraint = contactConstraints.pool[constraintIndex];
         if (!constraint) continue;
 
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
@@ -1139,24 +1149,24 @@ function computeContactSortKey(bodyIndexA: number, bodyIndexB: number, subShapeA
  */
 export function sortContactIndices(contactConstraints: ContactConstraints, bodies: Bodies, contactIndices: number[]): void {
     contactIndices.sort((aIdx, bIdx) => {
-        const a = contactConstraints.constraints[aIdx];
-        const b = contactConstraints.constraints[bIdx];
+        const a = contactConstraints.pool[aIdx];
+        const b = contactConstraints.pool[bIdx];
 
         if (!a || !b) return 0;
 
-        // Primary sort: sort key
+        // primary sort: sort key
         if (a.sortKey !== b.sortKey) {
             return a.sortKey - b.sortKey;
         }
 
-        // Secondary sort: body A ID
+        // secondary sort: body a id
         const bodyAIdA = bodies.pool[a.bodyIndexA]?.id ?? 0;
         const bodyAIdB = bodies.pool[b.bodyIndexA]?.id ?? 0;
         if (bodyAIdA !== bodyAIdB) {
             return bodyAIdA - bodyAIdB;
         }
 
-        // Tertiary sort: body B ID
+        // tertiary sort: body b id
         const bodyBIdA = bodies.pool[a.bodyIndexB]?.id ?? 0;
         const bodyBIdB = bodies.pool[b.bodyIndexB]?.id ?? 0;
         return bodyBIdA - bodyBIdB;

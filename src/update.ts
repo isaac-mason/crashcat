@@ -47,7 +47,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     ccd.clear(world.ccd, world.bodies);
 
     /* clear previous frame's contact constraints */
-    contactConstraints.clear(world.contactConstraints);
+    world.contactConstraints.count = 0;
 
     /* mark all body pairs and contacts as unprocessed (we will check 'processed' later for a "contact removed" condition) */
     contacts.markAllUnprocessed(world.contacts);
