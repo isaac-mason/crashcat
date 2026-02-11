@@ -1,6 +1,6 @@
 import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { TriangleMeshData } from './triangle-mesh-data';
-import { swapTriangles } from './triangle-mesh-data';
+import { OFFSET_INDEX_A, OFFSET_INDEX_B, OFFSET_INDEX_C, swapTriangles } from './triangle-mesh-data';
 
 /** cost of traversing a BVH node */
 const TRAVERSAL_COST = 1;
@@ -11,10 +11,10 @@ const TRIANGLE_INTERSECT_COST = 1.25;
 /** number of bins to use for SAH */
 const BIN_COUNT = 32;
 
-/** Number of elements per node in the flat buffer */
+/** number of elements per node in the flat buffer */
 export const NODE_STRIDE = 8;
 
-// Offsets within a node
+// offsets within a node
 export const NODE_MIN_X = 0;
 export const NODE_MIN_Y = 1;
 export const NODE_MIN_Z = 2;
@@ -24,9 +24,7 @@ export const NODE_MAX_Z = 5;
 export const NODE_RIGHT_OR_TRI_START = 6; // internal: right child offset, leaf: triangle start
 export const NODE_AXIS_OR_TRI_COUNT = 7; // internal: split axis (0-2), leaf: negative encoded count
 
-/**
- * BVH split strategies.
- */
+/** bvh split strategies */
 export enum BvhSplitStrategy {
     /**
      * CENTER: Split at midpoint of center bounds.
@@ -51,57 +49,52 @@ export enum BvhSplitStrategy {
     SAH,
 }
 
-/**
- * Settings for BVH construction.
- */
+/** settings for BVH construction */
 export type BvhBuildSettings = {
-    /** Split strategy to use */
+    /** split strategy to use */
     strategy: BvhSplitStrategy;
 
-    /** Maximum triangles per leaf node */
+    /** maximum triangles per leaf node */
     maxLeafTris: number;
 };
 
-/**
- * Triangle mesh BVH stored as a flat number array.
- * Use accessor functions (nodeIsLeaf, nodeTriStart, etc.) to read node data.
- */
+/** triangle mesh BVH stored as a flat number array */
 export type TriangleMeshBVH = {
-    /** Flat packed node data. Use accessor functions to read. */
+    /** packed node data */
     buffer: number[];
 };
 
-/** Check if node at offset is a leaf */
+/** check if node at offset is a leaf */
 export function nodeIsLeaf(buffer: number[], offset: number): boolean {
     return buffer[offset + NODE_AXIS_OR_TRI_COUNT] < 0;
 }
 
-/** Get triangle start index (leaf only) */
+/** get triangle start index (leaf only) */
 export function nodeTriStart(buffer: number[], offset: number): number {
     return buffer[offset + NODE_RIGHT_OR_TRI_START];
 }
 
-/** Get triangle count (leaf only). Decodes from negative flag. */
+/** get triangle count (leaf only). Decodes from negative flag. */
 export function nodeTriCount(buffer: number[], offset: number): number {
     return -(buffer[offset + NODE_AXIS_OR_TRI_COUNT] + 1);
 }
 
-/** Get left child offset. Left child is always contiguous (offset + NODE_STRIDE). */
+/** get left child offset. Left child is always contiguous (offset + NODE_STRIDE). */
 export function nodeLeft(offset: number): number {
     return offset + NODE_STRIDE;
 }
 
-/** Get right child offset (internal only) */
+/** get right child offset (internal only) */
 export function nodeRight(buffer: number[], offset: number): number {
     return buffer[offset + NODE_RIGHT_OR_TRI_START];
 }
 
-/** Get split axis (internal only): 0=x, 1=y, 2=z */
+/** get split axis (internal only): 0=x, 1=y, 2=z */
 export function nodeSplitAxis(buffer: number[], offset: number): number {
     return buffer[offset + NODE_AXIS_OR_TRI_COUNT];
 }
 
-/** Copy bounds into existing Box3 (avoids allocation) */
+/** copy bounds into existing Box3 */
 export function nodeGetBounds(buffer: number[], offset: number, out: Box3): void {
     out[0][0] = buffer[offset + NODE_MIN_X];
     out[0][1] = buffer[offset + NODE_MIN_Y];
@@ -111,17 +104,14 @@ export function nodeGetBounds(buffer: number[], offset: number, out: Box3): void
     out[1][2] = buffer[offset + NODE_MAX_Z];
 }
 
-/** Get center of node bounds (for distance-based sorting) */
+/** get center of node bounds */
 export function nodeGetCenter(buffer: number[], offset: number, out: Vec3): void {
     out[0] = (buffer[offset + NODE_MIN_X] + buffer[offset + NODE_MAX_X]) * 0.5;
     out[1] = (buffer[offset + NODE_MIN_Y] + buffer[offset + NODE_MAX_Y]) * 0.5;
     out[2] = (buffer[offset + NODE_MIN_Z] + buffer[offset + NODE_MAX_Z]) * 0.5;
 }
 
-/**
- * Test ray-AABB intersection using node bounds directly.
- * Matches three-mesh-bvh's intersectRay() approach.
- */
+/** test ray-AABB intersection using node bounds directly */
 export function nodeIntersectsRay(
     buffer: number[],
     offset: number,
@@ -184,7 +174,7 @@ export function nodeIntersectsRay(
     return tmin <= far && tmax >= near;
 }
 
-/** Test AABB-AABB intersection using node bounds directly */
+/** test AABB-AABB intersection using node bounds directly */
 export function nodeIntersectsBox(
     buffer: number[],
     offset: number,
@@ -213,26 +203,24 @@ const BUILD_DATA_STRIDE = 6;
 
 /** Offset to centerX in build data */
 const BUILD_DATA_CENTER_X = 0;
+
 /** Offset to halfExtentX in build data */
 const BUILD_DATA_HALF_EXTENT_X = 1;
+
 /** Offset to centerY in build data */
 const BUILD_DATA_CENTER_Y = 2;
+
 /** Offset to halfExtentY in build data */
 const BUILD_DATA_HALF_EXTENT_Y = 3;
+
 /** Offset to centerZ in build data */
 const BUILD_DATA_CENTER_Z = 4;
+
 /** Offset to halfExtentZ in build data */
 const BUILD_DATA_HALF_EXTENT_Z = 5;
 
-/**
- * Module-scoped pool for triangle build data.
- * Grows as needed, never shrinks, avoids GC from repeated allocations.
- */
 const _buildDataPool: number[] = [];
 
-/**
- * Preallocated SAH bin for reuse.
- */
 type PreallocatedSahBin = {
     /** AABB bounds of triangles in this bin */
     bounds: Box3;
@@ -246,15 +234,8 @@ type PreallocatedSahBin = {
     candidate: number;
 };
 
-/**
- * Sort comparator for SAH bins by candidate position.
- */
-const _sahBinSort = (a: PreallocatedSahBin, b: PreallocatedSahBin): number => a.candidate - b.candidate;
+const sahBinSort = (a: PreallocatedSahBin, b: PreallocatedSahBin): number => a.candidate - b.candidate;
 
-/**
- * Preallocated SAH bins for large mesh mode.
- * Fixed array of BIN_COUNT bins, reused across all SAH evaluations.
- */
 const _sahBins: PreallocatedSahBin[] = /* @__PURE__ */ new Array(BIN_COUNT)
     .fill(null)
     .map(() => ({
@@ -265,10 +246,7 @@ const _sahBins: PreallocatedSahBin[] = /* @__PURE__ */ new Array(BIN_COUNT)
         candidate: 0,
     }));
 
-/**
- * Reset a preallocated SAH bin to empty state.
- */
-function resetSahBin(bin: PreallocatedSahBin): void {
+    function resetSahBin(bin: PreallocatedSahBin): void {
     box3.empty(bin.bounds);
     box3.empty(bin.leftCacheBounds);
     box3.empty(bin.rightCacheBounds);
@@ -276,9 +254,6 @@ function resetSahBin(bin: PreallocatedSahBin): void {
     bin.candidate = 0;
 }
 
-/**
- * Temporary Box3 for left bounds accumulation in large mesh SAH.
- */
 const _leftBounds = /* @__PURE__ */ box3.create();
 
 /**
@@ -294,19 +269,6 @@ function ensureBuildDataPoolSize(out: number[], triangleCount: number): void {
     }
 }
 
-/**
- * Precompute bounds (center-halfExtent format) for all triangles into the module-scoped pool.
- * This is computed once at the start of BVH construction and avoids
- * redundant vertex lookups during partitioning and SAH evaluation.
- *
- * Storage format: [centerX, halfExtentX, centerY, halfExtentY, centerZ, halfExtentZ]
- * where center = (min + max) / 2 and halfExtent = (max - min) / 2
- *
- * Note: AABB centers are used for partitioning, which is
- * mathematically valid and matches three-mesh-bvh's proven approach.
- *
- * @param data Triangle mesh data
- */
 function precomputeTriangleBuildData(out: number[], data: TriangleMeshData): void {
     const count = data.triangleCount;
     ensureBuildDataPoolSize(out, count);
@@ -320,9 +282,9 @@ function precomputeTriangleBuildData(out: number[], data: TriangleMeshData): voi
         const buildOffset = triIdx * BUILD_DATA_STRIDE;
 
         // get vertex indices
-        const ia = buffer[bufferOffset + 0]; // OFFSET_INDEX_A
-        const ib = buffer[bufferOffset + 1]; // OFFSET_INDEX_B
-        const ic = buffer[bufferOffset + 2]; // OFFSET_INDEX_C
+        const ia = buffer[bufferOffset + OFFSET_INDEX_A]; 
+        const ib = buffer[bufferOffset + OFFSET_INDEX_B]; 
+        const ic = buffer[bufferOffset + OFFSET_INDEX_C];
 
         // get vertex positions
         const ax = positions[ia * 3 + 0];
@@ -710,7 +672,7 @@ function getOptimalSplit(
                     }
 
                     // Sort bins by candidate position (sort in-place, only first 'count' bins)
-                    _sahBins.sort(_sahBinSort);
+                    _sahBins.sort(sahBinSort);
 
                     // Remove duplicate candidates by tracking split count
                     // Instead of splice, we compact valid bins to the front
