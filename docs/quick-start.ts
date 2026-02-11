@@ -68,10 +68,6 @@ for (let i = 0; i < 5; i++) {
     });
 }
 
-// update the world
-// typically you will do this in a loop, e.g. requestAnimationFrame or setInterval, but here we'll just do a single step for demonstration
-updateWorld(world, undefined, 1 / 60);
-
 // if we want to listen to and modify physics events, we can pass a "listener" as the second argument
 const listener: Listener = {
     onBodyPairValidate: (bodyA: RigidBody, bodyB: RigidBody) => {
@@ -91,5 +87,8 @@ const listener: Listener = {
     },
 };
 
-// update the world with the listener
-updateWorld(world, listener, 1 / 60);
+// simulate 10 seconds
+for (let i = 0; i < 60 * 10; i++) {
+  // typically you will do this in a loop, e.g. requestAnimationFrame or setInterval
+  updateWorld(world, listener, 1 / 60);
+}
