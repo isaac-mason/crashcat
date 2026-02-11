@@ -77,7 +77,7 @@ let readmeText = fs.readFileSync(readmeTemplatePath, 'utf-8');
 /* <TOC /> */
 const tocRegex = /<TOC\s*\/>/g;
 const tocLines = [];
-const headingRegex = /^(#{2,5})\s+(.*)$/gm;
+const headingRegex = /^(#{2,2})\s+(.*)$/gm;
 for (const match of readmeText.matchAll(headingRegex)) {
     const level = match[1].length - 1;
     const title = match[2].trim();
