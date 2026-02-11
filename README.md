@@ -2496,7 +2496,7 @@ crashcat has experimental functionality for defining custom shapes.
 
 This is a lot of work to set up, but can be situationally very worthwhile when assumptions about a world can be more effectively communicated with a custom shape, e.g. voxel or voxel-like worlds, destructable terrain, or other complex procedurally-generated geometry.
 
-This is demonstrated in the below example, which creates a custom "voxel world" shape that efficiently represents a large grid of blocks with many empty spaces.
+This is demonstrated in the below example, which creates a custom "voxel world" shape that efficiently represents voxel volume, supporting modification at runtime without any rebuild cost.
 
 <table>
   <tr>

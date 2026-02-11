@@ -32,15 +32,15 @@ export function initialize(
     inTolerance: number,
     outEdges: Edges,
 ): EResult {
-    // Clear any leftovers
+    // clear any leftovers
     freeEdges(builder);
     outEdges.length = 0;
 
-    // Reset flag
+    // reset flag
     let result = EResult.Success;
 
-    // Determine a suitable tolerance for detecting that points are colinear
-    // Formula as per: Implementing Quickhull - Dirk Gregorius.
+    // determine a suitable tolerance for detecting that points are colinear
+    // formula as per: "Implementing Quickhull - Dirk Gregorius"
     const vmax: Vec3 = [0, 0, 0];
     for (const v of builder.positions) {
         vmax[0] = Math.max(vmax[0], Math.abs(v[0]));
@@ -50,10 +50,10 @@ export function initialize(
     const FLT_EPSILON = 1.1920929e-7;
     const colinearToleranceSq = (2.0 * FLT_EPSILON * (vmax[0] + vmax[1])) ** 2;
 
-    // Increase desired tolerance if accuracy doesn't allow it
+    // increase desired tolerance if accuracy doesn't allow it
     const toleranceSq = Math.max(colinearToleranceSq, inTolerance * inTolerance);
 
-    // Start with the initial indices in counter clockwise order
+    // start with the initial indices in counter clockwise order
     // z = (mPositions[inIdx2] - mPositions[inIdx1]).Cross(mPositions[inIdx3] - mPositions[inIdx1]).GetZ()
     const p1 = builder.positions[inIdx1];
     const p2 = builder.positions[inIdx2];
@@ -62,16 +62,16 @@ export function initialize(
     const edge1y = p2[1] - p1[1];
     const edge2x = p3[0] - p1[0];
     const edge2y = p3[1] - p1[1];
-    const z = edge1x * edge2y - edge1y * edge2x; // Cross product Z component
+    const z = edge1x * edge2y - edge1y * edge2x; // cross product Z component
 
     if (z < 0.0) {
-        // Swap to make counter-clockwise
+        // swap to make counter-clockwise
         const temp = inIdx1;
         inIdx1 = inIdx2;
         inIdx2 = temp;
     }
 
-    // Create and link edges
+    // create and link edges
     const e1: Edge = {
         mNormal: [0, 0, 0],
         mCenter: [0, 0, 0],
@@ -109,7 +109,7 @@ export function initialize(
     builder._firstEdge = e1;
     builder._numEdges = 3;
 
-    // Build the initial conflict lists
+    // build the initial conflict lists
     const edges = [e1, e2, e3];
     for (const edge of edges) {
         calculateNormalAndCenter(edge, builder.positions);
@@ -120,15 +120,15 @@ export function initialize(
         }
     }
 
-    // Add the remaining points to the hull
-    for (;;) {
-        // Check if we've reached the max amount of vertices that are allowed
+    // add the remaining points to the hull
+    for (; ;) {
+        // check if we've reached the max amount of vertices that are allowed
         if (builder._numEdges >= inMaxVertices) {
             result = EResult.MaxVerticesReached;
             break;
         }
 
-        // Find the edge with the furthest point on it
+        // find the edge with the furthest point on it
         let edgeWithFurthestPoint: Edge | null = null;
         let furthestDistSq = 0.0;
         let edge = builder._firstEdge!;
@@ -140,17 +140,17 @@ export function initialize(
             edge = edge.mNextEdge!;
         } while (edge !== builder._firstEdge);
 
-        // If there is none closer than our tolerance value, we're done
+        // if there is none closer than our tolerance value, we're done
         if (edgeWithFurthestPoint === null || furthestDistSq < toleranceSq) {
             break;
         }
 
-        // Take the furthest point
+        // take the furthest point
         const furthestPointIdx = edgeWithFurthestPoint.mConflictList.pop()!;
         const furthestPoint = builder.positions[furthestPointIdx];
 
-        // Find the horizon of edges that need to be removed
-        // Walk backwards from edge_with_furthest_point
+        // find the horizon of edges that need to be removed
+        // walk backwards from edge_with_furthest_point
         let firstEdge = edgeWithFurthestPoint;
         do {
             const prev = firstEdge.mPrevEdge!;
@@ -160,7 +160,7 @@ export function initialize(
             firstEdge = prev;
         } while (firstEdge !== edgeWithFurthestPoint);
 
-        // Walk forwards from edge_with_furthest_point
+        // walk forwards from edge_with_furthest_point
         let lastEdge = edgeWithFurthestPoint;
         do {
             const next = lastEdge.mNextEdge!;
@@ -170,7 +170,7 @@ export function initialize(
             lastEdge = next;
         } while (lastEdge !== edgeWithFurthestPoint);
 
-        // Create new edges
+        // create new edges
         const newE1: Edge = {
             mNormal: [0, 0, 0],
             mCenter: [0, 0, 0],
@@ -193,25 +193,25 @@ export function initialize(
         newE2.mPrevEdge = newE1;
         newE1.mPrevEdge!.mNextEdge = newE1;
         newE2.mNextEdge!.mPrevEdge = newE2;
-        builder._firstEdge = newE1; // We could delete mFirstEdge so just update it to the newly created edge
+        builder._firstEdge = newE1; // we could delete mFirstEdge so just update it to the newly created edge
         builder._numEdges += 2;
 
-        // Calculate normals
+        // calculate normals
         const newEdges = [newE1, newE2];
         for (const newEdge of newEdges) {
             calculateNormalAndCenter(newEdge, builder.positions);
         }
 
-        // Delete the old edges
-        for (;;) {
+        // delete the old edges
+        for (; ;) {
             const next = firstEdge.mNextEdge!;
 
-            // Redistribute points in conflict list
+            // redistribute points in conflict list
             for (const idx of firstEdge.mConflictList) {
                 assignPointToEdge(builder, idx, newEdges);
             }
 
-            // Clear the edge
+            // clear the edge
             firstEdge.mConflictList = [];
             firstEdge.mNextEdge = null;
             firstEdge.mPrevEdge = null;
@@ -224,7 +224,7 @@ export function initialize(
         }
     }
 
-    // Convert the edge list to a list of indices
+    // convert the edge list to a list of indices
     let outputEdge = builder._firstEdge!;
     do {
         outEdges.push(outputEdge.mStartIdx);
@@ -244,20 +244,17 @@ type Edge = {
     mFurthestPointDistanceSq: number;
 };
 
-/**
- * Free all edges
- * Walks the circular edge list and removes all edges.
- */
+/** free all edges, walks the circular edge list and removes all edges */
 function freeEdges(builder: ConvexHullBuilder2D): void {
     if (builder._firstEdge === null) {
         return;
     }
 
-    // Walk circular list and clear all edges
+    // walk circular list and clear all edges
     let edge = builder._firstEdge;
     do {
         const next = edge.mNextEdge;
-        // Clear references to help GC
+        // clear references to help GC
         edge.mNextEdge = null;
         edge.mPrevEdge = null;
         edge.mConflictList = [];
@@ -284,17 +281,15 @@ function assignPointToEdge(builder: ConvexHullBuilder2D, inPositionIdx: number, 
     let bestEdge: Edge | null = null;
     let bestDistSq = 0.0;
 
-    // Test against all edges
+    // test against all edges
     for (const edge of inEdges) {
-        // Determine distance to edge
-        // dot = edge->mNormal.Dot(point - edge->mCenter)
+        // determine distance to edge
         const dx = point[0] - edge.mCenter[0];
         const dy = point[1] - edge.mCenter[1];
         const dz = point[2] - edge.mCenter[2];
         const dot = edge.mNormal[0] * dx + edge.mNormal[1] * dy + edge.mNormal[2] * dz;
 
         if (dot > 0.0) {
-            // dist_sq = dot * dot / edge->mNormal.LengthSq()
             const normalLengthSq =
                 edge.mNormal[0] * edge.mNormal[0] + edge.mNormal[1] * edge.mNormal[1] + edge.mNormal[2] * edge.mNormal[2];
             const distSq = (dot * dot) / normalLengthSq;
@@ -306,14 +301,14 @@ function assignPointToEdge(builder: ConvexHullBuilder2D, inPositionIdx: number, 
         }
     }
 
-    // If this point is in front of the edge, add it to the conflict list
+    // if this point is in front of the edge, add it to the conflict list
     if (bestEdge !== null) {
         if (bestDistSq > bestEdge.mFurthestPointDistanceSq) {
-            // This point is further away than any others, update the distance and add point as last point
+            // this point is further away than any others, update the distance and add point as last point
             bestEdge.mFurthestPointDistanceSq = bestDistSq;
             bestEdge.mConflictList.push(inPositionIdx);
         } else {
-            // Not the furthest point, add it as the before last point
+            // not the furthest point, add it as the before last point
             const insertIdx = bestEdge.mConflictList.length - 1;
             bestEdge.mConflictList.splice(insertIdx, 0, inPositionIdx);
         }
@@ -355,7 +350,7 @@ export function validateEdges(builder: ConvexHullBuilder2D): void {
         edge = edge.mNextEdge;
     } while (edge !== builder._firstEdge);
 
-    // Validate that count matches
+    // validate that count matches
     if (count !== builder._numEdges) {
         throw new Error(`validateEdges: count (${count}) !== _numEdges (${builder._numEdges})`);
     }
@@ -374,29 +369,18 @@ function calculateNormalAndCenter(edge: Edge, positions: readonly Vec3[]): void 
     const p1 = positions[edge.mStartIdx];
     const p2 = positions[edge.mNextEdge!.mStartIdx];
 
-    // Center of edge
-    // mCenter = 0.5f * (p1 + p2)
+    // center of edge
     vec3.add(edge.mCenter, p1, p2);
     vec3.scale(edge.mCenter, edge.mCenter, 0.5);
 
-    // Create outward pointing normal.
-    // We have two choices for the normal (which satisfies normal . edge = 0):
-    // normal1 = (-edge.y, edge.x, 0)
-    // normal2 = (edge.y, -edge.x, 0)
-    // We want (normal x edge).z > 0 so that the normal points out of the polygon. Only normal2 satisfies this condition.
-    // Vec3 edge = p2 - p1;
-    // mNormal = Vec3(edge.GetY(), -edge.GetX(), 0);
+    // create outward pointing normal.
     const edgeX = p2[0] - p1[0];
     const edgeY = p2[1] - p1[1];
     vec3.set(edge.mNormal, edgeY, -edgeX, 0);
 }
 
-/**
- * Check if this edge is facing inPosition.
- * Returns true if the point is in front of the edge (outside the hull).
- */
+/** check if this edge is facing inPosition, returns true if the point is in front of the edge (outside the hull) */
 function isFacing(edge: Edge, inPosition: Vec3): boolean {
-    // mNormal.Dot(inPosition - mCenter) > 0.0f
     const dx = inPosition[0] - edge.mCenter[0];
     const dy = inPosition[1] - edge.mCenter[1];
     const dz = inPosition[2] - edge.mCenter[2];
