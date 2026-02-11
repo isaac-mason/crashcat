@@ -1,0 +1,44 @@
+name: pr checks
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: true
+
+      - name: Build root project
+        run: pnpm run build
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Run tree-shaking test
+        run: pnpm run test-tree-shaking
+
+      - name: Typecheck docs
+        run: pnpm run typecheck-docs
+
+      - name: Build website
+        run: |
+          cd website
+          pnpm install
+          ./build.sh
