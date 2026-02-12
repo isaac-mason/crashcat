@@ -81,34 +81,38 @@ export type TriangleSupport = {
 };
 
 function triangleGetSupport(this: TriangleSupport, direction: Vec3, out: Vec3): void {
-    const { a, b, c } = this;
+    const {
+        a: [ax, ay, az],
+        b: [bx, by, bz],
+        c: [cx, cy, cz],
+    } = this;
     const [dx, dy, dz] = direction;
 
     // project vertices on direction
-    const d1 = a[0] * dx + a[1] * dy + a[2] * dz;
-    const d2 = b[0] * dx + b[1] * dy + b[2] * dz;
-    const d3 = c[0] * dx + c[1] * dy + c[2] * dz;
+    const d1 = ax * dx + ay * dy + az * dz;
+    const d2 = bx * dx + by * dy + bz * dz;
+    const d3 = cx * dx + cy * dy + cz * dz;
 
     // return vertex with biggest projection
     if (d1 > d2) {
         if (d1 > d3) {
-            out[0] = a[0];
-            out[1] = a[1];
-            out[2] = a[2];
+            out[0] = ax;
+            out[1] = ay;
+            out[2] = az;
         } else {
-            out[0] = c[0];
-            out[1] = c[1];
-            out[2] = c[2];
+            out[0] = cx;
+            out[1] = cy;
+            out[2] = cz;
         }
     } else {
         if (d2 > d3) {
-            out[0] = b[0];
-            out[1] = b[1];
-            out[2] = b[2];
+            out[0] = bx;
+            out[1] = by;
+            out[2] = bz;
         } else {
-            out[0] = c[0];
-            out[1] = c[1];
-            out[2] = c[2];
+            out[0] = cx;
+            out[1] = cy;
+            out[2] = cz;
         }
     }
 }
@@ -218,11 +222,6 @@ export function setPolygonSupport(out: PolygonSupport, face: Face): void {
 }
 
 /* transformed support - applies a position + rotation to an inner support function */
-
-// uses mat4 approach like jolt's TransformedConvexObject for efficiency:
-// - direction to local: multiply3x3Transposed (inverse rotation for orthonormal)
-// - support to world: multiply3x3 + translate
-// this is ~2x fewer operations than quaternion approach per getSupport call
 
 const _transformedSupport_localDirection = /* @__PURE__ */ vec3.create();
 
@@ -342,7 +341,7 @@ export function setBoxSupport(
     halfExtents: Vec3,
     convexRadius: number,
     mode: SupportFunctionMode,
-    scale: Vec3
+    scale: Vec3,
 ): void {
     // scale half extents component-wise with absolute scale
     const scaledX = Math.abs(scale[0]) * halfExtents[0];
