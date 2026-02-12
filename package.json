@@ -11,6 +11,10 @@
         "game"
     ],
     "license": "MIT",
+    "homepage": "https://github.com/isaac-mason/crashcat",
+    "bugs": {
+        "url": "https://github.com/isaac-mason/crashcat/issues"
+    },
     "type": "module",
     "main": "dist/index.js",
     "types": "dist/src/index.d.ts",
