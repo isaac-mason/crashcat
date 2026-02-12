@@ -88,37 +88,44 @@ function calculateInverseEffectiveMass(
     bodyB: RigidBody,
     worldSpaceAxis: Vec3,
 ): number {
+    const [ax, ay, az] = worldSpaceAxis;
+
     // calculate I^-1 * axis for both bodies
+    let i1x: number, i1y: number, i1z: number;
+
     if (bodyA.motionType === MotionType.DYNAMIC) {
-        multiplyWorldSpaceInverseInertiaByVector(
-            _calc_invI1_Axis,
-            bodyA.motionProperties,
-            bodyA.quaternion,
-            worldSpaceAxis,
-        );
-        vec3.copy(part.invI1_Axis, _calc_invI1_Axis);
+        multiplyWorldSpaceInverseInertiaByVector(_calc_invI1_Axis, bodyA.motionProperties, bodyA.quaternion, worldSpaceAxis);
+        [i1x, i1y, i1z] = _calc_invI1_Axis;
+        part.invI1_Axis[0] = i1x;
+        part.invI1_Axis[1] = i1y;
+        part.invI1_Axis[2] = i1z;
     } else {
-        vec3.set(part.invI1_Axis, 0, 0, 0);
-        vec3.set(_calc_invI1_Axis, 0, 0, 0);
+        i1x = i1y = i1z = 0;
+        part.invI1_Axis[0] = 0;
+        part.invI1_Axis[1] = 0;
+        part.invI1_Axis[2] = 0;
     }
 
+    let i2x: number, i2y: number, i2z: number;
     if (bodyB.motionType === MotionType.DYNAMIC) {
-        multiplyWorldSpaceInverseInertiaByVector(
-            _calc_invI2_Axis,
-            bodyB.motionProperties,
-            bodyB.quaternion,
-            worldSpaceAxis,
-        );
-        vec3.copy(part.invI2_Axis, _calc_invI2_Axis);
+        multiplyWorldSpaceInverseInertiaByVector(_calc_invI2_Axis, bodyB.motionProperties, bodyB.quaternion, worldSpaceAxis);
+        [i2x, i2y, i2z] = _calc_invI2_Axis;
+        part.invI2_Axis[0] = i2x;
+        part.invI2_Axis[1] = i2y;
+        part.invI2_Axis[2] = i2z;
     } else {
-        vec3.set(part.invI2_Axis, 0, 0, 0);
-        vec3.set(_calc_invI2_Axis, 0, 0, 0);
+        i2x = i2y = i2z = 0;
+        part.invI2_Axis[0] = 0;
+        part.invI2_Axis[1] = 0;
+        part.invI2_Axis[2] = 0;
     }
 
     // calculate inverse effective mass: K = J M^-1 J^T = axis · (I1^-1 + I2^-1) · axis
     // since J = [0, -a, 0, a], we get: K = a · I1^-1 · a + a · I2^-1 · a
-    vec3.add(_calc_invI1_Axis, _calc_invI1_Axis, _calc_invI2_Axis);
-    return vec3.dot(worldSpaceAxis, _calc_invI1_Axis);
+    const sumX = i1x + i2x;
+    const sumY = i1y + i2y;
+    const sumZ = i1z + i2z;
+    return ax * sumX + ay * sumY + az * sumZ;
 }
 
 /**
@@ -267,12 +274,7 @@ export function calculateConstraintPropertiesWithSettings(
 const _ws_angularDelta = /* @__PURE__ */ vec3.create();
 
 /** apply warm start impulse from previous frame */
-export function warmStart(
-    part: AngleConstraintPart,
-    bodyA: RigidBody,
-    bodyB: RigidBody,
-    warmStartImpulseRatio: number,
-): void {
+export function warmStart(part: AngleConstraintPart, bodyA: RigidBody, bodyB: RigidBody, warmStartImpulseRatio: number): void {
     part.totalLambda *= warmStartImpulseRatio;
     applyVelocityStep(part, bodyA, bodyB, part.totalLambda);
 }
