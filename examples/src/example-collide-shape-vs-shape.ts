@@ -15,6 +15,7 @@ import {
     createClosestCollideShapeCollector,
     createDefaultCollideShapeSettings,
     EMPTY_SUB_SHAPE_ID,
+    registerAll,
     sphere,
     transformed,
     triangleMesh,
@@ -24,6 +25,8 @@ import {
 import { createShapeHelper } from 'crashcat/three';
 import { createFaceGeometry } from './debug/face.js';
 import { loadGLTFPoints } from './utils/gltf';
+
+registerAll();
 
 const GUI_SHAPE_OPTIONS = {
     Sphere: 'sphere',
