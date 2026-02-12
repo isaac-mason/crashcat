@@ -35,42 +35,24 @@ export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: V
 
     if (_barycentric_line.v <= 0.0) {
         // a is closest point
-        // vec3.copy(out.point, a);
         out.point[0] = a[0];
         out.point[1] = a[1];
         out.point[2] = a[2];
         out.pointSet = 0b0001;
     } else if (_barycentric_line.u <= 0.0) {
         // b is closest point
-        // vec3.copy(out.point, b);
         out.point[0] = b[0];
         out.point[1] = b[1];
         out.point[2] = b[2];
         out.pointSet = 0b0010;
     } else {
         // closest point lies on line ab
-        // vec3.zero(out.point);
-        // vec3.scaleAndAdd(out.point, out.point, a, _barycentric_line.u);
-        // vec3.scaleAndAdd(out.point, out.point, b, _barycentric_line.v);
         out.point[0] = a[0] * _barycentric_line.u + b[0] * _barycentric_line.v;
         out.point[1] = a[1] * _barycentric_line.u + b[1] * _barycentric_line.v;
         out.point[2] = a[2] * _barycentric_line.u + b[2] * _barycentric_line.v;
         out.pointSet = 0b0011;
     }
 }
-
-const _ac_tri = /* @__PURE__ */ vec3.create();
-const _ab_tri = /* @__PURE__ */ vec3.create();
-const _bc_tri = /* @__PURE__ */ vec3.create();
-const _a_tri = /* @__PURE__ */ vec3.create();
-const _c_tri = /* @__PURE__ */ vec3.create();
-const _n_tri = /* @__PURE__ */ vec3.create();
-const _ap_tri = /* @__PURE__ */ vec3.create();
-const _bp_tri = /* @__PURE__ */ vec3.create();
-const _cp_tri = /* @__PURE__ */ vec3.create();
-const _closestPoint_tri = /* @__PURE__ */ vec3.create();
-const _q_tri = /* @__PURE__ */ vec3.create();
-const _tempVector_tri = /* @__PURE__ */ vec3.create();
 
 export function computeClosestPointOnTriangle(
     out: ClosestPointResult,
@@ -81,233 +63,182 @@ export function computeClosestPointOnTriangle(
     squaredTolerance: number,
 ): void {
     // the most accurate normal is calculated by using the two shortest edges
-    // vec3.subtract(_ac_tri, inC, inA);
-    _ac_tri[0] = inC[0] - inA[0];
-    _ac_tri[1] = inC[1] - inA[1];
-    _ac_tri[2] = inC[2] - inA[2];
-    // vec3.subtract(_bc_tri, inC, inB);
-    _bc_tri[0] = inC[0] - inB[0];
-    _bc_tri[1] = inC[1] - inB[1];
-    _bc_tri[2] = inC[2] - inB[2];
-    // const swapAC = vec3.dot(_bc_tri, _bc_tri) < vec3.dot(_ac_tri, _ac_tri);
-    const swapAC =
-        _bc_tri[0] * _bc_tri[0] + _bc_tri[1] * _bc_tri[1] + _bc_tri[2] * _bc_tri[2] <
-        _ac_tri[0] * _ac_tri[0] + _ac_tri[1] * _ac_tri[1] + _ac_tri[2] * _ac_tri[2];
+    const acx = inC[0] - inA[0];
+    const acy = inC[1] - inA[1];
+    const acz = inC[2] - inA[2];
+    
+    const bcx = inC[0] - inB[0];
+    const bcy = inC[1] - inB[1];
+    const bcz = inC[2] - inB[2];
+    
+    const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
 
-    // vec3.copy(_a_tri, swapAC ? inC : inA);
-    // vec3.copy(_c_tri, swapAC ? inA : inC);
-    if (swapAC) {
-        _a_tri[0] = inC[0];
-        _a_tri[1] = inC[1];
-        _a_tri[2] = inC[2];
-        _c_tri[0] = inA[0];
-        _c_tri[1] = inA[1];
-        _c_tri[2] = inA[2];
-    } else {
-        _a_tri[0] = inA[0];
-        _a_tri[1] = inA[1];
-        _a_tri[2] = inA[2];
-        _c_tri[0] = inC[0];
-        _c_tri[1] = inC[1];
-        _c_tri[2] = inC[2];
-    }
+    // choose a and c based on swap
+    const ax = swapAC ? inC[0] : inA[0];
+    const ay = swapAC ? inC[1] : inA[1];
+    const az = swapAC ? inC[2] : inA[2];
+    const cx = swapAC ? inA[0] : inC[0];
+    const cy = swapAC ? inA[1] : inC[1];
+    const cz = swapAC ? inA[2] : inC[2];
 
     // calculate normal
+    const abx = inB[0] - ax;
+    const aby = inB[1] - ay;
+    const abz = inB[2] - az;
 
-    // vec3.subtract(_ab_tri, inB, _a_tri);
-    _ab_tri[0] = inB[0] - _a_tri[0];
-    _ab_tri[1] = inB[1] - _a_tri[1];
-    _ab_tri[2] = inB[2] - _a_tri[2];
+    const ac_x = cx - ax;
+    const ac_y = cy - ay;
+    const ac_z = cz - az;
 
-    // vec3.subtract(_ac_tri, _c_tri, _a_tri);
-    _ac_tri[0] = _c_tri[0] - _a_tri[0];
-    _ac_tri[1] = _c_tri[1] - _a_tri[1];
-    _ac_tri[2] = _c_tri[2] - _a_tri[2];
+    const nx = aby * ac_z - abz * ac_y;
+    const ny = abz * ac_x - abx * ac_z;
+    const nz = abx * ac_y - aby * ac_x;
 
-    // vec3.cross(_n_tri, _ab_tri, _ac_tri);
-    _n_tri[0] = _ab_tri[1] * _ac_tri[2] - _ab_tri[2] * _ac_tri[1];
-    _n_tri[1] = _ab_tri[2] * _ac_tri[0] - _ab_tri[0] * _ac_tri[2];
-    _n_tri[2] = _ab_tri[0] * _ac_tri[1] - _ab_tri[1] * _ac_tri[0];
-
-    // const normalLengthSquared = vec3.squaredLength(_n_tri);
-    const normalLengthSquared = _n_tri[0] * _n_tri[0] + _n_tri[1] * _n_tri[1] + _n_tri[2] * _n_tri[2];
+    const normalLengthSquared = nx * nx + ny * ny + nz * nz;
 
     // check degenerate
     if (normalLengthSquared < 1.0e-10) {
         // degenerate, fallback to vertices and edges
         let closestSet = 0b0100;
-        // vec3.copy(_closestPoint_tri, inC);
-        _closestPoint_tri[0] = inC[0];
-        _closestPoint_tri[1] = inC[1];
-        _closestPoint_tri[2] = inC[2];
-        // let bestDistanceSquared = vec3.squaredLength(inC);
+        let closestX = inC[0];
+        let closestY = inC[1];
+        let closestZ = inC[2];
         let bestDistanceSquared = inC[0] * inC[0] + inC[1] * inC[1] + inC[2] * inC[2];
 
         if (!mustIncludeC) {
             // try vertex A
-            // const aLengthSquared = vec3.squaredLength(inA);
             const aLengthSquared = inA[0] * inA[0] + inA[1] * inA[1] + inA[2] * inA[2];
 
             if (aLengthSquared < bestDistanceSquared) {
                 closestSet = 0b0001;
-                // vec3.copy(_closestPoint_tri, inA);
-                _closestPoint_tri[0] = inA[0];
-                _closestPoint_tri[1] = inA[1];
-                _closestPoint_tri[2] = inA[2];
+                closestX = inA[0];
+                closestY = inA[1];
+                closestZ = inA[2];
                 bestDistanceSquared = aLengthSquared;
             }
 
             // try vertex B
-            // const bLengthSquared = vec3.squaredLength(inB);
             const bLengthSquared = inB[0] * inB[0] + inB[1] * inB[1] + inB[2] * inB[2];
             if (bLengthSquared < bestDistanceSquared) {
                 closestSet = 0b0010;
-                // vec3.copy(_closestPoint_tri, inB);
-                _closestPoint_tri[0] = inB[0];
-                _closestPoint_tri[1] = inB[1];
-                _closestPoint_tri[2] = inB[2];
+                closestX = inB[0];
+                closestY = inB[1];
+                closestZ = inB[2];
                 bestDistanceSquared = bLengthSquared;
             }
         }
 
         // edge AC
-        // const acLengthSquared = vec3.squaredLength(_ac_tri);
-        const acLengthSquared = _ac_tri[0] * _ac_tri[0] + _ac_tri[1] * _ac_tri[1] + _ac_tri[2] * _ac_tri[2];
+        const ac2x = cx - ax;
+        const ac2y = cy - ay;
+        const ac2z = cz - az;
+        const acLengthSquared = ac2x * ac2x + ac2y * ac2y + ac2z * ac2z;
 
         if (acLengthSquared > squaredTolerance) {
-            const v = clamp(-vec3.dot(_a_tri, _ac_tri) / acLengthSquared, 0.0, 1.0);
-            // vec3.scaleAndAdd(_q_tri, _a_tri, _ac_tri, v);
-            _q_tri[0] = _a_tri[0] + _ac_tri[0] * v;
-            _q_tri[1] = _a_tri[1] + _ac_tri[1] * v;
-            _q_tri[2] = _a_tri[2] + _ac_tri[2] * v;
+            const v = clamp(-(ax * ac2x + ay * ac2y + az * ac2z) / acLengthSquared, 0.0, 1.0);
+            const qx = ax + ac2x * v;
+            const qy = ay + ac2y * v;
+            const qz = az + ac2z * v;
 
-            // const distanceSquared = vec3.squaredLength(_q_tri);
-            const distanceSquared = _q_tri[0] * _q_tri[0] + _q_tri[1] * _q_tri[1] + _q_tri[2] * _q_tri[2];
+            const distanceSquared = qx * qx + qy * qy + qz * qz;
 
             if (distanceSquared < bestDistanceSquared) {
                 closestSet = 0b0101;
-                // vec3.copy(_closestPoint_tri, _q_tri);
-                _closestPoint_tri[0] = _q_tri[0];
-                _closestPoint_tri[1] = _q_tri[1];
-                _closestPoint_tri[2] = _q_tri[2];
+                closestX = qx;
+                closestY = qy;
+                closestZ = qz;
                 bestDistanceSquared = distanceSquared;
             }
         }
 
         // edge BC
-        // vec3.subtract(_bc_tri, inC, inB);
-        _bc_tri[0] = inC[0] - inB[0];
-        _bc_tri[1] = inC[1] - inB[1];
-        _bc_tri[2] = inC[2] - inB[2];
+        const bc2x = inC[0] - inB[0];
+        const bc2y = inC[1] - inB[1];
+        const bc2z = inC[2] - inB[2];
 
-        // const bcLengthSquared = vec3.squaredLength(_bc_tri);
-        const bcLengthSquared = _bc_tri[0] * _bc_tri[0] + _bc_tri[1] * _bc_tri[1] + _bc_tri[2] * _bc_tri[2];
+        const bcLengthSquared = bc2x * bc2x + bc2y * bc2y + bc2z * bc2z;
 
         if (bcLengthSquared > squaredTolerance) {
-            const v = clamp(-vec3.dot(inB, _bc_tri) / bcLengthSquared, 0.0, 1.0);
+            const v = clamp(-(inB[0] * bc2x + inB[1] * bc2y + inB[2] * bc2z) / bcLengthSquared, 0.0, 1.0);
 
-            // vec3.scaleAndAdd(_q_tri, inB, _bc_tri, v);
-            _q_tri[0] = inB[0] + _bc_tri[0] * v;
-            _q_tri[1] = inB[1] + _bc_tri[1] * v;
-            _q_tri[2] = inB[2] + _bc_tri[2] * v;
+            const qx = inB[0] + bc2x * v;
+            const qy = inB[1] + bc2y * v;
+            const qz = inB[2] + bc2z * v;
 
-            // const distanceSquared = vec3.squaredLength(_q_tri);
-            const distanceSquared = _q_tri[0] * _q_tri[0] + _q_tri[1] * _q_tri[1] + _q_tri[2] * _q_tri[2];
+            const distanceSquared = qx * qx + qy * qy + qz * qz;
 
             if (distanceSquared < bestDistanceSquared) {
                 closestSet = 0b0110;
-                // vec3.copy(_closestPoint_tri, _q_tri);
-                _closestPoint_tri[0] = _q_tri[0];
-                _closestPoint_tri[1] = _q_tri[1];
-                _closestPoint_tri[2] = _q_tri[2];
+                closestX = qx;
+                closestY = qy;
+                closestZ = qz;
                 bestDistanceSquared = distanceSquared;
             }
         }
 
         if (!mustIncludeC) {
             // edge AB
-            // vec3.subtract(_ab_tri, inB, inA);
-            _ab_tri[0] = inB[0] - inA[0];
-            _ab_tri[1] = inB[1] - inA[1];
-            _ab_tri[2] = inB[2] - inA[2];
+            const ab2x = inB[0] - inA[0];
+            const ab2y = inB[1] - inA[1];
+            const ab2z = inB[2] - inA[2];
 
-            // const abLengthSquared = vec3.squaredLength(_ab_tri);
-            const abLengthSquared = _ab_tri[0] * _ab_tri[0] + _ab_tri[1] * _ab_tri[1] + _ab_tri[2] * _ab_tri[2];
+            const abLengthSquared = ab2x * ab2x + ab2y * ab2y + ab2z * ab2z;
 
             if (abLengthSquared > squaredTolerance) {
-                const v = clamp(-vec3.dot(inA, _ab_tri) / abLengthSquared, 0.0, 1.0);
+                const v = clamp(-(inA[0] * ab2x + inA[1] * ab2y + inA[2] * ab2z) / abLengthSquared, 0.0, 1.0);
 
-                // vec3.scaleAndAdd(_q_tri, inA, _ab_tri, v);
-                _q_tri[0] = inA[0] + _ab_tri[0] * v;
-                _q_tri[1] = inA[1] + _ab_tri[1] * v;
-                _q_tri[2] = inA[2] + _ab_tri[2] * v;
+                const qx = inA[0] + ab2x * v;
+                const qy = inA[1] + ab2y * v;
+                const qz = inA[2] + ab2z * v;
 
-                // const distanceSquared = vec3.squaredLength(_q_tri);
-                const distanceSquared = _q_tri[0] * _q_tri[0] + _q_tri[1] * _q_tri[1] + _q_tri[2] * _q_tri[2];
+                const distanceSquared = qx * qx + qy * qy + qz * qz;
 
                 if (distanceSquared < bestDistanceSquared) {
                     closestSet = 0b0011;
-                    // vec3.copy(_closestPoint_tri, _q_tri);
-                    _closestPoint_tri[0] = _q_tri[0];
-                    _closestPoint_tri[1] = _q_tri[1];
-                    _closestPoint_tri[2] = _q_tri[2];
+                    closestX = qx;
+                    closestY = qy;
+                    closestZ = qz;
                 }
             }
         }
 
         out.pointSet = closestSet;
-
-        // vec3.copy(out.point, _closestPoint_tri);
-        out.point[0] = _closestPoint_tri[0];
-        out.point[1] = _closestPoint_tri[1];
-        out.point[2] = _closestPoint_tri[2];
+        out.point[0] = closestX;
+        out.point[1] = closestY;
+        out.point[2] = closestZ;
 
         return;
     }
 
     // check if P in vertex region outside A
-    // vec3.negate(_ap_tri, _a_tri);
-    _ap_tri[0] = -_a_tri[0];
-    _ap_tri[1] = -_a_tri[1];
-    _ap_tri[2] = -_a_tri[2];
+    const apx = -ax;
+    const apy = -ay;
+    const apz = -az;
 
-    // const d1 = vec3.dot(_ab_tri, _ap_tri);
-    const d1 = _ab_tri[0] * _ap_tri[0] + _ab_tri[1] * _ap_tri[1] + _ab_tri[2] * _ap_tri[2];
-
-    // const d2 = vec3.dot(_ac_tri, _ap_tri);
-    const d2 = _ac_tri[0] * _ap_tri[0] + _ac_tri[1] * _ap_tri[1] + _ac_tri[2] * _ap_tri[2];
+    const d1 = abx * apx + aby * apy + abz * apz;
+    const d2 = ac_x * apx + ac_y * apy + ac_z * apz;
 
     if (d1 <= 0.0 && d2 <= 0.0) {
         out.pointSet = swapAC ? 0b0100 : 0b0001;
-
-        // vec3.copy(out.point, _a_tri);
-        out.point[0] = _a_tri[0];
-        out.point[1] = _a_tri[1];
-        out.point[2] = _a_tri[2];
-
+        out.point[0] = ax;
+        out.point[1] = ay;
+        out.point[2] = az;
         return;
     }
 
     // check if P in vertex region outside B
-    // vec3.negate(_bp_tri, inB);
-    _bp_tri[0] = -inB[0];
-    _bp_tri[1] = -inB[1];
-    _bp_tri[2] = -inB[2];
+    const bpx = -inB[0];
+    const bpy = -inB[1];
+    const bpz = -inB[2];
 
-    // const d3 = vec3.dot(_ab_tri, _bp_tri);
-    const d3 = _ab_tri[0] * _bp_tri[0] + _ab_tri[1] * _bp_tri[1] + _ab_tri[2] * _bp_tri[2];
-
-    // const d4 = vec3.dot(_ac_tri, _bp_tri);
-    const d4 = _ac_tri[0] * _bp_tri[0] + _ac_tri[1] * _bp_tri[1] + _ac_tri[2] * _bp_tri[2];
+    const d3 = abx * bpx + aby * bpy + abz * bpz;
+    const d4 = ac_x * bpx + ac_y * bpy + ac_z * bpz;
 
     if (d3 >= 0.0 && d4 <= d3) {
         out.pointSet = 0b0010;
-
-        // vec3.copy(out.point, inB);
         out.point[0] = inB[0];
         out.point[1] = inB[1];
         out.point[2] = inB[2];
-
         return;
     }
 
@@ -315,35 +246,25 @@ export function computeClosestPointOnTriangle(
     if (d1 * d4 <= d3 * d2 && d1 >= 0.0 && d3 <= 0.0) {
         const v = d1 / (d1 - d3);
         out.pointSet = swapAC ? 0b0110 : 0b0011;
-
-        // vec3.scaleAndAdd(out.point, _a_tri, _ab_tri, v);
-        out.point[0] = _a_tri[0] + _ab_tri[0] * v;
-        out.point[1] = _a_tri[1] + _ab_tri[1] * v;
-        out.point[2] = _a_tri[2] + _ab_tri[2] * v;
-
+        out.point[0] = ax + abx * v;
+        out.point[1] = ay + aby * v;
+        out.point[2] = az + abz * v;
         return;
     }
 
     // check if P in vertex region outside C
-    // vec3.negate(_cp_tri, _c_tri);
-    _cp_tri[0] = -_c_tri[0];
-    _cp_tri[1] = -_c_tri[1];
-    _cp_tri[2] = -_c_tri[2];
+    const cpx = -cx;
+    const cpy = -cy;
+    const cpz = -cz;
 
-    // const d5 = vec3.dot(_ab_tri, _cp_tri);
-    const d5 = _ab_tri[0] * _cp_tri[0] + _ab_tri[1] * _cp_tri[1] + _ab_tri[2] * _cp_tri[2];
-
-    // const d6 = vec3.dot(_ac_tri, _cp_tri);
-    const d6 = _ac_tri[0] * _cp_tri[0] + _ac_tri[1] * _cp_tri[1] + _ac_tri[2] * _cp_tri[2];
+    const d5 = abx * cpx + aby * cpy + abz * cpz;
+    const d6 = ac_x * cpx + ac_y * cpy + ac_z * cpz;
 
     if (d6 >= 0.0 && d5 <= d6) {
         out.pointSet = swapAC ? 0b0001 : 0b0100;
-
-        // vec3.copy(out.point, _c_tri);
-        out.point[0] = _c_tri[0];
-        out.point[1] = _c_tri[1];
-        out.point[2] = _c_tri[2];
-
+        out.point[0] = cx;
+        out.point[1] = cy;
+        out.point[2] = cz;
         return;
     }
 
@@ -351,12 +272,9 @@ export function computeClosestPointOnTriangle(
     if (d5 * d2 <= d1 * d6 && d2 >= 0.0 && d6 <= 0.0) {
         const w = d2 / (d2 - d6);
         out.pointSet = 0b0101;
-
-        // vec3.scaleAndAdd(out.point, _a_tri, _ac_tri, w);
-        out.point[0] = _a_tri[0] + _ac_tri[0] * w;
-        out.point[1] = _a_tri[1] + _ac_tri[1] * w;
-        out.point[2] = _a_tri[2] + _ac_tri[2] * w;
-
+        out.point[0] = ax + ac_x * w;
+        out.point[1] = ay + ac_y * w;
+        out.point[2] = az + ac_z * w;
         return;
     }
 
@@ -366,146 +284,105 @@ export function computeClosestPointOnTriangle(
     if (d3 * d6 <= d5 * d4 && diff_d4_d3 >= 0.0 && diff_d5_d6 >= 0.0) {
         const w = diff_d4_d3 / (diff_d4_d3 + diff_d5_d6);
         out.pointSet = swapAC ? 0b0011 : 0b0110;
+        
+        const tempx = cx - inB[0];
+        const tempy = cy - inB[1];
+        const tempz = cz - inB[2];
 
-        // vec3.subtract(_tempVector_tri, _c_tri, inB);
-        _tempVector_tri[0] = _c_tri[0] - inB[0];
-        _tempVector_tri[1] = _c_tri[1] - inB[1];
-        _tempVector_tri[2] = _c_tri[2] - inB[2];
-
-        // vec3.scaleAndAdd(out.point, inB, _tempVector_tri, w);
-        out.point[0] = inB[0] + _tempVector_tri[0] * w;
-        out.point[1] = inB[1] + _tempVector_tri[1] * w;
-        out.point[2] = inB[2] + _tempVector_tri[2] * w;
-
+        out.point[0] = inB[0] + tempx * w;
+        out.point[1] = inB[1] + tempy * w;
+        out.point[2] = inB[2] + tempz * w;
         return;
     }
 
     // P inside face region
     out.pointSet = 0b0111;
 
-    // vec3.add(_tempVector_tri, _a_tri, inB);
-    _tempVector_tri[0] = _a_tri[0] + inB[0];
-    _tempVector_tri[1] = _a_tri[1] + inB[1];
-    _tempVector_tri[2] = _a_tri[2] + inB[2];
+    const tempx = ax + inB[0] + cx;
+    const tempy = ay + inB[1] + cy;
+    const tempz = az + inB[2] + cz;
 
-    // vec3.add(_tempVector_tri, _tempVector_tri, _c_tri);
-    _tempVector_tri[0] += _c_tri[0];
-    _tempVector_tri[1] += _c_tri[1];
-    _tempVector_tri[2] += _c_tri[2];
-
-    // vec3.scale(out.point, _n_tri, vec3.dot(_tempVector_tri, _n_tri) / (3 * normalLengthSquared));
-    const scale =
-        (_tempVector_tri[0] * _n_tri[0] + _tempVector_tri[1] * _n_tri[1] + _tempVector_tri[2] * _n_tri[2]) /
-        (3 * normalLengthSquared);
-    out.point[0] = _n_tri[0] * scale;
-    out.point[1] = _n_tri[1] * scale;
-    out.point[2] = _n_tri[2] * scale;
+    const scale = (tempx * nx + tempy * ny + tempz * nz) / (3 * normalLengthSquared);
+    out.point[0] = nx * scale;
+    out.point[1] = ny * scale;
+    out.point[2] = nz * scale;
 }
-
-const _ab_planes = /* @__PURE__ */ vec3.create();
-const _ac_planes = /* @__PURE__ */ vec3.create();
-const _ad_planes = /* @__PURE__ */ vec3.create();
-const _bd_planes = /* @__PURE__ */ vec3.create();
-const _bc_planes = /* @__PURE__ */ vec3.create();
-const _ab_cross_ac = /* @__PURE__ */ vec3.create();
-const _ac_cross_ad = /* @__PURE__ */ vec3.create();
-const _ad_cross_ab = /* @__PURE__ */ vec3.create();
-const _bd_cross_bc = /* @__PURE__ */ vec3.create();
-const _signP = { x: 0, y: 0, z: 0, w: 0 };
-const _signD = { x: 0, y: 0, z: 0, w: 0 };
 
 // helper type for tracking which triangle planes the origin is outside of
 type TrianglePlaneFlags = { x: number; y: number; z: number; w: number };
 
 function isOriginOutsideOfTrianglePlanes(out: TrianglePlaneFlags, a: Vec3, b: Vec3, c: Vec3, d: Vec3, tolerance: number): void {
-    // vec3.subtract(_ab_planes, b, a);
-    _ab_planes[0] = b[0] - a[0];
-    _ab_planes[1] = b[1] - a[1];
-    _ab_planes[2] = b[2] - a[2];
+    // compute edge vectors
+    const abx = b[0] - a[0];
+    const aby = b[1] - a[1];
+    const abz = b[2] - a[2];
 
-    // vec3.subtract(_ac_planes, c, a);
-    _ac_planes[0] = c[0] - a[0];
-    _ac_planes[1] = c[1] - a[1];
-    _ac_planes[2] = c[2] - a[2];
+    const acx = c[0] - a[0];
+    const acy = c[1] - a[1];
+    const acz = c[2] - a[2];
 
-    // vec3.subtract(_ad_planes, d, a);
-    _ad_planes[0] = d[0] - a[0];
-    _ad_planes[1] = d[1] - a[1];
-    _ad_planes[2] = d[2] - a[2];
+    const adx = d[0] - a[0];
+    const ady = d[1] - a[1];
+    const adz = d[2] - a[2];
 
-    // vec3.subtract(_bd_planes, d, b);
-    _bd_planes[0] = d[0] - b[0];
-    _bd_planes[1] = d[1] - b[1];
-    _bd_planes[2] = d[2] - b[2];
+    const bdx = d[0] - b[0];
+    const bdy = d[1] - b[1];
+    const bdz = d[2] - b[2];
 
-    // vec3.subtract(_bc_planes, c, b);
-    _bc_planes[0] = c[0] - b[0];
-    _bc_planes[1] = c[1] - b[1];
-    _bc_planes[2] = c[2] - b[2];
+    const bcx = c[0] - b[0];
+    const bcy = c[1] - b[1];
+    const bcz = c[2] - b[2];
 
-    // vec3.cross(_ab_cross_ac, _ab_planes, _ac_planes);
-    _ab_cross_ac[0] = _ab_planes[1] * _ac_planes[2] - _ab_planes[2] * _ac_planes[1];
-    _ab_cross_ac[1] = _ab_planes[2] * _ac_planes[0] - _ab_planes[0] * _ac_planes[2];
-    _ab_cross_ac[2] = _ab_planes[0] * _ac_planes[1] - _ab_planes[1] * _ac_planes[0];
+    // compute cross products (triangle normals)
+    // ab x ac
+    const abac_x = aby * acz - abz * acy;
+    const abac_y = abz * acx - abx * acz;
+    const abac_z = abx * acy - aby * acx;
 
-    // vec3.cross(_ac_cross_ad, _ac_planes, _ad_planes);
-    _ac_cross_ad[0] = _ac_planes[1] * _ad_planes[2] - _ac_planes[2] * _ad_planes[1];
-    _ac_cross_ad[1] = _ac_planes[2] * _ad_planes[0] - _ac_planes[0] * _ad_planes[2];
-    _ac_cross_ad[2] = _ac_planes[0] * _ad_planes[1] - _ac_planes[1] * _ad_planes[0];
+    // ac x ad
+    const acad_x = acy * adz - acz * ady;
+    const acad_y = acz * adx - acx * adz;
+    const acad_z = acx * ady - acy * adx;
 
-    // vec3.cross(_ad_cross_ab, _ad_planes, _ab_planes);
-    _ad_cross_ab[0] = _ad_planes[1] * _ab_planes[2] - _ad_planes[2] * _ab_planes[1];
-    _ad_cross_ab[1] = _ad_planes[2] * _ab_planes[0] - _ad_planes[0] * _ab_planes[2];
-    _ad_cross_ab[2] = _ad_planes[0] * _ab_planes[1] - _ad_planes[1] * _ab_planes[0];
+    // ad x ab
+    const adab_x = ady * abz - adz * aby;
+    const adab_y = adz * abx - adx * abz;
+    const adab_z = adx * aby - ady * abx;
 
-    // vec3.cross(_bd_cross_bc, _bd_planes, _bc_planes);
-    _bd_cross_bc[0] = _bd_planes[1] * _bc_planes[2] - _bd_planes[2] * _bc_planes[1];
-    _bd_cross_bc[1] = _bd_planes[2] * _bc_planes[0] - _bd_planes[0] * _bc_planes[2];
-    _bd_cross_bc[2] = _bd_planes[0] * _bc_planes[1] - _bd_planes[1] * _bc_planes[0];
+    // bd x bc
+    const bdbc_x = bdy * bcz - bdz * bcy;
+    const bdbc_y = bdz * bcx - bdx * bcz;
+    const bdbc_z = bdx * bcy - bdy * bcx;
 
     // for each plane get the side on which the origin is
-    // _signP.x = vec3.dot(a, _ab_cross_ac); // ABC
-    _signP.x = a[0] * _ab_cross_ac[0] + a[1] * _ab_cross_ac[1] + a[2] * _ab_cross_ac[2];
-
-    // _signP.y = vec3.dot(a, _ac_cross_ad); // ACD
-    _signP.y = a[0] * _ac_cross_ad[0] + a[1] * _ac_cross_ad[1] + a[2] * _ac_cross_ad[2];
-
-    // _signP.z = vec3.dot(a, _ad_cross_ab); // ADB
-    _signP.z = a[0] * _ad_cross_ab[0] + a[1] * _ad_cross_ab[1] + a[2] * _ad_cross_ab[2];
-
-    // _signP.w = vec3.dot(b, _bd_cross_bc); // BDC
-    _signP.w = b[0] * _bd_cross_bc[0] + b[1] * _bd_cross_bc[1] + b[2] * _bd_cross_bc[2];
+    const signP_x = a[0] * abac_x + a[1] * abac_y + a[2] * abac_z; // ABC
+    const signP_y = a[0] * acad_x + a[1] * acad_y + a[2] * acad_z; // ACD
+    const signP_z = a[0] * adab_x + a[1] * adab_y + a[2] * adab_z; // ADB
+    const signP_w = b[0] * bdbc_x + b[1] * bdbc_y + b[2] * bdbc_z; // BDC
 
     // for each plane get the side that is outside (determined by the 4th point)
-    // _signD.x = vec3.dot(_ad_planes, _ab_cross_ac); // D
-    _signD.x = _ad_planes[0] * _ab_cross_ac[0] + _ad_planes[1] * _ab_cross_ac[1] + _ad_planes[2] * _ab_cross_ac[2];
+    const signD_x = adx * abac_x + ady * abac_y + adz * abac_z; // D
+    const signD_y = abx * acad_x + aby * acad_y + abz * acad_z; // B
+    const signD_z = acx * adab_x + acy * adab_y + acz * adab_z; // C
+    const signD_w = -(abx * bdbc_x + aby * bdbc_y + abz * bdbc_z); // A
 
-    // _signD.y = vec3.dot(_ab_planes, _ac_cross_ad); // B
-    _signD.y = _ab_planes[0] * _ac_cross_ad[0] + _ab_planes[1] * _ac_cross_ad[1] + _ab_planes[2] * _ac_cross_ad[2];
-
-    // _signD.z = vec3.dot(_ac_planes, _ad_cross_ab); // C
-    _signD.z = _ac_planes[0] * _ad_cross_ab[0] + _ac_planes[1] * _ad_cross_ab[1] + _ac_planes[2] * _ad_cross_ab[2];
-
-    // _signD.w = -vec3.dot(_ab_planes, _bd_cross_bc); // A
-    _signD.w = -(_ab_planes[0] * _bd_cross_bc[0] + _ab_planes[1] * _bd_cross_bc[1] + _ab_planes[2] * _bd_cross_bc[2]);
-
-    const allPositive = _signD.x > 0 && _signD.y > 0 && _signD.z > 0 && _signD.w > 0;
+    const allPositive = signD_x > 0 && signD_y > 0 && signD_z > 0 && signD_w > 0;
 
     if (allPositive) {
-        out.x = _signP.x >= -tolerance ? 1 : 0;
-        out.y = _signP.y >= -tolerance ? 1 : 0;
-        out.z = _signP.z >= -tolerance ? 1 : 0;
-        out.w = _signP.w >= -tolerance ? 1 : 0;
+        out.x = signP_x >= -tolerance ? 1 : 0;
+        out.y = signP_y >= -tolerance ? 1 : 0;
+        out.z = signP_z >= -tolerance ? 1 : 0;
+        out.w = signP_w >= -tolerance ? 1 : 0;
         return;
     }
 
-    const allNegative = _signD.x < 0 && _signD.y < 0 && _signD.z < 0 && _signD.w < 0;
+    const allNegative = signD_x < 0 && signD_y < 0 && signD_z < 0 && signD_w < 0;
 
     if (allNegative) {
-        out.x = _signP.x <= tolerance ? 1 : 0;
-        out.y = _signP.y <= tolerance ? 1 : 0;
-        out.z = _signP.z <= tolerance ? 1 : 0;
-        out.w = _signP.w <= tolerance ? 1 : 0;
+        out.x = signP_x <= tolerance ? 1 : 0;
+        out.y = signP_y <= tolerance ? 1 : 0;
+        out.z = signP_z <= tolerance ? 1 : 0;
+        out.w = signP_w <= tolerance ? 1 : 0;
         return;
     }
 
@@ -559,20 +436,13 @@ export function computeClosestPointOnTetrahedron(
 
     // face acd
     if (_originOutOfPlanes.y) {
-        _otherResult_tet.pointSet = 0;
-        // vec3.zero(_otherResult_tet.point);
-        _otherResult_tet.point[0] = 0;
-        _otherResult_tet.point[1] = 0;
-        _otherResult_tet.point[2] = 0;
         computeClosestPointOnTriangle(_otherResult_tet, inA, inC, inD, mustIncludeD, squaredTolerance);
-        // const distanceSquared = vec3.squaredLength(_otherResult_tet.point);
         const distanceSquared =
             _otherResult_tet.point[0] * _otherResult_tet.point[0] +
             _otherResult_tet.point[1] * _otherResult_tet.point[1] +
             _otherResult_tet.point[2] * _otherResult_tet.point[2];
         if (distanceSquared < bestDistanceSquared) {
             bestDistanceSquared = distanceSquared;
-            // vec3.copy(out.point, _otherResult_tet.point);
             out.point[0] = _otherResult_tet.point[0];
             out.point[1] = _otherResult_tet.point[1];
             out.point[2] = _otherResult_tet.point[2];
@@ -582,20 +452,13 @@ export function computeClosestPointOnTetrahedron(
 
     // face adb
     if (_originOutOfPlanes.z) {
-        _otherResult_tet.pointSet = 0;
-        // vec3.zero(_otherResult_tet.point);
-        _otherResult_tet.point[0] = 0;
-        _otherResult_tet.point[1] = 0;
-        _otherResult_tet.point[2] = 0;
         computeClosestPointOnTriangle(_otherResult_tet, inA, inB, inD, mustIncludeD, squaredTolerance);
-        // const distanceSquared = vec3.squaredLength(_otherResult_tet.point);
         const distanceSquared =
             _otherResult_tet.point[0] * _otherResult_tet.point[0] +
             _otherResult_tet.point[1] * _otherResult_tet.point[1] +
             _otherResult_tet.point[2] * _otherResult_tet.point[2];
         if (distanceSquared < bestDistanceSquared) {
             bestDistanceSquared = distanceSquared;
-            // vec3.copy(out.point, _otherResult_tet.point);
             out.point[0] = _otherResult_tet.point[0];
             out.point[1] = _otherResult_tet.point[1];
             out.point[2] = _otherResult_tet.point[2];
@@ -606,18 +469,15 @@ export function computeClosestPointOnTetrahedron(
     // face bdc
     if (_originOutOfPlanes.w) {
         _otherResult_tet.pointSet = 0;
-        // vec3.zero(_otherResult_tet.point);
         _otherResult_tet.point[0] = 0;
         _otherResult_tet.point[1] = 0;
         _otherResult_tet.point[2] = 0;
         computeClosestPointOnTriangle(_otherResult_tet, inB, inC, inD, mustIncludeD, squaredTolerance);
-        // const distanceSquared = vec3.squaredLength(_otherResult_tet.point);
         const distanceSquared =
             _otherResult_tet.point[0] * _otherResult_tet.point[0] +
             _otherResult_tet.point[1] * _otherResult_tet.point[1] +
             _otherResult_tet.point[2] * _otherResult_tet.point[2];
         if (distanceSquared < bestDistanceSquared) {
-            // vec3.copy(out.point, _otherResult_tet.point);
             out.point[0] = _otherResult_tet.point[0];
             out.point[1] = _otherResult_tet.point[1];
             out.point[2] = _otherResult_tet.point[2];
@@ -671,7 +531,6 @@ function computeClosestPointToSimplex(
         case 1: {
             // single point
             _closestPoint.pointSet = 0b0001;
-            // vec3.copy(_closestPoint.point, simplex.points[0].y);
             const y = simplex.points[0].y;
             const point = _closestPoint.point;
             point[0] = y[0];
@@ -774,7 +633,7 @@ export function gjkCastRay(
     _simplex.size = 0;
 
     let lambda = 0.0;
-    // vec3.copy(_x, rayOrigin);
+
     _x[0] = rayOrigin[0];
     _x[1] = rayOrigin[1];
     _x[2] = rayOrigin[2];
@@ -786,7 +645,7 @@ export function gjkCastRay(
     _directionA[2] = 0;
     support.getSupport(_directionA, _p);
 
-    // vec3.subtract(_v, _x, _p);
+    // _v = _x - _p
     _v[0] = _x[0] - _p[0];
     _v[1] = _x[1] - _p[1];
     _v[2] = _x[2] - _p[2];
@@ -800,7 +659,8 @@ export function gjkCastRay(
 
         // get new support point
         support.getSupport(_v, _p);
-        // vec3.subtract(_w, _x, _p);
+
+        // _w = _x - _p
         _w[0] = _x[0] - _p[0];
         _w[1] = _x[1] - _p[1];
         _w[2] = _x[2] - _p[2];
@@ -853,18 +713,19 @@ export function gjkCastRay(
         }
 
         // add p to set P: P = P U {p}
-        // vec3.copy(_simplex.points[_simplex.size].p, _p);
-        _simplex.points[_simplex.size].p[0] = _p[0];
-        _simplex.points[_simplex.size].p[1] = _p[1];
-        _simplex.points[_simplex.size].p[2] = _p[2];
+        const newPoint = _simplex.points[_simplex.size];
+        newPoint.p[0] = _p[0];
+        newPoint.p[1] = _p[1];
+        newPoint.p[2] = _p[2];
         _simplex.size++;
 
         // calculate Y = {x} - P
         for (let i = 0; i < _simplex.size; i++) {
-            // vec3.subtract(_simplex.points[i].y, _x, _simplex.points[i].p);
-            _simplex.points[i].y[0] = _x[0] - _simplex.points[i].p[0];
-            _simplex.points[i].y[1] = _x[1] - _simplex.points[i].p[1];
-            _simplex.points[i].y[2] = _x[2] - _simplex.points[i].p[2];
+            const point = _simplex.points[i];
+            // y = x - p
+            point.y[0] = _x[0] - point.p[0];
+            point.y[1] = _x[1] - point.p[1];
+            point.y[2] = _x[2] - point.p[2];
         }
 
         // determine the new closest point from Y to origin
@@ -1501,6 +1362,7 @@ export function gjkClosestPoints(
         q[0] = _q[0];
         q[1] = _q[1];
         q[2] = _q[2];
+
         _simplex.size++;
 
         computeClosestPointToSimplex(_closestPointToSimplex, previousSquaredDistance, true, _simplex);

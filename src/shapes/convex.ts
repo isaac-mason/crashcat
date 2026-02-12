@@ -1,5 +1,5 @@
 import type { Quat, Raycast3, Vec3 } from 'mathcat';
-import { box3, obb3, quat, vec3 } from 'mathcat';
+import { box3, quat, vec3 } from 'mathcat';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
@@ -230,30 +230,23 @@ const _collideConvex_addRadiusSupport: AddConvexRadiusSupport = /* @__PURE__ */ 
 const _collideConvex_transformedSupport = /* @__PURE__ */ createTransformedSupport();
 
 const _collideConvex_penetrationAxis = /* @__PURE__ */ vec3.create();
-const _collideConvex_vectorAB = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_inverseQuatA = /* @__PURE__ */ quat.create();
 const _collideConvex_relativePos = /* @__PURE__ */ vec3.create();
 const _collideConvex_relativeRot = /* @__PURE__ */ quat.create();
-
-const _collideConvex_aabbShapeExpand = /* @__PURE__ */ vec3.create();
-const _collideConvex_aabbShapeA = /* @__PURE__ */ box3.create();
-const _collideConvex_aabbShapeB = /* @__PURE__ */ box3.create();
-const _collideConvex_obb3ShapeB = /* @__PURE__ */ obb3.create();
 
 const _collideConvex_posA = /* @__PURE__ */ vec3.create();
 const _collideConvex_quatA = /* @__PURE__ */ quat.create();
 const _collideConvex_scaleA = /* @__PURE__ */ vec3.create();
-const _collideConvex_posB = /* @__PURE__ */ vec3.create();
-const _collideConvex_quatB = /* @__PURE__ */ quat.create();
 const _collideConvex_scaleB = /* @__PURE__ */ vec3.create();
 
 const _collideConvex_contactA = /* @__PURE__ */ vec3.create();
 const _collideConvex_contactB = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_temp_faceDirA = /* @__PURE__ */ vec3.create();
-const _collideConvex_temp_faceDirB = /* @__PURE__ */ vec3.create();
-const _collideConvex_temp_invRelativeRot = /* @__PURE__ */ quat.create();
+const _collideConvex_posB = /* @__PURE__ */ vec3.create();
+const _collideConvex_quatB = /* @__PURE__ */ quat.create();
+
+const _collideConvex_faceDirA = /* @__PURE__ */ vec3.create();
+const _collideConvex_faceDirB = /* @__PURE__ */ vec3.create();
 
 const _collideConvex_hit = /* @__PURE__ */ createCollideShapeHit();
 
@@ -291,19 +284,49 @@ export function collideConvexVsConvex(
     scaleBY: number,
     scaleBZ: number,
 ): void {
-    vec3.set(_collideConvex_posA, posAX, posAY, posAZ);
-    quat.set(_collideConvex_quatA, quatAX, quatAY, quatAZ, quatAW);
-    vec3.set(_collideConvex_scaleA, scaleAX, scaleAY, scaleAZ);
+    // set posA, quatA, scaleA
+    _collideConvex_posA[0] = posAX;
+    _collideConvex_posA[1] = posAY;
+    _collideConvex_posA[2] = posAZ;
+    _collideConvex_quatA[0] = quatAX;
+    _collideConvex_quatA[1] = quatAY;
+    _collideConvex_quatA[2] = quatAZ;
+    _collideConvex_quatA[3] = quatAW;
+    _collideConvex_scaleA[0] = scaleAX;
+    _collideConvex_scaleA[1] = scaleAY;
+    _collideConvex_scaleA[2] = scaleAZ;
 
-    vec3.set(_collideConvex_posB, posBX, posBY, posBZ);
-    quat.set(_collideConvex_quatB, quatBX, quatBY, quatBZ, quatBW);
-    vec3.set(_collideConvex_scaleB, scaleBX, scaleBY, scaleBZ);
+    // set scaleB
+    _collideConvex_scaleB[0] = scaleBX;
+    _collideConvex_scaleB[1] = scaleBY;
+    _collideConvex_scaleB[2] = scaleBZ;
 
     // transform B into A's local space
-    quat.conjugate(_collideConvex_inverseQuatA, _collideConvex_quatA);
-    quat.multiply(_collideConvex_relativeRot, _collideConvex_inverseQuatA, _collideConvex_quatB);
-    vec3.subtract(_collideConvex_vectorAB, _collideConvex_posB, _collideConvex_posA);
-    vec3.transformQuat(_collideConvex_relativePos, _collideConvex_vectorAB, _collideConvex_inverseQuatA);
+    // compute conjugate of quatA (negate x,y,z)
+    const invAx = -quatAX, invAy = -quatAY, invAz = -quatAZ, invAw = quatAW;
+
+    // compute relative rotation: conjugate(quatA) * quatB
+    // quaternion multiplication: (a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y, ...)
+    _collideConvex_relativeRot[0] = invAw * quatBX + invAx * quatBW + invAy * quatBZ - invAz * quatBY;
+    _collideConvex_relativeRot[1] = invAw * quatBY - invAx * quatBZ + invAy * quatBW + invAz * quatBX;
+    _collideConvex_relativeRot[2] = invAw * quatBZ + invAx * quatBY - invAy * quatBX + invAz * quatBW;
+    _collideConvex_relativeRot[3] = invAw * quatBW - invAx * quatBX - invAy * quatBY - invAz * quatBZ;
+
+    // compute vector from A to B
+    const abx = posBX - posAX, aby = posBY - posAY, abz = posBZ - posAZ;
+
+    // transform vector by conjugate of quatA: conjugate(quatA) * [0, abx, aby, abz] * quatA
+    // using: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
+    const qx = invAx, qy = invAy, qz = invAz, qw = invAw;
+    const uvx = qy * abz - qz * aby + qw * abx;
+    const uvy = qz * abx - qx * abz + qw * aby;
+    const uvz = qx * aby - qy * abx + qw * abz;
+    const uuvx = qy * uvz - qz * uvy;
+    const uuvy = qz * uvx - qx * uvz;
+    const uuvz = qx * uvy - qy * uvx;
+    _collideConvex_relativePos[0] = abx + 2 * uuvx;
+    _collideConvex_relativePos[1] = aby + 2 * uuvy;
+    _collideConvex_relativePos[2] = abz + 2 * uuvz;
 
     // delegate to local-space function
     collideConvexVsConvexLocal(
@@ -350,23 +373,6 @@ export function collideConvexVsConvexLocal(
     const { maxSeparationDistance, collisionTolerance, penetrationTolerance } = settings;
 
     // TODO: OBB3 early out?
-    // aabb and obb intersection early out test
-    const aabbShapeA = box3.copy(_collideConvex_aabbShapeA, shapeA.aabb);
-    box3.scale(aabbShapeA, aabbShapeA, scaleA);
-    box3.expandByExtents(aabbShapeA, aabbShapeA, vec3.setScalar(_collideConvex_aabbShapeExpand, maxSeparationDistance));
-
-    const aabbShapeB = box3.copy(_collideConvex_aabbShapeB, shapeB.aabb);
-    box3.scale(aabbShapeB, aabbShapeB, scaleB);
-
-    const obb3ShapeB = _collideConvex_obb3ShapeB;
-    box3.center(obb3ShapeB.center, aabbShapeB);
-    box3.extents(obb3ShapeB.halfExtents, aabbShapeB);
-    quat.copy(obb3ShapeB.quaternion, quatBInA);
-
-    if (!obb3.intersectsBox3(obb3ShapeB, aabbShapeA)) {
-        // early out - no collision
-        return;
-    }
 
     // get supports
     const supportA = getShapeSupportFunction(
@@ -390,11 +396,18 @@ export function collideConvexVsConvexLocal(
     // note: As we don't remember the penetration axis from the last iteration, and it is likely that shape2 is pushed out of
     // collision relative to shape1 by comparing their COM's, we use that as an initial penetration axis: shape2.com - shape1.com
     // This has been seen to improve performance by approx. 1% over using a fixed axis like (1, 0, 0).
-    const penetrationAxis = vec3.copy(_collideConvex_penetrationAxis, posBInA);
+    const penetrationAxis = _collideConvex_penetrationAxis;
+    penetrationAxis[0] = posBInA[0];
+    penetrationAxis[1] = posBInA[1];
+    penetrationAxis[2] = posBInA[2];
 
     // ensure that we do not pass in a near zero penetration axis
-    if (vec3.squaredLength(penetrationAxis) <= 1e-12) {
-        vec3.set(penetrationAxis, 1, 0, 0);
+    const [penetrationAxisX, penetrationAxisY, penetrationAxisZ] = penetrationAxis;
+    const paLenSq = penetrationAxisX * penetrationAxisX + penetrationAxisY * penetrationAxisY + penetrationAxisZ * penetrationAxisZ;
+    if (paLenSq <= 1e-12) {
+        penetrationAxis[0] = 1;
+        penetrationAxis[1] = 0;
+        penetrationAxis[2] = 0;
     }
 
     const penetrationDepth = _collideConvex_penetrationDepth;
@@ -475,30 +488,72 @@ export function collideConvexVsConvexLocal(
     }
 
     // check if the penetration is bigger than the early out fraction
-    const penetration = vec3.distance(penetrationDepth.pointA, penetrationDepth.pointB) - maxSeparationDistanceToUse;
+    // inline distance: sqrt((ax-bx)² + (ay-by)² + (az-bz)²)
+    const [pointAX, pointAY, pointAZ] = penetrationDepth.pointA;
+    const [pointBX, pointBY, pointBZ] = penetrationDepth.pointB;
+    const dx = pointAX - pointBX, dy = pointAY - pointBY, dz = pointAZ - pointBZ;
+    const penetration = Math.sqrt(dx * dx + dy * dy + dz * dz) - maxSeparationDistanceToUse;
     if (-penetration >= collector.earlyOutFraction) {
         return;
     }
 
     // correct point1 for the added separation distance
-    const penetrationAxisLen = vec3.length(penetrationDepth.penetrationAxis);
+    // sqrt(x² + y² + z²)
+    const [penetrationAxisNormalX, penetrationAxisNormalY, penetrationAxisNormalZ] = penetrationDepth.penetrationAxis;
+    const penetrationAxisLen = Math.sqrt(penetrationAxisNormalX * penetrationAxisNormalX + penetrationAxisNormalY * penetrationAxisNormalY + penetrationAxisNormalZ * penetrationAxisNormalZ);
     if (penetrationAxisLen > 0.0) {
         const correction = maxSeparationDistanceToUse / penetrationAxisLen;
-        vec3.scaleAndAdd(penetrationDepth.pointA, penetrationDepth.pointA, penetrationDepth.penetrationAxis, -correction);
+        // inline scaleAndAdd: pointA += penetrationAxis * (-correction)
+        penetrationDepth.pointA[0] += penetrationAxisNormalX * -correction;
+        penetrationDepth.pointA[1] += penetrationAxisNormalY * -correction;
+        penetrationDepth.pointA[2] += penetrationAxisNormalZ * -correction;
     }
 
     // convert to world space
-    vec3.transformQuat(_collideConvex_contactA, penetrationDepth.pointA, quaternionA);
-    vec3.add(_collideConvex_contactA, _collideConvex_contactA, positionA);
+    // inline transformQuat for contactA: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
+    const [qax, qay, qaz, qaw] = quaternionA;
+    const [pax2, pay2, paz2] = penetrationDepth.pointA;
+    const uvax = qay * paz2 - qaz * pay2 + qaw * pax2;
+    const uvay = qaz * pax2 - qax * paz2 + qaw * pay2;
+    const uvaz = qax * pay2 - qay * pax2 + qaw * paz2;
+    const uuvax = qay * uvaz - qaz * uvay;
+    const uuvay = qaz * uvax - qax * uvaz;
+    const uuvaz = qax * uvay - qay * uvax;
+    _collideConvex_contactA[0] = pax2 + 2 * uuvax + positionA[0];
+    _collideConvex_contactA[1] = pay2 + 2 * uuvay + positionA[1];
+    _collideConvex_contactA[2] = paz2 + 2 * uuvaz + positionA[2];
 
-    vec3.transformQuat(_collideConvex_contactB, penetrationDepth.pointB, quaternionA);
-    vec3.add(_collideConvex_contactB, _collideConvex_contactB, positionA);
+    // inline transformQuat for contactB
+    const [pbx2, pby2, pbz2] = penetrationDepth.pointB;
+    const uvbx = qay * pbz2 - qaz * pby2 + qaw * pbx2;
+    const uvby = qaz * pbx2 - qax * pbz2 + qaw * pby2;
+    const uvbz = qax * pby2 - qay * pbx2 + qaw * pbz2;
+    const uuvbx = qay * uvbz - qaz * uvby;
+    const uuvby = qaz * uvbx - qax * uvbz;
+    const uuvbz = qax * uvby - qay * uvbx;
+    _collideConvex_contactB[0] = pbx2 + 2 * uuvbx + positionA[0];
+    _collideConvex_contactB[1] = pby2 + 2 * uuvby + positionA[1];
+    _collideConvex_contactB[2] = pbz2 + 2 * uuvbz + positionA[2];
 
-    vec3.transformQuat(_collideConvex_hit.penetrationAxis, penetrationDepth.penetrationAxis, quaternionA);
+    // inline transformQuat for penetrationAxis
+    const [pnx2, pny2, pnz2] = penetrationDepth.penetrationAxis;
+    const uvnx = qay * pnz2 - qaz * pny2 + qaw * pnx2;
+    const uvny = qaz * pnx2 - qax * pnz2 + qaw * pny2;
+    const uvnz = qax * pny2 - qay * pnx2 + qaw * pnz2;
+    const uuvnx = qay * uvnz - qaz * uvny;
+    const uuvny = qaz * uvnx - qax * uvnz;
+    const uuvnz = qax * uvny - qay * uvnx;
+    _collideConvex_hit.penetrationAxis[0] = pnx2 + 2 * uuvnx;
+    _collideConvex_hit.penetrationAxis[1] = pny2 + 2 * uuvny;
+    _collideConvex_hit.penetrationAxis[2] = pnz2 + 2 * uuvnz;
 
     // create collision result
-    vec3.copy(_collideConvex_hit.pointA, _collideConvex_contactA);
-    vec3.copy(_collideConvex_hit.pointB, _collideConvex_contactB);
+    _collideConvex_hit.pointA[0] = _collideConvex_contactA[0];
+    _collideConvex_hit.pointA[1] = _collideConvex_contactA[1];
+    _collideConvex_hit.pointA[2] = _collideConvex_contactA[2];
+    _collideConvex_hit.pointB[0] = _collideConvex_contactB[0];
+    _collideConvex_hit.pointB[1] = _collideConvex_contactB[1];
+    _collideConvex_hit.pointB[2] = _collideConvex_contactB[2];
     _collideConvex_hit.penetration = penetration;
     _collideConvex_hit.subShapeIdA = subShapeIdA;
     _collideConvex_hit.subShapeIdB = subShapeIdB;
@@ -508,33 +563,73 @@ export function collideConvexVsConvexLocal(
 
     // gather faces
     if (settings.collectFaces) {
-        // get supporting face of shape A
-        vec3.negate(_collideConvex_temp_faceDirA, penetrationDepth.penetrationAxis);
+        // get supporting face of shape A (negate penetration axis)
+        _collideConvex_faceDirA[0] = -penetrationDepth.penetrationAxis[0];
+        _collideConvex_faceDirA[1] = -penetrationDepth.penetrationAxis[1];
+        _collideConvex_faceDirA[2] = -penetrationDepth.penetrationAxis[2];
         getShapeSupportingFace(
             _collideConvex_hit.faceA,
             shapeA,
             subShapeIdA,
-            _collideConvex_temp_faceDirA,
+            _collideConvex_faceDirA,
             positionA,
             quaternionA,
             scaleA,
         );
 
         // get supporting face of shape B
-        // transform penetration axis from A's local to B's local: quatBInA^-1 * penetrationAxis
-        quat.conjugate(_collideConvex_temp_invRelativeRot, quatBInA);
-        vec3.transformQuat(_collideConvex_temp_faceDirB, penetrationDepth.penetrationAxis, _collideConvex_temp_invRelativeRot);
+        // transform penetration axis from A's local to B's local: conjugate(quatBInA) * penetrationAxis
+        // using quaternion vector rotation: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
+        
+        // conjugate of quatBInA (negate xyz components)
+        const conjugateBInAX = -quatBInA[0];
+        const conjugateBInAY = -quatBInA[1];
+        const conjugateBInAZ = -quatBInA[2];
+        const conjugateBInAW = quatBInA[3];
+        
+        const [facePenetrationAxisX, facePenetrationAxisY, facePenetrationAxisZ] = penetrationDepth.penetrationAxis;
+        
+        // first intermediate: cross(q.xyz, v) + q.w * v
+        const crossPlusScaledX = conjugateBInAY * facePenetrationAxisZ - conjugateBInAZ * facePenetrationAxisY + conjugateBInAW * facePenetrationAxisX;
+        const crossPlusScaledY = conjugateBInAZ * facePenetrationAxisX - conjugateBInAX * facePenetrationAxisZ + conjugateBInAW * facePenetrationAxisY;
+        const crossPlusScaledZ = conjugateBInAX * facePenetrationAxisY - conjugateBInAY * facePenetrationAxisX + conjugateBInAW * facePenetrationAxisZ;
+        
+        // second intermediate: cross(q.xyz, firstIntermediate)
+        const doubleCrossX = conjugateBInAY * crossPlusScaledZ - conjugateBInAZ * crossPlusScaledY;
+        const doubleCrossY = conjugateBInAZ * crossPlusScaledX - conjugateBInAX * crossPlusScaledZ;
+        const doubleCrossZ = conjugateBInAX * crossPlusScaledY - conjugateBInAY * crossPlusScaledX;
+        
+        // final result: v + 2 * secondIntermediate
+        _collideConvex_faceDirB[0] = facePenetrationAxisX + 2 * doubleCrossX;
+        _collideConvex_faceDirB[1] = facePenetrationAxisY + 2 * doubleCrossY;
+        _collideConvex_faceDirB[2] = facePenetrationAxisZ + 2 * doubleCrossZ;
 
         // transform B to world space for face query: positionB = positionA + quaternionA * posBInA
-        vec3.transformQuat(_collideConvex_posB, posBInA, quaternionA);
-        vec3.add(_collideConvex_posB, _collideConvex_posB, positionA);
-        quat.multiply(_collideConvex_quatB, quaternionA, quatBInA);
+        // inline transformQuat: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
+        const [posBInAX, posBInAY, posBInAZ] = posBInA;
+        const uvpbx = qay * posBInAZ - qaz * posBInAY + qaw * posBInAX;
+        const uvpby = qaz * posBInAX - qax * posBInAZ + qaw * posBInAY;
+        const uvpbz = qax * posBInAY - qay * posBInAX + qaw * posBInAZ;
+        const uuvpbx = qay * uvpbz - qaz * uvpby;
+        const uuvpby = qaz * uvpbx - qax * uvpbz;
+        const uuvpbz = qax * uvpby - qay * uvpbx;
+        _collideConvex_posB[0] = posBInAX + 2 * uuvpbx + positionA[0];
+        _collideConvex_posB[1] = posBInAY + 2 * uuvpby + positionA[1];
+        _collideConvex_posB[2] = posBInAZ + 2 * uuvpbz + positionA[2];
+
+        // inline quat.multiply: quaternionA * quatBInA
+        const [qax2, qay2, qaz2, qaw2] = quaternionA;
+        const [qbx2, qby2, qbz2, qbw2] = quatBInA;
+        _collideConvex_quatB[0] = qaw2 * qbx2 + qax2 * qbw2 + qay2 * qbz2 - qaz2 * qby2;
+        _collideConvex_quatB[1] = qaw2 * qby2 - qax2 * qbz2 + qay2 * qbw2 + qaz2 * qbx2;
+        _collideConvex_quatB[2] = qaw2 * qbz2 + qax2 * qby2 - qay2 * qbx2 + qaz2 * qbw2;
+        _collideConvex_quatB[3] = qaw2 * qbw2 - qax2 * qbx2 - qay2 * qby2 - qaz2 * qbz2;
 
         getShapeSupportingFace(
             _collideConvex_hit.faceB,
             shapeB,
             subShapeIdB,
-            _collideConvex_temp_faceDirB,
+            _collideConvex_faceDirB,
             _collideConvex_posB,
             _collideConvex_quatB,
             scaleB,

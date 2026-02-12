@@ -238,41 +238,41 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     }
 }
 
-const _acceleration_forcesAccel = /* @__PURE__ */ vec3.create();
-const _acceleration_gravityAccel = /* @__PURE__ */ vec3.create();
-const _acceleration_linearAccel = /* @__PURE__ */ vec3.create();
-const _acceleration_angularAccel = /* @__PURE__ */ vec3.create();
 const _acceleration_rotation = /* @__PURE__ */ mat4.create();
 const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
     for (const body of world.bodies.pool) {
-        if (body._pooled) continue;
-        if (body.motionType !== MotionType.DYNAMIC) continue;
-        if (body.sleeping) continue;
+        if (body._pooled || body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
 
         const mp = body.motionProperties;
 
-        // linear acceleration: a = F/m + g
-        vec3.scale(_acceleration_forcesAccel, mp.force, mp.invMass);
-        vec3.scale(_acceleration_gravityAccel, world.settings.gravity, world.settings.gravityEnabled ? mp.gravityFactor : 0);
-        vec3.add(_acceleration_linearAccel, _acceleration_forcesAccel, _acceleration_gravityAccel);
-
-        // integrate linear velocity: v += a * dt
-        vec3.scale(_acceleration_linearAccel, _acceleration_linearAccel, timeStep);
-        vec3.add(mp.linearVelocity, mp.linearVelocity, _acceleration_linearAccel);
+        // linear acceleration: a = F/m + g, then integrate: v += a * dt
+        const gravityScale = world.settings.gravityEnabled ? mp.gravityFactor : 0;
+        const gravity = world.settings.gravity;
+        const accelX = (mp.force[0] * mp.invMass + gravity[0] * gravityScale) * timeStep;
+        const accelY = (mp.force[1] * mp.invMass + gravity[1] * gravityScale) * timeStep;
+        const accelZ = (mp.force[2] * mp.invMass + gravity[2] * gravityScale) * timeStep;
+        mp.linearVelocity[0] += accelX;
+        mp.linearVelocity[1] += accelY;
+        mp.linearVelocity[2] += accelZ;
 
         // apply linear damping: v *= max(0, 1 - damping * dt)
         const linearDampingFactor = Math.max(0, 1 - mp.linearDamping * timeStep);
-        vec3.scale(mp.linearVelocity, mp.linearVelocity, linearDampingFactor);
+        mp.linearVelocity[0] *= linearDampingFactor;
+        mp.linearVelocity[1] *= linearDampingFactor;
+        mp.linearVelocity[2] *= linearDampingFactor;
 
         // clamp linear velocity to max
-        const linearSpeedSq = vec3.squaredLength(mp.linearVelocity);
+        const lvx = mp.linearVelocity[0], lvy = mp.linearVelocity[1], lvz = mp.linearVelocity[2];
+        const linearSpeedSq = lvx * lvx + lvy * lvy + lvz * lvz;
         const maxLinearSq = mp.maxLinearVelocity * mp.maxLinearVelocity;
         if (linearSpeedSq > maxLinearSq) {
             const scale = mp.maxLinearVelocity / Math.sqrt(linearSpeedSq);
-            vec3.scale(mp.linearVelocity, mp.linearVelocity, scale);
+            mp.linearVelocity[0] = lvx * scale;
+            mp.linearVelocity[1] = lvy * scale;
+            mp.linearVelocity[2] = lvz * scale;
         }
 
         // enforce translation DOF constraints (zero out locked axes)
@@ -285,22 +285,29 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mat4.fromQuat(_acceleration_rotation, body.quaternion);
         const worldInverseInertia = _acceleration_worldInverseInertia;
         motionProperties.getInverseInertiaForRotation(worldInverseInertia, mp, _acceleration_rotation);
-        mat4.multiply3x3Vec(_acceleration_angularAccel, worldInverseInertia, mp.torque);
-
-        // integrate angular velocity: ω += α * dt
-        vec3.scale(_acceleration_angularAccel, _acceleration_angularAccel, timeStep);
-        vec3.add(mp.angularVelocity, mp.angularVelocity, _acceleration_angularAccel);
+        
+        // integrate angular velocity: ω += α * dt, where α = I^-1 * τ
+        const m = worldInverseInertia;
+        const tx = mp.torque[0], ty = mp.torque[1], tz = mp.torque[2];
+        mp.angularVelocity[0] += (m[0] * tx + m[4] * ty + m[8] * tz) * timeStep;
+        mp.angularVelocity[1] += (m[1] * tx + m[5] * ty + m[9] * tz) * timeStep;
+        mp.angularVelocity[2] += (m[2] * tx + m[6] * ty + m[10] * tz) * timeStep;
 
         // apply angular damping: ω *= max(0, 1 - damping * dt)
         const angularDampingFactor = Math.max(0, 1 - mp.angularDamping * timeStep);
-        vec3.scale(mp.angularVelocity, mp.angularVelocity, angularDampingFactor);
+        mp.angularVelocity[0] *= angularDampingFactor;
+        mp.angularVelocity[1] *= angularDampingFactor;
+        mp.angularVelocity[2] *= angularDampingFactor;
 
         // clamp angular velocity to max
-        const angularSpeedSq = vec3.squaredLength(mp.angularVelocity);
+        const avx = mp.angularVelocity[0], avy = mp.angularVelocity[1], avz = mp.angularVelocity[2];
+        const angularSpeedSq = avx * avx + avy * avy + avz * avz;
         const maxAngularSq = mp.maxAngularVelocity * mp.maxAngularVelocity;
         if (angularSpeedSq > maxAngularSq) {
             const scale = mp.maxAngularVelocity / Math.sqrt(angularSpeedSq);
-            vec3.scale(mp.angularVelocity, mp.angularVelocity, scale);
+            mp.angularVelocity[0] = avx * scale;
+            mp.angularVelocity[1] = avy * scale;
+            mp.angularVelocity[2] = avz * scale;
         }
 
         // enforce rotation DOF constraints (zero out locked axes)
@@ -1108,7 +1115,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
     },
 };
 
-/** body visitor that processes potential CCD hits for a given CCDBody */
 /** body visitor that processes potential CCD hits for a given CCDBody */
 const ccdBodyVisitor: BodyVisitor & {
     world: World;

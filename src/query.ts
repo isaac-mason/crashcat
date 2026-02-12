@@ -60,8 +60,12 @@ const CastRayBodyVisitor = {
     set(collector: CastRayCollector, settings: CastRaySettings, origin: Vec3, direction: Vec3, maxDistance: number) {
         this.collector = collector;
         this.settings = settings;
-        vec3.copy(this.origin, origin);
-        vec3.copy(this.direction, direction);
+        this.origin[0] = origin[0];
+        this.origin[1] = origin[1];
+        this.origin[2] = origin[2];
+        this.direction[0] = direction[0];
+        this.direction[1] = direction[1];
+        this.direction[2] = direction[2];
         this.maxDistance = maxDistance;
     },
     reset() {
@@ -154,10 +158,19 @@ const CastShapeBodyVisitor = {
         this.collector = collector;
         this.settings = settings;
         this.shape = shape;
-        vec3.copy(this.position, position);
-        quat.copy(this.quaternion, quaternion);
-        vec3.copy(this.scale, scale);
-        vec3.copy(this.displacement, displacement);
+        this.position[0] = position[0];
+        this.position[1] = position[1];
+        this.position[2] = position[2];
+        this.quaternion[0] = quaternion[0];
+        this.quaternion[1] = quaternion[1];
+        this.quaternion[2] = quaternion[2];
+        this.quaternion[3] = quaternion[3];
+        this.scale[0] = scale[0];
+        this.scale[1] = scale[1];
+        this.scale[2] = scale[2];
+        this.displacement[0] = displacement[0];
+        this.displacement[1] = displacement[1];
+        this.displacement[2] = displacement[2];
     },
     reset() {
         this.shouldExit = false;
@@ -251,9 +264,16 @@ const CollideShapeBodyVisitor = {
         this.collector = collector;
         this.settings = settings;
         this.shape = shape;
-        vec3.copy(this.position, position);
-        quat.copy(this.quaternion, quaternion);
-        vec3.copy(this.scale, scale);
+        this.position[0] = position[0];
+        this.position[1] = position[1];
+        this.position[2] = position[2];
+        this.quaternion[0] = quaternion[0];
+        this.quaternion[1] = quaternion[1];
+        this.quaternion[2] = quaternion[2];
+        this.quaternion[3] = quaternion[3];
+        this.scale[0] = scale[0];
+        this.scale[1] = scale[1];
+        this.scale[2] = scale[2];
     },
     reset() {
         this.shouldExit = false;
@@ -345,9 +365,16 @@ const CollideShapeWithInternalEdgeRemovalBodyVisitor = {
         this.collector = collector;
         this.settings = settings;
         this.shape = shape;
-        vec3.copy(this.position, position);
-        quat.copy(this.quaternion, quaternion);
-        vec3.copy(this.scale, scale);
+        this.position[0] = position[0];
+        this.position[1] = position[1];
+        this.position[2] = position[2];
+        this.quaternion[0] = quaternion[0];
+        this.quaternion[1] = quaternion[1];
+        this.quaternion[2] = quaternion[2];
+        this.quaternion[3] = quaternion[3];
+        this.scale[0] = scale[0];
+        this.scale[1] = scale[1];
+        this.scale[2] = scale[2];
     },
     reset() {
         this.shouldExit = false;
@@ -429,7 +456,9 @@ const CollidePointBodyVisitor = {
     set(collector: CollidePointCollector, settings: CollidePointSettings, point: Vec3) {
         this.collector = collector;
         this.settings = settings;
-        vec3.copy(this.point, point);
+        this.point[0] = point[0];
+        this.point[1] = point[1];
+        this.point[2] = point[2];
     },
     reset() {
         this.shouldExit = false;

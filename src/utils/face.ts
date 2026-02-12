@@ -1,5 +1,4 @@
 import type { Quat, Vec3 } from 'mathcat';
-import { vec3 } from 'mathcat';
 
 export type Face = {
     /**
@@ -28,25 +27,59 @@ export function cloneFace(face: Face): Face {
     };
 }
 
-const _transformVertex = /* @__PURE__ */ vec3.create();
-
 export function transformFace(face: Face, position: Vec3, quaternion: Quat, scale: Vec3): void {
+    // inline mat4.fromRotationTranslationScale to build transformation matrix
+    const qx = quaternion[0];
+    const qy = quaternion[1];
+    const qz = quaternion[2];
+    const qw = quaternion[3];
+
+    const qx2 = qx + qx;
+    const qy2 = qy + qy;
+    const qz2 = qz + qz;
+    const qxx = qx * qx2;
+    const qyx = qy * qx2;
+    const qyy = qy * qy2;
+    const qzx = qz * qx2;
+    const qzy = qz * qy2;
+    const qzz = qz * qz2;
+    const qwx = qw * qx2;
+    const qwy = qw * qy2;
+    const qwz = qw * qz2;
+    
+    const sx = scale[0];
+    const sy = scale[1];
+    const sz = scale[2];
+    
+    // transformation matrix columns (rotation × scale)
+    // column 0
+    const m00 = (1 - qyy - qzz) * sx;
+    const m01 = (qyx + qwz) * sx;
+    const m02 = (qzx - qwy) * sx;
+    // column 1
+    const m10 = (qyx - qwz) * sy;
+    const m11 = (1 - qxx - qzz) * sy;
+    const m12 = (qzy + qwx) * sy;
+    // column 2
+    const m20 = (qzx + qwy) * sz;
+    const m21 = (qzy - qwx) * sz;
+    const m22 = (1 - qxx - qyy) * sz;
+    // column 3 (translation)
+    const m30 = position[0];
+    const m31 = position[1];
+    const m32 = position[2];
+
+    // apply transformation to each vertex
     for (let i = 0; i < face.numVertices; i++) {
-        // scale
-        _transformVertex[0] = face.vertices[i * 3] * scale[0];
-        _transformVertex[1] = face.vertices[i * 3 + 1] * scale[1];
-        _transformVertex[2] = face.vertices[i * 3 + 2] * scale[2];
+        const idx = i * 3;
+        const x = face.vertices[idx];
+        const y = face.vertices[idx + 1];
+        const z = face.vertices[idx + 2];
 
-        // rotate
-        vec3.transformQuat(_transformVertex, _transformVertex, quaternion);
-
-        // translate
-        vec3.add(_transformVertex, _transformVertex, position);
-
-        // store
-        face.vertices[i * 3] = _transformVertex[0];
-        face.vertices[i * 3 + 1] = _transformVertex[1];
-        face.vertices[i * 3 + 2] = _transformVertex[2];
+        // mat4 × vec3 (affine transformation)
+        face.vertices[idx] = m00 * x + m10 * y + m20 * z + m30;
+        face.vertices[idx + 1] = m01 * x + m11 * y + m21 * z + m31;
+        face.vertices[idx + 2] = m02 * x + m12 * y + m22 * z + m32;
     }
 }
 

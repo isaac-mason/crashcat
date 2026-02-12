@@ -5,15 +5,15 @@ import type { ConstraintId } from '../constraints/constraint-id';
 import * as constraints from '../constraints/constraints';
 import * as contacts from '../contacts';
 import * as filter from '../filter';
+import * as emptyShape from '../shapes/empty-shape';
 import {
     computeMassProperties,
     type GetLeafShapeResult,
     type GetSubShapeTransformedShapeResult,
-    shapeDefs,
+    getShapeSurfaceNormal,
     type Shape,
+    shapeDefs,
 } from '../shapes/shapes';
-import * as emptyShape from '../shapes/empty-shape';
-import { getShapeSurfaceNormal } from '../shapes/shapes';
 import type { World } from '../world';
 import { type BodyId, getBodyIdIndex, getBodyIdSequence, INVALID_BODY_ID, SEQUENCE_MASK, serBodyId } from './body-id';
 import * as massProperties from './mass-properties';
@@ -358,8 +358,7 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     body.sleeping = false;
 
     body.sensor = o.sensor ?? DEFAULT_RIGID_BODY_SETTINGS.sensor;
-    body.enhancedInternalEdgeRemoval =
-        o.enhancedInternalEdgeRemoval ?? DEFAULT_RIGID_BODY_SETTINGS.enhancedInternalEdgeRemoval;
+    body.enhancedInternalEdgeRemoval = o.enhancedInternalEdgeRemoval ?? DEFAULT_RIGID_BODY_SETTINGS.enhancedInternalEdgeRemoval;
     body.collideKinematicVsNonDynamic =
         o.collideKinematicVsNonDynamic ?? DEFAULT_RIGID_BODY_SETTINGS.collideKinematicVsNonDynamic;
 
@@ -553,7 +552,7 @@ export function updatePositionFromCenterOfMass(body: RigidBody): void {
     vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
 }
 
-const _updateBodyAABB_corner = /* @__PURE__ */ vec3.create();
+const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
 
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
@@ -562,60 +561,116 @@ const _updateBodyAABB_corner = /* @__PURE__ */ vec3.create();
 function updateAABB(body: RigidBody): void {
     // transform shape AABB to world space by transforming all 8 corners
     const shapeAABB = body.shape.aabb;
-    const min = shapeAABB[0];
-    const max = shapeAABB[1];
+    const minX = shapeAABB[0][0];
+    const minY = shapeAABB[0][1];
+    const minZ = shapeAABB[0][2];
+    const maxX = shapeAABB[1][0];
+    const maxY = shapeAABB[1][1];
+    const maxZ = shapeAABB[1][2];
 
-    // transform first corner (min, min, min)
-    vec3.set(_updateBodyAABB_corner, min[0], min[1], min[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
+    // compute rotation matrix once
+    mat4.fromQuat(_updateBodyAABB_rot, body.quaternion);
+    const m = _updateBodyAABB_rot;
+    const px = body.position[0];
+    const py = body.position[1];
+    const pz = body.position[2];
 
-    // initialize AABB with first corner
-    vec3.copy(body.aabb[0], _updateBodyAABB_corner);
-    vec3.copy(body.aabb[1], _updateBodyAABB_corner);
+    // corner 0: (min, min, min) - initialize AABB
+    // worldCorner = R * corner + position
+    let wx = m[0] * minX + m[4] * minY + m[8] * minZ + px;
+    let wy = m[1] * minX + m[5] * minY + m[9] * minZ + py;
+    let wz = m[2] * minX + m[6] * minY + m[10] * minZ + pz;
+    let aabbMinX = wx;
+    let aabbMinY = wy;
+    let aabbMinZ = wz;
+    let aabbMaxX = wx;
+    let aabbMaxY = wy;
+    let aabbMaxZ = wz;
 
-    // transform and expand by remaining 7 corners
-    // (max, min, min)
-    vec3.set(_updateBodyAABB_corner, max[0], min[1], min[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 1: (max, min, min)
+    wx = m[0] * maxX + m[4] * minY + m[8] * minZ + px;
+    wy = m[1] * maxX + m[5] * minY + m[9] * minZ + py;
+    wz = m[2] * maxX + m[6] * minY + m[10] * minZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (min, max, min)
-    vec3.set(_updateBodyAABB_corner, min[0], max[1], min[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 2: (min, max, min)
+    wx = m[0] * minX + m[4] * maxY + m[8] * minZ + px;
+    wy = m[1] * minX + m[5] * maxY + m[9] * minZ + py;
+    wz = m[2] * minX + m[6] * maxY + m[10] * minZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (max, max, min)
-    vec3.set(_updateBodyAABB_corner, max[0], max[1], min[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 3: (max, max, min)
+    wx = m[0] * maxX + m[4] * maxY + m[8] * minZ + px;
+    wy = m[1] * maxX + m[5] * maxY + m[9] * minZ + py;
+    wz = m[2] * maxX + m[6] * maxY + m[10] * minZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (min, min, max)
-    vec3.set(_updateBodyAABB_corner, min[0], min[1], max[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 4: (min, min, max)
+    wx = m[0] * minX + m[4] * minY + m[8] * maxZ + px;
+    wy = m[1] * minX + m[5] * minY + m[9] * maxZ + py;
+    wz = m[2] * minX + m[6] * minY + m[10] * maxZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (max, min, max)
-    vec3.set(_updateBodyAABB_corner, max[0], min[1], max[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 5: (max, min, max)
+    wx = m[0] * maxX + m[4] * minY + m[8] * maxZ + px;
+    wy = m[1] * maxX + m[5] * minY + m[9] * maxZ + py;
+    wz = m[2] * maxX + m[6] * minY + m[10] * maxZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (min, max, max)
-    vec3.set(_updateBodyAABB_corner, min[0], max[1], max[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 6: (min, max, max)
+    wx = m[0] * minX + m[4] * maxY + m[8] * maxZ + px;
+    wy = m[1] * minX + m[5] * maxY + m[9] * maxZ + py;
+    wz = m[2] * minX + m[6] * maxY + m[10] * maxZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
 
-    // (max, max, max)
-    vec3.set(_updateBodyAABB_corner, max[0], max[1], max[2]);
-    vec3.transformQuat(_updateBodyAABB_corner, _updateBodyAABB_corner, body.quaternion);
-    vec3.add(_updateBodyAABB_corner, _updateBodyAABB_corner, body.position);
-    box3.expandByPoint(body.aabb, body.aabb, _updateBodyAABB_corner);
+    // corner 7: (max, max, max)
+    wx = m[0] * maxX + m[4] * maxY + m[8] * maxZ + px;
+    wy = m[1] * maxX + m[5] * maxY + m[9] * maxZ + py;
+    wz = m[2] * maxX + m[6] * maxY + m[10] * maxZ + pz;
+    aabbMinX = Math.min(aabbMinX, wx);
+    aabbMinY = Math.min(aabbMinY, wy);
+    aabbMinZ = Math.min(aabbMinZ, wz);
+    aabbMaxX = Math.max(aabbMaxX, wx);
+    aabbMaxY = Math.max(aabbMaxY, wy);
+    aabbMaxZ = Math.max(aabbMaxZ, wz);
+
+    // write final AABB
+    body.aabb[0][0] = aabbMinX;
+    body.aabb[0][1] = aabbMinY;
+    body.aabb[0][2] = aabbMinZ;
+    body.aabb[1][0] = aabbMaxX;
+    body.aabb[1][1] = aabbMaxY;
+    body.aabb[1][2] = aabbMaxZ;
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
@@ -1092,7 +1147,7 @@ export function bodiesShareConstraint(bodyA: RigidBody, bodyB: RigidBody): boole
     return false;
 }
 
-const WakeInAABBVisitor = {
+const wakeInAABBVisitor = {
     shouldExit: false,
     world: null! as World,
     bodiesToWake: [] as RigidBody[],
@@ -1129,18 +1184,18 @@ export function wakeInAABB(world: World, aabb: Box3): void {
     _wakeInAABB_filter.collisionGroups = ~0;
 
     // setup visitor to collect sleeping bodies
-    WakeInAABBVisitor.setup(world);
+    wakeInAABBVisitor.setup(world);
 
     // query broadphase for all bodies in AABB
-    broadphase.intersectAABB(world, aabb, _wakeInAABB_filter, WakeInAABBVisitor);
+    broadphase.intersectAABB(world, aabb, _wakeInAABB_filter, wakeInAABBVisitor);
 
     // wake all collected bodies
-    for (const body of WakeInAABBVisitor.bodiesToWake) {
+    for (const body of wakeInAABBVisitor.bodiesToWake) {
         sleepModule.wake(world, body);
     }
 
     // cleanup
-    WakeInAABBVisitor.reset();
+    wakeInAABBVisitor.reset();
 }
 
 export { sleep, wake } from './sleep';

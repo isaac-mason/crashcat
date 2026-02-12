@@ -59,11 +59,11 @@ export function getShapeSupportFunction(pool: ShapeSupportPool, shape: Shape, mo
 
     // pool entry may not exist for non-convex shapes
     const shapePool = pool.shapes[shape.type];
-    const support = shapeDef.getSupportFunction(shapePool, shape, mode, scale) as Support | undefined;
+    const support = shapeDef.getSupportFunction(shapePool, shape, mode, scale) as Support;
 
-    if (support === undefined) {
-        throw new Error(`Support function not implemented for shape type ${shape?.type}`);
-    }
+    // if (support === undefined) {
+    //     throw new Error(`Support function not implemented for shape type ${shape?.type}`);
+    // }
 
     return support;
 }

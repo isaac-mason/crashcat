@@ -1,4 +1,4 @@
-import { degreesToRadians, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { degreesToRadians, type Quat, type Vec3, vec3 } from 'mathcat';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
@@ -67,15 +67,14 @@ export function penetrationDepthStepGJK(
 
     // copy results to output
 
-    // vec3.copy(outPenetrationDepth.pointA, _gjk_closestPoints.pointA);
     outPenetrationDepth.pointA[0] = _gjk_closestPoints.pointA[0];
     outPenetrationDepth.pointA[1] = _gjk_closestPoints.pointA[1];
     outPenetrationDepth.pointA[2] = _gjk_closestPoints.pointA[2];
-    // vec3.copy(outPenetrationDepth.pointB, _gjk_closestPoints.pointB);
+
     outPenetrationDepth.pointB[0] = _gjk_closestPoints.pointB[0];
     outPenetrationDepth.pointB[1] = _gjk_closestPoints.pointB[1];
     outPenetrationDepth.pointB[2] = _gjk_closestPoints.pointB[2];
-    // vec3.copy(outPenetrationDepth.penetrationAxis, _gjk_closestPoints.penetrationAxis);
+
     outPenetrationDepth.penetrationAxis[0] = _gjk_closestPoints.penetrationAxis[0];
     outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
     outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
@@ -118,27 +117,15 @@ const _epa_d2 = /* @__PURE__ */ vec3.fromValues(-1, -1, -1);
 const _epa_d3 = /* @__PURE__ */ vec3.fromValues(1, -1, -1);
 const _epa_d4 = /* @__PURE__ */ vec3.fromValues(0, -1, 1);
 
-const _epa_axis = /* @__PURE__ */ vec3.create();
 const _epa_dir1 = /* @__PURE__ */ vec3.create();
 const _epa_dir2 = /* @__PURE__ */ vec3.create();
 const _epa_dir3 = /* @__PURE__ */ vec3.create();
-const _epa_quat = /* @__PURE__ */ quat.create();
 const _epa_p = /* @__PURE__ */ vec3.create();
 const _epa_q = /* @__PURE__ */ vec3.create();
-const _epa_y = /* @__PURE__ */ vec3.create();
 const _epa_negatedDirection = /* @__PURE__ */ vec3.create();
 const _epa_negatedNormal = /* @__PURE__ */ vec3.create();
 const _epa_p2 = /* @__PURE__ */ vec3.create();
 const _epa_q2 = /* @__PURE__ */ vec3.create();
-const _epa_w2 = /* @__PURE__ */ vec3.create();
-const _epa_p01 = /* @__PURE__ */ vec3.create();
-const _epa_p02 = /* @__PURE__ */ vec3.create();
-const _epa_q01 = /* @__PURE__ */ vec3.create();
-const _epa_q02 = /* @__PURE__ */ vec3.create();
-const _epa_p10 = /* @__PURE__ */ vec3.create();
-const _epa_p12 = /* @__PURE__ */ vec3.create();
-const _epa_q10 = /* @__PURE__ */ vec3.create();
-const _epa_q12 = /* @__PURE__ */ vec3.create();
 
 const _epa_penetrationNormal = /* @__PURE__ */ vec3.create();
 const _epa_contactPointA = /* @__PURE__ */ vec3.create();
@@ -171,13 +158,26 @@ const addEpaSupportPoint = (points: EpaSupportPoints, supportA: Support, support
 
     supportA.getSupport(direction, _epa_p);
     supportB.getSupport(_epa_negatedDirection, _epa_q);
-    vec3.subtract(_epa_y, _epa_p, _epa_q);
 
     // store new point
     const idx = points.y.size;
-    vec3.copy(points.y.values[idx], _epa_y);
-    vec3.copy(points.p.values[idx], _epa_p);
-    vec3.copy(points.q.values[idx], _epa_q);
+    const yOut = points.y.values[idx];
+    const pOut = points.p.values[idx];
+    const qOut = points.q.values[idx];
+
+    // y = p - q (minkowski difference)
+    yOut[0] = _epa_p[0] - _epa_q[0];
+    yOut[1] = _epa_p[1] - _epa_q[1];
+    yOut[2] = _epa_p[2] - _epa_q[2];
+
+    pOut[0] = _epa_p[0];
+    pOut[1] = _epa_p[1];
+    pOut[2] = _epa_p[2];
+
+    qOut[0] = _epa_q[0];
+    qOut[1] = _epa_q[1];
+    qOut[2] = _epa_q[2];
+
     points.y.size++;
     points.p.size++;
     points.q.size++;
@@ -191,31 +191,6 @@ const popBackEpaSupportPoint = (points: EpaSupportPoints) => {
     if (points.q.size > 0) points.q.size--;
 };
 
-const computeNormalizedPerpendicular = (out: Vec3, v: Vec3) => {
-    // chooses between two perpendicular constructions based on which component is larger
-    const absX = Math.abs(v[0]);
-    const absY = Math.abs(v[1]);
-
-    if (absX > absY) {
-        // use X and Z components
-        const len = Math.sqrt(v[0] * v[0] + v[2] * v[2]);
-        out[0] = v[2] / len;
-        out[1] = 0.0;
-        out[2] = -v[0] / len;
-    } else {
-        // use Y and Z components
-        const len = Math.sqrt(v[1] * v[1] + v[2] * v[2]);
-        out[0] = 0.0;
-        out[1] = v[2] / len;
-        out[2] = -v[1] / len;
-    }
-};
-
-const rotateByAxisAngle = (out: Vec3, v: Vec3, axis: Vec3, angleRadians: number) => {
-    quat.setAxisAngle(_epa_quat, axis, angleRadians);
-    vec3.transformQuat(out, v, _epa_quat);
-};
-
 const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(256);
 const _epa_hullState = /* @__PURE__ */ (() => {
     const state = hull.init();
@@ -225,7 +200,10 @@ const _epa_hullState = /* @__PURE__ */ (() => {
 })();
 const _epa_newTriangles: hull.NewTriangles = [];
 
-const RADIANS_120_DEG = /* @__PURE__ */ degreesToRadians(120.0);
+// rotation matrix constants for 120° rotation
+const COS_120_DEG = Math.cos(degreesToRadians(120));
+const SIN_120_DEG = Math.sin(degreesToRadians(120));
+const ONE_MINUS_COS_120_DEG = 1 - COS_120_DEG;
 
 /**
  * EPA penetration depth step.
@@ -246,9 +224,19 @@ export function penetrationDepthStepEPA(
 
     // copy simplex points to support points
     for (let i = 0; i < simplex.size; i++) {
-        vec3.copy(supportPoints.y.values[i], simplex.points[i].y);
-        vec3.copy(supportPoints.p.values[i], simplex.points[i].p);
-        vec3.copy(supportPoints.q.values[i], simplex.points[i].q);
+        const point = simplex.points[i];
+        const yOut = supportPoints.y.values[i];
+        const pOut = supportPoints.p.values[i];
+        const qOut = supportPoints.q.values[i];
+        yOut[0] = point.y[0];
+        yOut[1] = point.y[1];
+        yOut[2] = point.y[2];
+        pOut[0] = point.p[0];
+        pOut[1] = point.p[1];
+        pOut[2] = point.p[2];
+        qOut[0] = point.q[0];
+        qOut[1] = point.q[1];
+        qOut[2] = point.q[2];
     }
     supportPoints.y.size = simplex.size;
     supportPoints.p.size = simplex.size;
@@ -268,12 +256,70 @@ export function penetrationDepthStepEPA(
 
         case 2: {
             // two vertices - create 3 extra by rotating perpendicular axis
-            vec3.subtract(_epa_axis, supportPoints.y.values[1], supportPoints.y.values[0]);
-            vec3.normalize(_epa_axis, _epa_axis);
+            const y0 = supportPoints.y.values[0];
+            const y1 = supportPoints.y.values[1];
 
-            computeNormalizedPerpendicular(_epa_dir1, _epa_axis);
-            rotateByAxisAngle(_epa_dir2, _epa_dir1, _epa_axis, RADIANS_120_DEG);
-            rotateByAxisAngle(_epa_dir3, _epa_dir2, _epa_axis, RADIANS_120_DEG);
+            // axis = normalize(y1 - y0)
+            const axisx = y1[0] - y0[0];
+            const axisy = y1[1] - y0[1];
+            const axisz = y1[2] - y0[2];
+            const axisLen = Math.sqrt(axisx * axisx + axisy * axisy + axisz * axisz);
+            const axisNormx = axisx / axisLen;
+            const axisNormy = axisy / axisLen;
+            const axisNormz = axisz / axisLen;
+
+            // compute normalized perpendicular to axis
+            const absAxisx = Math.abs(axisNormx);
+            const absAxisy = Math.abs(axisNormy);
+
+            let dir1x: number, dir1y: number, dir1z: number;
+            if (absAxisx > absAxisy) {
+                // use X and Z components
+                const perpLen = Math.sqrt(axisNormx * axisNormx + axisNormz * axisNormz);
+                dir1x = axisNormz / perpLen;
+                dir1y = 0.0;
+                dir1z = -axisNormx / perpLen;
+            } else {
+                // use Y and Z components
+                const perpLen = Math.sqrt(axisNormy * axisNormy + axisNormz * axisNormz);
+                dir1x = 0.0;
+                dir1y = axisNormz / perpLen;
+                dir1z = -axisNormy / perpLen;
+            }
+
+            // construct rotation matrix for 120° rotation about axis
+            // R = cos(θ)I + sin(θ)[k]× + (1-cos(θ))kk^T
+            const r00 = COS_120_DEG + axisNormx * axisNormx * ONE_MINUS_COS_120_DEG;
+            const r01 = axisNormx * axisNormy * ONE_MINUS_COS_120_DEG - axisNormz * SIN_120_DEG;
+            const r02 = axisNormx * axisNormz * ONE_MINUS_COS_120_DEG + axisNormy * SIN_120_DEG;
+            const r10 = axisNormy * axisNormx * ONE_MINUS_COS_120_DEG + axisNormz * SIN_120_DEG;
+            const r11 = COS_120_DEG + axisNormy * axisNormy * ONE_MINUS_COS_120_DEG;
+            const r12 = axisNormy * axisNormz * ONE_MINUS_COS_120_DEG - axisNormx * SIN_120_DEG;
+            const r20 = axisNormz * axisNormx * ONE_MINUS_COS_120_DEG - axisNormy * SIN_120_DEG;
+            const r21 = axisNormz * axisNormy * ONE_MINUS_COS_120_DEG + axisNormx * SIN_120_DEG;
+            const r22 = COS_120_DEG + axisNormz * axisNormz * ONE_MINUS_COS_120_DEG;
+
+            // dir2 = R * dir1
+            const dir2x = r00 * dir1x + r01 * dir1y + r02 * dir1z;
+            const dir2y = r10 * dir1x + r11 * dir1y + r12 * dir1z;
+            const dir2z = r20 * dir1x + r21 * dir1y + r22 * dir1z;
+
+            // dir3 = R * dir2
+            const dir3x = r00 * dir2x + r01 * dir2y + r02 * dir2z;
+            const dir3y = r10 * dir2x + r11 * dir2y + r12 * dir2z;
+            const dir3z = r20 * dir2x + r21 * dir2y + r22 * dir2z;
+
+            _epa_dir1[0] = dir1x;
+            _epa_dir1[1] = dir1y;
+            _epa_dir1[2] = dir1z;
+
+            _epa_dir2[0] = dir2x;
+            _epa_dir2[1] = dir2y;
+            _epa_dir2[2] = dir2z;
+
+            _epa_dir3[0] = dir3x;
+            _epa_dir3[1] = dir3y;
+            _epa_dir3[2] = dir3z;
 
             addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_dir1);
             addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_dir2);
@@ -396,7 +442,7 @@ export function penetrationDepthStepEPA(
         const w = supportPoints.y.values[newIndex];
 
         // project w onto triangle normal
-        const dot = vec3.dot(triangle.normal, w);
+        const dot = triangle.normal[0] * w[0] + triangle.normal[1] * w[1] + triangle.normal[2] * w[2];
 
         // check for separating axis
         if (dot < 0.0) {
@@ -405,7 +451,11 @@ export function penetrationDepthStepEPA(
         }
 
         // get distance squared along normal
-        const distSq = (dot * dot) / vec3.squaredLength(triangle.normal);
+        const normalLenSq =
+            triangle.normal[0] * triangle.normal[0] +
+            triangle.normal[1] * triangle.normal[1] +
+            triangle.normal[2] * triangle.normal[2];
+        const distSq = (dot * dot) / normalLenSq;
 
         // check for convergence
         if (distSq - triangle.closestLengthSq < triangle.closestLengthSq * tolerance) {
@@ -431,7 +481,9 @@ export function penetrationDepthStepEPA(
         let hasDefect = false;
         for (let i = 0; i < newTriangles.length; i++) {
             const nt = newTriangles[i];
-            if (nt && hull.triangleIsFacingOrigin(nt)) {
+            // triangleIsFacingOrigin: check if triangle normal points toward origin
+            // if dot(normal, centroid) < 0, origin is on front side (defect)
+            if (nt && nt.normal[0] * nt.centroid[0] + nt.normal[1] * nt.centroid[1] + nt.normal[2] * nt.centroid[2] < 0.0) {
                 hasDefect = true;
                 break;
             }
@@ -439,11 +491,15 @@ export function penetrationDepthStepEPA(
 
         if (hasDefect) {
             // check if we need to flip penetration sign
-            vec3.negate(_epa_negatedNormal, triangle.normal);
+            _epa_negatedNormal[0] = -triangle.normal[0];
+            _epa_negatedNormal[1] = -triangle.normal[1];
+            _epa_negatedNormal[2] = -triangle.normal[2];
             supportAIncludingRadius.getSupport(_epa_negatedNormal, _epa_p2);
             supportBIncludingRadius.getSupport(triangle.normal, _epa_q2);
-            vec3.subtract(_epa_w2, _epa_p2, _epa_q2);
-            const dot2 = vec3.dot(_epa_negatedNormal, _epa_w2);
+            const w2x = _epa_p2[0] - _epa_q2[0];
+            const w2y = _epa_p2[1] - _epa_q2[1];
+            const w2z = _epa_p2[2] - _epa_q2[2];
+            const dot2 = _epa_negatedNormal[0] * w2x + _epa_negatedNormal[1] * w2y + _epa_negatedNormal[2] * w2z;
             if (dot2 < dot) {
                 flipVSign = true;
             }
@@ -460,21 +516,29 @@ export function penetrationDepthStepEPA(
     }
 
     // calculate penetration normal and depth
-    const normalLengthSq = vec3.squaredLength(last.normal);
-    const centroidDotNormal = vec3.dot(last.centroid, last.normal);
+    const normalLengthSq = last.normal[0] * last.normal[0] + last.normal[1] * last.normal[1] + last.normal[2] * last.normal[2];
+    const centroidDotNormal =
+        last.centroid[0] * last.normal[0] + last.centroid[1] * last.normal[1] + last.centroid[2] * last.normal[2];
 
     // penetration normal calculation
     const penetrationNormal = _epa_penetrationNormal;
     vec3.scale(penetrationNormal, last.normal, centroidDotNormal / normalLengthSq);
 
     // check for near-zero penetration
-    if (vec3.squaredLength(penetrationNormal) < 1e-10) {
+    const pnLenSq =
+        penetrationNormal[0] * penetrationNormal[0] +
+        penetrationNormal[1] * penetrationNormal[1] +
+        penetrationNormal[2] * penetrationNormal[2];
+    if (pnLenSq < 1e-10) {
         out.status = PenetrationDepthStatus.NOT_COLLIDING;
         return false;
     }
 
     if (flipVSign) {
-        vec3.negate(penetrationNormal, penetrationNormal);
+        // penetrationNormal = -penetrationNormal
+        penetrationNormal[0] = -penetrationNormal[0];
+        penetrationNormal[1] = -penetrationNormal[1];
+        penetrationNormal[2] = -penetrationNormal[2];
     }
 
     // calculate contact points using barycentric coordinates
@@ -490,31 +554,45 @@ export function penetrationDepthStepEPA(
     const contactPointB = _epa_contactPointB;
 
     if (last.lambdaRelativeTo0) {
-        vec3.subtract(_epa_p01, xp1, xp0);
-        vec3.subtract(_epa_p02, xp2, xp0);
-        vec3.subtract(_epa_q01, xq1, xq0);
-        vec3.subtract(_epa_q02, xq2, xq0);
+        // cache vertex components
+        const [xp0x, xp0y, xp0z] = xp0;
+        const [xp1x, xp1y, xp1z] = xp1;
+        const [xp2x, xp2y, xp2z] = xp2;
+        const [xq0x, xq0y, xq0z] = xq0;
+        const [xq1x, xq1y, xq1z] = xq1;
+        const [xq2x, xq2y, xq2z] = xq2;
 
-        vec3.copy(contactPointA, xp0);
-        vec3.scaleAndAdd(contactPointA, contactPointA, _epa_p01, last.lambda[0]);
-        vec3.scaleAndAdd(contactPointA, contactPointA, _epa_p02, last.lambda[1]);
+        // contactPointA = xp0 + (xp1 - xp0) * lambda[0] + (xp2 - xp0) * lambda[1]
+        const lambda0 = last.lambda[0];
+        const lambda1 = last.lambda[1];
+        contactPointA[0] = xp0x + (xp1x - xp0x) * lambda0 + (xp2x - xp0x) * lambda1;
+        contactPointA[1] = xp0y + (xp1y - xp0y) * lambda0 + (xp2y - xp0y) * lambda1;
+        contactPointA[2] = xp0z + (xp1z - xp0z) * lambda0 + (xp2z - xp0z) * lambda1;
 
-        vec3.copy(contactPointB, xq0);
-        vec3.scaleAndAdd(contactPointB, contactPointB, _epa_q01, last.lambda[0]);
-        vec3.scaleAndAdd(contactPointB, contactPointB, _epa_q02, last.lambda[1]);
+        // contactPointB = xq0 + (xq1 - xq0) * lambda[0] + (xq2 - xq0) * lambda[1]
+        contactPointB[0] = xq0x + (xq1x - xq0x) * lambda0 + (xq2x - xq0x) * lambda1;
+        contactPointB[1] = xq0y + (xq1y - xq0y) * lambda0 + (xq2y - xq0y) * lambda1;
+        contactPointB[2] = xq0z + (xq1z - xq0z) * lambda0 + (xq2z - xq0z) * lambda1;
     } else {
-        vec3.subtract(_epa_p10, xp0, xp1);
-        vec3.subtract(_epa_p12, xp2, xp1);
-        vec3.subtract(_epa_q10, xq0, xq1);
-        vec3.subtract(_epa_q12, xq2, xq1);
+        // cache vertex components
+        const [xp0x, xp0y, xp0z] = xp0;
+        const [xp1x, xp1y, xp1z] = xp1;
+        const [xp2x, xp2y, xp2z] = xp2;
+        const [xq0x, xq0y, xq0z] = xq0;
+        const [xq1x, xq1y, xq1z] = xq1;
+        const [xq2x, xq2y, xq2z] = xq2;
 
-        vec3.copy(contactPointA, xp1);
-        vec3.scaleAndAdd(contactPointA, contactPointA, _epa_p10, last.lambda[0]);
-        vec3.scaleAndAdd(contactPointA, contactPointA, _epa_p12, last.lambda[1]);
+        // contactPointA = xp1 + (xp0 - xp1) * lambda[0] + (xp2 - xp1) * lambda[1]
+        const lambda0 = last.lambda[0];
+        const lambda1 = last.lambda[1];
+        contactPointA[0] = xp1x + (xp0x - xp1x) * lambda0 + (xp2x - xp1x) * lambda1;
+        contactPointA[1] = xp1y + (xp0y - xp1y) * lambda0 + (xp2y - xp1y) * lambda1;
+        contactPointA[2] = xp1z + (xp0z - xp1z) * lambda0 + (xp2z - xp1z) * lambda1;
 
-        vec3.copy(contactPointB, xq1);
-        vec3.scaleAndAdd(contactPointB, contactPointB, _epa_q10, last.lambda[0]);
-        vec3.scaleAndAdd(contactPointB, contactPointB, _epa_q12, last.lambda[1]);
+        // contactPointB = xq1 + (xq0 - xq1) * lambda[0] + (xq2 - xq1) * lambda[1]
+        contactPointB[0] = xq1x + (xq0x - xq1x) * lambda0 + (xq2x - xq1x) * lambda1;
+        contactPointB[1] = xq1y + (xq0y - xq1y) * lambda0 + (xq2y - xq1y) * lambda1;
+        contactPointB[2] = xq1z + (xq0z - xq1z) * lambda0 + (xq2z - xq1z) * lambda1;
     }
 
     // write results to out

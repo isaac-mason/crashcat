@@ -628,7 +628,7 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
         const nodeIndex = entry.nodeIndex;
         const node = dbvt.nodes[nodeIndex];
 
-        // skip if node doesn't intersect the AABB
+        // node aabb test
         if (!box3.intersectsBox3(node.aabb, aabb)) {
             continue;
         }
@@ -642,7 +642,6 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 
         // leaf node - check body
         const body = world.bodies.pool[node.bodyIndex];
-        if (!body || body._pooled) continue;
 
         // collision group/mask filtering
         if (
@@ -666,7 +665,7 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
             continue;
         }
 
-        // aabb test
+        // body aabb test
         if (!box3.intersectsBox3(body.aabb, aabb)) {
             continue;
         }

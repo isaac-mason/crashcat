@@ -1,5 +1,5 @@
 import type { Mat3, Mat4, Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import { mat3, quat, vec3 } from 'mathcat';
 import { assert } from '../utils/assert';
 import { DOF_ALL } from './dof';
 import type { MassProperties } from './mass-properties';
@@ -480,10 +480,6 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
     );
 }
 
-const _getInverseInertia_inertiaRotMat4 = /* @__PURE__ */ mat4.create();
-const _getInverseInertia_rotation = /* @__PURE__ */ mat4.create();
-const _getInverseInertia_rotationScaled = /* @__PURE__ */ mat4.create();
-
 /**
  * Computes the world-space inverse inertia matrix for a given body rotation.
  *
@@ -496,47 +492,108 @@ const _getInverseInertia_rotationScaled = /* @__PURE__ */ mat4.create();
  * @returns out parameter
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
-    // step 1: rotation = bodyRotation.Multiply3x3(Mat44::sRotation(mInertiaRotation))
-    // convert inertia rotation quaternion to Mat4
-    const inertiaRotMat4 = _getInverseInertia_inertiaRotMat4;
-    mat4.fromQuat(inertiaRotMat4, motionProperties.inertiaRotation);
+    // step 1: inline mat4.fromQuat(inertiaRotation) -> inertiaRotMat4
+    const q = motionProperties.inertiaRotation;
+    const qx = q[0];
+    const qy = q[1];
+    const qz = q[2];
+    const qw = q[3];
+    const qx2 = qx + qx;
+    const qy2 = qy + qy;
+    const qz2 = qz + qz;
+    const qxx = qx * qx2;
+    const qyx = qy * qx2;
+    const qyy = qy * qy2;
+    const qzx = qz * qx2;
+    const qzy = qz * qy2;
+    const qzz = qz * qz2;
+    const qwx = qw * qx2;
+    const qwy = qw * qy2;
+    const qwz = qw * qz2;
 
-    const rotation = _getInverseInertia_rotation;
-    mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat4);
+    // inertiaRotMat4 (3x3 part):
+    // column 0: [1 - qyy - qzz, qyx + qwz, qzx - qwy]
+    // column 1: [qyx - qwz, 1 - qxx - qzz, qzy + qwx]
+    // column 2: [qzx + qwy, qzy - qwx, 1 - qxx - qyy]
+    const i00 = 1 - qyy - qzz;
+    const i01 = qyx + qwz;
+    const i02 = qzx - qwy;
+    const i10 = qyx - qwz;
+    const i11 = 1 - qxx - qzz;
+    const i12 = qzy + qwx;
+    const i20 = qzx + qwy;
+    const i21 = qzy - qwx;
+    const i22 = 1 - qxx - qyy;
 
-    // step 2: Create rotation_mul_scale_transposed
-    // each column of rotation is scaled by the corresponding invInertiaDiagonal element
-    const rotationScaled = _getInverseInertia_rotationScaled;
+    // step 2: inline mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat4)
+    // extract bodyRotation 3x3
+    const b00 = bodyRotation[0];
+    const b01 = bodyRotation[1];
+    const b02 = bodyRotation[2];
+    const b10 = bodyRotation[4];
+    const b11 = bodyRotation[5];
+    const b12 = bodyRotation[6];
+    const b20 = bodyRotation[8];
+    const b21 = bodyRotation[9];
+    const b22 = bodyRotation[10];
 
-    // column 0: invInertiaDiagonal[0] * rotation.column0
-    rotationScaled[0] = motionProperties.invInertiaDiagonal[0] * rotation[0];
-    rotationScaled[1] = motionProperties.invInertiaDiagonal[0] * rotation[1];
-    rotationScaled[2] = motionProperties.invInertiaDiagonal[0] * rotation[2];
-    rotationScaled[3] = 0;
+    // rotation = bodyRotation * inertiaRotMat4
+    // column j of result = bodyRotation * (column j of inertiaRotMat4)
+    // column 0 of result = bodyRotation * [i00, i01, i02]
+    const r00 = b00 * i00 + b10 * i01 + b20 * i02;
+    const r01 = b01 * i00 + b11 * i01 + b21 * i02;
+    const r02 = b02 * i00 + b12 * i01 + b22 * i02;
+    // column 1 of result = bodyRotation * [i10, i11, i12]
+    const r10 = b00 * i10 + b10 * i11 + b20 * i12;
+    const r11 = b01 * i10 + b11 * i11 + b21 * i12;
+    const r12 = b02 * i10 + b12 * i11 + b22 * i12;
+    // column 2 of result = bodyRotation * [i20, i21, i22]
+    const r20 = b00 * i20 + b10 * i21 + b20 * i22;
+    const r21 = b01 * i20 + b11 * i21 + b21 * i22;
+    const r22 = b02 * i20 + b12 * i21 + b22 * i22;
 
-    // column 1: invInertiaDiagonal[1] * rotation.column1
-    rotationScaled[4] = motionProperties.invInertiaDiagonal[1] * rotation[4];
-    rotationScaled[5] = motionProperties.invInertiaDiagonal[1] * rotation[5];
-    rotationScaled[6] = motionProperties.invInertiaDiagonal[1] * rotation[6];
-    rotationScaled[7] = 0;
+    // step 3: scale rotation columns by invInertiaDiagonal
+    const d0 = motionProperties.invInertiaDiagonal[0];
+    const d1 = motionProperties.invInertiaDiagonal[1];
+    const d2 = motionProperties.invInertiaDiagonal[2];
 
-    // column 2: invInertiaDiagonal[2] * rotation.column2
-    rotationScaled[8] = motionProperties.invInertiaDiagonal[2] * rotation[8];
-    rotationScaled[9] = motionProperties.invInertiaDiagonal[2] * rotation[9];
-    rotationScaled[10] = motionProperties.invInertiaDiagonal[2] * rotation[10];
-    rotationScaled[11] = 0;
+    const s00 = d0 * r00;
+    const s01 = d0 * r01;
+    const s02 = d0 * r02;
+    const s10 = d1 * r10;
+    const s11 = d1 * r11;
+    const s12 = d1 * r12;
+    const s20 = d2 * r20;
+    const s21 = d2 * r21;
+    const s22 = d2 * r22;
 
-    // column 3: (0, 0, 0, 1)
-    rotationScaled[12] = 0;
-    rotationScaled[13] = 0;
-    rotationScaled[14] = 0;
-    rotationScaled[15] = 1;
+    // step 4: inline mat4.multiply3x3RightTransposed(out, rotation, rotationScaled)
+    // result = rotation * rotationScaled^T
+    // column 0 of result (multiply rotation by transposed column 0 of scaled, which is row 0)
+    out[0] = s00 * r00 + s10 * r10 + s20 * r20;
+    out[1] = s00 * r01 + s10 * r11 + s20 * r21;
+    out[2] = s00 * r02 + s10 * r12 + s20 * r22;
+    out[3] = 0;
 
-    // step 3: inverse_inertia = rotation.Multiply3x3RightTransposed(rotation_mul_scale_transposed)
-    mat4.multiply3x3RightTransposed(out, rotation, rotationScaled);
+    // column 1 of result (multiply rotation by transposed column 1 of scaled, which is row 1)
+    out[4] = s01 * r00 + s11 * r10 + s21 * r20;
+    out[5] = s01 * r01 + s11 * r11 + s21 * r21;
+    out[6] = s01 * r02 + s11 * r12 + s21 * r22;
+    out[7] = 0;
 
-    // step 4: mask out DOFs that are not allowed
-    // we need to mask out both the rows and columns of DOFs that are not allowed
+    // column 2 of result (multiply rotation by transposed column 2 of scaled, which is row 2)
+    out[8] = s02 * r00 + s12 * r10 + s22 * r20;
+    out[9] = s02 * r01 + s12 * r11 + s22 * r21;
+    out[10] = s02 * r02 + s12 * r12 + s22 * r22;
+    out[11] = 0;
+
+    // column 3
+    out[12] = 0;
+    out[13] = 0;
+    out[14] = 0;
+    out[15] = 1;
+
+    // step 5: mask out DOFs that are not allowed
     const allowedRotationAxis = (motionProperties.allowedDegreesOfFreedom >> 3) & 0b111;
     if (allowedRotationAxis !== 0b111) {
         // create mask for each axis (1.0 if allowed, 0.0 if not)
@@ -544,25 +601,20 @@ export function getInverseInertiaForRotation(out: Mat4, motionProperties: Motion
         const maskY = allowedRotationAxis & 0b010 ? 1.0 : 0.0;
         const maskZ = allowedRotationAxis & 0b100 ? 1.0 : 0.0;
 
-        // mask column 0: AND with (maskX, maskY, maskZ, 1) AND (maskX, maskX, maskX, maskX)
+        // mask column 0
         out[0] *= maskX * maskX;
         out[1] *= maskY * maskX;
         out[2] *= maskZ * maskX;
-        // out[3] stays as is (translation component)
 
-        // mask column 1: AND with (maskX, maskY, maskZ, 1) AND (maskY, maskY, maskY, maskY)
+        // mask column 1
         out[4] *= maskX * maskY;
         out[5] *= maskY * maskY;
         out[6] *= maskZ * maskY;
-        // out[7] stays as is
 
-        // mask column 2: AND with (maskX, maskY, maskZ, 1) AND (maskZ, maskZ, maskZ, maskZ)
+        // mask column 2
         out[8] *= maskX * maskZ;
         out[9] *= maskY * maskZ;
         out[10] *= maskZ * maskZ;
-        // out[11] stays as is
-
-        // column 3 is (0, 0, 0, 1), no masking needed
     }
 
     return out;
@@ -836,8 +888,6 @@ export function multiplyWorldSpaceInverseInertiaByVector(
     return out;
 }
 
-const _getPointVelocityCOM_angularContrib = /* @__PURE__ */ vec3.create();
-
 /**
  * Get velocity of a point on the body (point relative to center of mass).
  * Velocity = v_linear + ω × r
@@ -848,9 +898,21 @@ const _getPointVelocityCOM_angularContrib = /* @__PURE__ */ vec3.create();
  * @returns out parameter
  */
 export function getPointVelocityCOM(out: Vec3, motionProperties: MotionProperties, pointRelativeToCOM: Vec3): Vec3 {
+    const [avX, avY, avZ] = motionProperties.angularVelocity;
+    const [rX, rY, rZ] = pointRelativeToCOM;
+
     // v_point = v_linear + ω × r
-    vec3.cross(_getPointVelocityCOM_angularContrib, motionProperties.angularVelocity, pointRelativeToCOM);
-    vec3.add(out, motionProperties.linearVelocity, _getPointVelocityCOM_angularContrib);
+    
+    // cross: angular velocity x pointRelativeToCOM
+    const angularContribX = avY * rZ - avZ * rY;
+    const angularContribY = avZ * rX - avX * rZ;
+    const angularContribZ = avX * rY - avY * rX;
+
+    // add: linearVelocity + angularContrib
+    out[0] = motionProperties.linearVelocity[0] + angularContribX;
+    out[1] = motionProperties.linearVelocity[1] + angularContribY;
+    out[2] = motionProperties.linearVelocity[2] + angularContribZ;
+
     return out;
 }
 

@@ -41,6 +41,25 @@ const listener: Listener = {
 
 // pass listener to updateWorld
 updateWorld(world, listener, 1 / 60);
+
+// WARNING: do NOT remove bodies inside listener callbacks!
+// the physics system is in the middle of processing contacts and removing bodies
+// will corrupt internal state. instead, store the body IDs and remove them after
+// updateWorld completes:
+//
+// const bodiesToRemove: number[] = [];
+// const listener: Listener = {
+//     onContactAdded: (bodyA, bodyB) => {
+//         if (shouldDestroy(bodyA)) {
+//             bodiesToRemove.push(bodyA.id);
+//         }
+//     }
+// };
+// updateWorld(world, listener, 1 / 60);
+// for (const id of bodiesToRemove) {
+//     removeBody(world, id);
+// }
+// bodiesToRemove.length = 0;
 /* SNIPPET_END: basic */
 
 /* SNIPPET_START: body-pair-validate */

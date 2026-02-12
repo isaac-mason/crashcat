@@ -1,4 +1,4 @@
-import { type Mat4, mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
@@ -265,11 +265,8 @@ function calculateFrictionBias(settings: ContactSettings, rA: Vec3, tangent: Vec
     return tangent[0] * svx + tangent[1] * svy + tangent[2] * svz;
 }
 
-const _calcBias_relativeVelocity = /* @__PURE__ */ vec3.create();
 const _calcBias_v1 = /* @__PURE__ */ vec3.create();
 const _calcBias_v2 = /* @__PURE__ */ vec3.create();
-const _calcBias_diff = /* @__PURE__ */ vec3.create();
-const _calcBias_relativeAcceleration = /* @__PURE__ */ vec3.create();
 
 /**
  * Calculate the normal velocity bias for a contact constraint.
@@ -302,41 +299,50 @@ function calculateNormalVelocityBias(
     minVelocityForRestitution: number,
 ): number {
     // step 1: calculate relative velocity at contact point
-    let relativeVelocity: Vec3;
-
     // check for non-static (both dynamic and kinematic contribute velocity)
     const aIsMoving = bodyA.motionType !== MotionType.STATIC;
     const bIsMoving = bodyB.motionType !== MotionType.STATIC;
     const aIsDynamic = bodyA.motionType === MotionType.DYNAMIC;
     const bIsDynamic = bodyB.motionType === MotionType.DYNAMIC;
 
+    let relVelX: number;
+    let relVelY: number;
+    let relVelZ: number;
+
     if (aIsMoving && bIsMoving) {
-        // both non-static: use both velocities
+        // both non-static: relative = vB - vA
         body.getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
         body.getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
-        vec3.subtract(_calcBias_relativeVelocity, _calcBias_v2, _calcBias_v1);
-        relativeVelocity = _calcBias_relativeVelocity;
+        relVelX = _calcBias_v2[0] - _calcBias_v1[0];
+        relVelY = _calcBias_v2[1] - _calcBias_v1[1];
+        relVelZ = _calcBias_v2[2] - _calcBias_v1[2];
     } else if (aIsMoving) {
-        // only A is non-static
+        // only A is non-static: relative = 0 - vA = -vA
         body.getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
-        vec3.negate(_calcBias_relativeVelocity, _calcBias_v1);
-        relativeVelocity = _calcBias_relativeVelocity;
+        relVelX = -_calcBias_v1[0];
+        relVelY = -_calcBias_v1[1];
+        relVelZ = -_calcBias_v1[2];
     } else if (bIsMoving) {
-        // only B is non-static
+        // only B is non-static: relative = vB - 0 = vB
         body.getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
-        relativeVelocity = _calcBias_v2;
+        relVelX = _calcBias_v2[0];
+        relVelY = _calcBias_v2[1];
+        relVelZ = _calcBias_v2[2];
     } else {
         // both static (shouldn't happen for constraints)
         return 0;
     }
 
-    const normalVelocity = vec3.dot(relativeVelocity, normal);
+    // normalVelocity = relativeVelocity · normal
+    const normalVelocity = relVelX * normal[0] + relVelY * normal[1] + relVelZ * normal[2];
 
     // step 2: calculate penetration depth
-    // penetration = (pos1 - pos2) · normal
+    // penetration = (posA - posB) · normal
     // positive = penetrating, negative = separated
-    vec3.subtract(_calcBias_diff, positionA, positionB);
-    const penetration = vec3.dot(_calcBias_diff, normal);
+    const diffX = positionA[0] - positionB[0];
+    const diffY = positionA[1] - positionB[1];
+    const diffZ = positionA[2] - positionB[2];
+    const penetration = diffX * normal[0] + diffY * normal[1] + diffZ * normal[2];
 
     // step 3: speculative contact bias
     // if there is no penetration, this is a speculative contact and we will apply a bias to the contact constraint
@@ -358,70 +364,66 @@ function calculateNormalVelocityBias(
             // if we get here, there was a collision at the beginning of the time step, so we've applied too much force.
             // this means that our calculated restitution can be too high resulting in an increase in energy.
             // so, when we apply restitution, we cancel the added velocity due to these forces.
-            vec3.zero(_calcBias_relativeAcceleration);
+            let relAccelX = 0;
+            let relAccelY = 0;
+            let relAccelZ = 0;
 
             // calculate effect of gravity
             // apply to all non-static bodies (both dynamic and kinematic)
             if (aIsMoving && bIsMoving) {
                 const gravityFactorA = bodyA.motionProperties.gravityFactor;
                 const gravityFactorB = bodyB.motionProperties.gravityFactor;
-                vec3.scaleAndAdd(
-                    _calcBias_relativeAcceleration,
-                    _calcBias_relativeAcceleration,
-                    gravity,
-                    gravityFactorB - gravityFactorA,
-                );
+                const gravityScale = gravityFactorB - gravityFactorA;
+                relAccelX += gravity[0] * gravityScale;
+                relAccelY += gravity[1] * gravityScale;
+                relAccelZ += gravity[2] * gravityScale;
             } else if (aIsMoving) {
                 const gravityFactorA = bodyA.motionProperties.gravityFactor;
-                vec3.scaleAndAdd(_calcBias_relativeAcceleration, _calcBias_relativeAcceleration, gravity, -gravityFactorA);
+                relAccelX += gravity[0] * -gravityFactorA;
+                relAccelY += gravity[1] * -gravityFactorA;
+                relAccelZ += gravity[2] * -gravityFactorA;
             } else if (bIsMoving) {
                 const gravityFactorB = bodyB.motionProperties.gravityFactor;
-                vec3.scaleAndAdd(_calcBias_relativeAcceleration, _calcBias_relativeAcceleration, gravity, gravityFactorB);
+                relAccelX += gravity[0] * gravityFactorB;
+                relAccelY += gravity[1] * gravityFactorB;
+                relAccelZ += gravity[2] * gravityFactorB;
             }
 
             // calculate effect of accumulated forces (only for dynamic bodies)
             if (aIsDynamic) {
-                vec3.scaleAndAdd(
-                    _calcBias_relativeAcceleration,
-                    _calcBias_relativeAcceleration,
-                    bodyA.motionProperties.force,
-                    -bodyA.motionProperties.invMass,
-                );
+                const forceScale = -bodyA.motionProperties.invMass;
+                relAccelX += bodyA.motionProperties.force[0] * forceScale;
+                relAccelY += bodyA.motionProperties.force[1] * forceScale;
+                relAccelZ += bodyA.motionProperties.force[2] * forceScale;
             }
             if (bIsDynamic) {
-                vec3.scaleAndAdd(
-                    _calcBias_relativeAcceleration,
-                    _calcBias_relativeAcceleration,
-                    bodyB.motionProperties.force,
-                    bodyB.motionProperties.invMass,
-                );
+                const forceScale = bodyB.motionProperties.invMass;
+                relAccelX += bodyB.motionProperties.force[0] * forceScale;
+                relAccelY += bodyB.motionProperties.force[1] * forceScale;
+                relAccelZ += bodyB.motionProperties.force[2] * forceScale;
             }
 
             // we only compensate forces towards the contact normal
-            const forceDeltaVelocity = Math.min(0, vec3.dot(_calcBias_relativeAcceleration, normal) * deltaTime);
+            // forceDeltaVelocity = (relativeAcceleration · normal) * deltaTime
+            const accelDotNormal = relAccelX * normal[0] + relAccelY * normal[1] + relAccelZ * normal[2];
+            const forceDeltaVelocity = Math.min(0, accelDotNormal * deltaTime);
 
             normalVelocityBias = combinedRestitution * (normalVelocity - forceDeltaVelocity);
         } else {
-            // In this case we have predicted that we don't hit the other object, but if we do (due to other constraints changing velocities)
+            // in this case we have predicted that we don't hit the other object, but if we do (due to other constraints changing velocities)
             // the speculative contact will prevent penetration but will not apply restitution
             normalVelocityBias = speculativeContactVelocityBias;
         }
     } else {
-        // No restitution. We can safely apply our contact velocity bias.
+        // no restitution. We can safely apply our contact velocity bias.
         normalVelocityBias = speculativeContactVelocityBias;
     }
 
     return normalVelocityBias;
 }
 
-const _addContactConstraint_invQuatA = /* @__PURE__ */ quat.create();
-const _addContactConstraint_invQuatB = /* @__PURE__ */ quat.create();
 const _addContactConstraint_relativePointOnA = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_relativePointOnB = /* @__PURE__ */ vec3.create();
-const _addContactConstraint_worldPosA = /* @__PURE__ */ vec3.create();
-const _addContactConstraint_worldPosB = /* @__PURE__ */ vec3.create();
-const _addContactConstraint_localPosA = /* @__PURE__ */ vec3.create();
-const _addContactConstraint_localPosB = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_midpoint = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_rA = /* @__PURE__ */ vec3.create();
 const _addContactConstraint_rB = /* @__PURE__ */ vec3.create();
@@ -465,12 +467,18 @@ export function addContactConstraint(
     // mark contact as processed this frame (for stale contact cleanup)
     contact.processedThisFrame = true;
 
-    // prepare inverse quaternions for local space transforms (used by both sensors and regular contacts)
-    const invQuatA = quat.conjugate(_addContactConstraint_invQuatA, bodyA.quaternion);
-    const invQuatB = quat.conjugate(_addContactConstraint_invQuatB, bodyB.quaternion);
+    // compute rotation matrices for both bodies (used for inverse rotation via transpose and inverse inertia)
+    const rotA = mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+    const rotB = mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
 
     // transform the world space normal to body B's local space and store in contact
-    vec3.transformQuat(contact.contactNormal, contactManifold.worldSpaceNormal, invQuatB);
+    // use transpose of rotation matrix for inverse rotation (R^-1 = R^T for orthogonal matrices)
+    const normalX = contactManifold.worldSpaceNormal[0];
+    const normalY = contactManifold.worldSpaceNormal[1];
+    const normalZ = contactManifold.worldSpaceNormal[2];
+    contact.contactNormal[0] = rotB[0] * normalX + rotB[1] * normalY + rotB[2] * normalZ;
+    contact.contactNormal[1] = rotB[4] * normalX + rotB[5] * normalY + rotB[6] * normalZ;
+    contact.contactNormal[2] = rotB[8] * normalX + rotB[9] * normalY + rotB[10] * normalZ;
     vec3.normalize(contact.contactNormal, contact.contactNormal);
     contact.numContactPoints = contactManifold.numContactPoints;
 
@@ -520,29 +528,32 @@ export function addContactConstraint(
         );
 
         // normal and tangents
-        vec3.copy(constraint.normal, contactManifold.worldSpaceNormal);
+        // constraint.normal = contactManifold.worldSpaceNormal
+        constraint.normal[0] = contactManifold.worldSpaceNormal[0];
+        constraint.normal[1] = contactManifold.worldSpaceNormal[1];
+        constraint.normal[2] = contactManifold.worldSpaceNormal[2];
         
         // compute orthonormal tangent basis from normal
-        const nx = constraint.normal[0];
-        const ny = constraint.normal[1];
-        const nz = constraint.normal[2];
+        const normalX = constraint.normal[0];
+        const normalY = constraint.normal[1];
+        const normalZ = constraint.normal[2];
 
-        if (Math.abs(nx) > Math.abs(ny)) {
-            const tangentLen = Math.sqrt(nx * nx + nz * nz);
-            constraint.tangent1[0] = nz / tangentLen;
+        if (Math.abs(normalX) > Math.abs(normalY)) {
+            const tangentLen = Math.sqrt(normalX * normalX + normalZ * normalZ);
+            constraint.tangent1[0] = normalZ / tangentLen;
             constraint.tangent1[1] = 0;
-            constraint.tangent1[2] = -nx / tangentLen;
+            constraint.tangent1[2] = -normalX / tangentLen;
         } else {
-            const tangentLen = Math.sqrt(ny * ny + nz * nz);
+            const tangentLen = Math.sqrt(normalY * normalY + normalZ * normalZ);
             constraint.tangent1[0] = 0;
-            constraint.tangent1[1] = nz / tangentLen;
-            constraint.tangent1[2] = -ny / tangentLen;
+            constraint.tangent1[1] = normalZ / tangentLen;
+            constraint.tangent1[2] = -normalY / tangentLen;
         }
 
         // cross product: normal × tangent1
-        constraint.tangent2[0] = ny * constraint.tangent1[2] - nz * constraint.tangent1[1];
-        constraint.tangent2[1] = nz * constraint.tangent1[0] - nx * constraint.tangent1[2];
-        constraint.tangent2[2] = nx * constraint.tangent1[1] - ny * constraint.tangent1[0];
+        constraint.tangent2[0] = normalY * constraint.tangent1[2] - normalZ * constraint.tangent1[1];
+        constraint.tangent2[1] = normalZ * constraint.tangent1[0] - normalX * constraint.tangent1[2];
+        constraint.tangent2[2] = normalX * constraint.tangent1[1] - normalY * constraint.tangent1[0];
 
         // set material properties from settings (may have been modified by listener)
         constraint.friction = contactSettings.combinedFriction;
@@ -555,8 +566,8 @@ export function addContactConstraint(
         constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
 
         // compute inverse inertia only for dynamic bodies (static/kinematic don't contribute)
+        // reuse rotation matrices computed earlier
         if (bodyA.motionType === MotionType.DYNAMIC) {
-            const rotA = mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
             const invInertiaA = getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
             const scale1 = contactSettings.invInertiaScale1;
             if (scale1 !== 1) {
@@ -571,7 +582,6 @@ export function addContactConstraint(
         }
 
         if (bodyB.motionType === MotionType.DYNAMIC) {
-            const rotB = mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
             const invInertiaB = getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
             const scale2 = contactSettings.invInertiaScale2;
             if (scale2 !== 1) {
@@ -605,16 +615,33 @@ export function addContactConstraint(
             relativePointOnB[1] = contactManifold.relativeContactPointsOnB[contactPointIndex + 1];
             relativePointOnB[2] = contactManifold.relativeContactPointsOnB[contactPointIndex + 2];
 
-            // get world positions from manifold
-            vec3.add(cp.positionA, contactManifold.baseOffset, relativePointOnA);
-            vec3.add(cp.positionB, contactManifold.baseOffset, relativePointOnB);
+            // cp.positionA = contactManifold.baseOffset + relativePointOnA
+            cp.positionA[0] = contactManifold.baseOffset[0] + relativePointOnA[0];
+            cp.positionA[1] = contactManifold.baseOffset[1] + relativePointOnA[1];
+            cp.positionA[2] = contactManifold.baseOffset[2] + relativePointOnA[2];
 
-            // transform to local center of mass space
-            vec3.subtract(cp.localPositionA, cp.positionA, bodyA.centerOfMassPosition);
-            vec3.transformQuat(cp.localPositionA, cp.localPositionA, invQuatA);
+            // cp.positionB = contactManifold.baseOffset + relativePointOnB
+            cp.positionB[0] = contactManifold.baseOffset[0] + relativePointOnB[0];
+            cp.positionB[1] = contactManifold.baseOffset[1] + relativePointOnB[1];
+            cp.positionB[2] = contactManifold.baseOffset[2] + relativePointOnB[2];
 
-            vec3.subtract(cp.localPositionB, cp.positionB, bodyB.centerOfMassPosition);
-            vec3.transformQuat(cp.localPositionB, cp.localPositionB, invQuatB);
+            // localA = cp.positionA - bodyA.centerOfMassPosition
+            const localAX = cp.positionA[0] - bodyA.centerOfMassPosition[0];
+            const localAY = cp.positionA[1] - bodyA.centerOfMassPosition[1];
+            const localAZ = cp.positionA[2] - bodyA.centerOfMassPosition[2];
+            // cp.localPositionA = rotA^T * localA
+            cp.localPositionA[0] = rotA[0] * localAX + rotA[1] * localAY + rotA[2] * localAZ;
+            cp.localPositionA[1] = rotA[4] * localAX + rotA[5] * localAY + rotA[6] * localAZ;
+            cp.localPositionA[2] = rotA[8] * localAX + rotA[9] * localAY + rotA[10] * localAZ;
+
+            // localB = cp.positionB - bodyB.centerOfMassPosition
+            const localBX = cp.positionB[0] - bodyB.centerOfMassPosition[0];
+            const localBY = cp.positionB[1] - bodyB.centerOfMassPosition[1];
+            const localBZ = cp.positionB[2] - bodyB.centerOfMassPosition[2];
+            // cp.localPositionB = rotB^T * localB
+            cp.localPositionB[0] = rotB[0] * localBX + rotB[1] * localBY + rotB[2] * localBZ;
+            cp.localPositionB[1] = rotB[4] * localBX + rotB[5] * localBY + rotB[6] * localBZ;
+            cp.localPositionB[2] = rotB[8] * localBX + rotB[9] * localBY + rotB[10] * localBZ;
 
             // check if we have have a close contact point from last update
             // match to cached contact point (first match wins)
@@ -626,8 +653,17 @@ export function addContactConstraint(
                     const point = existingContact.contactPoints[j];
 
                     // both positions within threshold?
-                    const dist1Sq = vec3.squaredDistance(cp.localPositionA, point.position1);
-                    const dist2Sq = vec3.squaredDistance(cp.localPositionB, point.position2);
+                    // dist1Sq = ||cp.localPositionA - point.position1||^2
+                    const d1x = cp.localPositionA[0] - point.position1[0];
+                    const d1y = cp.localPositionA[1] - point.position1[1];
+                    const d1z = cp.localPositionA[2] - point.position1[2];
+                    const dist1Sq = d1x * d1x + d1y * d1y + d1z * d1z;
+
+                    // dist2Sq = ||cp.localPositionB - point.position2||^2
+                    const d2x = cp.localPositionB[0] - point.position2[0];
+                    const d2y = cp.localPositionB[1] - point.position2[1];
+                    const d2z = cp.localPositionB[2] - point.position2[2];
+                    const dist2Sq = d2x * d2x + d2y * d2y + d2z * d2z;
 
                     const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
 
@@ -657,10 +693,20 @@ export function addContactConstraint(
             const rA = _addContactConstraint_rA;
             const rB = _addContactConstraint_rB;
 
-            vec3.add(midpoint, cp.positionA, cp.positionB);
-            vec3.scale(midpoint, midpoint, 0.5);
-            vec3.subtract(rA, midpoint, bodyA.centerOfMassPosition);
-            vec3.subtract(rB, midpoint, bodyB.centerOfMassPosition);
+            // midpoint = (cp.positionA + cp.positionB) * 0.5
+            midpoint[0] = (cp.positionA[0] + cp.positionB[0]) * 0.5;
+            midpoint[1] = (cp.positionA[1] + cp.positionB[1]) * 0.5;
+            midpoint[2] = (cp.positionA[2] + cp.positionB[2]) * 0.5;
+
+            // rA = midpoint - bodyA.centerOfMassPosition
+            rA[0] = midpoint[0] - bodyA.centerOfMassPosition[0];
+            rA[1] = midpoint[1] - bodyA.centerOfMassPosition[1];
+            rA[2] = midpoint[2] - bodyA.centerOfMassPosition[2];
+
+            // rB = midpoint - bodyB.centerOfMassPosition
+            rB[0] = midpoint[0] - bodyB.centerOfMassPosition[0];
+            rB[1] = midpoint[1] - bodyB.centerOfMassPosition[1];
+            rB[2] = midpoint[2] - bodyB.centerOfMassPosition[2];
 
             // calculate normal velocity bias with restitution and speculative contacts
             const normalVelocityBias = calculateNormalVelocityBias(
@@ -732,8 +778,14 @@ export function addContactConstraint(
 
             // store to contact array for next frame's warm starting
             const cachedPoint = contact.contactPoints[i];
-            vec3.copy(cachedPoint.position1, cp.localPositionA);
-            vec3.copy(cachedPoint.position2, cp.localPositionB);
+
+            cachedPoint.position1[0] = cp.localPositionA[0];
+            cachedPoint.position1[1] = cp.localPositionA[1];
+            cachedPoint.position1[2] = cp.localPositionA[2];
+
+            cachedPoint.position2[0] = cp.localPositionB[0];
+            cachedPoint.position2[1] = cp.localPositionB[1];
+            cachedPoint.position2[2] = cp.localPositionB[2];
 
             // store impulses (will be updated after solving)
             cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
@@ -749,32 +801,50 @@ export function addContactConstraint(
     // this ensures proper onContactAdded/onContactPersisted semantics for sensors
     for (let i = 0; i < contactManifold.numContactPoints; i++) {
         // get relative contact points from manifold
-        const relativePointOnA = vec3.fromBuffer(
-            _addContactConstraint_relativePointOnA,
-            contactManifold.relativeContactPointsOnA,
-            i * 3,
-        );
-        const relativePointOnB = vec3.fromBuffer(
-            _addContactConstraint_relativePointOnB,
-            contactManifold.relativeContactPointsOnB,
-            i * 3,
-        );
+        const contactPointIndex = i * 3;
 
-        // world positions from manifold
-        const worldPosA = vec3.add(_addContactConstraint_worldPosA, contactManifold.baseOffset, relativePointOnA);
-        const worldPosB = vec3.add(_addContactConstraint_worldPosB, contactManifold.baseOffset, relativePointOnB);
+        const relativePointOnA = _addContactConstraint_relativePointOnA;
+        relativePointOnA[0] = contactManifold.relativeContactPointsOnA[contactPointIndex];
+        relativePointOnA[1] = contactManifold.relativeContactPointsOnA[contactPointIndex + 1];
+        relativePointOnA[2] = contactManifold.relativeContactPointsOnA[contactPointIndex + 2];
 
-        // transform to local space for caching
-        const localPosA = vec3.subtract(_addContactConstraint_localPosA, worldPosA, bodyA.centerOfMassPosition);
-        vec3.transformQuat(localPosA, localPosA, invQuatA);
+        const relativePointOnB = _addContactConstraint_relativePointOnB;
+        relativePointOnB[0] = contactManifold.relativeContactPointsOnB[contactPointIndex];
+        relativePointOnB[1] = contactManifold.relativeContactPointsOnB[contactPointIndex + 1];
+        relativePointOnB[2] = contactManifold.relativeContactPointsOnB[contactPointIndex + 2];
 
-        const localPosB = vec3.subtract(_addContactConstraint_localPosB, worldPosB, bodyB.centerOfMassPosition);
-        vec3.transformQuat(localPosB, localPosB, invQuatB);
+        // worldPosA = contactManifold.baseOffset + relativePointOnA
+        const worldPosAX = contactManifold.baseOffset[0] + relativePointOnA[0];
+        const worldPosAY = contactManifold.baseOffset[1] + relativePointOnA[1];
+        const worldPosAZ = contactManifold.baseOffset[2] + relativePointOnA[2];
 
-        // store local positions to contact array
+        // worldPosB = contactManifold.baseOffset + relativePointOnB
+        const worldPosBX = contactManifold.baseOffset[0] + relativePointOnB[0];
+        const worldPosBY = contactManifold.baseOffset[1] + relativePointOnB[1];
+        const worldPosBZ = contactManifold.baseOffset[2] + relativePointOnB[2];
+
+        // localA = worldPosA - bodyA.centerOfMassPosition
+        const localAX = worldPosAX - bodyA.centerOfMassPosition[0];
+        const localAY = worldPosAY - bodyA.centerOfMassPosition[1];
+        const localAZ = worldPosAZ - bodyA.centerOfMassPosition[2];
+
+        // localB = worldPosB - bodyB.centerOfMassPosition
+        const localBX = worldPosBX - bodyB.centerOfMassPosition[0];
+        const localBY = worldPosBY - bodyB.centerOfMassPosition[1];
+        const localBZ = worldPosBZ - bodyB.centerOfMassPosition[2];
+
+        // store local positions to contact array (rotA^T * localA, rotB^T * localB)
         const cachedPoint = contact.contactPoints[i];
-        vec3.copy(cachedPoint.position1, localPosA);
-        vec3.copy(cachedPoint.position2, localPosB);
+
+        // cachedPoint.position1 = rotA^T * localA
+        cachedPoint.position1[0] = rotA[0] * localAX + rotA[1] * localAY + rotA[2] * localAZ;
+        cachedPoint.position1[1] = rotA[4] * localAX + rotA[5] * localAY + rotA[6] * localAZ;
+        cachedPoint.position1[2] = rotA[8] * localAX + rotA[9] * localAY + rotA[10] * localAZ;
+
+        // cachedPoint.position2 = rotB^T * localB
+        cachedPoint.position2[0] = rotB[0] * localBX + rotB[1] * localBY + rotB[2] * localBZ;
+        cachedPoint.position2[1] = rotB[4] * localBX + rotB[5] * localBY + rotB[6] * localBZ;
+        cachedPoint.position2[2] = rotB[8] * localBX + rotB[9] * localBY + rotB[10] * localBZ;
 
         // reset impulses (sensors don't apply forces)
         cachedPoint.normalLambda = 0;
@@ -1005,12 +1075,8 @@ export function storeAppliedImpulses(contactConstraints: ContactConstraints, con
     }
 }
 
-const _solvePos_penetrationVector = /* @__PURE__ */ vec3.create();
-const _solvePos_pointA = /* @__PURE__ */ vec3.create();
-const _solvePos_pointB = /* @__PURE__ */ vec3.create();
 const _solvePos_worldRa = /* @__PURE__ */ vec3.create();
 const _solvePos_worldRb = /* @__PURE__ */ vec3.create();
-const _solvePos_midpoint = /* @__PURE__ */ vec3.create();
 const _solvePos_rA = /* @__PURE__ */ vec3.create();
 const _solvePos_rB = /* @__PURE__ */ vec3.create();
 const _solvePos_invInertiaA = /* @__PURE__ */ mat4.create();
@@ -1070,14 +1136,24 @@ export function solvePositionConstraintsForIsland(
 
             // transform contact points from local to world space (bodies may have moved)
             mat4.multiply3x3Vec(_solvePos_worldRa, _solvePos_rotA, cp.localPositionA);
-            vec3.add(_solvePos_pointA, bodyA.centerOfMassPosition, _solvePos_worldRa);
+            // pointA = bodyA.centerOfMassPosition + _solvePos_worldRa
+            const pointAX = bodyA.centerOfMassPosition[0] + _solvePos_worldRa[0];
+            const pointAY = bodyA.centerOfMassPosition[1] + _solvePos_worldRa[1];
+            const pointAZ = bodyA.centerOfMassPosition[2] + _solvePos_worldRa[2];
 
             mat4.multiply3x3Vec(_solvePos_worldRb, _solvePos_rotB, cp.localPositionB);
-            vec3.add(_solvePos_pointB, bodyB.centerOfMassPosition, _solvePos_worldRb);
+            // pointB = bodyB.centerOfMassPosition + _solvePos_worldRb
+            const pointBX = bodyB.centerOfMassPosition[0] + _solvePos_worldRb[0];
+            const pointBY = bodyB.centerOfMassPosition[1] + _solvePos_worldRb[1];
+            const pointBZ = bodyB.centerOfMassPosition[2] + _solvePos_worldRb[2];
 
             // calculate penetration vector and separation
-            vec3.subtract(_solvePos_penetrationVector, _solvePos_pointB, _solvePos_pointA);
-            let separation = vec3.dot(_solvePos_penetrationVector, normal) + penetrationSlop;
+            // penetrationVector = pointB - pointA
+            const penVecX = pointBX - pointAX;
+            const penVecY = pointBY - pointAY;
+            const penVecZ = pointBZ - pointAZ;
+            // separation = penetrationVector · normal + penetrationSlop
+            let separation = (penVecX * normal[0] + penVecY * normal[1] + penVecZ * normal[2]) + penetrationSlop;
             separation = Math.max(separation, -maxPenetrationDistance);
 
             // early exit if not penetrating
@@ -1086,10 +1162,20 @@ export function solvePositionConstraintsForIsland(
             }
 
             // calculate midpoint and moment arms
-            vec3.add(_solvePos_midpoint, _solvePos_pointA, _solvePos_pointB);
-            vec3.scale(_solvePos_midpoint, _solvePos_midpoint, 0.5);
-            vec3.subtract(_solvePos_rA, _solvePos_midpoint, bodyA.centerOfMassPosition);
-            vec3.subtract(_solvePos_rB, _solvePos_midpoint, bodyB.centerOfMassPosition);
+            // midpoint = (pointA + pointB) * 0.5
+            const midpointX = (pointAX + pointBX) * 0.5;
+            const midpointY = (pointAY + pointBY) * 0.5;
+            const midpointZ = (pointAZ + pointBZ) * 0.5;
+            
+            // _solvePos_rA = midpoint - bodyA.centerOfMassPosition
+            _solvePos_rA[0] = midpointX - bodyA.centerOfMassPosition[0];
+            _solvePos_rA[1] = midpointY - bodyA.centerOfMassPosition[1];
+            _solvePos_rA[2] = midpointZ - bodyA.centerOfMassPosition[2];
+            
+            // _solvePos_rB = midpoint - bodyB.centerOfMassPosition
+            _solvePos_rB[0] = midpointX - bodyB.centerOfMassPosition[0];
+            _solvePos_rB[1] = midpointY - bodyB.centerOfMassPosition[1];
+            _solvePos_rB[2] = midpointZ - bodyB.centerOfMassPosition[2];
 
             // recalculate constraint properties with current inertia and moment arms
             axisConstraintPart.calculateConstraintPropertiesWithMassOverride(

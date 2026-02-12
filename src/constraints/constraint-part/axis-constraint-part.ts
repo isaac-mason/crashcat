@@ -80,18 +80,10 @@ export function resetAxisConstraintPart(part: AxisConstraintPart): void {
     part.springPart.softness = 0;
 }
 
-const _acp_r1PlusUxAxis = /* @__PURE__ */ vec3.create();
-const _acp_r2xAxis = /* @__PURE__ */ vec3.create();
-const _acp_invI1_r1PlusUxAxis = /* @__PURE__ */ vec3.create();
-const _acp_invI2_r2xAxis = /* @__PURE__ */ vec3.create();
-
 const _acp_scaledInvInertiaA = /* @__PURE__ */ mat4.create();
 const _acp_scaledInvInertiaB = /* @__PURE__ */ mat4.create();
 
-/**
- * Helper to calculate inverse effective mass (cached jacobian terms).
- * Internal function used by all calculateConstraintProperties variants.
- */
+/** calculate inverse effective mass (cached jacobian terms) */
 function calculateInverseEffectiveMass(
     part: AxisConstraintPart,
     bodyA: RigidBody,
@@ -104,35 +96,54 @@ function calculateInverseEffectiveMass(
     r2: Vec3,
     axis: Vec3,
 ): number {
-    // calculate cross products: r × axis
-    // (used in jacobian: J = [-axis, -(r1 × axis), axis, (r2 × axis)])
     let invEffectiveMass = 0;
 
     if (bodyA.motionType === MotionType.DYNAMIC) {
         // r1 × axis
-        vec3.cross(_acp_r1PlusUxAxis, r1PlusU, axis);
-        vec3.copy(part.r1PlusUxAxis, _acp_r1PlusUxAxis);
+        const r1x = r1PlusU[0];
+        const r1y = r1PlusU[1];
+        const r1z = r1PlusU[2];
+        const ax = axis[0];
+        const ay = axis[1];
+        const az = axis[2];
+        part.r1PlusUxAxis[0] = r1y * az - r1z * ay;
+        part.r1PlusUxAxis[1] = r1z * ax - r1x * az;
+        part.r1PlusUxAxis[2] = r1x * ay - r1y * ax;
 
-        // I1^-1 × (r1 × axis) (3x3 only)
-        mat4.multiply3x3Vec(_acp_invI1_r1PlusUxAxis, invInertiaA, _acp_r1PlusUxAxis);
-        vec3.copy(part.invI1_r1PlusUxAxis, _acp_invI1_r1PlusUxAxis);
+        // I1^-1 × (r1 × axis)
+        const cx = part.r1PlusUxAxis[0];
+        const cy = part.r1PlusUxAxis[1];
+        const cz = part.r1PlusUxAxis[2];
+        part.invI1_r1PlusUxAxis[0] = invInertiaA[0] * cx + invInertiaA[4] * cy + invInertiaA[8] * cz;
+        part.invI1_r1PlusUxAxis[1] = invInertiaA[1] * cx + invInertiaA[5] * cy + invInertiaA[9] * cz;
+        part.invI1_r1PlusUxAxis[2] = invInertiaA[2] * cx + invInertiaA[6] * cy + invInertiaA[10] * cz;
 
-        // add to inverse effective mass: invMass + (r × axis) · (I^-1 × (r × axis))
-        invEffectiveMass += invMassA + vec3.dot(_acp_invI1_r1PlusUxAxis, _acp_r1PlusUxAxis);
+        // invMass + (r × axis) · (I^-1 × (r × axis))
+        invEffectiveMass += invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
         // r2 × axis
-        vec3.cross(_acp_r2xAxis, r2, axis);
-        vec3.copy(part.r2xAxis, _acp_r2xAxis);
+        const r2x = r2[0];
+        const r2y = r2[1];
+        const r2z = r2[2];
+        const ax = axis[0];
+        const ay = axis[1];
+        const az = axis[2];
+        part.r2xAxis[0] = r2y * az - r2z * ay;
+        part.r2xAxis[1] = r2z * ax - r2x * az;
+        part.r2xAxis[2] = r2x * ay - r2y * ax;
 
-        // I2^-1 × (r2 × axis) (3x3 only)
-        mat4.multiply3x3Vec(_acp_invI2_r2xAxis, invInertiaB, _acp_r2xAxis);
-        vec3.copy(part.invI2_r2xAxis, _acp_invI2_r2xAxis);
+        // I2^-1 × (r2 × axis)
+        const cx = part.r2xAxis[0];
+        const cy = part.r2xAxis[1];
+        const cz = part.r2xAxis[2];
+        part.invI2_r2xAxis[0] = invInertiaB[0] * cx + invInertiaB[4] * cy + invInertiaB[8] * cz;
+        part.invI2_r2xAxis[1] = invInertiaB[1] * cx + invInertiaB[5] * cy + invInertiaB[9] * cz;
+        part.invI2_r2xAxis[2] = invInertiaB[2] * cx + invInertiaB[6] * cy + invInertiaB[10] * cz;
 
-        // Add to inverse effective mass
-        const rotContribB = vec3.dot(_acp_invI2_r2xAxis, _acp_r2xAxis);
-        invEffectiveMass += invMassB + rotContribB;
+        // invMass + (r × axis) · (I^-1 × (r × axis))
+        invEffectiveMass += invMassB + (part.invI2_r2xAxis[0] * cx + part.invI2_r2xAxis[1] * cy + part.invI2_r2xAxis[2] * cz);
     }
 
     return invEffectiveMass;
@@ -224,7 +235,6 @@ export function calculateConstraintPropertiesWithMassOverride(
     bias: number,
 ): void {
     // scale inverse inertia matrices only for dynamic bodies
-    // non-dynamic bodies don't contribute to inverse effective mass, so their inertia is never read
     if (bodyA.motionType === MotionType.DYNAMIC) {
         mat4.multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
     }

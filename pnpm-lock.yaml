@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       mathcat:
-        specifier: 0.0.9
-        version: 0.0.9
+        specifier: 0.0.10
+        version: 0.0.10
       three:
         specifier: '>=0.182.0'
         version: 0.182.0
@@ -2173,8 +2173,8 @@ packages:
       uc.micro: 2.1.0
     dev: true
 
-  /mathcat@0.0.9:
-    resolution: {integrity: sha512-RZ+MrCCTBEwHenvsp7dGDa/U4TQsIHZPnWF4POS5XlCh6EkCuMQ0ahwmux7bD6T3J4JwOBubCsoGGlEYxiIRwQ==}
+  /mathcat@0.0.10:
+    resolution: {integrity: sha512-bZiUxyl0Lj4Q4+RR5Z/RiAEKAwPhtCWm+RzVOxM1FI/AflsrFcjHEaVWUikrd1JwcglvQ0iWD/NQmbY93BGzsA==}
     dev: false
 
   /mdurl@2.0.0:

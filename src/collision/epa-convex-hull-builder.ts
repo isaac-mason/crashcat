@@ -56,21 +56,14 @@ export function allocateTriangle(): Triangle {
 }
 
 const _vectorAB = /* @__PURE__ */ vec3.create();
-const _y10 = /* @__PURE__ */ vec3.create();
-const _y20 = /* @__PURE__ */ vec3.create();
-const _y21 = /* @__PURE__ */ vec3.create();
 
 export function triangleIsFacing(triangle: Triangle, position: Vec3): boolean {
-    vec3.subtract(_vectorAB, position, triangle.centroid);
-    return vec3.dot(triangle.normal, _vectorAB) > 0.0;
-}
-
-export function triangleIsFacingOrigin(triangle: Triangle): boolean {
-    return vec3.dot(triangle.normal, triangle.centroid) < 0.0;
-}
-
-export function triangleGetNextEdge(triangle: Triangle, index: number): Edge {
-    return triangle.edge[(index + 1) % 3];
+    // vectorAB = position - centroid
+    const abx = position[0] - triangle.centroid[0];
+    const aby = position[1] - triangle.centroid[1];
+    const abz = position[2] - triangle.centroid[2];
+    // dot(normal, vectorAB) > 0
+    return triangle.normal[0] * abx + triangle.normal[1] * aby + triangle.normal[2] * abz > 0.0;
 }
 
 export type Points = {
@@ -224,45 +217,78 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
     const y2 = positions[idx3];
 
     // calculate centroid
-    triangle.centroid[0] = (y0[0] + y1[0] + y2[0]) / 3.0;
-    triangle.centroid[1] = (y0[1] + y1[1] + y2[1]) / 3.0;
-    triangle.centroid[2] = (y0[2] + y1[2] + y2[2]) / 3.0;
+    const cx = (y0[0] + y1[0] + y2[0]) / 3.0;
+    const cy = (y0[1] + y1[1] + y2[1]) / 3.0;
+    const cz = (y0[2] + y1[2] + y2[2]) / 3.0;
+    triangle.centroid[0] = cx;
+    triangle.centroid[1] = cy;
+    triangle.centroid[2] = cz;
 
     // calculate edges
-    vec3.subtract(_y10, y1, y0);
-    vec3.subtract(_y20, y2, y0);
-    vec3.subtract(_y21, y2, y1);
+    // y10 = y1 - y0
+    const y10x = y1[0] - y0[0];
+    const y10y = y1[1] - y0[1];
+    const y10z = y1[2] - y0[2];
 
+    // y20 = y2 - y0
+    const y20x = y2[0] - y0[0];
+    const y20y = y2[1] - y0[1];
+    const y20z = y2[2] - y0[2];
+
+    // y21 = y2 - y1
+    const y21x = y2[0] - y1[0];
+    const y21y = y2[1] - y1[1];
+    const y21z = y2[2] - y1[2];
+
+    // compute triangle normal
     // the most accurate normal is calculated by using the two shortest edges
-    const y20DotY20 = vec3.dot(_y20, _y20);
-    const y21DotY21 = vec3.dot(_y21, _y21);
+    // y20DotY20 = dot(y20, y20)
+    const y20DotY20 = y20x * y20x + y20y * y20y + y20z * y20z;
+    // y21DotY21 = dot(y21, y21)
+    const y21DotY21 = y21x * y21x + y21y * y21y + y21z * y21z;
 
+    // both branches compute: normal, distance to origin, and barycentric coordinates
+    // they differ only in which edge pair is selected for numerical stability
     if (y20DotY20 < y21DotY21) {
         // we select the edges y10 and y20
-        vec3.cross(triangle.normal, _y10, _y20);
+        // normal = cross(y10, y20)
+        const nx = y10y * y20z - y10z * y20y;
+        const ny = y10z * y20x - y10x * y20z;
+        const nz = y10x * y20y - y10y * y20x;
+        triangle.normal[0] = nx;
+        triangle.normal[1] = ny;
+        triangle.normal[2] = nz;
 
-        // check if triangle is degenerate
-        const normalLenSq = vec3.squaredLength(triangle.normal);
+        // check if triangle is degenerate (area too small)
+        const normalLenSq = nx * nx + ny * ny + nz * nz;
         if (normalLenSq > EPA_MIN_TRIANGLE_AREA) {
-            // determine distance between triangle and origin
-            const cDotN = vec3.dot(triangle.centroid, triangle.normal);
+            // compute signed squared distance from origin to triangle plane
+            // cDotN = dot(centroid, normal)
+            const cDotN = cx * nx + cy * ny + cz * nz;
+            // Math.abs(cDotN) * cDotN = sign(cDotN) * cDotN^2, preserves sign while squaring
             triangle.closestLengthSq = (Math.abs(cDotN) * cDotN) / normalLenSq;
 
-            // calculate closest point to origin using barycentric coordinates
-            const y10DotY10 = vec3.squaredLength(_y10);
-            const y10DotY20 = vec3.dot(_y10, _y20);
+            // calculate barycentric coordinates of closest point on triangle to origin
+            // y10DotY10 = dot(y10, y10)
+            const y10DotY10 = y10x * y10x + y10y * y10y + y10z * y10z;
+            // y10DotY20 = dot(y10, y20)
+            const y10DotY20 = y10x * y20x + y10y * y20y + y10z * y20z;
             const determinant = y10DotY10 * y20DotY20 - y10DotY20 * y10DotY20;
 
+            // determinant > 0 means non-degenerate triangle (edges not parallel)
             if (determinant > 0.0) {
-                const y0DotY10 = vec3.dot(y0, _y10);
-                const y0DotY20 = vec3.dot(y0, _y20);
+                // y0DotY10 = dot(y0, y10)
+                const y0DotY10 = y0[0] * y10x + y0[1] * y10y + y0[2] * y10z;
+                // y0DotY20 = dot(y0, y20)
+                const y0DotY20 = y0[0] * y20x + y0[1] * y20y + y0[2] * y20z;
                 const l0 = (y10DotY20 * y0DotY20 - y20DotY20 * y0DotY10) / determinant;
                 const l1 = (y10DotY20 * y0DotY10 - y10DotY10 * y0DotY20) / determinant;
                 triangle.lambda[0] = l0;
                 triangle.lambda[1] = l1;
                 triangle.lambdaRelativeTo0 = true;
 
-                // check if closest point is interior to the triangle
+                // check if closest point lies within triangle interior
+                // point is interior if: l0 >= 0, l1 >= 0, and l0 + l1 <= 1 (barycentric bounds)
                 if (l0 > -EPA_BARYCENTRIC_EPSILON && l1 > -EPA_BARYCENTRIC_EPSILON && l0 + l1 < 1.0 + EPA_BARYCENTRIC_EPSILON) {
                     triangle.closestPointInterior = true;
                 }
@@ -270,30 +296,44 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
         }
     } else {
         // we select the edges y10 and y21
-        vec3.cross(triangle.normal, _y10, _y21);
+        // normal = cross(y10, y21)
+        const nx = y10y * y21z - y10z * y21y;
+        const ny = y10z * y21x - y10x * y21z;
+        const nz = y10x * y21y - y10y * y21x;
+        triangle.normal[0] = nx;
+        triangle.normal[1] = ny;
+        triangle.normal[2] = nz;
 
-        // check if triangle is degenerate
-        const normalLenSq = vec3.squaredLength(triangle.normal);
+        // check if triangle is degenerate (area too small)
+        const normalLenSq = nx * nx + ny * ny + nz * nz;
         if (normalLenSq > EPA_MIN_TRIANGLE_AREA) {
-            // calculate distance between triangle and origin
-            const cDotN = vec3.dot(triangle.centroid, triangle.normal);
+            // compute signed squared distance from origin to triangle plane
+            // cDotN = dot(centroid, normal)
+            const cDotN = cx * nx + cy * ny + cz * nz;
+            // Math.abs(cDotN) * cDotN = sign(cDotN) * cDotN^2, preserves sign while squaring
             triangle.closestLengthSq = (Math.abs(cDotN) * cDotN) / normalLenSq;
 
-            // calculate closest point to origin using barycentric coordinates (y1 as reference)
-            const y10DotY10 = vec3.squaredLength(_y10);
-            const y10DotY21 = vec3.dot(_y10, _y21);
+            // calculate barycentric coordinates of closest point on triangle to origin (y1 as reference)
+            // y10DotY10 = dot(y10, y10)
+            const y10DotY10 = y10x * y10x + y10y * y10y + y10z * y10z;
+            // y10DotY21 = dot(y10, y21)
+            const y10DotY21 = y10x * y21x + y10y * y21y + y10z * y21z;
             const determinant = y10DotY10 * y21DotY21 - y10DotY21 * y10DotY21;
 
+            // determinant > 0 means non-degenerate triangle (edges not parallel)
             if (determinant > 0.0) {
-                const y1DotY10 = vec3.dot(y1, _y10);
-                const y1DotY21 = vec3.dot(y1, _y21);
+                // y1DotY10 = dot(y1, y10)
+                const y1DotY10 = y1[0] * y10x + y1[1] * y10y + y1[2] * y10z;
+                // y1DotY21 = dot(y1, y21)
+                const y1DotY21 = y1[0] * y21x + y1[1] * y21y + y1[2] * y21z;
                 const l0 = (y21DotY21 * y1DotY10 - y10DotY21 * y1DotY21) / determinant;
                 const l1 = (y10DotY21 * y1DotY10 - y10DotY10 * y1DotY21) / determinant;
                 triangle.lambda[0] = l0;
                 triangle.lambda[1] = l1;
                 triangle.lambdaRelativeTo0 = false;
 
-                // check if the closest point is inside the triangle
+                // check if closest point lies within triangle interior
+                // point is interior if: l0 >= 0, l1 >= 0, and l0 + l1 <= 1 (barycentric bounds)
                 if (l0 > -EPA_BARYCENTRIC_EPSILON && l1 > -EPA_BARYCENTRIC_EPSILON && l0 + l1 < 1.0 + EPA_BARYCENTRIC_EPSILON) {
                     triangle.closestPointInterior = true;
                 }
