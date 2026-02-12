@@ -3,8 +3,8 @@ import {
     addBroadphaseLayer,
     addObjectLayer,
     box,
-    compound,
     ConstraintSpace,
+    compound,
     createWorld,
     createWorldSettings,
     cylinder,
@@ -14,13 +14,13 @@ import {
     registerAll,
     rigidBody,
     sphere,
-    updateWorld
+    updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import { quat, vec3 } from 'mathcat';
 import { GLTFLoader } from 'three/examples/jsm/Addons.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { cameraPosition, Discard, float, Fn, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';
+import { cameraPosition, Discard, Fn, float, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 
 /* resources */
@@ -56,6 +56,7 @@ const CONE_BASE_HEIGHT = 0.12;
 const CONE_BODY_BOTTOM_RADIUS = 0.3; // bottom of truncated cone
 const CONE_BODY_TOP_RADIUS = 0.08; // flat top
 const CONE_BODY_HEIGHT = 0.9;
+
 // barrel dimensions
 const BARREL_RADIUS = 0.45;
 const BARREL_HALF_HEIGHT = 0.6;
@@ -63,13 +64,46 @@ const ROAD_WIDTH = 14;
 const GROUND_WIDTH = 400;
 
 const CAR_SPEED = 40;
+const CAR_BOOST_MULTIPLIER = 2.0; // boost speed multiplier
 const CAR_HALF_EXTENTS = vec3.fromValues(0.9, 0.65, 2.2);
 const CAR_X_RANGE = ROAD_WIDTH / 2 - CAR_HALF_EXTENTS[0]; // stay on road
 const CAR_X_LERP = 3;
 
+// camera constants
+const CAMERA_FOV_NORMAL = 60;
+const CAMERA_FOV_BOOST = 75;
+const CAMERA_FOV_LERP = 8;
+
+// boost constants
+const CAR_SPEED_LERP = 2.5; // how fast speed transitions
+
+// jump animation constants
+const JUMP_MIN_DURATION = 0.35; // seconds (for min height jump)
+const JUMP_MAX_DURATION = 0.65; // seconds (for max height jump)
+const JUMP_MIN_HEIGHT = 0.5; // units (quick tap)
+const JUMP_MAX_HEIGHT = 2.5; // units (full charge)
+const JUMP_MAX_CHARGE_TIME = 0.3; // seconds to reach max height
+const JUMP_COOLDOWN = 0; // seconds
+const JUMP_CHARGE_TILT = 0.05; // radians
+
+// suspension constants
+const SUSPENSION_SPRING_K = 12;
+const SUSPENSION_DAMPING = 0.65;
+const SUSPENSION_COMPRESS_START = -0.15;
+const SUSPENSION_EXTEND_LAUNCH = 0.1;
+const SUSPENSION_COMPRESS_LAND = -0.25;
+
 const TILE_DEPTH = 200;
 const TILES_AHEAD = 3;
 const TILES_BEHIND = 2;
+const OBSTACLE_BEHIND_CAMERA_DESPAWN_DIST = 20;
+
+/* utility functions */
+
+// exponential decay for hit reactions
+function calculateDecay(strength: number, decayRate: number, elapsed: number): number {
+    return strength * Math.exp(-decayRate * elapsed);
+}
 
 /* rendering */
 
@@ -205,6 +239,27 @@ const CAT_HIT_ROLL_AMPLITUDE = 1.05; // exaggerated roll
 const CAT_HIT_PITCH_AMPLITUDE = 0.6; // exaggerated pitch
 const CAT_MAX_ROT = Math.PI / 9; // 20 deg clamp
 
+// jump state
+type JumpState = 'grounded' | 'jumping';
+let jumpState: JumpState = 'grounded';
+let jumpTime = 0;
+let jumpCooldownTimer = 0;
+let isChargingJump = false;
+let jumpChargeStartTime = 0;
+let currentJumpHeight = JUMP_MIN_HEIGHT;
+let currentJumpDuration = JUMP_MIN_DURATION;
+
+// boost state
+let isBoosting = false;
+let currentSpeed = CAR_SPEED;
+let targetSpeed = CAR_SPEED;
+let currentFov = CAMERA_FOV_NORMAL;
+
+// suspension state
+let suspensionOffset = 0;
+let suspensionVelocity = 0;
+let targetSuspensionOffset = 0;
+
 /* pointer input */
 
 let pointerNormX = 0; // -1 to 1
@@ -223,6 +278,46 @@ window.addEventListener(
     },
     { passive: true },
 );
+
+/* jump input */
+
+function calculateJumpHeight(chargeDuration: number): number {
+    const chargeT = Math.min(chargeDuration / JUMP_MAX_CHARGE_TIME, 1);
+    // ease-out curve for diminishing returns at high charge
+    const eased = 1 - (1 - chargeT) ** 2;
+    return JUMP_MIN_HEIGHT + (JUMP_MAX_HEIGHT - JUMP_MIN_HEIGHT) * eased;
+}
+
+window.addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Spacebar') && jumpState === 'grounded' && jumpCooldownTimer <= 0 && !isChargingJump) {
+        isChargingJump = true;
+        jumpChargeStartTime = performance.now() / 1000;
+        e.preventDefault();
+    }
+    if (e.key === 'Shift') {
+        isBoosting = true;
+        e.preventDefault();
+    }
+});
+
+window.addEventListener('keyup', (e) => {
+    if ((e.key === ' ' || e.key === 'Spacebar') && isChargingJump) {
+        const now = performance.now() / 1000;
+        const chargeDuration = now - jumpChargeStartTime;
+        currentJumpHeight = calculateJumpHeight(chargeDuration);
+        // scale duration with sqrt of height for realistic physics
+        const heightT = (currentJumpHeight - JUMP_MIN_HEIGHT) / (JUMP_MAX_HEIGHT - JUMP_MIN_HEIGHT);
+        currentJumpDuration = JUMP_MIN_DURATION + (JUMP_MAX_DURATION - JUMP_MIN_DURATION) * Math.sqrt(heightT);
+        jumpState = 'jumping';
+        jumpTime = 0;
+        isChargingJump = false;
+        e.preventDefault();
+    }
+    if (e.key === 'Shift') {
+        isBoosting = false;
+        e.preventDefault();
+    }
+});
 
 /* tile system */
 
@@ -270,7 +365,7 @@ const MAX_VERTICES = 100_000;
 const MAX_INDICES = 100_000;
 
 // white phong material for obstacles with dithering based on camera proximity
-const obstacleMaterial = new THREE.MeshPhongNodeMaterial({ color: "#ccc", shininess: 10 });
+const obstacleMaterial = new THREE.MeshPhongNodeMaterial({ color: '#ccc', shininess: 10 });
 
 // dithering thresholds
 const ditherStartDistance = 3;
@@ -284,19 +379,23 @@ obstacleMaterial.colorNode = Fn(() => {
     const dy = worldPos.y.sub(camPos.y);
     const dz = worldPos.z.sub(camPos.z);
     const distance = dx.mul(dx).add(dy.mul(dy)).add(dz.mul(dz)).sqrt();
-    
+
     // calculate dither amount (0 = fully visible, 1 = fully transparent)
-    const ditherAmount = distance.sub(ditherEndDistance).div(ditherStartDistance - ditherEndDistance).oneMinus().clamp();
-    
+    const ditherAmount = distance
+        .sub(ditherEndDistance)
+        .div(ditherStartDistance - ditherEndDistance)
+        .oneMinus()
+        .clamp();
+
     If(ditherAmount.greaterThan(0.0), () => {
         // 4x4 bayer matrix for dithering pattern
         const screen = screenCoordinate.xy;
         const x = screen.x.mod(4.0).floor();
         const y = screen.y.mod(4.0).floor();
-        
+
         // bayer matrix thresholds (0-15) / 16
         const bayerIndex = y.mul(4.0).add(x).floor();
-        
+
         // bayer 4x4 matrix values
         const bayerMatrix = float(0.0).toVar();
         If(bayerIndex.equal(0.0), () => bayerMatrix.assign(0.0 / 16.0));
@@ -315,12 +414,12 @@ obstacleMaterial.colorNode = Fn(() => {
         If(bayerIndex.equal(13.0), () => bayerMatrix.assign(7.0 / 16.0));
         If(bayerIndex.equal(14.0), () => bayerMatrix.assign(13.0 / 16.0));
         If(bayerIndex.equal(15.0), () => bayerMatrix.assign(5.0 / 16.0));
-        
+
         If(ditherAmount.greaterThan(bayerMatrix), () => {
             Discard();
         });
     });
-    
+
     // return base color
     return tslVec3(0.8, 0.8, 0.8);
 })();
@@ -418,7 +517,9 @@ const coneShape = compound.create({
         {
             position: vec3.fromValues(0, CONE_BASE_HEIGHT + CONE_BODY_HEIGHT / 2, 0),
             quaternion: quat.identity(quat.create()),
-            shape: box.create({ halfExtents: vec3.fromValues(CONE_BODY_BOTTOM_RADIUS, CONE_BODY_HEIGHT / 2, CONE_BODY_BOTTOM_RADIUS) }),
+            shape: box.create({
+                halfExtents: vec3.fromValues(CONE_BODY_BOTTOM_RADIUS, CONE_BODY_HEIGHT / 2, CONE_BODY_BOTTOM_RADIUS),
+            }),
         },
     ],
 });
@@ -429,7 +530,9 @@ const groundShape = box.create({ halfExtents: vec3.fromValues(GROUND_WIDTH / 2, 
 
 // wrecking ball shapes
 const wreckingBallShape = sphere.create({ radius: WRECKING_BALL_RADIUS });
-const ropeSegmentShape = box.create({ halfExtents: vec3.fromValues(ROPE_SEGMENT_RADIUS, ROPE_SEGMENT_LENGTH / 2, ROPE_SEGMENT_RADIUS) });
+const ropeSegmentShape = box.create({
+    halfExtents: vec3.fromValues(ROPE_SEGMENT_RADIUS, ROPE_SEGMENT_LENGTH / 2, ROPE_SEGMENT_RADIUS),
+});
 
 type ObstacleEntry = { body: RigidBody; instanceId: number };
 
@@ -496,7 +599,7 @@ function spawnTile(index: number): Tile {
 
     // obstacles using batched mesh
     const obstacles: ObstacleEntry[] = [];
-    
+
     // symmetrical pyramid crate stacks - centered, wider at bottom
     const CRATE_GAP = 0.05;
     const CRATE_SPACING = CRATE_SIZE + CRATE_GAP;
@@ -634,9 +737,10 @@ function spawnTile(index: number): Tile {
                 bodyIdA: prevBody.id,
                 bodyIdB: segBody.id,
                 // pointA: bottom of previous body (local coords)
-                pointA: seg === 0 
-                    ? vec3.fromValues(0, -0.2, 0)  // bottom of anchor
-                    : vec3.fromValues(0, -ROPE_SEGMENT_LENGTH / 2, 0),  // bottom of prev segment
+                pointA:
+                    seg === 0
+                        ? vec3.fromValues(0, -0.2, 0) // bottom of anchor
+                        : vec3.fromValues(0, -ROPE_SEGMENT_LENGTH / 2, 0), // bottom of prev segment
                 // pointB: top of this segment (local coords)
                 pointB: vec3.fromValues(0, ROPE_SEGMENT_LENGTH / 2, 0),
                 minDistance: 0,
@@ -720,19 +824,20 @@ function despawnTile(tile: Tile) {
     }
 }
 
-// eagerly remove individual obstacles that are behind camera
+// eagerly remove individual obstacles that are behind camera (with shadow buffer)
 function cleanupObstaclesBehindCamera(tile: Tile, cameraZ: number) {
+    const cleanupThreshold = cameraZ + OBSTACLE_BEHIND_CAMERA_DESPAWN_DIST;
     for (let i = tile.obstacles.length - 1; i >= 0; i--) {
         const obs = tile.obstacles[i];
-        if (obs.body.position[2] > cameraZ) {
+        if (obs.body.position[2] > cleanupThreshold) {
             removeObstacle(obs);
             tile.obstacles.splice(i, 1);
         }
     }
-    
+
     for (let i = tile.wreckingBalls.length - 1; i >= 0; i--) {
         const wb = tile.wreckingBalls[i];
-        if (wb.ballBody.position[2] > cameraZ) {
+        if (wb.ballBody.position[2] > cleanupThreshold) {
             removeWreckingBall(wb);
             tile.wreckingBalls.splice(i, 1);
         }
@@ -796,7 +901,7 @@ const listener: Listener = {
 
         // only override if this hit is stronger than the current decaying one
         const now = performance.now() / 1000;
-        const remaining = hitStrength * Math.exp(-HIT_DECAY * (now - hitTime));
+        const remaining = calculateDecay(hitStrength, HIT_DECAY, now - hitTime);
         const sign = isCarA ? 1 : -1;
         if (strength > remaining) {
             hitTime = now;
@@ -807,7 +912,7 @@ const listener: Listener = {
         }
 
         // cat has its own hit state — more dramatic, slower decay
-        const catRemaining = catHitStrength * Math.exp(-CAT_HIT_DECAY * (now - catHitTime));
+        const catRemaining = calculateDecay(catHitStrength, CAT_HIT_DECAY, now - catHitTime);
         if (strength > catRemaining) {
             catHitTime = now;
             catHitStrength = strength;
@@ -818,31 +923,129 @@ const listener: Listener = {
 };
 
 function updateCarMovement(dt: number) {
-    carZ -= CAR_SPEED * dt;
+    // only update target speed when grounded (maintain speed in air)
+    if (jumpState === 'grounded') {
+        targetSpeed = isBoosting ? CAR_SPEED * CAR_BOOST_MULTIPLIER : CAR_SPEED;
+    }
+    
+    currentSpeed += (targetSpeed - currentSpeed) * Math.min(1, CAR_SPEED_LERP * dt);
+    
+    // map current speed to FOV (lerp based on actual speed, not button state)
+    const speedT = (currentSpeed - CAR_SPEED) / (CAR_SPEED * CAR_BOOST_MULTIPLIER - CAR_SPEED);
+    const targetFov = CAMERA_FOV_NORMAL + (CAMERA_FOV_BOOST - CAMERA_FOV_NORMAL) * Math.max(0, Math.min(1, speedT));
+    currentFov += (targetFov - currentFov) * Math.min(1, CAMERA_FOV_LERP * dt);
+    camera.fov = currentFov;
+    camera.updateProjectionMatrix();
+
+    carZ -= currentSpeed * dt;
 
     const targetX = pointerNormX * CAR_X_RANGE;
     const prevX = carX;
     carX += (targetX - carX) * Math.min(1, CAR_X_LERP * dt);
+
+    // update jump cooldown
+    if (jumpCooldownTimer > 0) {
+        jumpCooldownTimer -= dt;
+    }
+
+    // handle jump charging
+    if (isChargingJump) {
+        const now = performance.now() / 1000;
+        const chargeDuration = now - jumpChargeStartTime;
+        const chargeT = Math.min(chargeDuration / JUMP_MAX_CHARGE_TIME, 1);
+
+        // progressive suspension compression during charge
+        targetSuspensionOffset = SUSPENSION_COMPRESS_START * (0.5 + 0.5 * chargeT);
+    }
+
+    // update jump state
+    let carY = CAR_HALF_EXTENTS[1];
+    let pitchRotation = 0;
+
+    // apply charge tilt if charging
+    if (isChargingJump) {
+        const now = performance.now() / 1000;
+        const chargeDuration = now - jumpChargeStartTime;
+        const chargeT = Math.min(chargeDuration / JUMP_MAX_CHARGE_TIME, 1);
+        pitchRotation = JUMP_CHARGE_TILT * chargeT;
+    }
+
+    if (jumpState === 'jumping') {
+        jumpTime += dt;
+
+        if (jumpTime >= currentJumpDuration) {
+            // landing
+            jumpState = 'grounded';
+            jumpTime = 0;
+            jumpCooldownTimer = JUMP_COOLDOWN;
+            targetSuspensionOffset = SUSPENSION_COMPRESS_LAND;
+        } else {
+            // animate jump
+            const t = jumpTime / currentJumpDuration;
+
+            // parabolic height curve: peaks at t=0.5
+            const heightProgress = 4 * t * (1 - t);
+            carY = CAR_HALF_EXTENTS[1] + currentJumpHeight * heightProgress;
+
+            // no rotation during jump - let the arc speak for itself
+            pitchRotation = 0;
+
+            // suspension animation during jump
+            if (t < 0.05) {
+                targetSuspensionOffset = SUSPENSION_COMPRESS_START;
+            } else if (t < 0.15) {
+                targetSuspensionOffset = SUSPENSION_EXTEND_LAUNCH;
+            } else if (t < 0.7) {
+                targetSuspensionOffset = 0;
+            } else {
+                targetSuspensionOffset = -0.05;
+            }
+        }
+    } else {
+        // grounded - return suspension to neutral (if not charging)
+        if (!isChargingJump) {
+            const timeSinceLanding = JUMP_COOLDOWN - jumpCooldownTimer;
+            if (timeSinceLanding < 0.5) {
+                // keep compression for a bit after landing
+            } else {
+                targetSuspensionOffset = 0;
+            }
+        }
+    }
 
     // subtle yaw from lateral movement
     // guard against division by very small dt to prevent extreme lateral velocity values
     const lateralV = dt > 0.001 ? (carX - prevX) / dt : 0;
     const yaw = Math.atan2(-lateralV, CAR_SPEED) * 0.5;
 
-    vec3.set(_targetPos, carX, CAR_HALF_EXTENTS[1], carZ);
-    quat.setAxisAngle(_targetQuat, _yAxis, yaw);
-    rigidBody.moveKinematic(carBody, _targetPos, _targetQuat, dt);
+    // combine yaw with pitch from jump
+    const rotQuat = quat.create();
+    quat.setAxisAngle(rotQuat, _yAxis, yaw);
+    if (pitchRotation !== 0) {
+        const pitchQuat = quat.create();
+        const xAxis = vec3.fromValues(1, 0, 0);
+        quat.setAxisAngle(pitchQuat, xAxis, pitchRotation);
+        quat.multiply(rotQuat, rotQuat, pitchQuat);
+    }
+
+    vec3.set(_targetPos, carX, carY, carZ);
+    rigidBody.moveKinematic(carBody, _targetPos, rotQuat, dt);
 
     return lateralV;
 }
 
-function updateCarMesh(now: number) {
-    carObject.position.set(carBody.position[0], carBody.position[1] + 0.1, carBody.position[2]);
+function updateCarMesh(now: number, dt: number) {
+    // update suspension spring
+    suspensionVelocity += (targetSuspensionOffset - suspensionOffset) * SUSPENSION_SPRING_K * dt;
+    suspensionVelocity *= SUSPENSION_DAMPING;
+    suspensionOffset += suspensionVelocity * dt;
+
+    carObject.position.set(carBody.position[0], carBody.position[1] + 0.1 + suspensionOffset, carBody.position[2]);
     carObject.quaternion.set(carBody.quaternion[0], carBody.quaternion[1], carBody.quaternion[2], carBody.quaternion[3]);
 
     // chassis hit reaction — decaying oscillation
     const timeSinceHit = now / 1000 - hitTime;
-    const envelope = hitStrength * Math.exp(-HIT_DECAY * timeSinceHit);
+    const envelope = calculateDecay(hitStrength, HIT_DECAY, timeSinceHit);
     if (envelope > 0.001) {
         const osc = Math.sin(HIT_FREQ * timeSinceHit);
         carObject.position.y += osc * envelope * HIT_Y_AMPLITUDE;
@@ -870,7 +1073,7 @@ function updateCatMesh(now: number, lateralV: number, dt: number) {
 
     // cat hit reaction
     const catTimeSinceHit = now / 1000 - catHitTime;
-    const catEnvelope = catHitStrength * Math.exp(-CAT_HIT_DECAY * catTimeSinceHit);
+    const catEnvelope = calculateDecay(catHitStrength, CAT_HIT_DECAY, catTimeSinceHit);
     if (catEnvelope > 0.001) {
         const catOsc = Math.sin(CAT_HIT_FREQ * catTimeSinceHit);
         catObject.position.y += catOsc * catEnvelope * CAT_HIT_Y_AMPLITUDE;
@@ -879,9 +1082,18 @@ function updateCatMesh(now: number, lateralV: number, dt: number) {
     }
 
     // clamp cat rotation
-    catObject.rotation.x = Math.max(catBaseRotation.x - CAT_MAX_ROT, Math.min(catBaseRotation.x + CAT_MAX_ROT, catObject.rotation.x));
-    catObject.rotation.y = Math.max(catBaseRotation.y - CAT_MAX_ROT, Math.min(catBaseRotation.y + CAT_MAX_ROT, catObject.rotation.y));
-    catObject.rotation.z = Math.max(catBaseRotation.z - CAT_MAX_ROT, Math.min(catBaseRotation.z + CAT_MAX_ROT, catObject.rotation.z));
+    catObject.rotation.x = Math.max(
+        catBaseRotation.x - CAT_MAX_ROT,
+        Math.min(catBaseRotation.x + CAT_MAX_ROT, catObject.rotation.x),
+    );
+    catObject.rotation.y = Math.max(
+        catBaseRotation.y - CAT_MAX_ROT,
+        Math.min(catBaseRotation.y + CAT_MAX_ROT, catObject.rotation.y),
+    );
+    catObject.rotation.z = Math.max(
+        catBaseRotation.z - CAT_MAX_ROT,
+        Math.min(catBaseRotation.z + CAT_MAX_ROT, catObject.rotation.z),
+    );
 }
 
 function syncObstacleMeshes() {
@@ -890,8 +1102,13 @@ function syncObstacleMeshes() {
             const b = obs.body;
             obstacleBatchUpdate(
                 obs.instanceId,
-                b.position[0], b.position[1], b.position[2],
-                b.quaternion[0], b.quaternion[1], b.quaternion[2], b.quaternion[3]
+                b.position[0],
+                b.position[1],
+                b.position[2],
+                b.quaternion[0],
+                b.quaternion[1],
+                b.quaternion[2],
+                b.quaternion[3],
             );
         }
         for (const wb of tile.wreckingBalls) {
@@ -899,15 +1116,25 @@ function syncObstacleMeshes() {
                 const b = seg.body;
                 obstacleBatchUpdate(
                     seg.instanceId,
-                    b.position[0], b.position[1], b.position[2],
-                    b.quaternion[0], b.quaternion[1], b.quaternion[2], b.quaternion[3]
+                    b.position[0],
+                    b.position[1],
+                    b.position[2],
+                    b.quaternion[0],
+                    b.quaternion[1],
+                    b.quaternion[2],
+                    b.quaternion[3],
                 );
             }
             const ball = wb.ballBody;
             obstacleBatchUpdate(
                 wb.ballInstanceId,
-                ball.position[0], ball.position[1], ball.position[2],
-                ball.quaternion[0], ball.quaternion[1], ball.quaternion[2], ball.quaternion[3]
+                ball.position[0],
+                ball.position[1],
+                ball.position[2],
+                ball.quaternion[0],
+                ball.quaternion[1],
+                ball.quaternion[2],
+                ball.quaternion[3],
             );
         }
     }
@@ -933,7 +1160,7 @@ function update() {
 
     const lateralV = updateCarMovement(dt);
     updateWorld(world, listener, dt);
-    updateCarMesh(now);
+    updateCarMesh(now, dt);
     updateCatMesh(now, lateralV, dt);
     updateTiles(carZ);
     syncObstacleMeshes();
