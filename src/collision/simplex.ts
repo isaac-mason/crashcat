@@ -34,9 +34,17 @@ export const createSimplex = (): Simplex => ({
 export const copySimplex = (out: Simplex, input: Simplex): Simplex => {
     out.size = input.size;
     for (let i = 0; i < input.size; i++) {
-        vec3.copy(out.points[i].y, input.points[i].y);
-        vec3.copy(out.points[i].p, input.points[i].p);
-        vec3.copy(out.points[i].q, input.points[i].q);
+        const src = input.points[i];
+        const dst = out.points[i];
+        dst.y[0] = src.y[0];
+        dst.y[1] = src.y[1];
+        dst.y[2] = src.y[2];
+        dst.p[0] = src.p[0];
+        dst.p[1] = src.p[1];
+        dst.p[2] = src.p[2];
+        dst.q[0] = src.q[0];
+        dst.q[1] = src.q[1];
+        dst.q[2] = src.q[2];
     }
     return out;
 };
