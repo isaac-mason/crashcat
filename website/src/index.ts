@@ -244,6 +244,7 @@ type JumpState = 'grounded' | 'jumping';
 let jumpState: JumpState = 'grounded';
 let jumpTime = 0;
 let jumpCooldownTimer = 0;
+let landingTime = 0; // track when we landed
 let isChargingJump = false;
 let jumpChargeStartTime = 0;
 let currentJumpHeight = JUMP_MIN_HEIGHT;
@@ -962,16 +963,9 @@ function updateCarMovement(dt: number) {
     }
 
     // update jump state
-    let carY = CAR_HALF_EXTENTS[1];
+    const baseCarY = CAR_HALF_EXTENTS[1];
+    let carY: number;
     let pitchRotation = 0;
-
-    // apply charge tilt if charging
-    if (isChargingJump) {
-        const now = performance.now() / 1000;
-        const chargeDuration = now - jumpChargeStartTime;
-        const chargeT = Math.min(chargeDuration / JUMP_MAX_CHARGE_TIME, 1);
-        pitchRotation = JUMP_CHARGE_TILT * chargeT;
-    }
 
     if (jumpState === 'jumping') {
         jumpTime += dt;
@@ -979,19 +973,16 @@ function updateCarMovement(dt: number) {
         if (jumpTime >= currentJumpDuration) {
             // landing
             jumpState = 'grounded';
+            landingTime = performance.now() / 1000;
             jumpTime = 0;
             jumpCooldownTimer = JUMP_COOLDOWN;
             targetSuspensionOffset = SUSPENSION_COMPRESS_LAND;
+            carY = baseCarY;
         } else {
             // animate jump
-            const t = jumpTime / currentJumpDuration;
-
-            // parabolic height curve: peaks at t=0.5
+            const t = Math.min(jumpTime / currentJumpDuration, 1.0);
             const heightProgress = 4 * t * (1 - t);
-            carY = CAR_HALF_EXTENTS[1] + currentJumpHeight * heightProgress;
-
-            // no rotation during jump - let the arc speak for itself
-            pitchRotation = 0;
+            carY = baseCarY + currentJumpHeight * heightProgress;
 
             // suspension animation during jump
             if (t < 0.05) {
@@ -1005,18 +996,22 @@ function updateCarMovement(dt: number) {
             }
         }
     } else {
-        // grounded - return suspension to neutral (if not charging)
-        if (!isChargingJump) {
-            const timeSinceLanding = JUMP_COOLDOWN - jumpCooldownTimer;
-            if (timeSinceLanding < 0.5) {
-                // keep compression for a bit after landing
-            } else {
-                targetSuspensionOffset = 0;
-            }
+        // grounded
+        carY = baseCarY;
+        
+        const now = performance.now() / 1000;
+        const timeSinceLanding = now - landingTime;
+
+        if (isChargingJump) {
+            const chargeDuration = now - jumpChargeStartTime;
+            const chargeT = Math.min(chargeDuration / JUMP_MAX_CHARGE_TIME, 1);
+            pitchRotation = JUMP_CHARGE_TILT * chargeT;
+        } else if (timeSinceLanding >= 0.3) {
+            // after 0.3s grounded, reset suspension to neutral
+            targetSuspensionOffset = 0;
         }
     }
 
-    // subtle yaw from lateral movement
     // guard against division by very small dt to prevent extreme lateral velocity values
     const lateralV = dt > 0.001 ? (carX - prevX) / dt : 0;
     const yaw = Math.atan2(-lateralV, CAR_SPEED) * 0.5;
