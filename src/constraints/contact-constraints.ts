@@ -414,23 +414,6 @@ function calculateNormalVelocityBias(
     return normalVelocityBias;
 }
 
-/** compute tangent vectors perpendicular to contact normal */
-function computeTangents(normal: Vec3, tangent1: Vec3, tangent2: Vec3): void {
-    const x = normal[0];
-    const y = normal[1];
-    const z = normal[2];
-
-    if (Math.abs(x) > Math.abs(y)) {
-        const len = Math.sqrt(x * x + z * z);
-        vec3.set(tangent1, z / len, 0, -x / len);
-    } else {
-        const len = Math.sqrt(y * y + z * z);
-        vec3.set(tangent1, 0, z / len, -y / len);
-    }
-
-    vec3.cross(tangent2, normal, tangent1);
-}
-
 const _addContactConstraint_invQuatA = /* @__PURE__ */ quat.create();
 const _addContactConstraint_invQuatB = /* @__PURE__ */ quat.create();
 const _addContactConstraint_relativePointOnA = /* @__PURE__ */ vec3.create();
@@ -538,7 +521,28 @@ export function addContactConstraint(
 
         // normal and tangents
         vec3.copy(constraint.normal, contactManifold.worldSpaceNormal);
-        computeTangents(constraint.normal, constraint.tangent1, constraint.tangent2);
+        
+        // compute orthonormal tangent basis from normal
+        const nx = constraint.normal[0];
+        const ny = constraint.normal[1];
+        const nz = constraint.normal[2];
+
+        if (Math.abs(nx) > Math.abs(ny)) {
+            const tangentLen = Math.sqrt(nx * nx + nz * nz);
+            constraint.tangent1[0] = nz / tangentLen;
+            constraint.tangent1[1] = 0;
+            constraint.tangent1[2] = -nx / tangentLen;
+        } else {
+            const tangentLen = Math.sqrt(ny * ny + nz * nz);
+            constraint.tangent1[0] = 0;
+            constraint.tangent1[1] = nz / tangentLen;
+            constraint.tangent1[2] = -ny / tangentLen;
+        }
+
+        // cross product: normal × tangent1
+        constraint.tangent2[0] = ny * constraint.tangent1[2] - nz * constraint.tangent1[1];
+        constraint.tangent2[1] = nz * constraint.tangent1[0] - nx * constraint.tangent1[2];
+        constraint.tangent2[2] = nx * constraint.tangent1[1] - ny * constraint.tangent1[0];
 
         // set material properties from settings (may have been modified by listener)
         constraint.friction = contactSettings.combinedFriction;
@@ -960,7 +964,7 @@ export function solveVelocityConstraintsForIsland(
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
-            // inlined: solveVelocityConstraintWithMassOverride
+            // inlined: equiv to solveVelocityConstraintWithMassOverride with simplified clamp
             const totalLambda = axisConstraintPart.getTotalLambda(cp.normalConstraint, bodyA, bodyB, normal);
             // clamp to [0, ∞) → applyLambda
             // contacts can only push, never pull
