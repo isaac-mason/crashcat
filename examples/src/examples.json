@@ -27,6 +27,10 @@
         "title": "Cluster",
         "tags": ["world", "physics", "cluster", "velocity"]
     },
+    "example-cube-heap": {
+        "title": "Cube Heap",
+        "tags": ["world", "physics", "cube-heap"]
+    },
     "example-ccd": {
         "title": "Continuous Collision Detection",
         "tags": ["world", "physics", "ccd", "continuous", "collision", "dynamics"]
@@ -142,10 +146,6 @@
     "example-convex-hull-builder": {
         "title": "Convex Hull Builder",
         "tags": ["convex-hull", "shapes", "geometry", "builder"]
-    },
-    "example-cube-heap": {
-        "title": "Cube Heap",
-        "tags": ["world", "physics", "cube-heap"]
     },
     "example-test-scenarios": {
         "title": "Test Scenarios",
