@@ -311,7 +311,6 @@ export function pruneContactPoints(manifold: ContactManifold, penetrationAxis: V
 }
 
 const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
-
 const _manifoldBetweenTwoFaces_planeOrigin = /* @__PURE__ */ vec3.create();
 const _manifoldBetweenTwoFaces_edgeV1 = /* @__PURE__ */ vec3.create();
 const _manifoldBetweenTwoFaces_edgeV2 = /* @__PURE__ */ vec3.create();
