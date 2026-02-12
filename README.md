@@ -15,15 +15,15 @@ crashcat is physics engine for javascript, built for games, simulations, and cre
 **Features**
 
 - 🎯 rigid body simulation
-- 📦 support for various convex shapes, triangle mesh shapes, custom shapes
+- 📦 support for convex shapes, triangle mesh shapes, custom shapes
 - 🔗 constraints with motors and springs (hinge, slider, distance, point, fixed, cone, swing-twist, six-dof)
 - ⚡ continuous collision detection (ccd) for fast-moving objects
-- 🎚️ flexible collision filtering
+- 🎭 flexible collision filtering
 - 🔧 hooks for listening to and modifying physics events
 - 🌳 broadphase spatial acceleration with dynamic bvh
-- 😴 sleeping/activation system for performance
-- 👻 sensor bodies for trigger volumes
-- 🌲 pure javascript, written to be highly tree-shakeable
+- 😴 rigid body sleeping
+- 👻 sensor rigid bodies
+- 🌲 pure javascript, written to be highly tree-shakeable, only pay for what you use
 - 🔌 works with any javascript engine/library - babylon.js, playcanvas, three.js, or your own engine
 
 **API Documentation**
