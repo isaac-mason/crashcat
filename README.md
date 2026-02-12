@@ -87,19 +87,25 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
       </a>
     </td>
     <td align="center">
+      <a href="https://crashcat.dev/examples#example-cube-heap">
+        <img src="./examples/public/screenshots/example-cube-heap.png" width="180" height="120" style="object-fit:cover;"/><br/>
+        Cube Heap
+      </a>
+    </td>
+    <td align="center">
       <a href="https://crashcat.dev/examples#example-ccd">
         <img src="./examples/public/screenshots/example-ccd.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Continuous Collision Detection
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-kinematic">
         <img src="./examples/public/screenshots/example-kinematic.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Kinematic Body
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-constraints">
         <img src="./examples/public/screenshots/example-constraints.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -112,14 +118,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Constraint Motors
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-hinge-motor">
         <img src="./examples/public/screenshots/example-hinge-motor.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Hinge Motor
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-voxel-triangle-mesh">
         <img src="./examples/public/screenshots/example-voxel-triangle-mesh.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -132,14 +138,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Voxel Custom Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-restitution">
         <img src="./examples/public/screenshots/example-restitution.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Restitution
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-friction">
         <img src="./examples/public/screenshots/example-friction.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -152,14 +158,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Conveyor Belt
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-linear-damping">
         <img src="./examples/public/screenshots/example-linear-damping.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Linear Damping
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-angular-damping">
         <img src="./examples/public/screenshots/example-angular-damping.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -172,14 +178,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Gravity Factor
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-mass-properties">
         <img src="./examples/public/screenshots/example-mass-properties.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Mass Properties
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-add-impulse-at-position">
         <img src="./examples/public/screenshots/example-add-impulse-at-position.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -192,14 +198,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Cast Ray
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-shape">
         <img src="./examples/public/screenshots/example-cast-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Cast Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-point">
         <img src="./examples/public/screenshots/example-collide-point.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -212,14 +218,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Collide Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-sensor">
         <img src="./examples/public/screenshots/example-sensor.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Sensor
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-object-layer-filtering">
         <img src="./examples/public/screenshots/example-object-layer-filtering.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -232,14 +238,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Collision Filtering
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-shape-vs-shape">
         <img src="./examples/public/screenshots/example-collide-shape-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Collide Shape vs Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-point-vs-shape">
         <img src="./examples/public/screenshots/example-collide-point-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -252,14 +258,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Cast Ray vs Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-shape-vs-shape">
         <img src="./examples/public/screenshots/example-cast-shape-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Cast Shape vs Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-gjk">
         <img src="./examples/public/screenshots/example-gjk.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -272,18 +278,12 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Get Supporting Face
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-convex-hull-builder">
         <img src="./examples/public/screenshots/example-convex-hull-builder.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Convex Hull Builder
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="https://crashcat.dev/examples#example-cube-heap">
-        <img src="./examples/public/screenshots/example-cube-heap.png" width="180" height="120" style="object-fit:cover;"/><br/>
-        Cube Heap
       </a>
     </td>
     <td align="center">
@@ -1437,6 +1437,25 @@ const listener: Listener = {
 
 // pass listener to updateWorld
 updateWorld(world, listener, 1 / 60);
+
+// WARNING: do NOT remove bodies inside listener callbacks!
+// the physics system is in the middle of processing contacts and removing bodies
+// will corrupt internal state. instead, store the body IDs and remove them after
+// updateWorld completes:
+//
+// const bodiesToRemove: number[] = [];
+// const listener: Listener = {
+//     onContactAdded: (bodyA, bodyB) => {
+//         if (shouldDestroy(bodyA)) {
+//             bodiesToRemove.push(bodyA.id);
+//         }
+//     }
+// };
+// updateWorld(world, listener, 1 / 60);
+// for (const id of bodiesToRemove) {
+//     removeBody(world, id);
+// }
+// bodiesToRemove.length = 0;
 ```
 
 ### Body Pair Validation
@@ -2556,7 +2575,7 @@ crashcat is a good choice when:
 
 - **You want simplicity**: crashcat is pure JavaScript - no manual memory management or awkward wasm APIs. Everything is just JavaScript objects you can inspect, debug, and serialize naturally.
 
-**When to choose WASM instead**: If you need absolute maximum performance for very large simulations (10k+ bodies), and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
+**When to choose WASM instead**: If you need absolute maximum performance, and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
 
 ### Can I use crashcat with [my favorite framework]?
 

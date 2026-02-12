@@ -768,7 +768,7 @@ crashcat is a good choice when:
 
 - **You want simplicity**: crashcat is pure JavaScript - no manual memory management or awkward wasm APIs. Everything is just JavaScript objects you can inspect, debug, and serialize naturally.
 
-**When to choose WASM instead**: If you need absolute maximum performance for very large simulations (10k+ bodies), and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
+**When to choose WASM instead**: If you need absolute maximum performance, and don't need to interact with / customize the simulation deeply, WASM engines can be a better choice. Although at a certain point, the stronger architecture would be to write an engine that can live entirely in WASM, rather than just having the physics in WASM and all other state in javascript.
 
 ### Can I use crashcat with [my favorite framework]?
 
