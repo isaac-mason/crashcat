@@ -1,6 +1,6 @@
 {
     "name": "crashcat",
-    "version": "0.0.1-rc.2",
+    "version": "0.0.1-rc.3",
     "author": "Isaac Mason <isaac@isaacmason.com>",
     "description": "a 3d physics library for games and simulations",
     "keywords": [
