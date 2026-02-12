@@ -2598,3 +2598,4 @@ crashcat stands on the shoulders of giants! Many ideas and implementations were 
 - Bullet Physics: https://github.com/bulletphysics/bullet3 (broadphase, dbvt)
 - Bounce: https://codeberg.org/perplexdotgg/bounce (influenced crashcat's narrowphase design)
 - three-mesh-bvh: https://github.com/gkjohnson/three-mesh-bvh (referenced for triangle mesh bvh building and traversal)
+
