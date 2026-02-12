@@ -1,7 +1,7 @@
 ![cover](./docs/cover.png)
 
 [![Version](https://img.shields.io/npm/v/crashcat?style=for-the-badge)](https://www.npmjs.com/package/crashcat)
-![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/isaac-mason/crashcat/main.yml?style=for-the-badge)
+![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/isaac-mason/crashcat/build-and-deploy.yml?style=for-the-badge)
 [![Downloads](https://img.shields.io/npm/dt/crashcat.svg?style=for-the-badge)](https://www.npmjs.com/package/crashcat)
 
 ```bash
