@@ -1,22 +1,22 @@
-import { euler, quat, vec3 } from 'mathcat';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import {
     addBroadphaseLayer,
     addObjectLayer,
     box,
     capsule,
-    sphere,
     createWorld,
     createWorldSettings,
     dof,
     enableCollision,
     MotionType,
-    rigidBody,
-    updateWorld,
     registerAll,
+    rigidBody,
+    sphere,
+    updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
+import { euler, quat, vec3 } from 'mathcat';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
 
 /* rendering */
@@ -234,7 +234,6 @@ scene.add(debugRendererState.object3d);
 
 const maxDelta = 1 / 30;
 let lastTime = performance.now();
-let frame = 0;
 
 function resetBodies() {
     for (const data of bodies) {
@@ -257,18 +256,8 @@ function animate() {
     updateWorld(world, undefined, delta);
     debugUI.endPerf(ui);
     debugUI.updateStats(ui, world);
-    frame++;
 
     debugRenderer.update(debugRendererState, world);
-
-    const allStopped = bodies.every((data) => {
-        const vz = Math.abs(data.body.motionProperties.linearVelocity[2]);
-        return vz < 0.01 || data.body.position[2] > 15;
-    });
-
-    if (allStopped && frame > 60) {
-        setTimeout(resetBodies, 1000);
-    }
 
     orbitControls.update();
     renderer.render(scene, camera);
