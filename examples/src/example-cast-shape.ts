@@ -1,15 +1,10 @@
-import GUI from 'lil-gui';
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, quat, vec3 } from 'mathcat';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import {
     addBroadphaseLayer,
     addObjectLayer,
     box,
+    CastShapeStatus,
     capsule,
     castShape,
-    CastShapeStatus,
     createClosestCastShapeCollector,
     createDefaultCastShapeSettings,
     createWorld,
@@ -17,8 +12,8 @@ import {
     enableCollision,
     filter,
     MotionType,
-    registerAll,
     type RigidBody,
+    registerAll,
     rigidBody,
     type Shape,
     sphere,
@@ -26,6 +21,11 @@ import {
     type World,
 } from 'crashcat';
 import { createShapeHelper, debugRenderer } from 'crashcat/three';
+import GUI from 'lil-gui';
+import type { Quat, Vec3 } from 'mathcat';
+import { euler, quat, vec3 } from 'mathcat';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as debugUI from './debug/debug-ui';
 
 type MeshObject = {
@@ -102,7 +102,6 @@ type ShapeCasterObject = {
     castShapeScale: Vec3;
 };
 
-const _vector3 = new THREE.Vector3();
 const _deltaQuat = quat.create();
 
 function createCastShapeForType(shapeType: CastShapeType): Shape {
@@ -230,23 +229,23 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
     );
 
     const hadHit = state.shapeCollector.hit.status === CastShapeStatus.COLLIDING;
-    
+
     if (hadHit) {
         // calculate where the shape's center was at the moment of contact
         const hitPosWorld = vec3.create();
         vec3.scaleAndAdd(hitPosWorld, sc.position, sc.displacement, state.shapeCollector.hit.fraction);
-        
+
         // set hit mesh at the calculated center position
         sc.hitMesh.position.set(hitPosWorld[0], hitPosWorld[1], hitPosWorld[2]);
-        
+
         // line goes from origin to hit position
         const lineCenter = new THREE.Vector3();
         lineCenter.lerpVectors(sc.originMesh.position, sc.hitMesh.position, 0.5);
         sc.lineMesh.position.copy(lineCenter);
-        
+
         const lineLength = sc.originMesh.position.distanceTo(sc.hitMesh.position);
         sc.lineMesh.scale.set(1, lineLength, 1);
-        
+
         // orient line from origin to hit
         const lineDir = new THREE.Vector3();
         lineDir.subVectors(sc.hitMesh.position, sc.originMesh.position);
@@ -260,14 +259,14 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
         const endPosWorld = vec3.create();
         vec3.add(endPosWorld, sc.position, sc.displacement);
         sc.hitMesh.position.set(endPosWorld[0], endPosWorld[1], endPosWorld[2]);
-        
+
         // line goes from origin to center
         const lineCenter = new THREE.Vector3();
         lineCenter.lerpVectors(sc.originMesh.position, sc.hitMesh.position, 0.5);
         sc.lineMesh.position.copy(lineCenter);
-        
+
         sc.lineMesh.scale.set(1, pointDist, 1);
-        
+
         // orient line from origin to center
         const lineDir = new THREE.Vector3();
         lineDir.subVectors(sc.hitMesh.position, sc.originMesh.position);
