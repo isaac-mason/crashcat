@@ -11,6 +11,7 @@
         "game"
     ],
     "license": "MIT",
+    "repository": "github:isaac-mason/crashcat",
     "homepage": "https://github.com/isaac-mason/crashcat",
     "bugs": {
         "url": "https://github.com/isaac-mason/crashcat/issues"
@@ -34,10 +35,6 @@
         "LICENSE",
         "README.md"
     ],
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/isaac-mason/crashcat.git"
-    },
     "scripts": {
         "build": "rm -rf ./dist && rollup --config rollup.config.mjs",
         "format": "biome format --write src/. tst/.",
