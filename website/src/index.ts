@@ -459,18 +459,18 @@ const DASH_COLOR = new THREE.Color(0xaaaaaa);
 
 const OBSTACLE_COLOR = new THREE.Color(0xffffff);
 
-const _m = new THREE.Matrix4();
-const _pos = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _s = new THREE.Vector3(1, 1, 1);
+const _batch_matrix = new THREE.Matrix4();
+const _batch_pos = new THREE.Vector3();
+const _batch_quat = new THREE.Quaternion();
+const _batch_scale = new THREE.Vector3(1, 1, 1);
 
 function batchAdd(geoId: number, color: THREE.Color, x: number, y: number, z: number): number {
     const id = tileBatch.addInstance(geoId);
-    _pos.set(x, y, z);
-    _q.identity();
-    _s.set(1, 1, 1);
-    _m.compose(_pos, _q, _s);
-    tileBatch.setMatrixAt(id, _m);
+    _batch_pos.set(x, y, z);
+    _batch_quat.identity();
+    _batch_scale.set(1, 1, 1);
+    _batch_matrix.compose(_batch_pos, _batch_quat, _batch_scale);
+    tileBatch.setMatrixAt(id, _batch_matrix);
     tileBatch.setColorAt(id, color);
     return id;
 }
@@ -481,11 +481,11 @@ function batchRemove(id: number): void {
 
 function obstacleBatchAdd(geoId: number, x: number, y: number, z: number): number {
     const id = obstacleBatch.addInstance(geoId);
-    _pos.set(x, y, z);
-    _q.identity();
-    _s.set(1, 1, 1);
-    _m.compose(_pos, _q, _s);
-    obstacleBatch.setMatrixAt(id, _m);
+    _batch_pos.set(x, y, z);
+    _batch_quat.identity();
+    _batch_scale.set(1, 1, 1);
+    _batch_matrix.compose(_batch_pos, _batch_quat, _batch_scale);
+    obstacleBatch.setMatrixAt(id, _batch_matrix);
     obstacleBatch.setColorAt(id, OBSTACLE_COLOR);
     return id;
 }
@@ -495,11 +495,11 @@ function obstacleBatchRemove(id: number): void {
 }
 
 function obstacleBatchUpdate(id: number, x: number, y: number, z: number, qx: number, qy: number, qz: number, qw: number): void {
-    _pos.set(x, y, z);
-    _q.set(qx, qy, qz, qw);
-    _s.set(1, 1, 1);
-    _m.compose(_pos, _q, _s);
-    obstacleBatch.setMatrixAt(id, _m);
+    _batch_pos.set(x, y, z);
+    _batch_quat.set(qx, qy, qz, qw);
+    _batch_scale.set(1, 1, 1);
+    _batch_matrix.compose(_batch_pos, _batch_quat, _batch_scale);
+    obstacleBatch.setMatrixAt(id, _batch_matrix);
 }
 
 const crateShape = box.create({ halfExtents: CRATE_HALF_EXTENTS });
@@ -867,9 +867,12 @@ function updateTiles(carZ: number) {
 
 /* simulation */
 
-const _targetPos = vec3.create();
-const _targetQuat = quat.create();
-const _yAxis = vec3.fromValues(0, 1, 0);
+// scratch variables for updateCarMovement
+const _updateCarMovement_targetPos = vec3.create();
+const _updateCarMovement_yAxis = vec3.fromValues(0, 1, 0);
+const _updateCarMovement_xAxis = vec3.fromValues(1, 0, 0);
+const _updateCarMovement_rotQuat = quat.create();
+const _updateCarMovement_pitchQuat = quat.create();
 
 let prevTime = performance.now();
 let carZ = 0;
@@ -1019,17 +1022,14 @@ function updateCarMovement(dt: number) {
     const yaw = Math.atan2(-lateralV, CAR_SPEED) * 0.5;
 
     // combine yaw with pitch from jump
-    const rotQuat = quat.create();
-    quat.setAxisAngle(rotQuat, _yAxis, yaw);
+    quat.setAxisAngle(_updateCarMovement_rotQuat, _updateCarMovement_yAxis, yaw);
     if (pitchRotation !== 0) {
-        const pitchQuat = quat.create();
-        const xAxis = vec3.fromValues(1, 0, 0);
-        quat.setAxisAngle(pitchQuat, xAxis, pitchRotation);
-        quat.multiply(rotQuat, rotQuat, pitchQuat);
+        quat.setAxisAngle(_updateCarMovement_pitchQuat, _updateCarMovement_xAxis, pitchRotation);
+        quat.multiply(_updateCarMovement_rotQuat, _updateCarMovement_rotQuat, _updateCarMovement_pitchQuat);
     }
 
-    vec3.set(_targetPos, carX, carY, carZ);
-    rigidBody.moveKinematic(carBody, _targetPos, rotQuat, dt);
+    vec3.set(_updateCarMovement_targetPos, carX, carY, carZ);
+    rigidBody.moveKinematic(carBody, _updateCarMovement_targetPos, _updateCarMovement_rotQuat, dt);
 
     return lateralV;
 }
