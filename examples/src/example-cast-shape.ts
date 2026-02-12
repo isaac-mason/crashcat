@@ -2,6 +2,7 @@ import GUI from 'lil-gui';
 import type { Quat, Vec3 } from 'mathcat';
 import { euler, quat, vec3 } from 'mathcat';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import {
     addBroadphaseLayer,
     addObjectLayer,
@@ -50,6 +51,7 @@ type State = {
     deltaTime: number;
     debugRendererState: ReturnType<typeof debugRenderer.init>;
     ui: ReturnType<typeof debugUI.init>;
+    controls: OrbitControls;
 };
 
 let state: State;
@@ -88,8 +90,8 @@ const params = {
 
 type ShapeCasterObject = {
     rootObject: THREE.Object3D;
-    originMesh: THREE.Mesh;
-    hitMesh: THREE.Mesh;
+    originMesh: THREE.Object3D;
+    hitMesh: THREE.Object3D;
     lineMesh: THREE.Mesh;
     quaternion: Quat;
     rotationSpeed: Vec3;
@@ -114,25 +116,16 @@ function createCastShapeForType(shapeType: CastShapeType): Shape {
     }
 }
 
-function createShapeVisualization(shapeType: CastShapeType): THREE.Mesh {
-    let geometry: THREE.BufferGeometry;
-    switch (shapeType) {
-        case 'sphere':
-            geometry = new THREE.SphereGeometry(0.1, 16, 16);
-            break;
-        case 'box':
-            geometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
-            break;
-        case 'capsule':
-            geometry = new THREE.CapsuleGeometry(0.075, 0.2, 8, 16);
-            break;
-    }
+function createShapeVisualization(shapeType: CastShapeType, scale: number = 1): THREE.Object3D {
+    const shape = createCastShapeForType(shapeType);
     const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
         opacity: 0.6,
     });
-    return new THREE.Mesh(geometry, material);
+    const helper = createShapeHelper(shape, { material });
+    helper.object.scale.multiplyScalar(scale);
+    return helper.object;
 }
 
 function createShapeCasterObject(shapeType: CastShapeType): ShapeCasterObject {
@@ -144,14 +137,17 @@ function createShapeCasterObject(shapeType: CastShapeType): ShapeCasterObject {
     });
 
     const rootObject = new THREE.Object3D();
-    const originMesh = createShapeVisualization(shapeType);
-    const hitMesh = createShapeVisualization(shapeType);
-    hitMesh.scale.multiplyScalar(0.5);
+    const originMesh = createShapeVisualization(shapeType, 1);
+    const hitMesh = createShapeVisualization(shapeType, 1);
     const lineMesh = new THREE.Mesh(cylinderGeometry, lineMaterial);
 
-    rootObject.add(lineMesh);
-    rootObject.add(originMesh);
-    rootObject.add(hitMesh);
+    // add meshes directly to scene, not to rootObject, so they don't inherit its rotation
+    state.scene.add(originMesh);
+    state.scene.add(hitMesh);
+    state.scene.add(lineMesh);
+
+    // but keep rootObject for coordinate tracking
+    rootObject.add(new THREE.Object3D()); // dummy child
 
     // position origin at pointDist from center
     originMesh.position.set(pointDist, 0, 0);
@@ -197,15 +193,17 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
     );
     quat.multiply(sc.quaternion, sc.quaternion, _deltaQuat);
 
-    // Set Three.js rootObject from mathcat quaternion
+    // Set Three.js rootObject from mathcat quaternion (for tracking the orbit point)
     sc.rootObject.quaternion.set(sc.quaternion[0], sc.quaternion[1], sc.quaternion[2], sc.quaternion[3]);
 
-    // Get origin position in world space
-    sc.originMesh.updateMatrixWorld();
-    _vector3.setFromMatrixPosition(sc.originMesh.matrixWorld);
+    // position originMesh at pointDist along the rootObject's local X axis
+    sc.rootObject.updateMatrixWorld();
+    const localOffset = new THREE.Vector3(pointDist, 0, 0);
+    localOffset.applyQuaternion(sc.rootObject.quaternion);
+    sc.originMesh.position.copy(localOffset);
 
-    // Convert to vec3 for crashcat
-    vec3.set(sc.position, _vector3.x, _vector3.y, _vector3.z);
+    // Get origin position in world space
+    vec3.set(sc.position, sc.originMesh.position.x, sc.originMesh.position.y, sc.originMesh.position.z);
 
     // Direction points toward center (negative of position)
     vec3.negate(sc.direction, sc.position);
@@ -213,6 +211,9 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
 
     // Displacement is direction * pointDist
     vec3.scale(sc.displacement, sc.direction, pointDist);
+
+    // use identity quaternion for the cast - shape orientation doesn't rotate with rootObject
+    const identityQuat = quat.create();
 
     // Perform shape cast with crashcat
     state.shapeCollector.reset();
@@ -222,31 +223,67 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
         state.shapeSettings,
         sc.castShape,
         sc.position,
-        sc.quaternion,
+        identityQuat,
         sc.castShapeScale,
         sc.displacement,
         state.queryFilter,
     );
 
-    let hitDistance = pointDist;
     const hadHit = state.shapeCollector.hit.status === CastShapeStatus.COLLIDING;
+    
     if (hadHit) {
-        hitDistance = state.shapeCollector.hit.fraction * pointDist;
+        // calculate where the shape's center was at the moment of contact
+        const hitPosWorld = vec3.create();
+        vec3.scaleAndAdd(hitPosWorld, sc.position, sc.displacement, state.shapeCollector.hit.fraction);
+        
+        // set hit mesh at the calculated center position
+        sc.hitMesh.position.set(hitPosWorld[0], hitPosWorld[1], hitPosWorld[2]);
+        
+        // line goes from origin to hit position
+        const lineCenter = new THREE.Vector3();
+        lineCenter.lerpVectors(sc.originMesh.position, sc.hitMesh.position, 0.5);
+        sc.lineMesh.position.copy(lineCenter);
+        
+        const lineLength = sc.originMesh.position.distanceTo(sc.hitMesh.position);
+        sc.lineMesh.scale.set(1, lineLength, 1);
+        
+        // orient line from origin to hit
+        const lineDir = new THREE.Vector3();
+        lineDir.subVectors(sc.hitMesh.position, sc.originMesh.position);
+        if (lineDir.lengthSq() > 0.0001) {
+            lineDir.normalize();
+            const up = new THREE.Vector3(0, 1, 0);
+            sc.lineMesh.quaternion.setFromUnitVectors(up, lineDir);
+        }
+    } else {
+        // no hit - place hit mesh at the end of the cast (at the center)
+        const endPosWorld = vec3.create();
+        vec3.add(endPosWorld, sc.position, sc.displacement);
+        sc.hitMesh.position.set(endPosWorld[0], endPosWorld[1], endPosWorld[2]);
+        
+        // line goes from origin to center
+        const lineCenter = new THREE.Vector3();
+        lineCenter.lerpVectors(sc.originMesh.position, sc.hitMesh.position, 0.5);
+        sc.lineMesh.position.copy(lineCenter);
+        
+        sc.lineMesh.scale.set(1, pointDist, 1);
+        
+        // orient line from origin to center
+        const lineDir = new THREE.Vector3();
+        lineDir.subVectors(sc.hitMesh.position, sc.originMesh.position);
+        if (lineDir.lengthSq() > 0.0001) {
+            lineDir.normalize();
+            const up = new THREE.Vector3(0, 1, 0);
+            sc.lineMesh.quaternion.setFromUnitVectors(up, lineDir);
+        }
     }
-
-    // Update hit mesh position
-    sc.hitMesh.position.set(pointDist - hitDistance, 0, 0);
-
-    // Update line between origin and hit point
-    const lineLength = hadHit ? hitDistance : pointDist;
-
-    sc.lineMesh.position.set(pointDist - lineLength / 2, 0, 0);
-    sc.lineMesh.scale.set(1, lineLength, 1);
-    sc.lineMesh.rotation.z = Math.PI / 2;
 }
 
 function removeShapeCasterObject(sc: ShapeCasterObject) {
     state.scene.remove(sc.rootObject);
+    state.scene.remove(sc.originMesh);
+    state.scene.remove(sc.hitMesh);
+    state.scene.remove(sc.lineMesh);
 }
 
 registerAll();
@@ -296,6 +333,11 @@ function init() {
     camera.far = 100;
     camera.updateProjectionMatrix();
 
+    // Orbit controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
     // Initialize debug renderer
     const options = debugRenderer.createDefaultOptions();
     const debugRendererState = debugRenderer.init(options);
@@ -319,6 +361,7 @@ function init() {
         deltaTime: 0,
         debugRendererState,
         ui,
+        controls,
     };
 
     // Initialize physics world
@@ -435,8 +478,8 @@ function addShapeCaster() {
 }
 
 function updateFromOptions() {
-    // update shapecaster count
-    while (state.shapeCasterObjects.length > params.shapecasters.count) {
+    // clear and recreate all shapecasters (to handle shape type changes)
+    while (state.shapeCasterObjects.length > 0) {
         const sc = state.shapeCasterObjects.pop();
         if (sc) removeShapeCasterObject(sc);
     }
@@ -546,6 +589,9 @@ function render() {
 
     // Update debug renderer
     debugRenderer.update(state.debugRendererState, state.world);
+
+    // Update orbit controls
+    state.controls.update();
 
     state.renderer.render(state.scene, state.camera);
 

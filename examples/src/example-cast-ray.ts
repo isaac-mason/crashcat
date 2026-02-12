@@ -2,6 +2,7 @@ import GUI from 'lil-gui';
 import type { Quat, Vec3 } from 'mathcat';
 import { euler, quat, vec3 } from 'mathcat';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import {
     addBroadphaseLayer,
     addObjectLayer,
@@ -53,6 +54,7 @@ type State = {
     deltaTime: number;
     debugRendererState: ReturnType<typeof debugRenderer.init>;
     ui: ReturnType<typeof debugUI.init>;
+    controls: OrbitControls;
 };
 
 let state: State;
@@ -247,6 +249,11 @@ function init() {
     camera.far = 100;
     camera.updateProjectionMatrix();
 
+    // Orbit controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
     // Initialize debug renderer
     const options = debugRenderer.createDefaultOptions();
     const debugRendererState = debugRenderer.init(options);
@@ -272,6 +279,7 @@ function init() {
         deltaTime: 0,
         debugRendererState,
         ui,
+        controls,
     };
 
     // Initialize physics world
@@ -512,6 +520,9 @@ function render() {
 
     // Update debug renderer
     debugRenderer.update(state.debugRendererState, state.world);
+
+    // Update orbit controls
+    state.controls.update();
 
     state.renderer.render(state.scene, state.camera);
 
