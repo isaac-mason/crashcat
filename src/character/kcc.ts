@@ -3053,7 +3053,7 @@ export function setPosition(world: World, character: KCC, position: Vec3): void 
  * @param character the character controller
  * @param quaternion the new rotation quaternion
  */
-export function setRotation(world: World, character: KCC, quaternion: Quat): void {
+export function setQuaternion(world: World, character: KCC, quaternion: Quat): void {
     quat.copy(character.quaternion, quaternion);
     updateInnerBodyTransform(world, character);
 }
