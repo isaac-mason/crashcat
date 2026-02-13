@@ -9,6 +9,8 @@ import {
     getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB,
     type Listener,
     MotionType,
+    removeBody,
+    type RigidBody,
     rigidBody,
     updateWorld
 } from 'crashcat';
@@ -41,26 +43,36 @@ const listener: Listener = {
 
 // pass listener to updateWorld
 updateWorld(world, listener, 1 / 60);
+/* SNIPPET_END: basic */
 
+/* SNIPPET_START: deferred-removal */
 // WARNING: do NOT remove bodies inside listener callbacks!
 // the physics system is in the middle of processing contacts and removing bodies
 // will corrupt internal state. instead, store the body IDs and remove them after
 // updateWorld completes:
-//
-// const bodiesToRemove: number[] = [];
-// const listener: Listener = {
-//     onContactAdded: (bodyA, bodyB) => {
-//         if (shouldDestroy(bodyA)) {
-//             bodiesToRemove.push(bodyA.id);
-//         }
-//     }
-// };
-// updateWorld(world, listener, 1 / 60);
-// for (const id of bodiesToRemove) {
-//     removeBody(world, id);
-// }
-// bodiesToRemove.length = 0;
-/* SNIPPET_END: basic */
+
+const bodiesToRemove: number[] = [];
+
+const deferredRemovalListener: Listener = {
+    onContactAdded: (bodyA, bodyB) => {
+        // example: destroy bodies that touch lava
+        if (bodyA.userData === 'lava') {
+            bodiesToRemove.push(bodyB.id);
+        }
+        if (bodyB.userData === 'lava') {
+            bodiesToRemove.push(bodyA.id);
+        }
+    },
+};
+
+updateWorld(world, deferredRemovalListener, 1 / 60);
+
+// now it's safe to remove bodies
+for (const id of bodiesToRemove) {
+    removeBody(world, id);
+}
+bodiesToRemove.length = 0;
+/* SNIPPET_END: deferred-removal */
 
 /* SNIPPET_START: body-pair-validate */
 // most efficient place to filter collisions - before narrowphase runs

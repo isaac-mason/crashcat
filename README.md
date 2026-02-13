@@ -1437,25 +1437,41 @@ const listener: Listener = {
 
 // pass listener to updateWorld
 updateWorld(world, listener, 1 / 60);
+```
 
+### Deferred Body Removal
+
+**Important:** Don't remove bodies inside listener callbacks.
+
+Instead, store body IDs during callbacks and remove them after `updateWorld` completes:
+
+```ts
 // WARNING: do NOT remove bodies inside listener callbacks!
 // the physics system is in the middle of processing contacts and removing bodies
 // will corrupt internal state. instead, store the body IDs and remove them after
 // updateWorld completes:
-//
-// const bodiesToRemove: number[] = [];
-// const listener: Listener = {
-//     onContactAdded: (bodyA, bodyB) => {
-//         if (shouldDestroy(bodyA)) {
-//             bodiesToRemove.push(bodyA.id);
-//         }
-//     }
-// };
-// updateWorld(world, listener, 1 / 60);
-// for (const id of bodiesToRemove) {
-//     removeBody(world, id);
-// }
-// bodiesToRemove.length = 0;
+
+const bodiesToRemove: number[] = [];
+
+const deferredRemovalListener: Listener = {
+    onContactAdded: (bodyA, bodyB) => {
+        // example: destroy bodies that touch lava
+        if (bodyA.userData === 'lava') {
+            bodiesToRemove.push(bodyB.id);
+        }
+        if (bodyB.userData === 'lava') {
+            bodiesToRemove.push(bodyA.id);
+        }
+    },
+};
+
+updateWorld(world, deferredRemovalListener, 1 / 60);
+
+// now it's safe to remove bodies
+for (const id of bodiesToRemove) {
+    removeBody(world, id);
+}
+bodiesToRemove.length = 0;
 ```
 
 ### Body Pair Validation
