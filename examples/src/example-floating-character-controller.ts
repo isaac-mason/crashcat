@@ -1,15 +1,12 @@
-import type { Vec3 } from 'mathcat';
-import { quat, vec3 } from 'mathcat';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
     addBroadphaseLayer,
     addObjectLayer,
     box,
-    capsule,
+    type CastRaySettings,
     CastRayStatus,
-    castRay,
     ConstraintSpace,
+    capsule,
+    castRay,
     createClosestCastRayCollector,
     createDefaultCastRaySettings,
     createWorld,
@@ -17,21 +14,24 @@ import {
     distanceConstraint,
     emptyShape,
     enableCollision,
+    type Filter,
     filter,
     MotionType,
-    rigidBody,
     type RigidBody,
-    type Shape,
-    sphere,
-    SpringMode,
-    triangleMesh,
-    type CastRaySettings,
-    type Filter,
-    type World,
-    updateWorld,
     registerAll,
+    rigidBody,
+    type Shape,
+    SpringMode,
+    sphere,
+    triangleMesh,
+    updateWorld,
+    type World,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
+import type { Vec3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as debugUI from './debug/debug-ui';
 
 // reference: https://github.com/pmndrs/ecctrl
@@ -40,16 +40,16 @@ type FloatingCharacterState = {
     // core components
     body: RigidBody;
     shape: Shape;
-    
+
     // configuration
     capsuleRadius: number;
     capsuleHalfHeight: number;
     floatHeight: number;
-    
+
     // floating spring-damper parameters
     floatSpringK: number;
     floatDampingC: number;
-    
+
     // movement parameters
     maxWalkSpeed: number;
     maxRunSpeed: number;
@@ -60,34 +60,34 @@ type FloatingCharacterState = {
     rejectVelMult: number;
     dragDampingC: number;
     moveImpulsePointY: number;
-    
+
     // slope parameters
     maxSlopeAngle: number;
     slopeRayOffset: number;
     slopeUpExtraForce: number;
     slopeDownExtraForce: number;
-    
+
     // auto-balance parameters
     enableAutoBalance: boolean;
     balanceSpringK: number;
     balanceDampingC: number;
     balanceSpringOnY: number;
     balanceDampingOnY: number;
-    
+
     // jump parameters
     jumpVelocity: number;
     jumpForceToGroundMult: number;
     slopeJumpMult: number;
     sprintJumpMult: number;
-    
+
     // gravity parameters
     normalGravityScale: number;
     fallingGravityScale: number;
     maxFallSpeed: number;
-    
+
     // ray parameters
     rayHitForgiveness: number;
-    
+
     // runtime state - ground detection
     isOnGround: boolean;
     isFalling: boolean;
@@ -99,27 +99,27 @@ type FloatingCharacterState = {
     groundSubShapeId: number;
     groundPosition: Vec3;
     groundDistance: number;
-    
+
     // runtime state - moving platforms
     isOnMovingObject: boolean;
     massRatio: number;
     movingObjectVelocity: Vec3;
-    
+
     // runtime state - rotation
     characterModelIndicator: { y: number };
     characterRotated: boolean;
-    
+
     // runtime state - contact forces
     bodyContactForce: Vec3;
     characterMassForce: Vec3;
-    
+
     // input state
     input: {
         moveDirection: Vec3;
         wantToRun: boolean;
         wantToJump: boolean;
     };
-}
+};
 
 type FloatingCharacterControllerOptions = {
     capsuleRadius: number;
@@ -137,7 +137,6 @@ type FloatingCharacterControllerOptions = {
     dragDampingC: number;
     moveImpulsePointY: number;
     maxSlopeAngle: number;
-    slopeRayOffset: number;
     slopeUpExtraForce: number;
     slopeDownExtraForce: number;
     enableAutoBalance: boolean;
@@ -153,16 +152,10 @@ type FloatingCharacterControllerOptions = {
     fallingGravityScale: number;
     maxFallSpeed: number;
     rayHitForgiveness: number;
-}
+};
 
-// initialization
-function initFloatingCharacterController(
-    world: World,
-    position: Vec3,
-    objectLayer: number,
-    options?: Partial<FloatingCharacterControllerOptions>
-): FloatingCharacterState {
-    const opts: FloatingCharacterControllerOptions = {
+function createFloatingCharacterControllerOptions(): FloatingCharacterControllerOptions {
+    return {
         capsuleRadius: 0.5,
         capsuleHalfHeight: 0.5,
         floatHeight: 0.3,
@@ -177,8 +170,7 @@ function initFloatingCharacterController(
         rejectVelMult: 4.0,
         dragDampingC: 0.15,
         moveImpulsePointY: 0.5,
-        maxSlopeAngle: 1.0, // ~57 degrees in radians (ecctrl default)
-        slopeRayOffset: 0.27, // capsuleRadius - 0.03, will be overridden by options
+        maxSlopeAngle: 1.0,
         slopeUpExtraForce: 0.1,
         slopeDownExtraForce: 0.2,
         enableAutoBalance: true,
@@ -194,42 +186,46 @@ function initFloatingCharacterController(
         fallingGravityScale: 2.5,
         maxFallSpeed: 20.0,
         rayHitForgiveness: 0.1,
-        ...options,
     };
-    
-    // adjust slopeRayOffset based on actual capsuleRadius if not overridden
-    if (!options?.slopeRayOffset) {
-        opts.slopeRayOffset = opts.capsuleRadius - 0.03;
-    }
-    
+}
+
+// initialization
+function initFloatingCharacterController(
+    world: World,
+    position: Vec3,
+    objectLayer: number,
+    options: FloatingCharacterControllerOptions,
+): FloatingCharacterState {
+    const slopeRayOffset = options.capsuleRadius - 0.03;
+
     // create capsule shape
     const shape = capsule.create({
-        halfHeightOfCylinder: opts.capsuleHalfHeight,
-        radius: opts.capsuleRadius,
+        halfHeightOfCylinder: options.capsuleHalfHeight,
+        radius: options.capsuleRadius,
     });
-    
+
     // create dynamic rigidbody
     const body = rigidBody.create(world, {
         shape,
         motionType: MotionType.DYNAMIC,
         position,
         objectLayer,
-        friction: -0.5,  // ecctrl uses negative friction (non-physical but works!)
+        friction: 0.5,
         restitution: 0.0,
         linearDamping: 0.0,
         angularDamping: 0.0,
-        mass: 1.0, // use light mass like ecctrl (rapier uses shape-based mass)
-        // allow rotation on all axes for auto-balance
-        allowedDegreesOfFreedom: opts.enableAutoBalance ? 0b111111 : 0b111000, // all if balance enabled, else translation only
+        mass: 1.0,
+        allowedDegreesOfFreedom: options.enableAutoBalance ? 0b111111 : 0b111000, // all if balance enabled, else translation only
     });
-    
+
     // set gravity factor
-    body.motionProperties.gravityFactor = opts.normalGravityScale;
-    
+    body.motionProperties.gravityFactor = options.normalGravityScale;
+
     return {
         body,
         shape,
-        ...opts,
+        ...options,
+        slopeRayOffset,
         isOnGround: false,
         isFalling: false,
         canJump: false,
@@ -255,7 +251,6 @@ function initFloatingCharacterController(
     };
 }
 
-// scratch variables to avoid allocations in hot paths
 const _updateGroundDetection_rayOrigin: Vec3 = vec3.create();
 const _updateSlopeDetection_forward: Vec3 = vec3.create();
 const _updateSlopeDetection_slopeRayOrigin: Vec3 = vec3.create();
@@ -282,7 +277,7 @@ function updateGroundDetection(
     character: FloatingCharacterState,
     rayCollector: ReturnType<typeof createClosestCastRayCollector>,
     raySettings: CastRaySettings,
-    queryFilter: Filter
+    queryFilter: Filter,
 ): void {
     // ray from bottom of capsule cylinder (not including hemisphere radius)
     // this matches ecctrl's rayOriginOffest = { x: 0, y: -capsuleHalfHeight, z: 0 }
@@ -290,34 +285,34 @@ function updateGroundDetection(
     _updateGroundDetection_rayOrigin[0] = bodyPos[0];
     _updateGroundDetection_rayOrigin[1] = bodyPos[1] - character.capsuleHalfHeight;
     _updateGroundDetection_rayOrigin[2] = bodyPos[2];
-    
+
     const rayLength = character.capsuleRadius + 2.0;
-    
+
     // cast ray
     rayCollector.reset();
     castRay(world, rayCollector, raySettings, _updateGroundDetection_rayOrigin, [0, -1, 0], rayLength, queryFilter);
-    
+
     const floatingDis = character.capsuleRadius + character.floatHeight;
-    
+
     if (rayCollector.hit.status === CastRayStatus.COLLIDING) {
         const hitDistance = rayCollector.hit.fraction * rayLength;
-        
+
         // check if close enough to ground (without forgiveness for ground detection)
         if (hitDistance < floatingDis + character.rayHitForgiveness) {
             character.isOnGround = true;
             character.groundDistance = hitDistance;
-            
+
             // get ground position
             character.groundPosition = [
                 _updateGroundDetection_rayOrigin[0],
                 _updateGroundDetection_rayOrigin[1] - hitDistance,
-                _updateGroundDetection_rayOrigin[2]
+                _updateGroundDetection_rayOrigin[2],
             ];
-            
+
             // get ground body id and sub-shape id (for platform interaction)
             character.groundBodyId = rayCollector.hit.bodyIdB;
             character.groundSubShapeId = rayCollector.hit.subShapeId;
-            
+
             // canJump will be set by slope detection (requires valid slope check)
         } else {
             character.isOnGround = false;
@@ -342,7 +337,7 @@ function updateSlopeDetection(
     character: FloatingCharacterState,
     rayCollector: ReturnType<typeof createClosestCastRayCollector>,
     raySettings: CastRaySettings,
-    queryFilter: Filter
+    queryFilter: Filter,
 ): void {
     if (!character.isOnGround) {
         character.slopeAngle = 0;
@@ -350,41 +345,37 @@ function updateSlopeDetection(
         character.canJump = false;
         return;
     }
-    
+
     // get character forward direction
     const bodyRot = character.body.quaternion;
     _updateSlopeDetection_forward[0] = 0;
     _updateSlopeDetection_forward[1] = 0;
     _updateSlopeDetection_forward[2] = 1;
     vec3.transformQuat(_updateSlopeDetection_forward, _updateSlopeDetection_forward, bodyRot);
-    
+
     // slope ray origin: offset forward from character center
     const bodyPos = character.body.position;
     _updateSlopeDetection_slopeRayOrigin[0] = bodyPos[0] + _updateSlopeDetection_forward[0] * character.slopeRayOffset;
     _updateSlopeDetection_slopeRayOrigin[1] = bodyPos[1] - character.capsuleHalfHeight;
     _updateSlopeDetection_slopeRayOrigin[2] = bodyPos[2] + _updateSlopeDetection_forward[2] * character.slopeRayOffset;
-    
+
     const rayLength = character.capsuleRadius + 3.0;
-    
+
     rayCollector.reset();
     castRay(world, rayCollector, raySettings, _updateSlopeDetection_slopeRayOrigin, [0, -1, 0], rayLength, queryFilter);
-    
+
     const floatingDis = character.capsuleRadius + character.floatHeight;
-    
+
     // require both main ray and slope ray (like ecctrl)
-    if (rayCollector.hit.status === CastRayStatus.COLLIDING && 
-        rayCollector.hit.fraction * rayLength < floatingDis + 0.5) {
-        
+    if (rayCollector.hit.status === CastRayStatus.COLLIDING && rayCollector.hit.fraction * rayLength < floatingDis + 0.5) {
         const slopeRayDistance = rayCollector.hit.fraction * rayLength;
         const mainRayDistance = character.groundDistance;
-        
+
         // calculate slope angle from height difference
-        const slopeAngle = Math.atan(
-            (mainRayDistance - slopeRayDistance) / character.slopeRayOffset
-        );
-        
+        const slopeAngle = Math.atan((mainRayDistance - slopeRayDistance) / character.slopeRayOffset);
+
         character.slopeAngle = Number(slopeAngle.toFixed(2));
-        
+
         // get actual surface normal and validate slope
         if (character.groundBodyId !== null) {
             const groundBody = rigidBody.get(world, character.groundBodyId);
@@ -393,12 +384,14 @@ function updateSlopeDetection(
                     character.actualSlopeNormal,
                     groundBody,
                     character.groundPosition,
-                    character.groundSubShapeId
+                    character.groundSubShapeId,
                 );
-                
+
                 // calculate actual slope angle from normal
-                character.actualSlopeAngle = Math.acos(Math.max(-1, Math.min(1, vec3.dot(character.actualSlopeNormal, [0, 1, 0] as Vec3))));
-                
+                character.actualSlopeAngle = Math.acos(
+                    Math.max(-1, Math.min(1, vec3.dot(character.actualSlopeNormal, [0, 1, 0] as Vec3))),
+                );
+
                 // canJump only if slope is walkable AND slope ray hit (like ecctrl)
                 if (character.actualSlopeAngle < character.maxSlopeAngle) {
                     character.canJump = true;
@@ -420,40 +413,35 @@ function updateSlopeDetection(
 }
 
 // floating spring-damper force
-function applyFloatingForce(
-    world: World,
-    character: FloatingCharacterState
-): void {
+function applyFloatingForce(world: World, character: FloatingCharacterState): void {
     if (!character.isOnGround || character.groundBodyId === null) {
         return;
     }
-    
+
     // get ground body from ID
     const groundBody = rigidBody.get(world, character.groundBodyId);
     if (!groundBody) {
         return;
     }
-    
+
     const floatingDis = character.capsuleRadius + character.floatHeight;
     const displacement = floatingDis - character.groundDistance;
-    
+
     const velocity = character.body.motionProperties.linearVelocity;
     const verticalVelocity = velocity[1];
-    
+
     // spring-damper formula: F = k * x - c * v
-    const floatingForce = 
-        character.floatSpringK * displacement - 
-        character.floatDampingC * verticalVelocity;
-    
+    const floatingForce = character.floatSpringK * displacement - character.floatDampingC * verticalVelocity;
+
     // apply directly as per-frame impulse (ecctrl applies spring force each frame)
     const impulse: Vec3 = [0, floatingForce, 0];
     rigidBody.addImpulse(world, character.body, impulse);
-    
+
     // track character mass force for jump application (like ecctrl)
     character.characterMassForce[0] = 0;
     character.characterMassForce[1] = floatingForce > 0 ? -floatingForce : 0;
     character.characterMassForce[2] = 0;
-    
+
     // newton's third law: apply opposite force to ground (dynamic or kinematic)
     if (groundBody.motionType === MotionType.DYNAMIC || groundBody.motionType === MotionType.KINEMATIC) {
         rigidBody.addImpulseAtPosition(world, groundBody, character.characterMassForce, character.groundPosition);
@@ -461,20 +449,19 @@ function applyFloatingForce(
 }
 
 // movement via impulses (ecctrl aligned)
-function applyMovementForce(
-    world: World,
-    character: FloatingCharacterState
-): void {
+function applyMovementForce(world: World, character: FloatingCharacterState): void {
     const run = character.input.wantToRun;
     const maxVelLimit = run ? character.maxRunSpeed : character.maxWalkSpeed;
-    
+
     // setup moving direction based on slope
     let movingDirection: Vec3 = [0, 0, 1];
-    
+
     // only apply slope angle to moving direction when slope is walkable
-    if (character.actualSlopeAngle < character.maxSlopeAngle &&
+    if (
+        character.actualSlopeAngle < character.maxSlopeAngle &&
         Math.abs(character.slopeAngle) > 0.2 &&
-        Math.abs(character.slopeAngle) < character.maxSlopeAngle) {
+        Math.abs(character.slopeAngle) < character.maxSlopeAngle
+    ) {
         movingDirection = [0, Math.sin(character.slopeAngle), Math.cos(character.slopeAngle)];
     }
     // if on a maxSlopeAngle slope, only apply small amount of forward direction
@@ -482,88 +469,83 @@ function applyMovementForce(
         movingDirection = [
             0,
             Math.sin(character.slopeAngle) > 0 ? 0 : Math.sin(character.slopeAngle),
-            Math.sin(character.slopeAngle) > 0 ? 0.1 : 1
+            Math.sin(character.slopeAngle) > 0 ? 0.1 : 1,
         ];
     }
-    
+
     // apply character model indicator rotation to moving direction
     quat.setAxisAngle(_applyMovementForce_indicatorQuat, [0, 1, 0], character.characterModelIndicator.y);
     vec3.transformQuat(movingDirection, movingDirection, _applyMovementForce_indicatorQuat);
-    
+
     // current velocity
     const currentVel = character.body.motionProperties.linearVelocity;
-    
+
     // calculate moving object velocity direction according to character moving direction
     const movingObjectDot = vec3.dot(character.movingObjectVelocity, movingDirection);
     vec3.scale(_applyMovementForce_movingObjectVelocityInCharacterDir, movingDirection, movingObjectDot);
-    
+
     // calculate angle between moving object velocity direction and character moving direction
     const angleBetweenCharacterDirAndObjectDir = Math.acos(
-        Math.max(-1, Math.min(1, 
-            vec3.dot(character.movingObjectVelocity, movingDirection) / 
-            (vec3.length(character.movingObjectVelocity) * vec3.length(movingDirection) + 0.0001)
-        ))
+        Math.max(
+            -1,
+            Math.min(
+                1,
+                vec3.dot(character.movingObjectVelocity, movingDirection) /
+                    (vec3.length(character.movingObjectVelocity) * vec3.length(movingDirection) + 0.0001),
+            ),
+        ),
     );
-    
+
     // setup rejection velocity (currently only work on ground)
     const wantToMoveMag = currentVel[0] * movingDirection[0] + currentVel[2] * movingDirection[2];
-    const wantToMoveVel: Vec3 = [
-        movingDirection[0] * wantToMoveMag,
-        0,
-        movingDirection[2] * wantToMoveMag
-    ];
-    const rejectVel: Vec3 = [
-        currentVel[0] - wantToMoveVel[0],
-        0,
-        currentVel[2] - wantToMoveVel[2]
-    ];
-    
+    const wantToMoveVel: Vec3 = [movingDirection[0] * wantToMoveMag, 0, movingDirection[2] * wantToMoveMag];
+    const rejectVel: Vec3 = [currentVel[0] - wantToMoveVel[0], 0, currentVel[2] - wantToMoveVel[2]];
+
     // calculate required acceleration and force: a = Δv/Δt
     // if on moving/rotating platform, apply platform velocity to Δv accordingly
     // also apply reject velocity when character is moving opposite of movement direction
     const moveAccNeeded: Vec3 = [
         (movingDirection[0] * (maxVelLimit + _applyMovementForce_movingObjectVelocityInCharacterDir[0]) -
-         (currentVel[0] - 
-          character.movingObjectVelocity[0] * Math.sin(angleBetweenCharacterDirAndObjectDir) +
-          rejectVel[0] * (character.isOnMovingObject ? 0 : character.rejectVelMult))) / character.accelerationTime,
+            (currentVel[0] -
+                character.movingObjectVelocity[0] * Math.sin(angleBetweenCharacterDirAndObjectDir) +
+                rejectVel[0] * (character.isOnMovingObject ? 0 : character.rejectVelMult))) /
+            character.accelerationTime,
         0,
         (movingDirection[2] * (maxVelLimit + _applyMovementForce_movingObjectVelocityInCharacterDir[2]) -
-         (currentVel[2] - 
-          character.movingObjectVelocity[2] * Math.sin(angleBetweenCharacterDirAndObjectDir) +
-          rejectVel[2] * (character.isOnMovingObject ? 0 : character.rejectVelMult))) / character.accelerationTime
+            (currentVel[2] -
+                character.movingObjectVelocity[2] * Math.sin(angleBetweenCharacterDirAndObjectDir) +
+                rejectVel[2] * (character.isOnMovingObject ? 0 : character.rejectVelMult))) /
+            character.accelerationTime,
     ];
-    
+
     // wanted move force: F = ma (mass = 1.0)
     const moveForceNeeded: Vec3 = vec3.clone(moveAccNeeded);
-    
+
     // apply turnVelMultiplier if character hasn't completed turning
     const controlMult = character.characterRotated ? 1 : character.turnVelMultiplier;
     const airMult = character.canJump ? 1 : character.airControlFactor;
-    
+
     // calculate slope impulse Y component
     let slopeImpulseY = 0;
     if (character.slopeAngle !== 0) {
-        slopeImpulseY = movingDirection[1] *
+        slopeImpulseY =
+            movingDirection[1] *
             (movingDirection[1] > 0 ? character.slopeUpExtraForce : character.slopeDownExtraForce) *
             (run ? character.maxRunSpeed / character.maxWalkSpeed : 1);
     }
-    
+
     const moveImpulse: Vec3 = [
         moveForceNeeded[0] * controlMult * airMult,
         slopeImpulseY,
-        moveForceNeeded[2] * controlMult * airMult
+        moveForceNeeded[2] * controlMult * airMult,
     ];
-    
+
     // apply impulse at offset point
     const currentPos = character.body.position;
-    const impulsePoint: Vec3 = [
-        currentPos[0],
-        currentPos[1] + character.moveImpulsePointY,
-        currentPos[2]
-    ];
-    
+    const impulsePoint: Vec3 = [currentPos[0], currentPos[1] + character.moveImpulsePointY, currentPos[2]];
+
     rigidBody.addImpulseAtPosition(world, character.body, moveImpulse, impulsePoint);
-    
+
     // apply opposite drag force to standing platform
     if (character.isOnMovingObject && character.groundBodyId !== null) {
         const groundBody = rigidBody.get(world, character.groundBodyId);
@@ -571,7 +553,7 @@ function applyMovementForce(
             const movingObjectDragForce: Vec3 = [
                 -moveImpulse[0] * Math.min(1, 1 / character.massRatio),
                 0,
-                -moveImpulse[2] * Math.min(1, 1 / character.massRatio)
+                -moveImpulse[2] * Math.min(1, 1 / character.massRatio),
             ];
             rigidBody.addImpulseAtPosition(world, groundBody, movingObjectDragForce, character.groundPosition);
         }
@@ -579,70 +561,66 @@ function applyMovementForce(
 }
 
 // auto-balance torques
-function applyAutoBalanceTorque(
-    world: World,
-    character: FloatingCharacterState
-): void {
+function applyAutoBalanceTorque(world: World, character: FloatingCharacterState): void {
     if (!character.enableAutoBalance) {
         return;
     }
-    
+
     // get body orientation
     const bodyRot = character.body.quaternion;
-    
+
     // body's current up vector
     const bodyUp: Vec3 = [0, 1, 0];
     vec3.transformQuat(bodyUp, bodyUp, bodyRot);
-    
+
     // body's current forward vector
     const bodyForward: Vec3 = [0, 0, 1];
     vec3.transformQuat(bodyForward, bodyForward, bodyRot);
-    
+
     // desired up (world up)
     const desiredUp: Vec3 = [0, 1, 0];
-    
+
     // desired forward (movement direction)
     if (vec3.length(character.input.moveDirection) > 0.001) {
         vec3.normalize(_applyAutoBalanceTorque_desiredForward, character.input.moveDirection);
     } else {
         vec3.copy(_applyAutoBalanceTorque_desiredForward, bodyForward);
     }
-    
+
     // decompose balance vector into components
     const bodyBalanceOnX: Vec3 = [0, bodyUp[1], bodyUp[2]];
     const bodyBalanceOnZ: Vec3 = [bodyUp[0], bodyUp[1], 0];
     const bodyFacingOnY: Vec3 = [bodyForward[0], 0, bodyForward[2]];
-    
+
     // compute cross products for torque direction
     vec3.cross(_applyAutoBalanceTorque_crossX, desiredUp, bodyBalanceOnX);
     vec3.cross(_applyAutoBalanceTorque_crossY, _applyAutoBalanceTorque_desiredForward, bodyFacingOnY);
     vec3.cross(_applyAutoBalanceTorque_crossZ, desiredUp, bodyBalanceOnZ);
-    
+
     // get angular velocity
     const angVel = character.body.motionProperties.angularVelocity;
-    
+
     // compute spring-damper torque on each axis
     const angleX = Math.acos(Math.max(-1, Math.min(1, vec3.dot(bodyBalanceOnX, desiredUp))));
     const angleY = Math.acos(Math.max(-1, Math.min(1, vec3.dot(bodyFacingOnY, _applyAutoBalanceTorque_desiredForward))));
     const angleZ = Math.acos(Math.max(-1, Math.min(1, vec3.dot(bodyBalanceOnZ, desiredUp))));
-    
+
     const torque: Vec3 = [
-        (_applyAutoBalanceTorque_crossX[0] < 0 ? 1 : -1) * character.balanceSpringK * angleX - angVel[0] * character.balanceDampingC,
-        (_applyAutoBalanceTorque_crossY[1] < 0 ? 1 : -1) * character.balanceSpringOnY * angleY - angVel[1] * character.balanceDampingOnY,
-        (_applyAutoBalanceTorque_crossZ[2] < 0 ? 1 : -1) * character.balanceSpringK * angleZ - angVel[2] * character.balanceDampingC
+        (_applyAutoBalanceTorque_crossX[0] < 0 ? 1 : -1) * character.balanceSpringK * angleX -
+            angVel[0] * character.balanceDampingC,
+        (_applyAutoBalanceTorque_crossY[1] < 0 ? 1 : -1) * character.balanceSpringOnY * angleY -
+            angVel[1] * character.balanceDampingOnY,
+        (_applyAutoBalanceTorque_crossZ[2] < 0 ? 1 : -1) * character.balanceSpringK * angleZ -
+            angVel[2] * character.balanceDampingC,
     ];
-    
+
     // apply directly as angular impulse (ecctrl's constants are tuned for per-frame application)
     // these are NOT physical torques, but per-frame angular velocity changes
     rigidBody.addAngularImpulse(world, character.body, torque);
 }
 
 // moving platform tracking and reaction forces (ecctrl aligned)
-function updateMovingPlatform(
-    world: World,
-    character: FloatingCharacterState,
-    isMoving: boolean
-): void {
+function updateMovingPlatform(world: World, character: FloatingCharacterState, isMoving: boolean): void {
     // reset moving platform state if not on ground
     if (!character.canJump || character.groundBodyId === null) {
         character.massRatio = 1;
@@ -651,7 +629,7 @@ function updateMovingPlatform(
         vec3.set(character.bodyContactForce, 0, 0, 0);
         return;
     }
-    
+
     const groundBody = rigidBody.get(world, character.groundBodyId);
     if (!groundBody) {
         character.massRatio = 1;
@@ -659,48 +637,52 @@ function updateMovingPlatform(
         vec3.set(character.movingObjectVelocity, 0, 0, 0);
         return;
     }
-    
+
     const groundBodyType = groundBody.motionType;
-    
+
     // check if on dynamic or kinematic body
     if (groundBodyType === MotionType.DYNAMIC || groundBodyType === MotionType.KINEMATIC) {
         character.isOnMovingObject = true;
-        
+
         // calculate mass ratio
         const groundMass = groundBody.massProperties.mass;
         const characterMass = character.body.massProperties.mass;
         character.massRatio = characterMass / groundMass;
-        
+
         // calculate distance from character to object
         const currentPos = character.body.position;
         const groundPos = groundBody.position;
         _updateMovingPlatform_distanceFromCharacterToObject[0] = currentPos[0] - groundPos[0];
         _updateMovingPlatform_distanceFromCharacterToObject[1] = currentPos[1] - groundPos[1];
         _updateMovingPlatform_distanceFromCharacterToObject[2] = currentPos[2] - groundPos[2];
-        
+
         // get platform velocities
         const groundLinvel = groundBody.motionProperties?.linearVelocity || vec3.create();
         const groundAngvel = groundBody.motionProperties?.angularVelocity || vec3.create();
-        
+
         // combine linear and angular velocity
         vec3.cross(_updateMovingPlatform_objectAngvelToLinvel, groundAngvel, _updateMovingPlatform_distanceFromCharacterToObject);
         vec3.set(
             character.movingObjectVelocity,
             groundLinvel[0] + _updateMovingPlatform_objectAngvelToLinvel[0],
             groundLinvel[1],
-            groundLinvel[2] + _updateMovingPlatform_objectAngvelToLinvel[2]
+            groundLinvel[2] + _updateMovingPlatform_objectAngvelToLinvel[2],
         );
         vec3.scale(character.movingObjectVelocity, character.movingObjectVelocity, Math.min(1, 1 / character.massRatio));
-        
+
         // velocity difference clamping (ecctrl pattern)
         const currentVel = character.body.motionProperties.linearVelocity;
         _updateMovingPlatform_velocityDiff[0] = character.movingObjectVelocity[0] - currentVel[0];
         _updateMovingPlatform_velocityDiff[1] = character.movingObjectVelocity[1] - currentVel[1];
         _updateMovingPlatform_velocityDiff[2] = character.movingObjectVelocity[2] - currentVel[2];
         if (vec3.length(_updateMovingPlatform_velocityDiff) > 30) {
-            vec3.scale(character.movingObjectVelocity, character.movingObjectVelocity, 1 / vec3.length(_updateMovingPlatform_velocityDiff));
+            vec3.scale(
+                character.movingObjectVelocity,
+                character.movingObjectVelocity,
+                1 / vec3.length(_updateMovingPlatform_velocityDiff),
+            );
         }
-        
+
         // apply drag force to platform
         if (groundBodyType === MotionType.DYNAMIC) {
             if (!isMoving && vec3.squaredLength(character.input.moveDirection) < 0.001) {
@@ -708,7 +690,7 @@ function updateMovingPlatform(
                 const movingObjectDragForce: Vec3 = [
                     -character.bodyContactForce[0] * Math.min(1, 1 / character.massRatio),
                     -character.bodyContactForce[1] * Math.min(1, 1 / character.massRatio),
-                    -character.bodyContactForce[2] * Math.min(1, 1 / character.massRatio)
+                    -character.bodyContactForce[2] * Math.min(1, 1 / character.massRatio),
                 ];
                 rigidBody.addImpulseAtPosition(world, groundBody, movingObjectDragForce, character.groundPosition);
                 vec3.set(character.bodyContactForce, 0, 0, 0);
@@ -725,15 +707,13 @@ function updateMovingPlatform(
 }
 
 // gravity scaling (ecctrl aligned)
-function updateGravityScale(
-    character: FloatingCharacterState
-): void {
+function updateGravityScale(character: FloatingCharacterState): void {
     const velocity = character.body.motionProperties.linearVelocity;
     const verticalVel = velocity[1];
-    
+
     // detect falling (use canJump not isOnGround, like ecctrl)
     character.isFalling = verticalVel < 0 && !character.canJump;
-    
+
     // adjust gravity scale
     if (verticalVel < -character.maxFallSpeed) {
         // terminal velocity - disable gravity
@@ -748,30 +728,23 @@ function updateGravityScale(
 }
 
 // jump handling (ecctrl aligned)
-function handleJump(
-    world: World,
-    character: FloatingCharacterState
-): void {
+function handleJump(world: World, character: FloatingCharacterState): void {
     if (!character.input.wantToJump || !character.canJump) {
         return;
     }
-    
+
     const currentVel = character.body.motionProperties.linearVelocity;
     const run = character.input.wantToRun;
     const jumpVel = run ? character.sprintJumpMult * character.jumpVelocity : character.jumpVelocity;
-    
+
     // base jump velocity
-    const jumpVelocityVec: Vec3 = [
-        currentVel[0],
-        jumpVel,
-        currentVel[2]
-    ];
-    
+    const jumpVelocityVec: Vec3 = [currentVel[0], jumpVel, currentVel[2]];
+
     // project jump direction along slope normal (like ecctrl)
     _handleJump_jumpDirection[0] = 0;
     _handleJump_jumpDirection[1] = jumpVel * character.slopeJumpMult;
     _handleJump_jumpDirection[2] = 0;
-    
+
     // project onto slope normal
     const normalLength = vec3.length(character.actualSlopeNormal);
     if (normalLength > 0.0001) {
@@ -779,12 +752,12 @@ function handleJump(
         vec3.scale(_handleJump_projection, character.actualSlopeNormal, dot / (normalLength * normalLength));
         vec3.copy(_handleJump_jumpDirection, _handleJump_projection);
     }
-    
+
     // combine base velocity and slope-projected jump
     vec3.add(jumpVelocityVec, jumpVelocityVec, _handleJump_jumpDirection);
-    
+
     rigidBody.setLinearVelocity(world, character.body, jumpVelocityVec);
-    
+
     // apply jump force downward to standing platform (using characterMassForce like ecctrl)
     if (character.groundBodyId !== null) {
         const groundBody = rigidBody.get(world, character.groundBodyId);
@@ -792,7 +765,7 @@ function handleJump(
             const jumpForceToGround: Vec3 = [
                 character.characterMassForce[0],
                 character.characterMassForce[1] * character.jumpForceToGroundMult,
-                character.characterMassForce[2]
+                character.characterMassForce[2],
             ];
             rigidBody.addImpulseAtPosition(world, groundBody, jumpForceToGround, character.groundPosition);
         }
@@ -800,28 +773,24 @@ function handleJump(
 }
 
 // character rotation tracking (ecctrl aligned)
-function updateCharacterRotation(
-    character: FloatingCharacterState,
-    moveDirection: Vec3,
-    delta: number
-): void {
+function updateCharacterRotation(character: FloatingCharacterState, moveDirection: Vec3, delta: number): void {
     if (vec3.length(moveDirection) > 0.001) {
         // calculate target rotation from movement direction (already in world space from camera-relative input)
         const targetY = Math.atan2(moveDirection[0], moveDirection[2]);
-        
+
         // smoothly rotate towards target
         const deltaRot = targetY - character.characterModelIndicator.y;
         let normalizedDelta = deltaRot;
-        
+
         // normalize to [-PI, PI]
         while (normalizedDelta > Math.PI) normalizedDelta -= 2 * Math.PI;
         while (normalizedDelta < -Math.PI) normalizedDelta += 2 * Math.PI;
-        
+
         // apply turn speed
         const maxRotationStep = character.turnSpeed * delta;
         const rotationStep = Math.max(-maxRotationStep, Math.min(maxRotationStep, normalizedDelta));
         character.characterModelIndicator.y += rotationStep;
-        
+
         // check if rotation complete
         character.characterRotated = Math.abs(normalizedDelta) < 0.01;
     } else {
@@ -830,30 +799,23 @@ function updateCharacterRotation(
 }
 
 // drag forces (ecctrl aligned)
-function applyDragForce(
-    world: World,
-    character: FloatingCharacterState
-): void {
+function applyDragForce(world: World, character: FloatingCharacterState): void {
     if (!character.canJump) {
         return;
     }
-    
+
     const currentVel = character.body.motionProperties.linearVelocity;
-    
+
     // different drag behavior on moving object vs static ground
     if (!character.isOnMovingObject) {
-        const dragForce: Vec3 = [
-            -currentVel[0] * character.dragDampingC,
-            0,
-            -currentVel[2] * character.dragDampingC
-        ];
+        const dragForce: Vec3 = [-currentVel[0] * character.dragDampingC, 0, -currentVel[2] * character.dragDampingC];
         rigidBody.addImpulse(world, character.body, dragForce);
     } else {
         // on moving object, drag toward object velocity
         const dragForce: Vec3 = [
             (character.movingObjectVelocity[0] - currentVel[0]) * character.dragDampingC,
             0,
-            (character.movingObjectVelocity[2] - currentVel[2]) * character.dragDampingC
+            (character.movingObjectVelocity[2] - currentVel[2]) * character.dragDampingC,
         ];
         rigidBody.addImpulse(world, character.body, dragForce);
     }
@@ -876,39 +838,39 @@ function updateFloatingCharacterController(
     delta: number,
     rayCollector: ReturnType<typeof createClosestCastRayCollector>,
     raySettings: CastRaySettings,
-    queryFilter: Filter
+    queryFilter: Filter,
 ): void {
     // clamp delta like ecctrl
     if (delta > 1) {
         delta = delta % 1;
     }
-    
+
     // update input state
     character.input.wantToRun = input.run;
     character.input.wantToJump = input.jump;
-    
+
     // camera direction is already computed from forward/backward/left/right input
     vec3.copy(_updateCharacterRotation_moveDir, cameraDirection);
-    
+
     // project to horizontal plane and normalize
     _updateCharacterRotation_moveDir[1] = 0;
     if (vec3.length(_updateCharacterRotation_moveDir) > 0.001) {
         vec3.normalize(_updateCharacterRotation_moveDir, _updateCharacterRotation_moveDir);
     }
     character.input.moveDirection = _updateCharacterRotation_moveDir;
-    
+
     const isMoving = vec3.length(_updateCharacterRotation_moveDir) > 0.001;
-    
+
     // update character model indicator rotation (separate from physics body)
     updateCharacterRotation(character, _updateCharacterRotation_moveDir, delta);
-    
+
     // ray casting for ground detection
     updateGroundDetection(world, character, rayCollector, raySettings, queryFilter);
     updateSlopeDetection(world, character, rayCollector, raySettings, queryFilter);
-    
+
     // moving platform tracking (must be after ground/slope detection)
     updateMovingPlatform(world, character, isMoving);
-    
+
     // apply movement force (if moving)
     if (isMoving) {
         applyMovementForce(world, character);
@@ -916,16 +878,16 @@ function updateFloatingCharacterController(
         // apply drag when not moving
         applyDragForce(world, character);
     }
-    
+
     // floating force (after ground detection)
     applyFloatingForce(world, character);
-    
+
     // auto-balance torque (always, to keep upright)
     applyAutoBalanceTorque(world, character);
-    
+
     // handle jump
     handleJump(world, character);
-    
+
     // update gravity scaling
     updateGravityScale(character);
 }
@@ -1254,11 +1216,7 @@ const diagonalPlatformSpeed = 0.12;
     ];
 
     for (const offset of anchorOffsets) {
-        const anchorPosition: Vec3 = [
-            platformCenter[0] + offset[0],
-            anchorHeight,
-            platformCenter[2] + offset[2],
-        ];
+        const anchorPosition: Vec3 = [platformCenter[0] + offset[0], anchorHeight, platformCenter[2] + offset[2]];
 
         const anchor = rigidBody.create(world, {
             shape: emptyShape.create(),
@@ -1298,11 +1256,9 @@ const raySettings = createDefaultCastRaySettings();
 const queryFilter = filter.create(world.settings.layers);
 
 // initialize character
-const character = initFloatingCharacterController(
-    world,
-    [0, 5, 0],
-    LAYER_MOVING
-);
+const characterOptions = createFloatingCharacterControllerOptions();
+
+const character = initFloatingCharacterController(world, [0, 5, 0], LAYER_MOVING, characterOptions);
 
 // exclude character's own body from raycasts using body filter
 queryFilter.bodyFilter = (body) => body !== character.body;
@@ -1334,18 +1290,21 @@ slopeFolder.add(character, 'rejectVelMult', 0, 10, 0.5).name('Reject Vel Mult');
 
 // auto balance folder
 const balanceFolder = ui.gui.addFolder('Auto Balance');
-balanceFolder.add(character, 'enableAutoBalance').name('Enable').onChange((enabled: boolean) => {
-    // update allowed degrees of freedom based on balance setting
-    if (enabled) {
-        character.body.motionProperties.allowedDegreesOfFreedom = 0b111111; // all
-    } else {
-        character.body.motionProperties.allowedDegreesOfFreedom = 0b111000; // translation only
-        // reset angular velocity and rotation when disabling
-        character.body.motionProperties.angularVelocity = [0, 0, 0];
-        // reset to upright rotation (identity quaternion)
-        character.body.quaternion = [0, 0, 0, 1];
-    }
-});
+balanceFolder
+    .add(character, 'enableAutoBalance')
+    .name('Enable')
+    .onChange((enabled: boolean) => {
+        // update allowed degrees of freedom based on balance setting
+        if (enabled) {
+            character.body.motionProperties.allowedDegreesOfFreedom = 0b111111; // all
+        } else {
+            character.body.motionProperties.allowedDegreesOfFreedom = 0b111000; // translation only
+            // reset angular velocity and rotation when disabling
+            character.body.motionProperties.angularVelocity = [0, 0, 0];
+            // reset to upright rotation (identity quaternion)
+            character.body.quaternion = [0, 0, 0, 1];
+        }
+    });
 balanceFolder.add(character, 'balanceSpringK', 0, 2, 0.05).name('Spring K');
 balanceFolder.add(character, 'balanceDampingC', 0, 0.2, 0.005).name('Damping C');
 balanceFolder.add(character, 'balanceSpringOnY', 0, 2, 0.05).name('Spring K Y');
@@ -1360,89 +1319,70 @@ jumpFolder.add(character, 'sprintJumpMult', 1, 2, 0.1).name('Sprint Jump Mult');
 
 // gravity folder
 const gravityFolder = ui.gui.addFolder('Gravity');
-gravityFolder.add(character, 'normalGravityScale', 0, 3, 0.1).name('Normal Scale').onChange((scale: number) => {
-    if (!character.isFalling) {
-        character.body.motionProperties.gravityFactor = scale;
-    }
-});
-gravityFolder.add(character, 'fallingGravityScale', 0, 5, 0.1).name('Falling Scale').onChange((scale: number) => {
-    if (character.isFalling) {
-        character.body.motionProperties.gravityFactor = scale;
-    }
-});
+gravityFolder
+    .add(character, 'normalGravityScale', 0, 3, 0.1)
+    .name('Normal Scale')
+    .onChange((scale: number) => {
+        if (!character.isFalling) {
+            character.body.motionProperties.gravityFactor = scale;
+        }
+    });
+gravityFolder
+    .add(character, 'fallingGravityScale', 0, 5, 0.1)
+    .name('Falling Scale')
+    .onChange((scale: number) => {
+        if (character.isFalling) {
+            character.body.motionProperties.gravityFactor = scale;
+        }
+    });
 gravityFolder.add(character, 'maxFallSpeed', 0, 50, 1).name('Max Fall Speed');
 
 // create character mesh (external to physics)
 const characterMesh = new THREE.Mesh(
     new THREE.CapsuleGeometry(character.capsuleRadius, character.capsuleHalfHeight * 2, 8, 16),
-    new THREE.MeshStandardMaterial({ color: 0x4488ff })
+    new THREE.MeshStandardMaterial({ color: 0x4488ff }),
 );
 scene.add(characterMesh);
 
 /* debug helpers */
 
 // ground ray visualization
-const groundRayHelper = new THREE.ArrowHelper(
-    new THREE.Vector3(0, -1, 0),
-    new THREE.Vector3(0, 0, 0),
-    1,
-    0xff0000
-);
+const groundRayHelper = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 0), 1, 0xff0000);
 scene.add(groundRayHelper);
 
 // slope ray visualization
-const slopeRayHelper = new THREE.ArrowHelper(
-    new THREE.Vector3(0, -1, 0),
-    new THREE.Vector3(0, 0, 0),
-    1,
-    0x00ff00
-);
+const slopeRayHelper = new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 0, 0), 1, 0x00ff00);
 scene.add(slopeRayHelper);
 
 // ground normal visualization
-const groundNormalHelper = new THREE.ArrowHelper(
-    new THREE.Vector3(0, 1, 0),
-    new THREE.Vector3(0, 0, 0),
-    1,
-    0x0000ff
-);
+const groundNormalHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), 1, 0x0000ff);
 scene.add(groundNormalHelper);
 
 function updateDebugHelpers() {
     const bodyPos = character.body.position;
-    
+
     // update ground ray
-    groundRayHelper.position.set(
-        bodyPos[0],
-        bodyPos[1] - character.capsuleHalfHeight,
-        bodyPos[2]
-    );
+    groundRayHelper.position.set(bodyPos[0], bodyPos[1] - character.capsuleHalfHeight, bodyPos[2]);
     groundRayHelper.setLength(character.groundDistance > 0 ? character.groundDistance : 1);
     groundRayHelper.setColor(character.isOnGround ? 0x00ff00 : 0xff0000);
-    
+
     // update slope ray
     const bodyRot = character.body.quaternion;
     const forward: Vec3 = [0, 0, 1];
     vec3.transformQuat(forward, forward, bodyRot);
-    
+
     slopeRayHelper.position.set(
         bodyPos[0] + forward[0] * character.slopeRayOffset,
         bodyPos[1] - character.capsuleHalfHeight,
-        bodyPos[2] + forward[2] * character.slopeRayOffset
+        bodyPos[2] + forward[2] * character.slopeRayOffset,
     );
-    
+
     // update ground normal
     if (character.isOnGround) {
-        groundNormalHelper.position.set(
-            character.groundPosition[0],
-            character.groundPosition[1],
-            character.groundPosition[2]
+        groundNormalHelper.position.set(character.groundPosition[0], character.groundPosition[1], character.groundPosition[2]);
+        groundNormalHelper.setDirection(
+            new THREE.Vector3(character.actualSlopeNormal[0], character.actualSlopeNormal[1], character.actualSlopeNormal[2]),
         );
-        groundNormalHelper.setDirection(new THREE.Vector3(
-            character.actualSlopeNormal[0],
-            character.actualSlopeNormal[1],
-            character.actualSlopeNormal[2]
-        ));
     }
 }
 
@@ -1452,9 +1392,9 @@ const clock = new THREE.Clock();
 
 function animate() {
     requestAnimationFrame(animate);
-    
+
     const delta = Math.min(clock.getDelta(), 1 / 45); // cap at 45 FPS
-    
+
     // get camera rotation and calculate movement direction
     const cameraRotation = new THREE.Quaternion();
     camera.getWorldQuaternion(cameraRotation);
@@ -1463,12 +1403,12 @@ function animate() {
     const cameraDirection = new THREE.Vector3(right, 0, -forward).applyQuaternion(cameraRotation);
     cameraDirection.y = 0;
     cameraDirection.normalize();
-    
+
     const cameraForwardVec: Vec3 = [cameraDirection.x, cameraDirection.y, cameraDirection.z];
     const cameraRightVec: Vec3 = [0, 0, 0]; // not used with new direction calculation
-    
+
     debugUI.beginPerf(ui);
-    
+
     // update character physics
     vec3.copy(_animate_oldPosition, character.body.position);
     updateFloatingCharacterController(
@@ -1480,26 +1420,22 @@ function animate() {
         delta,
         rayCollector,
         raySettings,
-        queryFilter
+        queryFilter,
     );
-    
+
     // update spinning platform - use moveKinematic to properly set angular velocity
     const spinSpeed = 1.0;
     quat.copy(_animate_targetRotation, spinningPlatform.quaternion);
     quat.setAxisAngle(_animate_deltaRotation, [0, 1, 0], spinSpeed * delta);
     quat.multiply(_animate_targetRotation, _animate_targetRotation, _animate_deltaRotation);
     rigidBody.moveKinematic(spinningPlatform, spinningPlatform.position, _animate_targetRotation, delta);
-    
+
     // update sliding platform - use moveKinematic to properly set linear velocity
     const time = clock.getElapsedTime();
     const slideOffset = Math.sin(time * slidingPlatformSpeed * Math.PI * 2) * slidingPlatformAmplitude;
-    const targetPosition: Vec3 = [
-        slidingPlatformCenter[0] + slideOffset,
-        slidingPlatformCenter[1],
-        slidingPlatformCenter[2],
-    ];
+    const targetPosition: Vec3 = [slidingPlatformCenter[0] + slideOffset, slidingPlatformCenter[1], slidingPlatformCenter[2]];
     rigidBody.moveKinematic(slidingPlatform, targetPosition, slidingPlatform.quaternion, delta);
-    
+
     // update diagonal platform - moves sideways and up/down
     const diagonalPhase = time * diagonalPlatformSpeed * Math.PI * 2;
     const diagonalOffsetX = Math.sin(diagonalPhase) * diagonalPlatformAmplitudeX;
@@ -1510,30 +1446,35 @@ function animate() {
         diagonalPlatformCenter[2],
     ];
     rigidBody.moveKinematic(diagonalPlatform, diagonalTargetPosition, diagonalPlatform.quaternion, delta);
-    
+
     // update world physics
     updateWorld(world, undefined, delta);
-    
+
     debugUI.endPerf(ui);
     debugUI.updateStats(ui, world);
-    
+
     const newPosition = vec3.clone(character.body.position);
-    
+
     // sync visual character mesh to physics body
     characterMesh.position.set(newPosition[0], newPosition[1], newPosition[2]);
-    characterMesh.quaternion.set(character.body.quaternion[0], character.body.quaternion[1], character.body.quaternion[2], character.body.quaternion[3]);
-    
+    characterMesh.quaternion.set(
+        character.body.quaternion[0],
+        character.body.quaternion[1],
+        character.body.quaternion[2],
+        character.body.quaternion[3],
+    );
+
     // move camera with character
     vec3.sub(_animate_deltaPos, newPosition, _animate_oldPosition);
     camera.position.add(new THREE.Vector3(_animate_deltaPos[0], _animate_deltaPos[1], _animate_deltaPos[2]));
     controls.target.set(newPosition[0], newPosition[1], newPosition[2]);
-    
+
     // update debug helpers
     updateDebugHelpers();
-    
+
     // update debug renderer
     debugRenderer.update(debugState, world);
-    
+
     // render
     controls.update();
     renderer.render(scene, camera);
