@@ -1,4 +1,5 @@
 import { nodeResolve } from '@rollup/plugin-node-resolve';
+import filesize from 'rollup-plugin-filesize';
 
 export default {
 	input: './entry.js',
@@ -9,5 +10,6 @@ export default {
 	},
 	plugins: [
 		nodeResolve(),
+		filesize(),
 	],
 };
