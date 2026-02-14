@@ -386,6 +386,14 @@ The listener lets you react to and modify physics events during world updates. P
 
 <Snippet source="./listeners.ts" select="basic" />
 
+### Deferred Body Removal
+
+**Important:** Don't remove bodies inside listener callbacks.
+
+Instead, store body IDs during callbacks and remove them after `updateWorld` completes:
+
+<Snippet source="./listeners.ts" select="deferred-removal" />
+
 ### Body Pair Validation
 
 Runs before expensive narrowphase collision detection. Use this when filtering logic is too complex for object layers or collision groups/masks (which are faster). Prefer those simpler mechanisms when possible.
