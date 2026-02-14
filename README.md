@@ -1451,16 +1451,16 @@ Instead, store body IDs during callbacks and remove them after `updateWorld` com
 // will corrupt internal state. instead, store the body IDs and remove them after
 // updateWorld completes:
 
-const bodiesToRemove: number[] = [];
+const bodiesToRemove: RigidBody[] = [];
 
 const deferredRemovalListener: Listener = {
     onContactAdded: (bodyA, bodyB) => {
         // example: destroy bodies that touch lava
         if (bodyA.userData === 'lava') {
-            bodiesToRemove.push(bodyB.id);
+            bodiesToRemove.push(bodyB);
         }
         if (bodyB.userData === 'lava') {
-            bodiesToRemove.push(bodyA.id);
+            bodiesToRemove.push(bodyA);
         }
     },
 };
@@ -1468,9 +1468,10 @@ const deferredRemovalListener: Listener = {
 updateWorld(world, deferredRemovalListener, 1 / 60);
 
 // now it's safe to remove bodies
-for (const id of bodiesToRemove) {
-    removeBody(world, id);
+for (const body of bodiesToRemove) {
+    rigidBody.remove(world, body);
 }
+
 bodiesToRemove.length = 0;
 ```
 
