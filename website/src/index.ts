@@ -5,11 +5,13 @@ import {
     box,
     ConstraintSpace,
     compound,
+    createCollisionEstimationResult,
     createWorld,
     createWorldSettings,
     cylinder,
     distanceConstraint,
     enableCollision,
+    estimateCollisionResponse,
     MotionType,
     registerAll,
     rigidBody,
@@ -889,8 +891,10 @@ const HIT_Y_AMPLITUDE = 0.1; // vertical bounce amplitude
 const HIT_ROLL_AMPLITUDE = 0.17; // roll amplitude in radians
 const HIT_PITCH_AMPLITUDE = 0.08; // pitch amplitude in radians
 
+const collisionEstimationResult = createCollisionEstimationResult();
+
 const listener: Listener = {
-    onContactAdded: (bodyA, bodyB, manifold) => {
+    onContactAdded: (bodyA, bodyB, manifold, settings) => {
         const isCarA = bodyA === carBody;
         const isCarB = bodyB === carBody;
         if (!isCarA && !isCarB) return;
@@ -899,9 +903,24 @@ const listener: Listener = {
         const other = isCarA ? bodyB : bodyA;
         if (other.motionType === MotionType.STATIC) return;
 
-        // estimate impact intensity from penetration depth
-        const depth = Math.abs(manifold.penetrationDepth);
-        const strength = Math.min(depth * 8, 1);
+        // estimate impact intensity using collision response solver
+        estimateCollisionResponse(
+            collisionEstimationResult,
+            bodyA,
+            bodyB,
+            manifold,
+            settings.combinedFriction,
+            settings.combinedRestitution,
+        );
+
+        // sum up total normal impulse from all contact points
+        let totalNormalImpulse = 0;
+        for (let i = 0; i < collisionEstimationResult.numImpulses; i++) {
+            totalNormalImpulse += collisionEstimationResult.impulses[i].contactImpulse;
+        }
+
+        // scale impulse to strength (tune this scaling based on feel)
+        const strength = Math.min(totalNormalImpulse * 0.15, 1);
 
         // only override if this hit is stronger than the current decaying one
         const now = performance.now() / 1000;

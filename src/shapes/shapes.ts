@@ -48,6 +48,7 @@ export enum ShapeType {
     CYLINDER = 9,
     OFFSET_CENTER_OF_MASS = 10,
     PLANE = 11,
+    STATIC_COMPOUND = 12,
 
     // user-defined shapes: 101-110
     USER_1 = 101,
@@ -101,6 +102,7 @@ export interface ShapeTypeRegistry {
     [ShapeType.EMPTY]: EmptyShape;
     [ShapeType.OFFSET_CENTER_OF_MASS]: OffsetCenterOfMassShape;
     [ShapeType.PLANE]: PlaneShape;
+    [ShapeType.STATIC_COMPOUND]: StaticCompoundShape;
 }
 
 /** shape type, union derived from registry interface */

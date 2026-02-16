@@ -43,6 +43,9 @@ export * from './collision/simplex';
 export * from './collision/support';
 export * as activeEdges from './collision/active-edges';
 
+export type { CollisionEstimationResult, CollisionEstimationImpulse } from './collision/estimate-collision-response';
+export { estimateCollisionResponse, createCollisionEstimationResult } from './collision/estimate-collision-response';
+
 export * as broadphase from './broadphase/broadphase';
 export * as dbvt from './broadphase/dbvt';
 export type { BodyVisitor } from './broadphase/body-visitor';
