@@ -18,6 +18,7 @@ import type { OffsetCenterOfMassShape } from './offset-center-of-mass';
 import type { PlaneShape } from './plane';
 import type { ScaledShape } from './scaled';
 import type { SphereShape } from './sphere';
+import type { StaticCompoundShape } from './static-compound';
 import type { TransformedShape } from './transformed';
 import type { TriangleMeshShape } from './triangle-mesh';
 

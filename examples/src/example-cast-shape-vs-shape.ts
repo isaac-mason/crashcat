@@ -19,6 +19,7 @@ import {
     type Face,
     registerAll,
     sphere,
+    staticCompound,
     transformed,
     triangleMesh,
 } from 'crashcat';
@@ -36,6 +37,7 @@ const GUI_SHAPE_OPTIONS = {
     Capsule: 'capsule',
     'Triangle Mesh': 'triangle-mesh',
     'Compound (Two Boxes)': 'compound-two-boxes',
+    'Static Compound (Two Boxes)': 'static-compound-two-boxes',
     'Convex Hull (Suzanne)': 'convexhull',
     'Transformed (Rotated Box)': 'transformed-box',
 } as const;
@@ -206,6 +208,22 @@ function createTestShape(type: ShapeOption) {
         case 'compound-two-boxes': {
 
             return compound.create({
+                children: [
+                    {
+                        shape: box.create({ halfExtents: vec3.fromValues(0.8, 0.5, 0.8) }),
+                        position: vec3.fromValues(-1.2, 0.8, 0),
+                        quaternion: quat.fromDegrees(quat.create(), 0, 45, 0, 'zyx'),
+                    },
+                    {
+                        shape: box.create({ halfExtents: vec3.fromValues(0.6, 0.7, 0.6) }),
+                        position: vec3.fromValues(1.0, -0.6, 0),
+                        quaternion: quat.fromDegrees(quat.create(), 30, -30, 15, 'zyx'),
+                    }
+                ]
+            });
+        }
+        case 'static-compound-two-boxes': {
+            return staticCompound.create({
                 children: [
                     {
                         shape: box.create({ halfExtents: vec3.fromValues(0.8, 0.5, 0.8) }),

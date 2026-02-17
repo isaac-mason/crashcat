@@ -16,6 +16,7 @@ import {
     EMPTY_SUB_SHAPE_ID,
     registerAll,
     sphere,
+    staticCompound,
     transformed,
     triangleMesh,
     type CollidePointCollector,
@@ -32,6 +33,7 @@ const GUI_SHAPE_OPTIONS = {
     Capsule: 'capsule',
     'Triangle Mesh': 'triangle-mesh',
     'Compound (Two Boxes)': 'compound-two-boxes',
+    'Static Compound (Two Boxes)': 'static-compound-two-boxes',
     'Convex Hull (Suzanne)': 'convexhull',
     'Transformed (Rotated Box)': 'transformed-box',
 } as const;
@@ -96,7 +98,7 @@ let state: ReturnType<typeof init>;
 const infoPanel = document.createElement('div');
 infoPanel.style.position = 'absolute';
 infoPanel.style.top = '10px';
-infoPanel.style.right = '10px';
+infoPanel.style.left = '10px';
 infoPanel.style.color = 'white';
 infoPanel.style.fontFamily = 'monospace';
 infoPanel.style.fontSize = '14px';
@@ -131,6 +133,22 @@ function createTestShape(type: ShapeOption) {
         }
         case 'compound-two-boxes': {
             return compound.create({
+                children: [
+                    {
+                        shape: box.create({ halfExtents: vec3.fromValues(0.8, 0.5, 0.8) }),
+                        position: vec3.fromValues(-1.2, 0.8, 0),
+                        quaternion: quat.fromDegrees(quat.create(), 0, 45, 0, 'zyx'),
+                    },
+                    {
+                        shape: box.create({ halfExtents: vec3.fromValues(0.6, 0.7, 0.6) }),
+                        position: vec3.fromValues(1.0, -0.6, 0),
+                        quaternion: quat.fromDegrees(quat.create(), 30, -30, 15, 'zyx'),
+                    }
+                ],
+            });
+        }
+        case 'static-compound-two-boxes': {
+            return staticCompound.create({
                 children: [
                     {
                         shape: box.create({ halfExtents: vec3.fromValues(0.8, 0.5, 0.8) }),
@@ -356,33 +374,6 @@ renderer.domElement.addEventListener('contextmenu', (event) => {
         }
     }
 });
-
-/* Instructions */
-
-const instructions = document.createElement('div');
-instructions.style.position = 'absolute';
-instructions.style.top = '10px';
-instructions.style.left = '10px';
-instructions.style.color = 'white';
-instructions.style.fontFamily = 'monospace';
-instructions.style.fontSize = '14px';
-instructions.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-instructions.style.padding = '10px';
-instructions.style.borderRadius = '5px';
-instructions.innerHTML = `
-<b>collidePointVsShape Example</b><br>
-<br>
-<b>Controls:</b><br>
-Right-click gizmos to toggle translate/rotate<br>
-Drag gizmos to move them around<br>
-<br>
-<b>Visualization:</b><br>
-<span style="color: #00ff00;">Green</span>: Colliding<br>
-<span style="color: #ff0000;">Red</span>: Not colliding<br>
-<span style="color: #ffaa00;">Orange sphere</span>: Point (not colliding)<br>
-<span style="color: #00ff00;">Green sphere</span>: Point (colliding)
-`;
-document.body.appendChild(instructions);
 
 setup();
 
