@@ -10,7 +10,6 @@ import {
     computeMassProperties,
     defineShape,
     getShapeInnerRadius,
-    shapeDefs,
     type Shape,
     ShapeCategory,
     ShapeType,
@@ -18,6 +17,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 /** settings for creating a transformed shape */
