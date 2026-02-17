@@ -240,14 +240,14 @@ for (let i = 0; i < 64; i++) {
  * on a local copy of the velocities. designed to be called from onContactAdded
  * to estimate impact strength before the actual solver runs.
  *
- * @param result - output structure to fill with predicted velocities and impulses
- * @param body1 - first body
- * @param body2 - second body
- * @param manifold - contact manifold
- * @param combinedFriction - combined friction coefficient
- * @param combinedRestitution - combined restitution coefficient
- * @param minVelocityForRestitution - minimum relative velocity to apply restitution (default 1.0 m/s)
- * @param numIterations - number of PGS iterations (default 10)
+ * @param result result object to write to
+ * @param body1 first body
+ * @param body2 second body
+ * @param manifold contact manifold
+ * @param combinedFriction combined friction coefficient
+ * @param combinedRestitution combined restitution coefficient
+ * @param minVelocityForRestitution minimum relative velocity to apply restitution (default 1.0 m/s)
+ * @param numIterations number of PGS iterations (default 10)
  */
 export function estimateCollisionResponse(
     result: CollisionEstimationResult,
