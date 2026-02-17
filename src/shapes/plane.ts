@@ -26,14 +26,14 @@ import {
     type ConvexShape,
     defineShape,
     getShapeSupportingFace,
-    setCastShapeFn,
-    setCollideShapeFn,
     type Shape,
     ShapeCategory,
-    shapeDefs,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
+    setCastShapeFn,
+    setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 export const DEFAULT_PLANE_HALF_EXTENT = 1000.0;
@@ -501,6 +501,7 @@ function collideConvexVsPlane(
     scaleBY: number,
     scaleBZ: number,
 ): void {
+    const convexShape = shapeA as ConvexShape;
     const planeShape = shapeB as PlaneShape;
 
     // scale plane B
@@ -517,8 +518,11 @@ function collideConvexVsPlane(
     quat.set(_collideConvexVsPlane_quatB, quatBX, quatBY, quatBZ, quatBW);
     mat4.fromRotationTranslation(_collideConvexVsPlane_transform, _collideConvexVsPlane_quatB, _collideConvexVsPlane_posB);
 
-    // compute inverse of transform A (rotation + translation only, NOT scale)
-    mat4.fromRotationTranslation(_collideConvexVsPlane_invTransform, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
+    // build transform A once and reuse (avoid redundant matrix construction)
+    mat4.fromRotationTranslation(_collideConvexVsPlane_transformA, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
+
+    // compute inverse of transform A
+    mat4.copy(_collideConvexVsPlane_invTransform, _collideConvexVsPlane_transformA);
     mat4.invert(_collideConvexVsPlane_invTransform, _collideConvexVsPlane_invTransform);
 
     // transform plane to convex shape's local space (invA * transformB)
@@ -558,17 +562,17 @@ function collideConvexVsPlane(
         vec3.scale(_collideConvexVsPlane_offsetByDistance, normal, signedDistance);
         vec3.subtract(_collideConvexVsPlane_point2, _collideConvexVsPlane_supportPoint, _collideConvexVsPlane_offsetByDistance);
 
-        // build transform A (rotation + translation only, NO scale)
-        // scale is already applied in the support function
-        mat4.fromRotationTranslation(_collideConvexVsPlane_transformA, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
-
-        // transform contact points to world space
+        // transform contact points to world space (using pre-built transformA)
         vec3.transformMat4(_collideConvexVsPlane_point1World, _collideConvexVsPlane_point1, _collideConvexVsPlane_transformA);
         vec3.transformMat4(_collideConvexVsPlane_point2World, _collideConvexVsPlane_point2, _collideConvexVsPlane_transformA);
 
-        // transform penetration axis to world space (rotation only)
+        // transform penetration axis to world space (rotation only, using pre-built transformA)
         vec3.negate(_collideConvexVsPlane_normal, normal);
-        vec3.transformQuat(_collideConvexVsPlane_penetrationAxisWorld, _collideConvexVsPlane_normal, _collideConvexVsPlane_quatA);
+        mat4.multiply3x3Vec(
+            _collideConvexVsPlane_penetrationAxisWorld,
+            _collideConvexVsPlane_transformA,
+            _collideConvexVsPlane_normal,
+        );
 
         // create hit
         vec3.copy(_collideConvexVsPlane_hit.pointA, _collideConvexVsPlane_point1World);
@@ -577,7 +581,7 @@ function collideConvexVsPlane(
         _collideConvexVsPlane_hit.penetration = penetration;
         _collideConvexVsPlane_hit.subShapeIdA = subShapeIdA;
         _collideConvexVsPlane_hit.subShapeIdB = subShapeIdB;
-        _collideConvexVsPlane_hit.materialIdA = (shapeA as ConvexShape).materialId;
+        _collideConvexVsPlane_hit.materialIdA = convexShape.materialId;
         _collideConvexVsPlane_hit.materialIdB = planeShape.materialId;
         _collideConvexVsPlane_hit.bodyIdB = collector.bodyIdB;
 
@@ -598,7 +602,7 @@ function collideConvexVsPlane(
             if (_collideConvexVsPlane_hit.faceA.numVertices > 0) {
                 getAdaptivePlaneSupportingFace(
                     _collideConvexVsPlane_hit.faceB,
-                    shapeA,
+                    convexShape,
                     _collideConvexVsPlane_posA,
                     _collideConvexVsPlane_scaledPlane,
                     _collideConvexVsPlane_transform,
