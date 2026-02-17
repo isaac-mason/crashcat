@@ -1,4 +1,4 @@
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, type Vec3, vec3 } from 'mathcat';
 import type { CompoundShapeChild } from '../compound';
 import {
     NODE_AXIS_OR_COUNT,
@@ -65,7 +65,7 @@ const _extent = /* @__PURE__ */ vec3.create();
 const _centerMin = /* @__PURE__ */ vec3.create();
 const _centerMax = /* @__PURE__ */ vec3.create();
 
-const _transformedCorner = /* @__PURE__ */ vec3.create();
+const _transformMatrix = /* @__PURE__ */ mat4.create();
 
 /**
  * compute child AABB in compound local space (transformed by position/rotation).
@@ -74,31 +74,11 @@ const _transformedCorner = /* @__PURE__ */ vec3.create();
 function computeChildBounds(out: Box3, child: CompoundShapeChild): void {
     const childAABB = child.shape.aabb;
 
-    // start with empty bounds
-    out[0][0] = Infinity;
-    out[0][1] = Infinity;
-    out[0][2] = Infinity;
-    out[1][0] = -Infinity;
-    out[1][1] = -Infinity;
-    out[1][2] = -Infinity;
+    // create transform matrix from position and quaternion
+    mat4.fromRotationTranslation(_transformMatrix, child.quaternion, child.position);
 
-    // transform all 8 corners of the child AABB
-    for (let x = 0; x < 2; x++) {
-        for (let y = 0; y < 2; y++) {
-            for (let z = 0; z < 2; z++) {
-                _transformedCorner[0] = childAABB[x][0];
-                _transformedCorner[1] = childAABB[y][1];
-                _transformedCorner[2] = childAABB[z][2];
-
-                // rotate and translate corner
-                vec3.transformQuat(_transformedCorner, _transformedCorner, child.quaternion);
-                vec3.add(_transformedCorner, _transformedCorner, child.position);
-
-                // expand bounds
-                box3.expandByPoint(out, out, _transformedCorner);
-            }
-        }
-    }
+    // transform the AABB by the matrix
+    box3.transformMat4(out, childAABB, _transformMatrix);
 }
 
 /**
