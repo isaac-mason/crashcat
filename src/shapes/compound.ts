@@ -1,4 +1,4 @@
-import { type Box3, box3, mat3, mat4, type Quat, quat, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -361,7 +361,13 @@ const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 function castRayVsCompound(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: CompoundShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -404,7 +410,13 @@ function castRayVsCompound(
         childShapeDef.castRay(
             collector,
             settings,
-            ray,
+            originX,
+            originY,
+            originZ,
+            directionX,
+            directionY,
+            directionZ,
+            length,
             child.shape,
             _castRayVsCompound_subShapeIdBuilder.value,
             _castRayVsCompound_subShapeIdBuilder.currentBit,

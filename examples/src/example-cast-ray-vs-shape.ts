@@ -1,9 +1,3 @@
-import GUI from 'lil-gui';
-import { quat, vec3 } from 'mathcat';
-import * as THREE from 'three';
-import { TransformControls } from 'three/addons/controls/TransformControls.js';
-import { OrbitControls } from 'three/examples/jsm/Addons.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
     box,
     CastRayStatus,
@@ -17,13 +11,19 @@ import {
     createDefaultCastRaySettings,
     EMPTY_SUB_SHAPE_ID,
     getShapeSurfaceNormal,
+    registerAll,
     sphere,
     staticCompound,
     transformed,
     triangleMesh,
-    registerAll,
 } from 'crashcat';
 import { createShapeHelper } from 'crashcat/three';
+import GUI from 'lil-gui';
+import { quat, vec3 } from 'mathcat';
+import * as THREE from 'three';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { OrbitControls } from 'three/examples/jsm/Addons.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { loadGLTFPoints } from './utils/gltf.js';
 
 registerAll();
@@ -199,7 +199,7 @@ function createTestShape(type: ShapeOption) {
                         shape: box.create({ halfExtents: vec3.fromValues(0.6, 0.7, 0.6) }),
                         position: vec3.fromValues(1.0, -0.6, 0),
                         quaternion: quat.fromDegrees(quat.create(), -20, 30, 25, 'zyx'),
-                    }
+                    },
                 ],
             });
         }
@@ -215,7 +215,7 @@ function createTestShape(type: ShapeOption) {
                         shape: box.create({ halfExtents: vec3.fromValues(0.6, 0.7, 0.6) }),
                         position: vec3.fromValues(1.0, -0.6, 0),
                         quaternion: quat.fromDegrees(quat.create(), -20, 30, 25, 'zyx'),
-                    }
+                    },
                 ],
             });
         }
@@ -341,22 +341,32 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
     );
     const shapeScale = vec3.fromValues(1, 1, 1);
 
-    const ray = {
-        origin: vec3.fromValues(origin.x, origin.y, origin.z),
-        direction,
-        length: rayLength,
-    };
+    // ray origin from click position
+    const originX = origin.x;
+    const originY = origin.y;
+    const originZ = origin.z;
+    const directionX = direction[0];
+    const directionY = direction[1];
+    const directionZ = direction[2];
 
     const hits: CastRayHitResult[] = [];
 
+    const options = createDefaultCastRaySettings();
+    options.collideWithBackfaces = true;
+
     if (config.collectorMode === 'closest') {
         const closestCollector = createClosestCastRayCollector();
-        const options = createDefaultCastRaySettings();
-        options.collideWithBackfaces = true;
+        
         castRayVsShape(
             closestCollector,
             options,
-            ray,
+            originX,
+            originY,
+            originZ,
+            directionX,
+            directionY,
+            directionZ,
+            rayLength,
             state.collisionShape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -376,7 +386,7 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
         if (hit.status === CastRayStatus.COLLIDING) {
             const hitPoint = vec3.create();
             const normalizedDistance = hit.fraction * rayLength;
-            vec3.scaleAndAdd(hitPoint, ray.origin, direction, normalizedDistance);
+            vec3.scaleAndAdd(hitPoint, [originX, originY, originZ], direction, normalizedDistance);
 
             const localHitPoint = vec3.create();
             vec3.subtract(localHitPoint, hitPoint, shapePos);
@@ -398,8 +408,14 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
         const anyCollector = createAnyCastRayCollector();
         castRayVsShape(
             anyCollector,
-            { collideWithBackfaces: true, treatConvexAsSolid: true },
-            ray,
+            options,
+            originX,
+            originY,
+            originZ,
+            directionX,
+            directionY,
+            directionZ,
+            rayLength,
             state.collisionShape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -419,7 +435,7 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
         if (hit.status === CastRayStatus.COLLIDING) {
             const hitPoint = vec3.create();
             const normalizedDistance = hit.fraction * rayLength;
-            vec3.scaleAndAdd(hitPoint, ray.origin, direction, normalizedDistance);
+            vec3.scaleAndAdd(hitPoint, [originX, originY, originZ], direction, normalizedDistance);
 
             const localHitPoint = vec3.create();
             vec3.subtract(localHitPoint, hitPoint, shapePos);
@@ -441,8 +457,14 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
         const allCollector = createAllCastRayCollector();
         castRayVsShape(
             allCollector,
-            { collideWithBackfaces: true, treatConvexAsSolid: true },
-            ray,
+            options,
+            originX,
+            originY,
+            originZ,
+            directionX,
+            directionY,
+            directionZ,
+            rayLength,
             state.collisionShape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -462,7 +484,7 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
             if (hit.status === CastRayStatus.COLLIDING) {
                 const hitPoint = vec3.create();
                 const normalizedDistance = hit.fraction * rayLength;
-                vec3.scaleAndAdd(hitPoint, ray.origin, direction, normalizedDistance);
+                vec3.scaleAndAdd(hitPoint, [originX, originY, originZ], direction, normalizedDistance);
 
                 const localHitPoint = vec3.create();
                 vec3.subtract(localHitPoint, hitPoint, shapePos);

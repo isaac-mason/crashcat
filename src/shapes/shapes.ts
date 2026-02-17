@@ -1,4 +1,4 @@
-import type { Box3, Mat4, Raycast3 } from 'mathcat';
+import type { Box3, Mat4 } from 'mathcat';
 import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import type { SubShapeId } from '../body/sub-shape';
@@ -167,7 +167,13 @@ export type GetSubShapeTransformedShapeResult = {
 export type CastRayVsShapeFn<S> = (
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: S,
     subShapeId: number,
     subShapeIdBits: number,
@@ -271,22 +277,32 @@ export type CastShapeVsShapeFn = (
     scaleBZ: number,
 ) => void;
 
-type OptionalShapeDef = 'computeMassProperties' | 'getInnerRadius' | 'createSupportPool' | 'getSupportFunction' | 'getLeafShape' | 'getSubShapeTransformedShape';
+type OptionalShapeDef =
+    | 'computeMassProperties'
+    | 'getInnerRadius'
+    | 'createSupportPool'
+    | 'getSupportFunction'
+    | 'getLeafShape'
+    | 'getSubShapeTransformedShape';
 
 export type ShapeDefOptions<S extends ShapeBase> = Omit<ShapeDef<S>, OptionalShapeDef> &
     Partial<Pick<ShapeDef<S>, OptionalShapeDef>>;
 
 export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): ShapeDef<S> {
-    const computeMassProperties = shapeDef.computeMassProperties ?? ((out: MassProperties, _shape: S) => {
-        // default: unit mass, identity inertia (don't change)
-        out.mass = 1;
-    });
+    const computeMassProperties =
+        shapeDef.computeMassProperties ??
+        ((out: MassProperties, _shape: S) => {
+            // default: unit mass, identity inertia (don't change)
+            out.mass = 1;
+        });
 
-    const getInnerRadius = shapeDef.getInnerRadius ?? ((_shape: S) => {
-        // default: zero inner radius
-        return 0;
-    });
-    
+    const getInnerRadius =
+        shapeDef.getInnerRadius ??
+        ((_shape: S) => {
+            // default: zero inner radius
+            return 0;
+        });
+
     const getLeafShape =
         shapeDef.getLeafShape ??
         ((out, shape, subShapeId) => {
@@ -339,11 +355,7 @@ export type GetSupportingFaceImpl<S extends ShapeBase> = (
 
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 
-export type GetLeafShapeImpl<S extends ShapeBase> = (
-    outResult: GetLeafShapeResult,
-    shape: S,
-    subShapeId: SubShapeId,
-) => void;
+export type GetLeafShapeImpl<S extends ShapeBase> = (outResult: GetLeafShapeResult, shape: S, subShapeId: SubShapeId) => void;
 
 export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
     outResult: GetSubShapeTransformedShapeResult,

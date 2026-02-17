@@ -813,8 +813,26 @@ export function castRay(
             const rightNode = dbvt.nodes[node.right];
 
             // calculate distances to children
-            const leftDist = rayDistanceToBox3(_ray, leftNode.aabb);
-            const rightDist = rayDistanceToBox3(_ray, rightNode.aabb);
+            const leftDist = rayDistanceToBox3(
+                _ray.origin[0],
+                _ray.origin[1],
+                _ray.origin[2],
+                _ray.direction[0],
+                _ray.direction[1],
+                _ray.direction[2],
+                _ray.length,
+                leftNode.aabb,
+            );
+            const rightDist = rayDistanceToBox3(
+                _ray.origin[0],
+                _ray.origin[1],
+                _ray.origin[2],
+                _ray.direction[0],
+                _ray.direction[1],
+                _ray.direction[2],
+                _ray.length,
+                rightNode.aabb,
+            );
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
@@ -919,10 +937,28 @@ export function castAABB(
 
             // calculate distances to expanded children bounds
             box3.expandByExtents(_nodeBounds, leftNode.aabb, _halfExtents);
-            const leftDist = rayDistanceToBox3(_ray, _nodeBounds);
+            const leftDist = rayDistanceToBox3(
+                _ray.origin[0],
+                _ray.origin[1],
+                _ray.origin[2],
+                _ray.direction[0],
+                _ray.direction[1],
+                _ray.direction[2],
+                _ray.length,
+                _nodeBounds,
+            );
 
             box3.expandByExtents(_nodeBounds, rightNode.aabb, _halfExtents);
-            const rightDist = rayDistanceToBox3(_ray, _nodeBounds);
+            const rightDist = rayDistanceToBox3(
+                _ray.origin[0],
+                _ray.origin[1],
+                _ray.origin[2],
+                _ray.direction[0],
+                _ray.direction[1],
+                _ray.direction[2],
+                _ray.length,
+                _nodeBounds,
+            );
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {

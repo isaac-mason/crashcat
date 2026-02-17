@@ -1,4 +1,4 @@
-import { type Box3, box3, mat4, type Quat, quat, type Raycast3, raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -226,12 +226,17 @@ const _castRayVsTransformed_worldQuat = /* @__PURE__ */ quat.create();
 const _castRayVsTransformed_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTransformed_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTransformed_invQuat = /* @__PURE__ */ quat.create();
-const _castRayVsTransformed_tempRay = /* @__PURE__ */ raycast3.create();
 
 function castRayVsTransformed(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: TransformedShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -260,42 +265,42 @@ function castRayVsTransformed(
     // first, compute inverse quaternion
     quat.conjugate(_castRayVsTransformed_invQuat, _castRayVsTransformed_worldQuat);
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsTransformed_rayOriginLocal, originX, originY, originZ);
     // transform ray origin: (origin - position) rotated by inverse quaternion
-    vec3.subtract(_castRayVsTransformed_rayOriginLocal, ray.origin, _castRayVsTransformed_worldPos);
+    vec3.subtract(_castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_worldPos);
     vec3.transformQuat(_castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_invQuat);
 
+    // set ray direction from parameters
+    vec3.set(_castRayVsTransformed_rayDirectionLocal, directionX, directionY, directionZ);
     // transform ray direction: direction rotated by inverse quaternion
-    vec3.copy(_castRayVsTransformed_rayDirectionLocal, ray.direction);
     vec3.transformQuat(
         _castRayVsTransformed_rayDirectionLocal,
         _castRayVsTransformed_rayDirectionLocal,
         _castRayVsTransformed_invQuat,
     );
 
-    // prepare transformed ray for inner shape
-    vec3.copy(_castRayVsTransformed_tempRay.origin, _castRayVsTransformed_rayOriginLocal);
-    vec3.copy(_castRayVsTransformed_tempRay.direction, _castRayVsTransformed_rayDirectionLocal);
-    _castRayVsTransformed_tempRay.length = ray.length;
-
     // cast against the inner shape with identity transform (already accumulated)
+    // pass transformed ray components directly - no temp ray needed!
     const innerShapeDef = shapeDefs[transformedShape.shape.type];
+
+    // biome-ignore format: readability
     innerShapeDef.castRay(
         collector,
         settings,
-        _castRayVsTransformed_tempRay,
+        _castRayVsTransformed_rayOriginLocal[0],
+        _castRayVsTransformed_rayOriginLocal[1],
+        _castRayVsTransformed_rayOriginLocal[2],
+        _castRayVsTransformed_rayDirectionLocal[0],
+        _castRayVsTransformed_rayDirectionLocal[1],
+        _castRayVsTransformed_rayDirectionLocal[2],
+        length,
         transformedShape.shape,
         subShapeId,
         subShapeIdBits,
-        0,
-        0,
-        0, // identity position
-        0,
-        0,
-        0,
-        1, // identity quaternion
-        scaleX,
-        scaleY,
-        scaleZ, // pass through scale
+        0, 0, 0, // identity position
+        0, 0, 0, 1, // identity quaternion
+        scaleX, scaleY, scaleZ, // pass through scale
     );
 }
 

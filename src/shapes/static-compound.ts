@@ -1,4 +1,4 @@
-import { type Box3, box3, mat3, mat4, quat, raycast3, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat3, mat4, quat, raycast3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -9,23 +9,23 @@ import type { CollidePointCollector, CollidePointSettings } from '../collision/c
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
 import * as bvhStack from '../utils/bvh-stack';
-import * as bvh from './utils/bvh';
 import type { CompoundShapeChild } from './compound';
 import {
     collisionDispatch,
     defineShape,
     type GetLeafShapeResult,
-    getShapeInnerRadius,
     type GetSubShapeTransformedShapeResult,
-    setCastShapeFn,
-    setCollideShapeFn,
+    getShapeInnerRadius,
     type Shape,
     ShapeCategory,
-    shapeDefs,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
+    setCastShapeFn,
+    setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
+import * as bvh from './utils/bvh';
 import type { BvhBuildSettings, StaticCompoundBVH } from './utils/static-compound-bvh';
 import * as staticCompoundBvh from './utils/static-compound-bvh';
 
@@ -348,7 +348,6 @@ const _castRayVsStaticCompound_invQuat = /* @__PURE__ */ quat.create();
 
 const _castRayVsStaticCompound_localRayOrigin = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_localRayDir = /* @__PURE__ */ vec3.create();
-const _castRayVsStaticCompound_localRay = /* @__PURE__ */ raycast3.create();
 
 const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
@@ -361,7 +360,13 @@ const _castRayVsStaticCompound_nodeBounds = /* @__PURE__ */ box3.create();
 function castRay(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: StaticCompoundShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -377,7 +382,7 @@ function castRay(
     scaleZ: number,
 ): void {
     const buffer = shape.bvh.buffer;
-    
+
     if (buffer.length === 0) {
         return;
     }
@@ -388,26 +393,32 @@ function castRay(
     // transform ray from world space to compound local space
     quat.conjugate(_castRayVsStaticCompound_invQuat, _castRayVsStaticCompound_quat);
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsStaticCompound_localRayOrigin, originX, originY, originZ);
     // transform ray origin: (origin - position) rotated by inverse quaternion
-    vec3.subtract(_castRayVsStaticCompound_localRayOrigin, ray.origin, _castRayVsStaticCompound_pos);
+    vec3.subtract(_castRayVsStaticCompound_localRayOrigin, _castRayVsStaticCompound_localRayOrigin, _castRayVsStaticCompound_pos);
     vec3.transformQuat(
         _castRayVsStaticCompound_localRayOrigin,
         _castRayVsStaticCompound_localRayOrigin,
         _castRayVsStaticCompound_invQuat,
     );
 
+    // set ray direction from parameters
+    vec3.set(_castRayVsStaticCompound_localRayDir, directionX, directionY, directionZ);
     // transform ray direction: direction rotated by inverse quaternion
-    vec3.copy(_castRayVsStaticCompound_localRayDir, ray.direction);
     vec3.transformQuat(
         _castRayVsStaticCompound_localRayDir,
         _castRayVsStaticCompound_localRayDir,
         _castRayVsStaticCompound_invQuat,
     );
 
-    // prepare local ray for bvh traversal
-    vec3.copy(_castRayVsStaticCompound_localRay.origin, _castRayVsStaticCompound_localRayOrigin);
-    vec3.copy(_castRayVsStaticCompound_localRay.direction, _castRayVsStaticCompound_localRayDir);
-    _castRayVsStaticCompound_localRay.length = ray.length;
+    // store transformed ray components for bvh traversal
+    const localOriginX = _castRayVsStaticCompound_localRayOrigin[0];
+    const localOriginY = _castRayVsStaticCompound_localRayOrigin[1];
+    const localOriginZ = _castRayVsStaticCompound_localRayOrigin[2];
+    const localDirX = _castRayVsStaticCompound_localRayDir[0];
+    const localDirY = _castRayVsStaticCompound_localRayDir[1];
+    const localDirZ = _castRayVsStaticCompound_localRayDir[2];
 
     bvhStack.reset(_castRayVsStaticCompound_stack);
     bvhStack.push(_castRayVsStaticCompound_stack, 0, -Infinity); // root always visited
@@ -436,7 +447,7 @@ function castRay(
             // leaf: check children
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
-            
+
             for (let i = 0; i < childCount; i++) {
                 const childIndex = childStart + i;
                 const child = shape.children[childIndex];
@@ -466,7 +477,13 @@ function castRay(
                 childShapeDef.castRay(
                     collector,
                     settings,
-                    ray,
+                    localOriginX,
+                    localOriginY,
+                    localOriginZ,
+                    localDirX,
+                    localDirY,
+                    localDirZ,
+                    length,
                     child.shape,
                     _castRayVsStaticCompound_subShapeIdBuilder.value,
                     _castRayVsStaticCompound_subShapeIdBuilder.currentBit,
@@ -489,10 +506,28 @@ function castRay(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             bvh.nodeGetBounds(buffer, leftOffset, _castRayVsStaticCompound_nodeBounds);
-            const leftDist = rayDistanceToBox3(_castRayVsStaticCompound_localRay, _castRayVsStaticCompound_nodeBounds);
+            const leftDist = rayDistanceToBox3(
+                localOriginX,
+                localOriginY,
+                localOriginZ,
+                localDirX,
+                localDirY,
+                localDirZ,
+                length,
+                _castRayVsStaticCompound_nodeBounds,
+            );
 
             bvh.nodeGetBounds(buffer, rightOffset, _castRayVsStaticCompound_nodeBounds);
-            const rightDist = rayDistanceToBox3(_castRayVsStaticCompound_localRay, _castRayVsStaticCompound_nodeBounds);
+            const rightDist = rayDistanceToBox3(
+                localOriginX,
+                localOriginY,
+                localOriginZ,
+                localDirX,
+                localDirY,
+                localDirZ,
+                length,
+                _castRayVsStaticCompound_nodeBounds,
+            );
 
             // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
@@ -1365,9 +1400,9 @@ function castShapeVsStaticCompound(
     scaleBZ: number,
 ): void {
     const compound = shapeB as StaticCompoundShape;
-    
+
     const buffer = compound.bvh.buffer;
-    
+
     // early out if buffer is empty (no children)
     if (buffer.length === 0) {
         return;
@@ -1384,14 +1419,31 @@ function castShapeVsStaticCompound(
     quat.conjugate(_castShapeVsStaticCompound_inverseQuaternionB, _castShapeVsStaticCompound_quatB);
 
     vec3.sub(_castShapeVsStaticCompound_positionDifference, _castShapeVsStaticCompound_posA, _castShapeVsStaticCompound_posB);
-    vec3.transformQuat(_castShapeVsStaticCompound_posAInB, _castShapeVsStaticCompound_positionDifference, _castShapeVsStaticCompound_inverseQuaternionB);
+    vec3.transformQuat(
+        _castShapeVsStaticCompound_posAInB,
+        _castShapeVsStaticCompound_positionDifference,
+        _castShapeVsStaticCompound_inverseQuaternionB,
+    );
 
-    quat.multiply(_castShapeVsStaticCompound_quatAInB, _castShapeVsStaticCompound_inverseQuaternionB, _castShapeVsStaticCompound_quatA);
+    quat.multiply(
+        _castShapeVsStaticCompound_quatAInB,
+        _castShapeVsStaticCompound_inverseQuaternionB,
+        _castShapeVsStaticCompound_quatA,
+    );
 
-    vec3.transformQuat(_castShapeVsStaticCompound_displacementInB, _castShapeVsStaticCompound_displacementA, _castShapeVsStaticCompound_inverseQuaternionB);
+    vec3.transformQuat(
+        _castShapeVsStaticCompound_displacementInB,
+        _castShapeVsStaticCompound_displacementA,
+        _castShapeVsStaticCompound_inverseQuaternionB,
+    );
 
     // compute base AABB of shape A at t=0 in compound local space
-    const aabbMatrix = mat4.fromRotationTranslationScale(_castShapeVsStaticCompound_mat4, _castShapeVsStaticCompound_quatAInB, _castShapeVsStaticCompound_posAInB, _castShapeVsStaticCompound_scaleA);
+    const aabbMatrix = mat4.fromRotationTranslationScale(
+        _castShapeVsStaticCompound_mat4,
+        _castShapeVsStaticCompound_quatAInB,
+        _castShapeVsStaticCompound_posAInB,
+        _castShapeVsStaticCompound_scaleA,
+    );
     box3.transformMat4(_castShapeVsStaticCompound_sweptAABB, shapeA.aabb, aabbMatrix);
 
     // compute centroid of base AABB
@@ -1440,7 +1492,7 @@ function castShapeVsStaticCompound(
             // leaf: test child shapes
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
-            
+
             for (let i = 0; i < childCount; i++) {
                 const childIndex = childStart + i;
 
@@ -1541,7 +1593,16 @@ function castShapeVsStaticCompound(
             expandedBounds[1][0] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
-            const leftDist = rayDistanceToBox3(ray, expandedBounds);
+            const leftDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
 
             expandedBounds[0][0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
             expandedBounds[0][1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
@@ -1549,7 +1610,16 @@ function castShapeVsStaticCompound(
             expandedBounds[1][0] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
-            const rightDist = rayDistanceToBox3(ray, expandedBounds);
+            const rightDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {

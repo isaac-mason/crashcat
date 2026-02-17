@@ -1,4 +1,4 @@
-import { type Box3, box3, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -9,14 +9,14 @@ import {
     collisionDispatch,
     defineShape,
     getShapeInnerRadius,
-    setCastShapeFn,
-    setCollideShapeFn,
     type Shape,
     ShapeCategory,
-    shapeDefs,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
+    setCastShapeFn,
+    setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 /** settings for creating an offset center of mass shape */
@@ -142,7 +142,13 @@ function getInnerRadius(shape: OffsetCenterOfMassShape): number {
 function castRayVsOffsetCenterOfMass(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: OffsetCenterOfMassShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -157,12 +163,18 @@ function castRayVsOffsetCenterOfMass(
     scaleY: number,
     scaleZ: number,
 ): void {
-    // geometry doesn't move when COM changes - just pass through
+    // geometry doesn't move when COM changes - just pass through ray components
     const innerShapeDef = shapeDefs[shape.shape.type];
     innerShapeDef.castRay(
         collector,
         settings,
-        ray,
+        originX,
+        originY,
+        originZ,
+        directionX,
+        directionY,
+        directionZ,
+        length,
         shape.shape,
         subShapeId,
         subShapeIdBits,

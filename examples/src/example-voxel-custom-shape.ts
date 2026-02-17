@@ -41,7 +41,7 @@ import {
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
-import { type Box3, box3, createSimplex2D, mat4, quat, type Raycast3, randomFloat, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, createSimplex2D, mat4, quat, randomFloat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
@@ -338,13 +338,7 @@ const voxelShapeDef = defineShape<VoxelShape>({
         const px = ioResult.transform[12];
         const py = ioResult.transform[13];
         const pz = ioResult.transform[14];
-        getVoxelFromHitPosition(
-            _getSupportingFace_voxelPos,
-            px,
-            py,
-            pz,
-            hitFace,
-        );
+        getVoxelFromHitPosition(_getSupportingFace_voxelPos, px, py, pz, hitFace);
 
         const vx = _getSupportingFace_voxelPos[0];
         const vy = _getSupportingFace_voxelPos[1];
@@ -484,7 +478,13 @@ const _castRayVsVoxels_subShapeIdBuilder = subShape.builder();
 function castRayVsVoxels(
     collector: CastRayCollector,
     _settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: VoxelShape,
     subShapeId: number,
     subShapeIdBitsB: number,
@@ -500,13 +500,10 @@ function castRayVsVoxels(
     scaleZ: number,
 ): void {
     // transform ray to voxel local space
-    const rayOrigin = ray.origin;
-    const rayDir = ray.direction;
-
     // translate origin to local space
-    _castRayVsVoxels_rayOriginLocal[0] = rayOrigin[0] - posX;
-    _castRayVsVoxels_rayOriginLocal[1] = rayOrigin[1] - posY;
-    _castRayVsVoxels_rayOriginLocal[2] = rayOrigin[2] - posZ;
+    _castRayVsVoxels_rayOriginLocal[0] = originX - posX;
+    _castRayVsVoxels_rayOriginLocal[1] = originY - posY;
+    _castRayVsVoxels_rayOriginLocal[2] = originZ - posZ;
 
     // rotate by inverse quaternion
     quat.set(_castRayVsVoxels_quat, quatX, quatY, quatZ, quatW);
@@ -514,7 +511,8 @@ function castRayVsVoxels(
     vec3.transformQuat(_castRayVsVoxels_rayOriginLocal, _castRayVsVoxels_rayOriginLocal, _castRayVsVoxels_quat);
 
     // rotate direction (no translation)
-    vec3.transformQuat(_castRayVsVoxels_rayDirectionLocal, rayDir, _castRayVsVoxels_quat);
+    vec3.set(_castRayVsVoxels_rayDirectionLocal, directionX, directionY, directionZ);
+    vec3.transformQuat(_castRayVsVoxels_rayDirectionLocal, _castRayVsVoxels_rayDirectionLocal, _castRayVsVoxels_quat);
 
     // apply scale
     _castRayVsVoxels_rayOriginLocal[0] /= Math.abs(scaleX);
@@ -541,7 +539,7 @@ function castRayVsVoxels(
     _castRayVsVoxels_rayDirectionLocal[1] *= invDirLength;
     _castRayVsVoxels_rayDirectionLocal[2] *= invDirLength;
 
-    const maxDistance = ray.length * dirLength;
+    const maxDistance = length * dirLength;
 
     // get voxel bounds in local space
     const boundsMinX = shape.chunkBounds[0][0] * CHUNK_SIZE;

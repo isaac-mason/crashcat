@@ -1,4 +1,4 @@
-import { type Box3, box3, mat4, type Quat, quat, type Raycast3, raycast3, triangle3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, type Quat, quat, raycast3, triangle3, type Vec3, vec3 } from 'mathcat';
 import { CastRayStatus, createCastRayHit, createDefaultCastRaySettings } from 'src/collision/cast-ray-vs-shape';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -253,7 +253,7 @@ const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
 const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
+const _castRayVsTriangleMesh_rayForMathcat = /* @__PURE__ */ raycast3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
 const _castRayVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
 const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
@@ -267,7 +267,13 @@ const _castRayVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builde
 function castRayVsTriangleMesh(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: TriangleMeshShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -297,9 +303,22 @@ function castRayVsTriangleMesh(
         _castRayVsTriangleMesh_negPos,
     );
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsTriangleMesh_rayOriginLocal, originX, originY, originZ);
     // transform ray from world space to mesh local space using pre-computed matrix
-    vec3.transformMat4(_castRayVsTriangleMesh_rayOriginLocal, ray.origin, _castRayVsTriangleMesh_mat4_WorldToB);
-    mat4.multiply3x3Vec(_castRayVsTriangleMesh_rayDirectionLocal, _castRayVsTriangleMesh_mat4_WorldToB, ray.direction);
+    vec3.transformMat4(
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_mat4_WorldToB,
+    );
+
+    // set ray direction from parameters
+    vec3.set(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
+    mat4.multiply3x3Vec(
+        _castRayVsTriangleMesh_rayDirectionLocal,
+        _castRayVsTriangleMesh_mat4_WorldToB,
+        _castRayVsTriangleMesh_rayDirectionLocal,
+    );
 
     // handle scale by dividing ray direction components by scale
     // (scale affects how far we need to go in local space to reach world distance)
@@ -307,10 +326,11 @@ function castRayVsTriangleMesh(
     _castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
     _castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
 
-    // prepare local ray for bvh traversal
-    vec3.copy(_castRayVsTriangleMesh_ray.origin, _castRayVsTriangleMesh_rayOriginLocal);
-    vec3.copy(_castRayVsTriangleMesh_ray.direction, _castRayVsTriangleMesh_rayDirectionLocal);
-    _castRayVsTriangleMesh_ray.length = ray.length;
+    // set up scratch ray for mathcat api calls
+    // safe to use module-level scratch because triangle meshes don't nest
+    vec3.copy(_castRayVsTriangleMesh_rayForMathcat.origin, _castRayVsTriangleMesh_rayOriginLocal);
+    vec3.copy(_castRayVsTriangleMesh_rayForMathcat.direction, _castRayVsTriangleMesh_rayDirectionLocal);
+    _castRayVsTriangleMesh_rayForMathcat.length = length;
 
     const buffer = shape.bvh.buffer;
     const meshData = shape.data;
@@ -371,7 +391,7 @@ function castRayVsTriangleMesh(
                 // test ray vs triangle
                 raycast3.intersectsTriangle(
                     _castRayVsTriangleMesh_hitResult,
-                    _castRayVsTriangleMesh_ray,
+                    _castRayVsTriangleMesh_rayForMathcat,
                     a,
                     b,
                     c,
@@ -410,8 +430,26 @@ function castRayVsTriangleMesh(
             bvh.nodeGetBounds(buffer, leftOffset, _castRayVsTriangleMesh_leftBounds);
             bvh.nodeGetBounds(buffer, rightOffset, _castRayVsTriangleMesh_rightBounds);
 
-            const leftDist = rayDistanceToBox3(_castRayVsTriangleMesh_ray, _castRayVsTriangleMesh_leftBounds);
-            const rightDist = rayDistanceToBox3(_castRayVsTriangleMesh_ray, _castRayVsTriangleMesh_rightBounds);
+            const leftDist = rayDistanceToBox3(
+                _castRayVsTriangleMesh_rayForMathcat.origin[0],
+                _castRayVsTriangleMesh_rayForMathcat.origin[1],
+                _castRayVsTriangleMesh_rayForMathcat.origin[2],
+                _castRayVsTriangleMesh_rayForMathcat.direction[0],
+                _castRayVsTriangleMesh_rayForMathcat.direction[1],
+                _castRayVsTriangleMesh_rayForMathcat.direction[2],
+                _castRayVsTriangleMesh_rayForMathcat.length,
+                _castRayVsTriangleMesh_leftBounds,
+            );
+            const rightDist = rayDistanceToBox3(
+                _castRayVsTriangleMesh_rayForMathcat.origin[0],
+                _castRayVsTriangleMesh_rayForMathcat.origin[1],
+                _castRayVsTriangleMesh_rayForMathcat.origin[2],
+                _castRayVsTriangleMesh_rayForMathcat.direction[0],
+                _castRayVsTriangleMesh_rayForMathcat.direction[1],
+                _castRayVsTriangleMesh_rayForMathcat.direction[2],
+                _castRayVsTriangleMesh_rayForMathcat.length,
+                _castRayVsTriangleMesh_rightBounds,
+            );
 
             // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
@@ -549,11 +587,16 @@ function collidePointVsTriangleMesh(
     hitCountCollector.bodyIdB = collector.bodyIdB;
 
     // cast ray through mesh, counting all triangle intersections
+    // pass ray components directly from the local point and direction
     // biome-ignore format: readability
     castRayVsTriangleMesh(
         hitCountCollector,
         _collidePointVsTriangleMesh_castRaySettings,
-        _collidePointVsTriangleMesh_ray,
+        _collidePointVsTriangleMesh_localPoint[0],
+        _collidePointVsTriangleMesh_localPoint[1],
+        _collidePointVsTriangleMesh_localPoint[2],
+        0, 1, 0,    // direction: +Y axis
+        rayLength,
         shapeB,
         subShapeIdB,
         subShapeIdBitsB,
@@ -1059,7 +1102,16 @@ function castConvexVsTriangleMesh(
             expandedBounds[1][0] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
-            const leftDist = rayDistanceToBox3(ray, expandedBounds);
+            const leftDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
 
             expandedBounds[0][0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
             expandedBounds[0][1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
@@ -1067,7 +1119,16 @@ function castConvexVsTriangleMesh(
             expandedBounds[1][0] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
-            const rightDist = rayDistanceToBox3(ray, expandedBounds);
+            const rightDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {

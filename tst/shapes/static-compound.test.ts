@@ -1,4 +1,4 @@
-import { quat, type Raycast3, vec3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -16,12 +16,16 @@ import {
     staticCompoundBvh,
 } from '../../src';
 
-function createRay(origin: [number, number, number], direction: [number, number, number], length = 1000): Raycast3 {
+function createRayParams(origin: [number, number, number], direction: [number, number, number], length = 1000) {
     const dir = vec3.fromValues(...direction);
     vec3.normalize(dir, dir);
     return {
-        origin: vec3.fromValues(...origin),
-        direction: dir,
+        originX: origin[0],
+        originY: origin[1],
+        originZ: origin[2],
+        directionX: dir[0],
+        directionY: dir[1],
+        directionZ: dir[2],
         length,
     };
 }
@@ -188,10 +192,33 @@ describe('StaticCompoundShape castRay', () => {
             children: [{ position: vec3.fromValues(5, 0, 0), quaternion: quat.create(), shape: s }],
         });
 
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
         const collector = createAllCastRayCollector();
 
-        castRayVsShape(collector, defaultCastRaySettings, ray, shape, EMPTY_SUB_SHAPE_ID, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        castRayVsShape(
+            collector,
+            defaultCastRaySettings,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
+            shape,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+        );
 
         expect(collector.hits.length).toBe(1);
         expect(collector.hits[0].status).toBe(CastRayStatus.COLLIDING);
@@ -205,10 +232,33 @@ describe('StaticCompoundShape castRay', () => {
             children: [{ position: vec3.fromValues(5, 0, 0), quaternion: quat.create(), shape: s }],
         });
 
-        const ray = createRay([0, 0, 0], [-1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [-1, 0, 0]);
         const collector = createAllCastRayCollector();
 
-        castRayVsShape(collector, defaultCastRaySettings, ray, shape, EMPTY_SUB_SHAPE_ID, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        castRayVsShape(
+            collector,
+            defaultCastRaySettings,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
+            shape,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+        );
 
         expect(collector.hits.length).toBe(0);
     });
@@ -223,10 +273,33 @@ describe('StaticCompoundShape castRay', () => {
             ],
         });
 
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
         const collector = createAllCastRayCollector();
 
-        castRayVsShape(collector, defaultCastRaySettings, ray, shape, EMPTY_SUB_SHAPE_ID, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        castRayVsShape(
+            collector,
+            defaultCastRaySettings,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
+            shape,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+        );
 
         expect(collector.hits.length).toBe(2);
     });
@@ -249,10 +322,33 @@ describe('StaticCompoundShape castRay', () => {
         const shape = staticCompound.create({ children });
 
         // ray along x-axis should hit all spheres
-        const ray = createRay([0, 0, 0], [1, 0, 0], 1000);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0], 1000);
         const collector = createAllCastRayCollector();
 
-        castRayVsShape(collector, defaultCastRaySettings, ray, shape, EMPTY_SUB_SHAPE_ID, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1);
+        castRayVsShape(
+            collector,
+            defaultCastRaySettings,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
+            shape,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            1,
+            1,
+            1,
+        );
 
         expect(collector.hits.length).toBe(50);
     });

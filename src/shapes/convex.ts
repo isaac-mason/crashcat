@@ -1,4 +1,4 @@
-import type { Mat4, Raycast3, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'mathcat';
 import { box3, mat4, quat, vec3 } from 'mathcat';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
@@ -54,7 +54,13 @@ const _castRayVsConvex_gjkResult = /* @__PURE__ */ createGjkCastRayResult();
 export function castRayVsConvex(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: Shape,
     subShapeId: number,
     _subShapeIdBits: number,
@@ -84,16 +90,19 @@ export function castRayVsConvex(
     // first, compute inverse quaternion
     quat.conjugate(_castRayVsConvex_invQuat, _castRayVsConvex_quat);
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsConvex_rayOriginLocal, originX, originY, originZ);
     // transform ray origin: (origin - position) rotated by inverse quaternion
-    vec3.subtract(_castRayVsConvex_rayOriginLocal, ray.origin, _castRayVsConvex_pos);
+    vec3.subtract(_castRayVsConvex_rayOriginLocal, _castRayVsConvex_rayOriginLocal, _castRayVsConvex_pos);
     vec3.transformQuat(_castRayVsConvex_rayOriginLocal, _castRayVsConvex_rayOriginLocal, _castRayVsConvex_invQuat);
 
+    // set ray direction from parameters
+    vec3.set(_castRayVsConvex_rayDirectionLocal, directionX, directionY, directionZ);
     // transform ray direction: direction rotated by inverse quaternion
-    vec3.copy(_castRayVsConvex_rayDirectionLocal, ray.direction);
     vec3.transformQuat(_castRayVsConvex_rayDirectionLocal, _castRayVsConvex_rayDirectionLocal, _castRayVsConvex_invQuat);
 
     // scale direction by ray length for GJK
-    vec3.scale(_castRayVsConvex_rayDirectionLocal, _castRayVsConvex_rayDirectionLocal, ray.length);
+    vec3.scale(_castRayVsConvex_rayDirectionLocal, _castRayVsConvex_rayDirectionLocal, length);
 
     // cast ray using GJK
     gjkCastRay(

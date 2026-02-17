@@ -1,4 +1,4 @@
-import { type Box3, box3, type Mat4, mat4, type Plane3, plane3, quat, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Mat4, mat4, type Plane3, plane3, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import { type CastRayCollector, type CastRaySettings, CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import {
@@ -317,10 +317,19 @@ const _castRayVsPlane_quat = /* @__PURE__ */ quat.create();
 const _castRayVsPlane_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsPlane_hit = /* @__PURE__ */ createCastRayHit();
 
+const _castRayVsPlane_rayOrigin = /* @__PURE__ */ vec3.create();
+const _castRayVsPlane_rayDirection = /* @__PURE__ */ vec3.create();
+
 function castRayVsPlane(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: PlaneShape,
     subShapeId: number,
     _subShapeIdBits: number,
@@ -347,8 +356,10 @@ function castRayVsPlane(
     mat4.fromRotationTranslation(_castRayVsPlane_transform, _castRayVsPlane_quat, _castRayVsPlane_pos);
     transformPlane(_castRayVsPlane_worldPlane, _castRayVsPlane_scaledPlane, _castRayVsPlane_transform);
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsPlane_rayOrigin, originX, originY, originZ);
     // calculate signed distance from ray origin to plane
-    const distance = plane3.distanceToPoint(_castRayVsPlane_worldPlane, ray.origin);
+    const distance = plane3.distanceToPoint(_castRayVsPlane_worldPlane, _castRayVsPlane_rayOrigin);
 
     // inside solid half-space (distance <= 0)?
     if (settings.treatConvexAsSolid && distance <= 0.0 && collector.earlyOutFraction > 0.0) {
@@ -361,8 +372,10 @@ function castRayVsPlane(
         return;
     }
 
+    // set ray direction from parameters
+    vec3.set(_castRayVsPlane_rayDirection, directionX, directionY, directionZ);
     // calculate dot product for ray direction with plane normal
-    const dot = vec3.dot(ray.direction, _castRayVsPlane_worldPlane.normal);
+    const dot = vec3.dot(_castRayVsPlane_rayDirection, _castRayVsPlane_worldPlane.normal);
 
     // parallel to plane?
     if (Math.abs(dot) < 1e-10) {
@@ -377,7 +390,7 @@ function castRayVsPlane(
 
     // calculate hit fraction
     // normalize by ray length to get fraction in [0,1]
-    const fraction = -distance / dot / ray.length;
+    const fraction = -distance / dot / length;
 
     // valid hit?
     if (fraction >= 0.0 && fraction < collector.earlyOutFraction) {

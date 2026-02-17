@@ -1,4 +1,4 @@
-import { type Box3, box3, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -173,7 +173,13 @@ function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, sha
 function castRayVsScaled(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: ScaledShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -194,11 +200,18 @@ function castRayVsScaled(
     const newScaleZ = scaleZ * shape.scale[2];
 
     // cast against the inner shape with accumulated scale
+    // pass through ray components directly
     const innerShapeDef = shapeDefs[shape.shape.type];
     innerShapeDef.castRay(
         collector,
         settings,
-        ray,
+        originX,
+        originY,
+        originZ,
+        directionX,
+        directionY,
+        directionZ,
+        length,
         shape.shape,
         subShapeId,
         subShapeIdBits,
