@@ -21,7 +21,7 @@ import {
 } from '../collision/collide-shape-vs-shape';
 import { createShapeSupportPool, getShapeSupportFunction, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
-import { isScaleInsideOut, transformFace } from '../utils/face';
+import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import {
     type ConvexShape,
     defineShape,
@@ -134,7 +134,7 @@ const _getSupportingFace_vertices: [Vec3, Vec3, Vec3, Vec3] = [
 ];
 
 function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: PlaneShape, _subShapeId: number): void {
-    const { position, quaternion, scale } = ioResult;
+    const { transform, scale } = ioResult;
     const face = ioResult.face;
 
     // get the 4 vertices of the plane quad in local space
@@ -173,7 +173,7 @@ function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, sha
         face.vertices[11] = _getSupportingFace_vertices[3][2];
     }
 
-    transformFace(face, position, quaternion, scale);
+    transformFaceWithMat4Scale(face, transform, scale);
 }
 
 function getInnerRadius(_shape: PlaneShape): number {
@@ -590,8 +590,7 @@ function collideConvexVsPlane(
                 shapeA,
                 subShapeIdA,
                 normal, // direction in local space
-                _collideConvexVsPlane_posA,
-                _collideConvexVsPlane_quatA,
+                _collideConvexVsPlane_transformA,
                 _collideConvexVsPlane_scaleVec,
             );
 
@@ -721,7 +720,6 @@ const _castConvexVsPlane_comHit = /* @__PURE__ */ mat4.create();
 const _castConvexVsPlane_contactLocal = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_shapeToWorld = /* @__PURE__ */ mat4.create();
-const _castConvexVsPlane_quatFromMat4 = /* @__PURE__ */ quat.create();
 const _castConvexVsPlane_posFromMat4 = /* @__PURE__ */ vec3.create();
 
 export function castConvexVsPlane(
@@ -887,13 +885,6 @@ export function castConvexVsPlane(
         // transform convex to world at impact
         mat4.multiply(_castConvexVsPlane_shapeToWorld, _castConvexVsPlane_comHit, _castConvexVsPlane_startTransform);
 
-        vec3.set(
-            _castConvexVsPlane_posFromMat4,
-            _castConvexVsPlane_shapeToWorld[12],
-            _castConvexVsPlane_shapeToWorld[13],
-            _castConvexVsPlane_shapeToWorld[14],
-        );
-        quat.fromMat4(_castConvexVsPlane_quatFromMat4, _castConvexVsPlane_shapeToWorld);
         vec3.set(_castConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
 
         getShapeSupportingFace(
@@ -901,12 +892,18 @@ export function castConvexVsPlane(
             shapeA,
             subShapeIdA,
             _castConvexVsPlane_normalInShapeSpace,
-            _castConvexVsPlane_posFromMat4,
-            _castConvexVsPlane_quatFromMat4,
+            _castConvexVsPlane_shapeToWorld,
             _castConvexVsPlane_scaleA,
         );
 
         if (_castConvexVsPlane_hit.faceA.numVertices > 0) {
+            // extract position for adaptive plane face
+            vec3.set(
+                _castConvexVsPlane_posFromMat4,
+                _castConvexVsPlane_shapeToWorld[12],
+                _castConvexVsPlane_shapeToWorld[13],
+                _castConvexVsPlane_shapeToWorld[14],
+            );
             getAdaptivePlaneSupportingFace(
                 _castConvexVsPlane_hit.faceB,
                 shapeA,

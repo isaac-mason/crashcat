@@ -1,4 +1,4 @@
-import { clamp, type Quat, type Vec3, vec3 } from 'mathcat';
+import { clamp, mat4, type Quat, type Vec3, vec3 } from 'mathcat';
 import {
     computeBarycentricCoordinates2d,
     computeBarycentricCoordinates3d,
@@ -504,6 +504,7 @@ const _bary = /* @__PURE__ */ createBarycentricCoordinatesResult();
 const _closestPoint = /* @__PURE__ */ createClosestPointResult();
 const _closestPointToSimplex = /* @__PURE__ */ createClosestPointToSimplexResult();
 const _transformedSupportA = /* @__PURE__ */ createTransformedSupport();
+const _gjkCastShape_mat4_AtoB = /* @__PURE__ */ mat4.create();
 
 type ClosestPointToSimplexResult = {
     point: Vec3;
@@ -867,7 +868,8 @@ export function gjkCastShape(
     const sumConvexRadius = convexRadiusA + convexRadiusB;
 
     // wrap shapeA with transform
-    setTransformedSupport(_transformedSupportA, posAInB, quatAInB, shapeASupport);
+    const mat4_AtoB = mat4.fromRotationTranslation(_gjkCastShape_mat4_AtoB, quatAInB, posAInB);
+    setTransformedSupport(_transformedSupportA, mat4_AtoB, shapeASupport);
 
     // reset state
     _simplex.size = 0;

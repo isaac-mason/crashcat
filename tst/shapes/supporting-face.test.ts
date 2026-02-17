@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import { box, compound, getShapeSupportingFace, convexHull, createFace, scaled, sphere, transformed } from '../../src';
 
@@ -13,8 +13,7 @@ describe('Supporting Face - Sphere', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -38,9 +37,8 @@ describe('Supporting Face - Sphere', () => {
                 shape,
                 0,
                 direction,
-                vec3.fromValues(0, 0, 0),
-                quat.fromValues(0, 0, 0, 1),
-                vec3.fromValues(1, 1, 1),
+                mat4.create(),
+            vec3.fromValues(1, 1, 1),
             );
             expect(face.numVertices).toBe(0);
         }
@@ -58,8 +56,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -80,8 +77,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -102,8 +98,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -124,8 +119,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -146,8 +140,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -168,8 +161,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -190,8 +182,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -212,8 +203,7 @@ describe('Supporting Face - Box', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -246,8 +236,7 @@ describe('Supporting Face - Transformed Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -286,8 +275,7 @@ describe('Supporting Face - Transformed Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -327,8 +315,7 @@ describe('Supporting Face - Transformed Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -346,10 +333,11 @@ describe('Supporting Face - Transformed Shape', () => {
         const worldPosition = vec3.fromValues(3, 1, -1);
         const worldRotation = quat.fromValues(0, 0, Math.sin(Math.PI / 4), Math.cos(Math.PI / 4)); // 90° around Z
         const worldScale = vec3.fromValues(2, 2, 2);
+        const worldTransform = mat4.fromRotationTranslation(mat4.create(), worldRotation, worldPosition);
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(face, shape, 0, direction, worldPosition, worldRotation, worldScale);
+        getShapeSupportingFace(face, shape, 0, direction, worldTransform, worldScale);
 
         expect(face.numVertices).toBe(4);
 
@@ -412,8 +400,7 @@ describe('Supporting Face - Scaled Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -446,8 +433,7 @@ describe('Supporting Face - Scaled Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -470,8 +456,7 @@ describe('Supporting Face - Scaled Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -492,7 +477,7 @@ describe('Supporting Face - Scaled Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(face, shape, 0, direction, vec3.fromValues(0, 0, 0), quat.fromValues(0, 0, 0, 1), worldScale);
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), worldScale);
 
         expect(face.numVertices).toBe(4);
 
@@ -520,8 +505,7 @@ describe('Supporting Face - Scaled Shape', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -551,8 +535,7 @@ describe('Supporting Face - Compound Shape', () => {
             compoundShape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -580,8 +563,7 @@ describe('Supporting Face - Compound Shape', () => {
             compoundShape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
         expect(faceSphere.numVertices).toBe(0); // Sphere returns 0 vertices
@@ -593,8 +575,7 @@ describe('Supporting Face - Compound Shape', () => {
             compoundShape,
             1,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
         expect(faceBox.numVertices).toBe(4); // Box returns 4 vertices
@@ -618,8 +599,7 @@ describe('Supporting Face - Complex Decorated Shapes', () => {
             transformedShape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -647,8 +627,7 @@ describe('Supporting Face - Complex Decorated Shapes', () => {
             scaledShape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -673,8 +652,7 @@ describe('Supporting Face - Edge Cases', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -693,8 +671,7 @@ describe('Supporting Face - Edge Cases', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -714,8 +691,7 @@ describe('Supporting Face - Edge Cases', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -737,8 +713,7 @@ describe('Supporting Face - Edge Cases', () => {
             shape,
             0,
             direction,
-            vec3.fromValues(0, 0, 0),
-            quat.fromValues(0, 0, 0, 1),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -760,8 +735,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0, // subShapeId
             vec3.fromValues(0, 1, 0), // +Y direction
-            vec3.fromValues(0, 0, 0), // position
-            quat.create(), // identity rotation
+            mat4.create(),
             vec3.fromValues(1, 1, 1), // no scale
         );
 
@@ -785,8 +759,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0,
             vec3.fromValues(0, -1, 0), // -Y direction
-            vec3.fromValues(0, 0, 0),
-            quat.create(),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -809,8 +782,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0,
             vec3.fromValues(1, 0, 0), // +X direction
-            vec3.fromValues(0, 0, 0),
-            quat.create(),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 
@@ -835,8 +807,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0,
             vec3.fromValues(0, 1, 0), // +Y direction
-            vec3.fromValues(0, 0, 0),
-            quat.create(),
+            mat4.create(),
             scale,
         );
 
@@ -854,8 +825,9 @@ describe('Supporting Face - Convex Hull', () => {
         const face = createFace();
 
         const position = vec3.fromValues(5, 10, -3);
+        const transform = mat4.fromTranslation(mat4.create(), position);
 
-        getShapeSupportingFace(face, hull, 0, vec3.fromValues(0, 1, 0), position, quat.create(), vec3.fromValues(1, 1, 1));
+        getShapeSupportingFace(face, hull, 0, vec3.fromValues(0, 1, 0), transform, vec3.fromValues(1, 1, 1));
 
         // query +Y returns bottom face translated to y ≈ 9 (10 + (-1))
         expect(face.numVertices).toBeGreaterThan(0);
@@ -878,8 +850,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0,
             vec3.fromValues(1, 0, 0), // +X direction (but scale is negative)
-            vec3.fromValues(0, 0, 0),
-            quat.create(),
+            mat4.create(),
             scale,
         );
 
@@ -915,8 +886,7 @@ describe('Supporting Face - Convex Hull', () => {
             hull,
             0,
             vec3.fromValues(0, -1, 0), // -Y direction
-            vec3.fromValues(0, 0, 0),
-            quat.create(),
+            mat4.create(),
             vec3.fromValues(1, 1, 1),
         );
 

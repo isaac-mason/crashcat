@@ -1,6 +1,3 @@
-import { type Box3, box3, createSimplex2D, mat4, quat, randomFloat, type Raycast3, type Vec3, vec3 } from 'mathcat';
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import type {
     CastRayCollector,
     CastRaySettings,
@@ -12,13 +9,13 @@ import type {
     Shape,
 } from 'crashcat';
 import {
+    ALL_SHAPE_DEFS,
     addBroadphaseLayer,
     addObjectLayer,
-    ALL_SHAPE_DEFS,
     box,
+    CastRayStatus,
     capsule,
     castRay,
-    CastRayStatus,
     collideConvexVsConvexLocal,
     createCastRayHit,
     createClosestCastRayCollector,
@@ -34,16 +31,19 @@ import {
     registerShapes,
     reversedCollideShapeVsShape,
     rigidBody,
-    setCollideShapeFn,
     ShapeCategory,
-    shapeDefs,
     ShapeType,
+    setCollideShapeFn,
+    shapeDefs,
     sphere,
     subShape,
-    transformFace,
+    transformFaceWithMat4Scale,
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
+import { type Box3, box3, createSimplex2D, mat4, quat, type Raycast3, randomFloat, type Vec3, vec3 } from 'mathcat';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
 
 /* voxel shape */
@@ -333,12 +333,16 @@ const voxelShapeDef = defineShape<VoxelShape>({
         subShape.popIndex(_subShapeIdPopResult, subShapeId, VOXEL_FACE_COUNT);
         const hitFace = _subShapeIdPopResult.value as VoxelFace;
 
-        // derive voxel position from out.position (contact point) and face
+        // derive voxel position from transform translation (contact point) and face
+        // extract position from transform matrix (column 3)
+        const px = ioResult.transform[12];
+        const py = ioResult.transform[13];
+        const pz = ioResult.transform[14];
         getVoxelFromHitPosition(
             _getSupportingFace_voxelPos,
-            ioResult.position[0],
-            ioResult.position[1],
-            ioResult.position[2],
+            px,
+            py,
+            pz,
             hitFace,
         );
 
@@ -456,7 +460,7 @@ const voxelShapeDef = defineShape<VoxelShape>({
         }
 
         face.numVertices = 4;
-        transformFace(face, ioResult.position, ioResult.quaternion, ioResult.scale);
+        transformFaceWithMat4Scale(face, ioResult.transform, ioResult.scale);
     },
     register() {
         // voxels x convex shapes
@@ -943,6 +947,8 @@ const _collideVoxelsVsConvex_aabbMatrix = mat4.create();
 const _collideVoxelsVsConvex_convexAABB = box3.create();
 const _collideVoxelsVsConvex_subShapeIdBuilder = subShape.builder();
 const _collideVoxelsVsConvex_posBRelativeToBox = vec3.create();
+const _collideVoxelsVsConvex_mat4_AtoWorld = mat4.create();
+const _collideVoxelsVsConvex_mat4_BtoA = mat4.create();
 
 function collideVoxelsVsConvex(
     collector: CollideShapeCollector,
@@ -1054,6 +1060,15 @@ function collideVoxelsVsConvex(
                 // test voxel box vs convex shape
                 // voxel box is at origin with identity rotation (in its own local space)
                 // convex B is at posBRelativeToBox relative to the voxel box
+                // build transform matrices for the new API
+                // mat4_AtoWorld: voxel box local -> world (just translation, no rotation)
+                mat4.fromRotationTranslation(_collideVoxelsVsConvex_mat4_AtoWorld, _voxelBoxQuaternion, _voxelBoxPosition);
+                // mat4_BtoA: convex B local -> voxel box local
+                mat4.fromRotationTranslation(
+                    _collideVoxelsVsConvex_mat4_BtoA,
+                    _collideVoxelsVsConvex_quatBInA,
+                    _collideVoxelsVsConvex_posBRelativeToBox,
+                );
                 collideConvexVsConvexLocal(
                     collector,
                     settings,
@@ -1061,12 +1076,10 @@ function collideVoxelsVsConvex(
                     _collideVoxelsVsConvex_subShapeIdBuilder.value,
                     shapeB,
                     subShapeIdB,
-                    _collideVoxelsVsConvex_posBRelativeToBox,
-                    _collideVoxelsVsConvex_quatBInA,
+                    _collideVoxelsVsConvex_mat4_BtoA,
+                    _collideVoxelsVsConvex_mat4_AtoWorld,
                     _voxelBoxScale,
                     _collideVoxelsVsConvex_scaleB,
-                    _voxelBoxPosition,
-                    _voxelBoxQuaternion,
                 );
 
                 if (collector.shouldEarlyOut()) {

@@ -1,5 +1,5 @@
-import type { Box3, Raycast3 } from 'mathcat';
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import type { Box3, Mat4, Raycast3 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import type { SubShapeId } from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -132,16 +132,14 @@ export type SurfaceNormalResult = {
 
 export type SupportingFaceResult = {
     face: Face;
-    position: Vec3;
-    quaternion: Quat;
+    transform: Mat4;
     scale: Vec3;
 };
 
 export function createSupportingFaceResult(): SupportingFaceResult {
     return {
         face: { vertices: [], numVertices: 0 },
-        position: vec3.create(),
-        quaternion: quat.create(),
+        transform: mat4.create(),
         scale: vec3.fromValues(1, 1, 1),
     };
 }
@@ -485,8 +483,7 @@ const _supportingFaceResult = /* @__PURE__ */ createSupportingFaceResult();
  * @param shape shape to query
  * @param subShapeId sub-shape ID
  * @param localDirection query direction in local space to the shape
- * @param position world position of shape
- * @param quaternion world rotation of shape
+ * @param transform world transform of shape (rotation + translation, no scale)
  * @param scale scale in local space of the shape
  */
 export function getShapeSupportingFace(
@@ -494,12 +491,10 @@ export function getShapeSupportingFace(
     shape: Shape,
     subShapeId: number,
     localDirection: Vec3,
-    position: Vec3,
-    quaternion: Quat,
+    transform: Mat4,
     scale: Vec3,
 ): void {
-    vec3.copy(_supportingFaceResult.position, position);
-    quat.copy(_supportingFaceResult.quaternion, quaternion);
+    mat4.copy(_supportingFaceResult.transform, transform);
     vec3.copy(_supportingFaceResult.scale, scale);
 
     shapeDefs[shape.type].getSupportingFace(_supportingFaceResult, localDirection, shape, subShapeId);

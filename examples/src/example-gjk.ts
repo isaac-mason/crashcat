@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import { quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
@@ -25,6 +25,11 @@ import {
 import { loadGLTFPoints } from './utils/gltf.js';
 
 registerAll();
+
+const _transformA = mat4.create();
+const _transformB = mat4.create();
+const _tempQuat = quat.create();
+const _tempPos = vec3.create();
 
 const GUI_SHAPE_OPTIONS = {
     Sphere: 'sphere',
@@ -418,19 +423,17 @@ function visualizeSimplex(state: ExampleState, simplex: Simplex) {
 }
 
 function update(state: ExampleState) {
-    setTransformedSupport(
-        state.transformedSupportA,
-        vec3.fromValues(state.meshA.position.x, state.meshA.position.y, state.meshA.position.z),
-        quat.fromValues(state.meshA.quaternion.x, state.meshA.quaternion.y, state.meshA.quaternion.z, state.meshA.quaternion.w),
-        state.supportA,
-    );
+    // compute transform for A
+    vec3.set(_tempPos, state.meshA.position.x, state.meshA.position.y, state.meshA.position.z);
+    quat.set(_tempQuat, state.meshA.quaternion.x, state.meshA.quaternion.y, state.meshA.quaternion.z, state.meshA.quaternion.w);
+    mat4.fromRotationTranslation(_transformA, _tempQuat, _tempPos);
+    setTransformedSupport(state.transformedSupportA, _transformA, state.supportA);
 
-    setTransformedSupport(
-        state.transformedSupportB,
-        vec3.fromValues(state.meshB.position.x, state.meshB.position.y, state.meshB.position.z),
-        quat.fromValues(state.meshB.quaternion.x, state.meshB.quaternion.y, state.meshB.quaternion.z, state.meshB.quaternion.w),
-        state.supportB,
-    );
+    // compute transform for B
+    vec3.set(_tempPos, state.meshB.position.x, state.meshB.position.y, state.meshB.position.z);
+    quat.set(_tempQuat, state.meshB.quaternion.x, state.meshB.quaternion.y, state.meshB.quaternion.z, state.meshB.quaternion.w);
+    mat4.fromRotationTranslation(_transformB, _tempQuat, _tempPos);
+    setTransformedSupport(state.transformedSupportB, _transformB, state.supportB);
 
     // Update Minkowski point cloud
     updateMinkowskiPoints(state.minkowskiPoints, state.transformedSupportA, state.transformedSupportB);

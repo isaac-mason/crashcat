@@ -7,8 +7,9 @@ import type { CollidePointCollector, CollidePointSettings } from '../collision/c
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import {
     collisionDispatch,
-    computeMassProperties,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
     ShapeCategory,
@@ -118,78 +119,19 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 const _surfaceNormal_invRotation = /* @__PURE__ */ quat.create();
 const _surfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
-const _supportingFace_vec3 = /* @__PURE__ */ vec3.create();
-const _supportingFace_quat = /* @__PURE__ */ quat.create();
 const _supportingFace_localDirection = /* @__PURE__ */ vec3.create();
+const _supportingFace_shapeMat4 = /* @__PURE__ */ mat4.create();
 
 export const def = /* @__PURE__ */ (() =>
     defineShape<TransformedShape>({
         type: ShapeType.TRANSFORMED,
         category: ShapeCategory.DECORATOR,
-        computeMassProperties(out: MassProperties, shape: TransformedShape): void {
-            // only rotates the inertia (translation doesn't affect inertia about center of mass)
-            computeMassProperties(_childMassProperties, shape.shape);
-
-            // convert quaternion to rotation matrix
-            mat4.fromQuat(_rotationMat, shape.quaternion);
-
-            // only apply rotation to inertia
-            massProperties.rotate(out, _childMassProperties, _rotationMat);
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TransformedShape, subShapeId: number): void {
-            // accumulate transform: position = position - translation (inverse transform)
-            vec3.subtract(ioResult.position, ioResult.position, shape.position);
-
-            // accumulate rotation: quaternion = conjugate(shape.rotation) * quaternion (inverse transform)
-            const invRotation = quat.conjugate(_surfaceNormal_invRotation, shape.quaternion);
-            quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
-            // transform position to local space
-            vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
-
-            // get normal from inner shape in its local space
-            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
-
-            // transform normal back to outer space using accumulated rotation.
-            // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
-            // to get the forward transformation for the normal.
-            const forwardAccumulatedRotation = quat.conjugate(_surfaceNormal_forwardRotation, ioResult.quaternion);
-            vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: TransformedShape, subShapeId: number): void {
-            // accumulate transform: position += rotation * translation
-            vec3.transformQuat(_supportingFace_vec3, shape.position, ioResult.quaternion);
-            vec3.add(ioResult.position, ioResult.position, _supportingFace_vec3);
-
-            // accumulate rotation: rotation = rotation * shape.rotation
-            quat.multiply(ioResult.quaternion, ioResult.quaternion, shape.quaternion);
-
-            // transform direction to local space (rotate by inverse quaternion)
-            const invRotation = quat.conjugate(_supportingFace_quat, shape.quaternion);
-            vec3.transformQuat(_supportingFace_localDirection, direction, invRotation);
-
-            // compute face in local space - pass SubShapeID unchanged (decorator shapes don't consume bits)
-            shapeDefs[shape.shape.type].getSupportingFace(ioResult, _supportingFace_localDirection, shape.shape, subShapeId);
-        },
-        getInnerRadius(shape: TransformedShape): number {
-            return getShapeInnerRadius(shape.shape);
-        },
-        getLeafShape(out, shape, subShapeId): void {
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getLeafShape(out, shape.shape, subShapeId);
-        },
-        getSubShapeTransformedShape(outResult, shape, subShapeId): void {
-            // apply decorated transform: pos = pos + rotate(rot, shapePos), rot = rot * shapeRot
-            const rotatedPos = vec3.create();
-            vec3.transformQuat(rotatedPos, shape.position, outResult.rotation);
-            vec3.add(outResult.position, outResult.position, rotatedPos);
-            quat.multiply(outResult.rotation, outResult.rotation, shape.quaternion);
-
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsTransformed,
         collidePoint: collidePointVsTransformed,
         register: () => {
@@ -202,6 +144,78 @@ export const def = /* @__PURE__ */ (() =>
             }
         },
     }))();
+
+function computeMassProperties(out: MassProperties, shape: TransformedShape): void {
+    // only rotates the inertia (translation doesn't affect inertia about center of mass)
+    const shapeDef = shapeDefs[shape.shape.type];
+    shapeDef.computeMassProperties(_childMassProperties, shape.shape);
+
+    // convert quaternion to rotation matrix
+    mat4.fromQuat(_rotationMat, shape.quaternion);
+
+    // only apply rotation to inertia
+    massProperties.rotate(out, _childMassProperties, _rotationMat);
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TransformedShape, subShapeId: number): void {
+    // accumulate transform: position = position - translation (inverse transform)
+    vec3.subtract(ioResult.position, ioResult.position, shape.position);
+
+    // accumulate rotation: quaternion = conjugate(shape.rotation) * quaternion (inverse transform)
+    const invRotation = quat.conjugate(_surfaceNormal_invRotation, shape.quaternion);
+    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
+
+    // transform position to local space
+    vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
+
+    // get normal from inner shape in its local space
+    shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+
+    // transform normal back to outer space using accumulated rotation.
+    // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
+    // to get the forward transformation for the normal.
+    const forwardAccumulatedRotation = quat.conjugate(_surfaceNormal_forwardRotation, ioResult.quaternion);
+    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+}
+function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: TransformedShape, subShapeId: number): void {
+    // build shape's local transform matrix (position + quaternion)
+    const shapeMat4 = mat4.fromRotationTranslation(_supportingFace_shapeMat4, shape.quaternion, shape.position);
+
+    // accumulate transform: ioResult.transform = ioResult.transform * shapeMat4
+    mat4.multiply(ioResult.transform, ioResult.transform, shapeMat4);
+
+    // transform direction to local space using transposed rotation (inverse)
+    // for a rotation matrix, inverse is transpose
+    mat4.multiply3x3TransposedVec(_supportingFace_localDirection, shapeMat4, direction);
+
+    // compute face in local space - pass SubShapeID unchanged (decorator shapes don't consume bits)
+    shapeDefs[shape.shape.type].getSupportingFace(ioResult, _supportingFace_localDirection, shape.shape, subShapeId);
+}
+
+function getInnerRadius(shape: TransformedShape): number {
+    return getShapeInnerRadius(shape.shape);
+}
+
+function getLeafShape(out: GetLeafShapeResult, shape: TransformedShape, subShapeId: number): void {
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getLeafShape(out, shape.shape, subShapeId);
+}
+function getSubShapeTransformedShape(
+    outResult: GetSubShapeTransformedShapeResult,
+    shape: TransformedShape,
+    subShapeId: number,
+): void {
+    // apply decorated transform: pos = pos + rotate(rot, shapePos), rot = rot * shapeRot
+    const rotatedPos = vec3.create();
+    vec3.transformQuat(rotatedPos, shape.position, outResult.rotation);
+    vec3.add(outResult.position, outResult.position, rotatedPos);
+    quat.multiply(outResult.rotation, outResult.rotation, shape.quaternion);
+
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
+}
 
 /* cast ray */
 

@@ -1,6 +1,5 @@
 import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
-import * as subShape from '../body/sub-shape';
 import {
     type CollidePointCollector,
     type CollidePointSettings,
@@ -12,7 +11,6 @@ import {
     createCollideShapeHit,
 } from '../collision/collide-shape-vs-shape';
 import { type Support, SupportFunctionMode } from '../collision/support';
-import { assert } from '../utils/assert';
 import * as convex from './convex';
 import type { Shape } from './shapes';
 import {
@@ -96,57 +94,10 @@ export const def = /* @__PURE__ */ (() =>
     defineShape<SphereShape>({
         type: ShapeType.SPHERE,
         category: ShapeCategory.CONVEX,
-        computeMassProperties(out: MassProperties, shape: SphereShape): void {
-            const r2 = shape.radius * shape.radius;
-            out.mass = (4.0 / 3.0) * Math.PI * shape.radius * r2 * shape.density;
-
-            // calculate inertia: I = (2/5) * m * r²
-            const inertia = (2.0 / 5.0) * out.mass * r2;
-
-            // set diagonal inertia tensor using mat4::sScale pattern
-            // diagonal matrix in column-major order: [I, 0, 0, 0, 0, I, 0, 0, 0, 0, I, 0, 0, 0, 0, 1]
-            out.inertia[0] = inertia;
-            out.inertia[1] = 0;
-            out.inertia[2] = 0;
-            out.inertia[3] = 0;
-            out.inertia[4] = 0;
-            out.inertia[5] = inertia;
-            out.inertia[6] = 0;
-            out.inertia[7] = 0;
-            out.inertia[8] = 0;
-            out.inertia[9] = 0;
-            out.inertia[10] = inertia;
-            out.inertia[11] = 0;
-            out.inertia[12] = 0;
-            out.inertia[13] = 0;
-            out.inertia[14] = 0;
-            out.inertia[15] = 1.0;
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: SphereShape, subShapeId: number): void {
-            assert(subShape.isEmpty(subShapeId), 'Invalid subshape ID for SphereShape');
-
-            const len = vec3.length(ioResult.position);
-
-            if (len !== 0.0) {
-                // vec3.scale(out.normal, out.position, 1 / len);
-                ioResult.normal[0] = ioResult.position[0] / len;
-                ioResult.normal[1] = ioResult.position[1] / len;
-                ioResult.normal[2] = ioResult.position[2] / len;
-                return;
-            }
-
-            // fallback to y axis if position is at origin
-            ioResult.normal[0] = 0;
-            ioResult.normal[1] = 1;
-            ioResult.normal[2] = 0;
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: SphereShape, _subShapeId: number): void {
-            // sphere has no supporting face (single point)
-            ioResult.face.numVertices = 0;
-        },
-        getInnerRadius(shape: SphereShape): number {
-            return shape.radius;
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: collidePointVsSphere,
         createSupportPool: createSphereSupportPool,
@@ -165,11 +116,60 @@ export const def = /* @__PURE__ */ (() =>
 
             // optimized sphere vs sphere handler
             setCollideShapeFn(ShapeType.SPHERE, ShapeType.SPHERE, collideSphereVsSphere);
-
-            // TODO: sphere vs triangle mesh
-            // ...
         },
     }))();
+
+function computeMassProperties(out: MassProperties, shape: SphereShape): void {
+    const r2 = shape.radius * shape.radius;
+    out.mass = (4.0 / 3.0) * Math.PI * shape.radius * r2 * shape.density;
+
+    // calculate inertia: I = (2/5) * m * r²
+    const inertia = (2.0 / 5.0) * out.mass * r2;
+
+    // set diagonal inertia tensor using mat4::sScale pattern
+    // diagonal matrix in column-major order: [I, 0, 0, 0, 0, I, 0, 0, 0, 0, I, 0, 0, 0, 0, 1]
+    out.inertia[0] = inertia;
+    out.inertia[1] = 0;
+    out.inertia[2] = 0;
+    out.inertia[3] = 0;
+    out.inertia[4] = 0;
+    out.inertia[5] = inertia;
+    out.inertia[6] = 0;
+    out.inertia[7] = 0;
+    out.inertia[8] = 0;
+    out.inertia[9] = 0;
+    out.inertia[10] = inertia;
+    out.inertia[11] = 0;
+    out.inertia[12] = 0;
+    out.inertia[13] = 0;
+    out.inertia[14] = 0;
+    out.inertia[15] = 1.0;
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: SphereShape, _subShapeId: number): void {
+    const len = vec3.length(ioResult.position);
+
+    if (len !== 0.0) {
+        ioResult.normal[0] = ioResult.position[0] / len;
+        ioResult.normal[1] = ioResult.position[1] / len;
+        ioResult.normal[2] = ioResult.position[2] / len;
+        return;
+    }
+
+    // fallback to y axis if position is at origin
+    ioResult.normal[0] = 0;
+    ioResult.normal[1] = 1;
+    ioResult.normal[2] = 0;
+}
+
+function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: SphereShape, _subShapeId: number): void {
+    // sphere has no supporting face (single point)
+    ioResult.face.numVertices = 0;
+}
+
+function getInnerRadius(shape: SphereShape): number {
+    return shape.radius;
+}
 
 /**
  * Sphere support for EXCLUDE_CONVEX_RADIUS mode.
@@ -312,9 +312,6 @@ function collidePointVsSphere(
 /* collide shape */
 
 const _collideSphereVsSphere_hit = /* @__PURE__ */ createCollideShapeHit();
-const _collideSphereVsSphere_contactA = /* @__PURE__ */ vec3.create();
-const _collideSphereVsSphere_contactB = /* @__PURE__ */ vec3.create();
-const _collideSphereVsSphere_contactNormal = /* @__PURE__ */ vec3.create();
 
 export function collideSphereVsSphere(
     collector: CollideShapeCollector,
@@ -374,31 +371,35 @@ export function collideSphereVsSphere(
     const penetration = radiusSum - dist;
 
     // normal from A to B
-    const normal = _collideSphereVsSphere_contactNormal;
+    let normalX: number, normalY: number, normalZ: number;
+
     if (dist > 0) {
         const invDist = 1 / dist;
-        vec3.set(normal, dx * invDist, dy * invDist, dz * invDist);
+        normalX = dx * invDist;
+        normalY = dy * invDist;
+        normalZ = dz * invDist;
     } else {
         // spheres at same position, use arbitrary normal
-        vec3.set(normal, 0, 1, 0);
+        normalX = 0;
+        normalY = 1;
+        normalZ = 0;
     }
-
-    // contact points
-    const contactA = _collideSphereVsSphere_contactA;
-    contactA[0] = posAX + normal[0] * radiusA;
-    contactA[1] = posAY + normal[1] * radiusA;
-    contactA[2] = posAZ + normal[2] * radiusA;
-
-    const contactB = _collideSphereVsSphere_contactB;
-    contactB[0] = posBX - normal[0] * radiusB;
-    contactB[1] = posBY - normal[1] * radiusB;
-    contactB[2] = posBZ - normal[2] * radiusB;
 
     // report hit
     const hit = _collideSphereVsSphere_hit;
-    vec3.copy(hit.pointA, contactA);
-    vec3.copy(hit.pointB, contactB);
-    vec3.copy(hit.penetrationAxis, normal);
+
+    hit.pointA[0] = posAX + normalX * radiusA;
+    hit.pointA[1] = posAY + normalY * radiusA;
+    hit.pointA[2] = posAZ + normalZ * radiusA;
+
+    hit.pointB[0] = posBX - normalX * radiusB;
+    hit.pointB[1] = posBY - normalY * radiusB;
+    hit.pointB[2] = posBZ - normalZ * radiusB;
+
+    hit.penetrationAxis[0] = normalX;
+    hit.penetrationAxis[1] = normalY;
+    hit.penetrationAxis[2] = normalZ;
+
     hit.penetration = penetration;
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = subShapeIdB;

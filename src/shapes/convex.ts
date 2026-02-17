@@ -1,5 +1,5 @@
-import type { Quat, Raycast3, Vec3 } from 'mathcat';
-import { box3, quat, vec3 } from 'mathcat';
+import type { Mat4, Raycast3, Vec3 } from 'mathcat';
+import { box3, mat4, quat, vec3 } from 'mathcat';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
@@ -233,6 +233,10 @@ const _collideConvex_penetrationAxis = /* @__PURE__ */ vec3.create();
 
 const _collideConvex_relativePos = /* @__PURE__ */ vec3.create();
 const _collideConvex_relativeRot = /* @__PURE__ */ quat.create();
+const _collideConvex_invQuatA = /* @__PURE__ */ quat.create();
+const _collideConvex_mat4_BtoA = /* @__PURE__ */ mat4.create();
+const _collideConvex_mat4_AtoWorld = /* @__PURE__ */ mat4.create();
+const _collideConvex_mat4_BtoWorld = /* @__PURE__ */ mat4.create();
 
 const _collideConvex_posA = /* @__PURE__ */ vec3.create();
 const _collideConvex_quatA = /* @__PURE__ */ quat.create();
@@ -241,9 +245,6 @@ const _collideConvex_scaleB = /* @__PURE__ */ vec3.create();
 
 const _collideConvex_contactA = /* @__PURE__ */ vec3.create();
 const _collideConvex_contactB = /* @__PURE__ */ vec3.create();
-
-const _collideConvex_posB = /* @__PURE__ */ vec3.create();
-const _collideConvex_quatB = /* @__PURE__ */ quat.create();
 
 const _collideConvex_faceDirA = /* @__PURE__ */ vec3.create();
 const _collideConvex_faceDirB = /* @__PURE__ */ vec3.create();
@@ -301,32 +302,28 @@ export function collideConvexVsConvex(
     _collideConvex_scaleB[1] = scaleBY;
     _collideConvex_scaleB[2] = scaleBZ;
 
-    // transform B into A's local space
-    // compute conjugate of quatA (negate x,y,z)
-    const invAx = -quatAX, invAy = -quatAY, invAz = -quatAZ, invAw = quatAW;
+    // transform B into A's local space using quaternions (fast path)
+    // relative rotation: inv(quatA) * quatB
+    quat.conjugate(_collideConvex_invQuatA, _collideConvex_quatA);
+    _collideConvex_relativeRot[0] = quatBX;
+    _collideConvex_relativeRot[1] = quatBY;
+    _collideConvex_relativeRot[2] = quatBZ;
+    _collideConvex_relativeRot[3] = quatBW;
+    quat.multiply(_collideConvex_relativeRot, _collideConvex_invQuatA, _collideConvex_relativeRot);
 
-    // compute relative rotation: conjugate(quatA) * quatB
-    // quaternion multiplication: (a.w*b.x + a.x*b.w + a.y*b.z - a.z*b.y, ...)
-    _collideConvex_relativeRot[0] = invAw * quatBX + invAx * quatBW + invAy * quatBZ - invAz * quatBY;
-    _collideConvex_relativeRot[1] = invAw * quatBY - invAx * quatBZ + invAy * quatBW + invAz * quatBX;
-    _collideConvex_relativeRot[2] = invAw * quatBZ + invAx * quatBY - invAy * quatBX + invAz * quatBW;
-    _collideConvex_relativeRot[3] = invAw * quatBW - invAx * quatBX - invAy * quatBY - invAz * quatBZ;
+    // relative position: inv(quatA) * (posB - posA)
+    _collideConvex_relativePos[0] = posBX - posAX;
+    _collideConvex_relativePos[1] = posBY - posAY;
+    _collideConvex_relativePos[2] = posBZ - posAZ;
+    vec3.transformQuat(_collideConvex_relativePos, _collideConvex_relativePos, _collideConvex_invQuatA);
 
-    // compute vector from A to B
-    const abx = posBX - posAX, aby = posBY - posAY, abz = posBZ - posAZ;
-
-    // transform vector by conjugate of quatA: conjugate(quatA) * [0, abx, aby, abz] * quatA
-    // using: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
-    const qx = invAx, qy = invAy, qz = invAz, qw = invAw;
-    const uvx = qy * abz - qz * aby + qw * abx;
-    const uvy = qz * abx - qx * abz + qw * aby;
-    const uvz = qx * aby - qy * abx + qw * abz;
-    const uuvx = qy * uvz - qz * uvy;
-    const uuvy = qz * uvx - qx * uvz;
-    const uuvz = qx * uvy - qy * uvx;
-    _collideConvex_relativePos[0] = abx + 2 * uuvx;
-    _collideConvex_relativePos[1] = aby + 2 * uuvy;
-    _collideConvex_relativePos[2] = abz + 2 * uuvz;
+    // pre-compute transformation matrices
+    const mat4_AtoWorld = mat4.fromRotationTranslation(_collideConvex_mat4_AtoWorld, _collideConvex_quatA, _collideConvex_posA);
+    const mat4_BtoA = mat4.fromRotationTranslation(
+        _collideConvex_mat4_BtoA,
+        _collideConvex_relativeRot,
+        _collideConvex_relativePos,
+    );
 
     // delegate to local-space function
     collideConvexVsConvexLocal(
@@ -336,12 +333,10 @@ export function collideConvexVsConvex(
         subShapeIdA,
         shapeB,
         subShapeIdB,
-        _collideConvex_relativePos,
-        _collideConvex_relativeRot,
+        mat4_BtoA,
+        mat4_AtoWorld,
         _collideConvex_scaleA,
         _collideConvex_scaleB,
-        _collideConvex_posA,
-        _collideConvex_quatA,
     );
 }
 
@@ -349,12 +344,10 @@ export function collideConvexVsConvex(
  * Local-space collision detection for convex vs convex.
  * Operates in shape A's local space. Shape B's transform is relative to A.
  *
- * @param posBInA shape B's position in A's local space
- * @param quatBInA shape B's orientation in A's local space
+ * @param mat4_BtoA shape B's transform in A's local space
  * @param scaleA shape A's scale
  * @param scaleB shape B's scale
- * @param positionA shape A's world position (for transforming results back)
- * @param quaternionA shape A's world quaternion (for transforming results back)
+ * @param mat4_AtoWorld shape A's world transform (for transforming results back)
  */
 export function collideConvexVsConvexLocal(
     collector: CollideShapeCollector,
@@ -363,12 +356,10 @@ export function collideConvexVsConvexLocal(
     subShapeIdA: number,
     shapeB: Shape,
     subShapeIdB: number,
-    posBInA: Vec3,
-    quatBInA: Quat,
+    mat4_BtoA: Mat4,
+    mat4_AtoWorld: Mat4,
     scaleA: Vec3,
     scaleB: Vec3,
-    positionA: Vec3,
-    quaternionA: Quat,
 ): void {
     const { maxSeparationDistance, collisionTolerance, penetrationTolerance } = settings;
 
@@ -388,22 +379,24 @@ export function collideConvexVsConvexLocal(
         scaleB,
     );
 
-    // wrap support objects in TransformedSupport with accumulated positions/rotations
+    // wrap support objects in TransformedSupport
     // shape B in A's local space
-    setTransformedSupport(_collideConvex_transformedSupportB, posBInA, quatBInA, supportB);
+    setTransformedSupport(_collideConvex_transformedSupportB, mat4_BtoA, supportB);
 
     // initial search direction (vector from A to B in A's local space)
     // note: As we don't remember the penetration axis from the last iteration, and it is likely that shape2 is pushed out of
     // collision relative to shape1 by comparing their COM's, we use that as an initial penetration axis: shape2.com - shape1.com
     // This has been seen to improve performance by approx. 1% over using a fixed axis like (1, 0, 0).
+    // extract translation from mat4_BtoA
     const penetrationAxis = _collideConvex_penetrationAxis;
-    penetrationAxis[0] = posBInA[0];
-    penetrationAxis[1] = posBInA[1];
-    penetrationAxis[2] = posBInA[2];
+    penetrationAxis[0] = mat4_BtoA[12];
+    penetrationAxis[1] = mat4_BtoA[13];
+    penetrationAxis[2] = mat4_BtoA[14];
 
     // ensure that we do not pass in a near zero penetration axis
     const [penetrationAxisX, penetrationAxisY, penetrationAxisZ] = penetrationAxis;
-    const paLenSq = penetrationAxisX * penetrationAxisX + penetrationAxisY * penetrationAxisY + penetrationAxisZ * penetrationAxisZ;
+    const paLenSq =
+        penetrationAxisX * penetrationAxisX + penetrationAxisY * penetrationAxisY + penetrationAxisZ * penetrationAxisZ;
     if (paLenSq <= 1e-12) {
         penetrationAxis[0] = 1;
         penetrationAxis[1] = 0;
@@ -464,8 +457,8 @@ export function collideConvexVsConvexLocal(
             // add separation distance
             setAddConvexRadiusSupport(_collideConvex_addRadiusSupport, maxSeparationDistanceToUse, supportAWithRadius);
 
-            // shape B in A's local space
-            setTransformedSupport(_collideConvex_transformedSupport, posBInA, quatBInA, supportBWithRadius);
+            // shape B in A's local space (reuse mat4_BtoA computed earlier)
+            setTransformedSupport(_collideConvex_transformedSupport, mat4_BtoA, supportBWithRadius);
 
             // perform EPA step
             if (
@@ -491,7 +484,9 @@ export function collideConvexVsConvexLocal(
     // inline distance: sqrt((ax-bx)² + (ay-by)² + (az-bz)²)
     const [pointAX, pointAY, pointAZ] = penetrationDepth.pointA;
     const [pointBX, pointBY, pointBZ] = penetrationDepth.pointB;
-    const dx = pointAX - pointBX, dy = pointAY - pointBY, dz = pointAZ - pointBZ;
+    const dx = pointAX - pointBX,
+        dy = pointAY - pointBY,
+        dz = pointAZ - pointBZ;
     const penetration = Math.sqrt(dx * dx + dy * dy + dz * dz) - maxSeparationDistanceToUse;
     if (-penetration >= collector.earlyOutFraction) {
         return;
@@ -500,7 +495,11 @@ export function collideConvexVsConvexLocal(
     // correct point1 for the added separation distance
     // sqrt(x² + y² + z²)
     const [penetrationAxisNormalX, penetrationAxisNormalY, penetrationAxisNormalZ] = penetrationDepth.penetrationAxis;
-    const penetrationAxisLen = Math.sqrt(penetrationAxisNormalX * penetrationAxisNormalX + penetrationAxisNormalY * penetrationAxisNormalY + penetrationAxisNormalZ * penetrationAxisNormalZ);
+    const penetrationAxisLen = Math.sqrt(
+        penetrationAxisNormalX * penetrationAxisNormalX +
+            penetrationAxisNormalY * penetrationAxisNormalY +
+            penetrationAxisNormalZ * penetrationAxisNormalZ,
+    );
     if (penetrationAxisLen > 0.0) {
         const correction = maxSeparationDistanceToUse / penetrationAxisLen;
         // inline scaleAndAdd: pointA += penetrationAxis * (-correction)
@@ -509,43 +508,10 @@ export function collideConvexVsConvexLocal(
         penetrationDepth.pointA[2] += penetrationAxisNormalZ * -correction;
     }
 
-    // convert to world space
-    // inline transformQuat for contactA: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
-    const [qax, qay, qaz, qaw] = quaternionA;
-    const [pax2, pay2, paz2] = penetrationDepth.pointA;
-    const uvax = qay * paz2 - qaz * pay2 + qaw * pax2;
-    const uvay = qaz * pax2 - qax * paz2 + qaw * pay2;
-    const uvaz = qax * pay2 - qay * pax2 + qaw * paz2;
-    const uuvax = qay * uvaz - qaz * uvay;
-    const uuvay = qaz * uvax - qax * uvaz;
-    const uuvaz = qax * uvay - qay * uvax;
-    _collideConvex_contactA[0] = pax2 + 2 * uuvax + positionA[0];
-    _collideConvex_contactA[1] = pay2 + 2 * uuvay + positionA[1];
-    _collideConvex_contactA[2] = paz2 + 2 * uuvaz + positionA[2];
-
-    // inline transformQuat for contactB
-    const [pbx2, pby2, pbz2] = penetrationDepth.pointB;
-    const uvbx = qay * pbz2 - qaz * pby2 + qaw * pbx2;
-    const uvby = qaz * pbx2 - qax * pbz2 + qaw * pby2;
-    const uvbz = qax * pby2 - qay * pbx2 + qaw * pbz2;
-    const uuvbx = qay * uvbz - qaz * uvby;
-    const uuvby = qaz * uvbx - qax * uvbz;
-    const uuvbz = qax * uvby - qay * uvbx;
-    _collideConvex_contactB[0] = pbx2 + 2 * uuvbx + positionA[0];
-    _collideConvex_contactB[1] = pby2 + 2 * uuvby + positionA[1];
-    _collideConvex_contactB[2] = pbz2 + 2 * uuvbz + positionA[2];
-
-    // inline transformQuat for penetrationAxis
-    const [pnx2, pny2, pnz2] = penetrationDepth.penetrationAxis;
-    const uvnx = qay * pnz2 - qaz * pny2 + qaw * pnx2;
-    const uvny = qaz * pnx2 - qax * pnz2 + qaw * pny2;
-    const uvnz = qax * pny2 - qay * pnx2 + qaw * pnz2;
-    const uuvnx = qay * uvnz - qaz * uvny;
-    const uuvny = qaz * uvnx - qax * uvnz;
-    const uuvnz = qax * uvny - qay * uvnx;
-    _collideConvex_hit.penetrationAxis[0] = pnx2 + 2 * uuvnx;
-    _collideConvex_hit.penetrationAxis[1] = pny2 + 2 * uuvny;
-    _collideConvex_hit.penetrationAxis[2] = pnz2 + 2 * uuvnz;
+    // convert to world space using mat4_AtoWorld
+    vec3.transformMat4(_collideConvex_contactA, penetrationDepth.pointA, mat4_AtoWorld);
+    vec3.transformMat4(_collideConvex_contactB, penetrationDepth.pointB, mat4_AtoWorld);
+    mat4.multiply3x3Vec(_collideConvex_hit.penetrationAxis, mat4_AtoWorld, penetrationDepth.penetrationAxis);
 
     // create collision result
     _collideConvex_hit.pointA[0] = _collideConvex_contactA[0];
@@ -567,71 +533,22 @@ export function collideConvexVsConvexLocal(
         _collideConvex_faceDirA[0] = -penetrationDepth.penetrationAxis[0];
         _collideConvex_faceDirA[1] = -penetrationDepth.penetrationAxis[1];
         _collideConvex_faceDirA[2] = -penetrationDepth.penetrationAxis[2];
-        getShapeSupportingFace(
-            _collideConvex_hit.faceA,
-            shapeA,
-            subShapeIdA,
-            _collideConvex_faceDirA,
-            positionA,
-            quaternionA,
-            scaleA,
-        );
+        getShapeSupportingFace(_collideConvex_hit.faceA, shapeA, subShapeIdA, _collideConvex_faceDirA, mat4_AtoWorld, scaleA);
 
         // get supporting face of shape B
-        // transform penetration axis from A's local to B's local: conjugate(quatBInA) * penetrationAxis
-        // using quaternion vector rotation: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
-        
-        // conjugate of quatBInA (negate xyz components)
-        const conjugateBInAX = -quatBInA[0];
-        const conjugateBInAY = -quatBInA[1];
-        const conjugateBInAZ = -quatBInA[2];
-        const conjugateBInAW = quatBInA[3];
-        
-        const [facePenetrationAxisX, facePenetrationAxisY, facePenetrationAxisZ] = penetrationDepth.penetrationAxis;
-        
-        // first intermediate: cross(q.xyz, v) + q.w * v
-        const crossPlusScaledX = conjugateBInAY * facePenetrationAxisZ - conjugateBInAZ * facePenetrationAxisY + conjugateBInAW * facePenetrationAxisX;
-        const crossPlusScaledY = conjugateBInAZ * facePenetrationAxisX - conjugateBInAX * facePenetrationAxisZ + conjugateBInAW * facePenetrationAxisY;
-        const crossPlusScaledZ = conjugateBInAX * facePenetrationAxisY - conjugateBInAY * facePenetrationAxisX + conjugateBInAW * facePenetrationAxisZ;
-        
-        // second intermediate: cross(q.xyz, firstIntermediate)
-        const doubleCrossX = conjugateBInAY * crossPlusScaledZ - conjugateBInAZ * crossPlusScaledY;
-        const doubleCrossY = conjugateBInAZ * crossPlusScaledX - conjugateBInAX * crossPlusScaledZ;
-        const doubleCrossZ = conjugateBInAX * crossPlusScaledY - conjugateBInAY * crossPlusScaledX;
-        
-        // final result: v + 2 * secondIntermediate
-        _collideConvex_faceDirB[0] = facePenetrationAxisX + 2 * doubleCrossX;
-        _collideConvex_faceDirB[1] = facePenetrationAxisY + 2 * doubleCrossY;
-        _collideConvex_faceDirB[2] = facePenetrationAxisZ + 2 * doubleCrossZ;
+        // transform penetration axis from A's local to B's local using inverse rotation of mat4_BtoA
+        // (transposed 3x3 portion = inverse rotation for orthonormal matrices)
+        mat4.multiply3x3TransposedVec(_collideConvex_faceDirB, mat4_BtoA, penetrationDepth.penetrationAxis);
 
-        // transform B to world space for face query: positionB = positionA + quaternionA * posBInA
-        // inline transformQuat: v' = v + 2 * cross(q.xyz, cross(q.xyz, v) + q.w * v)
-        const [posBInAX, posBInAY, posBInAZ] = posBInA;
-        const uvpbx = qay * posBInAZ - qaz * posBInAY + qaw * posBInAX;
-        const uvpby = qaz * posBInAX - qax * posBInAZ + qaw * posBInAY;
-        const uvpbz = qax * posBInAY - qay * posBInAX + qaw * posBInAZ;
-        const uuvpbx = qay * uvpbz - qaz * uvpby;
-        const uuvpby = qaz * uvpbx - qax * uvpbz;
-        const uuvpbz = qax * uvpby - qay * uvpbx;
-        _collideConvex_posB[0] = posBInAX + 2 * uuvpbx + positionA[0];
-        _collideConvex_posB[1] = posBInAY + 2 * uuvpby + positionA[1];
-        _collideConvex_posB[2] = posBInAZ + 2 * uuvpbz + positionA[2];
-
-        // inline quat.multiply: quaternionA * quatBInA
-        const [qax2, qay2, qaz2, qaw2] = quaternionA;
-        const [qbx2, qby2, qbz2, qbw2] = quatBInA;
-        _collideConvex_quatB[0] = qaw2 * qbx2 + qax2 * qbw2 + qay2 * qbz2 - qaz2 * qby2;
-        _collideConvex_quatB[1] = qaw2 * qby2 - qax2 * qbz2 + qay2 * qbw2 + qaz2 * qbx2;
-        _collideConvex_quatB[2] = qaw2 * qbz2 + qax2 * qby2 - qay2 * qbx2 + qaz2 * qbw2;
-        _collideConvex_quatB[3] = qaw2 * qbw2 - qax2 * qbx2 - qay2 * qby2 - qaz2 * qbz2;
+        // compute B's world transform: mat4_BtoWorld = mat4_AtoWorld * mat4_BtoA
+        mat4.multiply(_collideConvex_mat4_BtoWorld, mat4_AtoWorld, mat4_BtoA);
 
         getShapeSupportingFace(
             _collideConvex_hit.faceB,
             shapeB,
             subShapeIdB,
             _collideConvex_faceDirB,
-            _collideConvex_posB,
-            _collideConvex_quatB,
+            _collideConvex_mat4_BtoWorld,
             scaleB,
         );
     }
@@ -647,9 +564,6 @@ const castConvex_supportPoolB = /* @__PURE__ */ createShapeSupportPool();
 
 const _castConvex_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 
-const _castConvex_posAInB = /* @__PURE__ */ vec3.create();
-const _castConvex_quatAInB = /* @__PURE__ */ quat.create();
-const _castConvex_positionDifference = /* @__PURE__ */ vec3.create();
 const _castConvex_inverseQuaternionB = /* @__PURE__ */ quat.create();
 
 const _castConvex_posA = /* @__PURE__ */ vec3.create();
@@ -661,14 +575,11 @@ const _castConvex_quatB = /* @__PURE__ */ quat.create();
 const _castConvex_scaleB = /* @__PURE__ */ vec3.create();
 const _castConvex_displacementInB = /* @__PURE__ */ vec3.create();
 
-const _castConvex_contactPointA = /* @__PURE__ */ vec3.create();
-const _castConvex_contactPointWorldB = /* @__PURE__ */ vec3.create();
-const _castConvex_convexWorldPositionA = /* @__PURE__ */ vec3.create();
-const _castConvex_convexWorldQuaternionA = /* @__PURE__ */ quat.create();
 const _castConvex_convexQueryNormal = /* @__PURE__ */ vec3.create();
-const _castConvex_convexDisplacementScaled = /* @__PURE__ */ vec3.create();
-const _castConvex_convexPosAInBAtContact = /* @__PURE__ */ vec3.create();
-const _castConvex_convexInvQuatAInB = /* @__PURE__ */ quat.create();
+const _castConvex_castTransform = /* @__PURE__ */ mat4.create();
+const _castConvex_transformAAtContact = /* @__PURE__ */ mat4.create();
+const _castConvex_targetTransform = /* @__PURE__  */ mat4.create();
+const _castConvex_inverseTargetTransform = /* @__PURE__  */ mat4.create();
 
 const _castConvex_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 
@@ -713,14 +624,21 @@ export function castConvexVsConvex(
     quat.set(_castConvex_quatB, quatBX, quatBY, quatBZ, quatBW);
     vec3.set(_castConvex_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    // transform A into B's local space
+    // compute inverse of B's quaternion for transforming displacement
     quat.conjugate(_castConvex_inverseQuaternionB, _castConvex_quatB);
 
-    vec3.sub(_castConvex_positionDifference, _castConvex_posA, _castConvex_posB);
-    vec3.transformQuat(_castConvex_posAInB, _castConvex_positionDifference, _castConvex_inverseQuaternionB);
+    // transform A into B's local space using matrices (aligned with JoltPhysics)
+    // castTransform = inverse(targetTransform) * transformA
+    const transformA = mat4.fromRotationTranslation(_castConvex_castTransform, _castConvex_quatA, _castConvex_posA);
+    const targetTransform = mat4.fromRotationTranslation(_castConvex_targetTransform, _castConvex_quatB, _castConvex_posB);
 
-    quat.multiply(_castConvex_quatAInB, _castConvex_inverseQuaternionB, _castConvex_quatA);
+    // inverse target transform (use separate temp to avoid overwriting targetTransform)
+    mat4.invert(_castConvex_inverseTargetTransform, targetTransform);
 
+    // castTransform = targetTransform^-1 * transformA (A's start transform in B's space)
+    mat4.multiply(_castConvex_castTransform, _castConvex_inverseTargetTransform, transformA);
+
+    // transform displacement to B's space
     vec3.transformQuat(_castConvex_displacementInB, _castConvex_displacementA, _castConvex_inverseQuaternionB);
 
     // delegate to local-space function with world space info for contact points
@@ -731,13 +649,11 @@ export function castConvexVsConvex(
         subShapeIdA,
         shapeB,
         subShapeIdB,
-        _castConvex_posAInB,
-        _castConvex_quatAInB,
+        _castConvex_castTransform,
         _castConvex_scaleA,
         _castConvex_displacementInB,
         _castConvex_scaleB,
-        _castConvex_posB,
-        _castConvex_quatB,
+        targetTransform,
     );
 }
 
@@ -748,18 +664,22 @@ export function castConvexVsConvexLocal(
     subShapeIdA: number,
     shapeB: Shape,
     subShapeIdB: number,
-    posAInB: Vec3,
-    quatAInB: Quat,
+    castTransform: Mat4,
     scaleA: Vec3,
     displacementInB: Vec3,
     scaleB: Vec3,
-    positionB: Vec3,
-    quaternionB: Quat,
+    targetTransform: Mat4,
 ): void {
     // get support functions for both shapes WITHOUT convex radius
     // (radius will be added in EPA if needed)
     const supportA = getShapeSupportFunction(castConvex_supportPoolA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
     const supportB = getShapeSupportFunction(castConvex_supportPoolB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
+
+    // extract position and quaternion from castTransform for penetrationCastShape
+    _castConvex_posA[0] = castTransform[12];
+    _castConvex_posA[1] = castTransform[13];
+    _castConvex_posA[2] = castTransform[14];
+    mat4.getRotation(_castConvex_quatA, castTransform);
 
     // run GJK casting with EPA fallback for deep penetration in B's local space
     // penetrationCastShape will handle transform wrapping internally
@@ -767,8 +687,8 @@ export function castConvexVsConvexLocal(
     _castConvex_gjkResult.lambda = collector.earlyOutFraction;
     penetrationCastShape(
         _castConvex_gjkResult,
-        posAInB,
-        quatAInB,
+        _castConvex_posA,
+        _castConvex_quatA,
         supportA,
         supportB,
         displacementInB,
@@ -807,15 +727,12 @@ export function castConvexVsConvexLocal(
         return;
     }
 
-    // transform contact points from B's local space to world space
-    vec3.transformQuat(_castConvex_contactPointA, _castConvex_gjkResult.pointA, quaternionB);
-    vec3.add(_castConvex_castShapeHit.pointA, _castConvex_contactPointA, positionB);
-
-    vec3.transformQuat(_castConvex_contactPointWorldB, _castConvex_gjkResult.pointB, quaternionB);
-    vec3.add(_castConvex_castShapeHit.pointB, _castConvex_contactPointWorldB, positionB);
+    // transform contact points from B's local space to world space using targetTransform
+    vec3.transformMat4(_castConvex_castShapeHit.pointA, _castConvex_gjkResult.pointA, targetTransform);
+    vec3.transformMat4(_castConvex_castShapeHit.pointB, _castConvex_gjkResult.pointB, targetTransform);
 
     // transform penetrationAxis from B's local space to world space (keep unnormalized)
-    vec3.transformQuat(_castConvex_castShapeHit.penetrationAxis, _castConvex_gjkResult.separatingAxis, quaternionB);
+    mat4.multiply3x3Vec(_castConvex_castShapeHit.penetrationAxis, targetTransform, _castConvex_gjkResult.separatingAxis);
 
     // compute contact normal as -penetrationAxis.normalized()
     vec3.normalize(_castConvex_castShapeHit.normal, _castConvex_castShapeHit.penetrationAxis);
@@ -832,27 +749,25 @@ export function castConvexVsConvexLocal(
 
     // extract supporting faces if requested
     if (settings.collectFaces) {
-        // calculate transform for shape A at contact point
-        // transform_1_to_2 = inShapeCast.mCenterOfMassStart with translation += fraction * inShapeCast.mDirection
-        vec3.scale(_castConvex_convexDisplacementScaled, displacementInB, _castConvex_gjkResult.lambda);
-        vec3.add(_castConvex_convexPosAInBAtContact, posAInB, _castConvex_convexDisplacementScaled);
+        // calculate transform for shape A at contact point (aligned with JoltPhysics)
+        // transform_1_to_2 = castTransform with translation += fraction * displacementInB
+        mat4.copy(_castConvex_transformAAtContact, castTransform);
+        _castConvex_transformAAtContact[12] += _castConvex_gjkResult.lambda * displacementInB[0];
+        _castConvex_transformAAtContact[13] += _castConvex_gjkResult.lambda * displacementInB[1];
+        _castConvex_transformAAtContact[14] += _castConvex_gjkResult.lambda * displacementInB[2];
 
-        // world space transforms for shape A at contact: positionA = positionB + quaternionB * posAInB, quaternionA = quaternionB * quatAInB
-        vec3.transformQuat(_castConvex_convexWorldPositionA, _castConvex_convexPosAInBAtContact, quaternionB);
-        vec3.add(_castConvex_convexWorldPositionA, _castConvex_convexWorldPositionA, positionB);
-        quat.multiply(_castConvex_convexWorldQuaternionA, quaternionB, quatAInB);
+        // shape A's world transform at contact = targetTransform * transformAAtContact
+        mat4.multiply(_castConvex_transformAAtContact, targetTransform, _castConvex_transformAAtContact);
 
-        // shape a: contact_normal is in B's local space, transform to A's local: conjugate(quatAInB) * (-separatingAxis)
-        vec3.negate(_castConvex_convexQueryNormal, _castConvex_gjkResult.separatingAxis);
-        quat.conjugate(_castConvex_convexInvQuatAInB, quatAInB);
-        vec3.transformQuat(_castConvex_convexQueryNormal, _castConvex_convexQueryNormal, _castConvex_convexInvQuatAInB);
+        // shape A: contact_normal is in B's local space, transform to A's local using transposed rotation
+        mat4.multiply3x3TransposedVec(_castConvex_convexQueryNormal, castTransform, _castConvex_gjkResult.separatingAxis);
+        vec3.negate(_castConvex_convexQueryNormal, _castConvex_convexQueryNormal);
         getShapeSupportingFace(
             _castConvex_castShapeHit.faceA,
             shapeA,
             subShapeIdA,
             _castConvex_convexQueryNormal,
-            _castConvex_convexWorldPositionA,
-            _castConvex_convexWorldQuaternionA,
+            _castConvex_transformAAtContact,
             scaleA,
         );
 
@@ -862,8 +777,7 @@ export function castConvexVsConvexLocal(
             shapeB,
             subShapeIdB,
             _castConvex_gjkResult.separatingAxis,
-            positionB,
-            quaternionB,
+            targetTransform,
             scaleB,
         );
     } else {

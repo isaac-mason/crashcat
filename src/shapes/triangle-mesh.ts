@@ -45,7 +45,7 @@ import {
 import { createClosestPointOnTriangleResult, getClosestPointOnTriangle } from '../collision/triangle';
 import { assert } from '../utils/assert';
 import * as bvhStack from '../utils/bvh-stack';
-import { isScaleInsideOut, transformFace } from '../utils/face';
+import { isScaleInsideOut, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale } from '../utils/face';
 import {
     type ConvexShape,
     defineShape,
@@ -154,72 +154,9 @@ export const def = /* @__PURE__ */ (() =>
     defineShape<TriangleMeshShape>({
         type: ShapeType.TRIANGLE_MESH,
         category: ShapeCategory.MESH,
-        computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): void {
-            // triangle meshes are static collision geometry by default.
-            // mass properties should be overridden at the body level if needed.
-            out.mass = 0;
-            mat4.identity(out.inertia);
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
-            const triangleIndex = _subShapeIdPopResult.value;
-
-            // if triangleIndex is a valid triangle index, return that triangle's normal
-            if (triangleIndex >= 0 && triangleIndex < shape.data.triangleCount) {
-                getTriangleNormal(_getSurfaceNormal_normal, shape.data, triangleIndex);
-                vec3.copy(ioResult.normal, _getSurfaceNormal_normal);
-                return;
-            }
-
-            assert(false, 'Invalid SubShapeID for TriangleMeshShape');
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: TriangleMeshShape, subShapeId: number): void {
-            const face = ioResult.face;
-            const { position, quaternion, scale } = ioResult;
-
-            // extract triangle index from SubShapeID
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
-            const triangleIndex = _subShapeIdPopResult.value;
-
-            const a = _getSupportingFace_a;
-            const b = _getSupportingFace_b;
-            const c = _getSupportingFace_c;
-            getTriangleVertices(a, b, c, shape.data, triangleIndex);
-
-            // check if scale inverts winding (negative determinant)
-            const insideOut = isScaleInsideOut(scale);
-
-            // return the 3 vertices of the triangle
-            face.numVertices = 3;
-
-            if (insideOut) {
-                // reverse winding: a,b,c -> c,b,a
-                face.vertices[0] = c[0];
-                face.vertices[1] = c[1];
-                face.vertices[2] = c[2];
-                face.vertices[3] = b[0];
-                face.vertices[4] = b[1];
-                face.vertices[5] = b[2];
-                face.vertices[6] = a[0];
-                face.vertices[7] = a[1];
-                face.vertices[8] = a[2];
-            } else {
-                face.vertices[0] = a[0];
-                face.vertices[1] = a[1];
-                face.vertices[2] = a[2];
-                face.vertices[3] = b[0];
-                face.vertices[4] = b[1];
-                face.vertices[5] = b[2];
-                face.vertices[6] = c[0];
-                face.vertices[7] = c[1];
-                face.vertices[8] = c[2];
-            }
-
-            transformFace(face, position, quaternion, scale);
-        },
-        getInnerRadius(_shape: TriangleMeshShape): number {
-            return 0.0;
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
         castRay: castRayVsTriangleMesh,
         collidePoint: collidePointVsTriangleMesh,
         register: () => {
@@ -240,6 +177,72 @@ export const def = /* @__PURE__ */ (() =>
         },
     }))();
 
+function computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): void {
+    // triangle meshes are static collision geometry by default.
+    // mass properties should be overridden at the body level if needed.
+    out.mass = 0;
+    mat4.identity(out.inertia);
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+    const triangleIndex = _subShapeIdPopResult.value;
+
+    // if triangleIndex is a valid triangle index, return that triangle's normal
+    if (triangleIndex >= 0 && triangleIndex < shape.data.triangleCount) {
+        getTriangleNormal(_getSurfaceNormal_normal, shape.data, triangleIndex);
+        vec3.copy(ioResult.normal, _getSurfaceNormal_normal);
+        return;
+    }
+
+    assert(false, 'Invalid SubShapeID for TriangleMeshShape');
+}
+
+function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, shape: TriangleMeshShape, subShapeId: number): void {
+    const face = ioResult.face;
+    const { transform, scale } = ioResult;
+
+    // extract triangle index from SubShapeID
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+    const triangleIndex = _subShapeIdPopResult.value;
+
+    const a = _getSupportingFace_a;
+    const b = _getSupportingFace_b;
+    const c = _getSupportingFace_c;
+    getTriangleVertices(a, b, c, shape.data, triangleIndex);
+
+    // check if scale inverts winding (negative determinant)
+    const insideOut = isScaleInsideOut(scale);
+
+    // return the 3 vertices of the triangle
+    face.numVertices = 3;
+
+    if (insideOut) {
+        // reverse winding: a,b,c -> c,b,a
+        face.vertices[0] = c[0];
+        face.vertices[1] = c[1];
+        face.vertices[2] = c[2];
+        face.vertices[3] = b[0];
+        face.vertices[4] = b[1];
+        face.vertices[5] = b[2];
+        face.vertices[6] = a[0];
+        face.vertices[7] = a[1];
+        face.vertices[8] = a[2];
+    } else {
+        face.vertices[0] = a[0];
+        face.vertices[1] = a[1];
+        face.vertices[2] = a[2];
+        face.vertices[3] = b[0];
+        face.vertices[4] = b[1];
+        face.vertices[5] = b[2];
+        face.vertices[6] = c[0];
+        face.vertices[7] = c[1];
+        face.vertices[8] = c[2];
+    }
+
+    transformFaceWithMat4Scale(face, transform, scale);
+}
+
 /* cast ray */
 
 const _castRayVsTriangleMesh_pos = /* @__PURE__ */ vec3.create();
@@ -248,6 +251,8 @@ const _castRayVsTriangleMesh_scale = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
+const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
 const _castRayVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
@@ -281,24 +286,20 @@ function castRayVsTriangleMesh(
     quat.set(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
     vec3.set(_castRayVsTriangleMesh_scale, scaleX, scaleY, scaleZ);
 
-    // transform ray from world space to mesh local space
+    // pre-compute world-to-B matrix (inverse of B's transform)
+    // inverse transform: conjugate rotation, then negate-rotated position
     quat.conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
-
-    // transform ray origin: (origin - position) rotated by inverse quaternion
-    vec3.subtract(_castRayVsTriangleMesh_rayOriginLocal, ray.origin, _castRayVsTriangleMesh_pos);
-    vec3.transformQuat(
-        _castRayVsTriangleMesh_rayOriginLocal,
-        _castRayVsTriangleMesh_rayOriginLocal,
+    vec3.negate(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_pos);
+    vec3.transformQuat(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_invQuat);
+    mat4.fromRotationTranslation(
+        _castRayVsTriangleMesh_mat4_WorldToB,
         _castRayVsTriangleMesh_invQuat,
+        _castRayVsTriangleMesh_negPos,
     );
 
-    // transform ray direction: direction rotated by inverse quaternion
-    vec3.copy(_castRayVsTriangleMesh_rayDirectionLocal, ray.direction);
-    vec3.transformQuat(
-        _castRayVsTriangleMesh_rayDirectionLocal,
-        _castRayVsTriangleMesh_rayDirectionLocal,
-        _castRayVsTriangleMesh_invQuat,
-    );
+    // transform ray from world space to mesh local space using pre-computed matrix
+    vec3.transformMat4(_castRayVsTriangleMesh_rayOriginLocal, ray.origin, _castRayVsTriangleMesh_mat4_WorldToB);
+    mat4.multiply3x3Vec(_castRayVsTriangleMesh_rayDirectionLocal, _castRayVsTriangleMesh_mat4_WorldToB, ray.direction);
 
     // handle scale by dividing ray direction components by scale
     // (scale affects how far we need to go in local space to reach world distance)
@@ -603,7 +604,6 @@ const _castConvexVsTriangleMesh_faceNormal = /* @__PURE__ */ vec3.create();
 
 const _castConvexVsTriangleMesh_activeEdgeMovementDirection = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_conjugateQuat = /* @__PURE__ */ quat.create();
 
 const _castConvexVsTriangleMesh_triangleA = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_triangleB = /* @__PURE__ */ vec3.create();
@@ -626,6 +626,9 @@ const _castConvexVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _castConvexVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 
 const _castConvexVsTriangleMesh_aabbTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_mat4_BtoWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_mat4_AtoB = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_mat4_AtoWorld = /* @__PURE__ */ mat4.create();
 
 const _castConvexVsTriangleMesh_bvhStack = /* @__PURE__ */ bvhStack.create();
 const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
@@ -731,15 +734,28 @@ function castConvexVsTriangleMesh(
         supportMode,
         _castConvexVsTriangleMesh_scaleA,
     );
-    setTransformedSupport(
-        _castConvexVsTriangleMesh_transformedSupportA,
-        _castConvexVsTriangleMesh_posAInB,
+    const mat4_AtoB = mat4.fromRotationTranslation(
+        _castConvexVsTriangleMesh_mat4_AtoB,
         _castConvexVsTriangleMesh_quatAInB,
-        supportA,
+        _castConvexVsTriangleMesh_posAInB,
     );
+    setTransformedSupport(_castConvexVsTriangleMesh_transformedSupportA, mat4_AtoB, supportA);
 
     // determine if shape is inside out or not
     const scaleSign = vec3.isScaleInsideOut(_castConvexVsTriangleMesh_scaleB) ? -1 : 1;
+
+    // pre-compute B-to-world transformation matrix (rotation + translation only, no scale)
+    // vertices are already scaled, so matrix should only handle rotation and translation
+    const mat4_BtoWorld = mat4.fromRotationTranslation(
+        _castConvexVsTriangleMesh_mat4_BtoWorld,
+        _castConvexVsTriangleMesh_quatB,
+        _castConvexVsTriangleMesh_posB,
+    );
+
+    // pre-compute inverse of quatAInB if we'll be collecting faces
+    if (settings.collectFaces) {
+        quat.conjugate(_castConvexVsTriangleMesh_inverseQuatAInB, _castConvexVsTriangleMesh_quatAInB);
+    }
 
     // compute centroid of base AABB
     const ray = _castConvexVsTriangleMesh_raycast;
@@ -896,11 +912,11 @@ function castConvexVsTriangleMesh(
                 // active edge detection - correct normal if hitting inactive edge
                 const triangleActiveEdges = getActiveEdges(meshData, triangleIndex);
                 if (settings.collideOnlyWithActiveEdges && triangleActiveEdges !== 0b111) {
-                    // transform movement direction from world space to mesh's local space
+                    // transform movement direction from world space to mesh's local space (reuse pre-computed inverse)
                     vec3.transformQuat(
                         _castConvexVsTriangleMesh_activeEdgeMovementDirection,
                         settings.activeEdgeMovementDirection,
-                        quat.conjugate(_castConvexVsTriangleMesh_conjugateQuat, _castConvexVsTriangleMesh_quatB),
+                        _castConvexVsTriangleMesh_inverseQuaternionB,
                     );
 
                     // prepare triangle normal for fixNormal
@@ -928,31 +944,22 @@ function castConvexVsTriangleMesh(
                     vec3.copy(_castConvexVsTriangleMesh_gjkResult.separatingAxis, correctedAxis);
                 }
 
-                // convert to world space
-                vec3.transformQuat(
+                // convert to world space using pre-computed matrix
+                vec3.transformMat4(
                     _castConvexVsTriangleMesh_worldPointA,
                     _castConvexVsTriangleMesh_gjkResult.pointA,
-                    _castConvexVsTriangleMesh_quatB,
+                    mat4_BtoWorld,
                 );
-                vec3.add(
-                    _castConvexVsTriangleMesh_worldPointA,
-                    _castConvexVsTriangleMesh_worldPointA,
-                    _castConvexVsTriangleMesh_posB,
-                );
-                vec3.transformQuat(
+                vec3.transformMat4(
                     _castConvexVsTriangleMesh_worldPointB,
                     _castConvexVsTriangleMesh_gjkResult.pointB,
-                    _castConvexVsTriangleMesh_quatB,
+                    mat4_BtoWorld,
                 );
-                vec3.add(
-                    _castConvexVsTriangleMesh_worldPointB,
-                    _castConvexVsTriangleMesh_worldPointB,
-                    _castConvexVsTriangleMesh_posB,
-                );
-                vec3.transformQuat(
+                // transform direction (penetration axis) without translation
+                mat4.multiply3x3Vec(
                     _castConvexVsTriangleMesh_castShapeHit.penetrationAxis,
+                    mat4_BtoWorld,
                     _castConvexVsTriangleMesh_gjkResult.separatingAxis,
-                    _castConvexVsTriangleMesh_quatB,
                 );
 
                 // store hit info
@@ -999,19 +1006,25 @@ function castConvexVsTriangleMesh(
                         _castConvexVsTriangleMesh_faceNormal,
                         _castConvexVsTriangleMesh_gjkResult.separatingAxis,
                     );
-                    quat.conjugate(_castConvexVsTriangleMesh_inverseQuatAInB, _castConvexVsTriangleMesh_quatAInB);
                     vec3.transformQuat(normalInA, normalInA, _castConvexVsTriangleMesh_inverseQuatAInB);
+
+                    // build mat4 for shape A's world transform at hit time
+                    mat4.fromRotationTranslation(
+                        _castConvexVsTriangleMesh_mat4_AtoWorld,
+                        _castConvexVsTriangleMesh_quatA,
+                        position,
+                    );
+
                     getShapeSupportingFace(
                         _castConvexVsTriangleMesh_castShapeHit.faceA,
                         shapeA,
                         subShapeIdA,
                         normalInA,
-                        position,
-                        _castConvexVsTriangleMesh_quatA,
+                        _castConvexVsTriangleMesh_mat4_AtoWorld,
                         _castConvexVsTriangleMesh_scaleA,
                     );
 
-                    // face b: supporting face is the triangle vertices (already in B's local space)
+                    // face b: supporting face is the triangle vertices (already scaled and in B's local space)
                     _castConvexVsTriangleMesh_castShapeHit.faceB.numVertices = 3;
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[0] = a[0];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[1] = a[1];
@@ -1022,12 +1035,8 @@ function castConvexVsTriangleMesh(
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[6] = c[0];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[7] = c[1];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[8] = c[2];
-                    transformFace(
-                        _castConvexVsTriangleMesh_castShapeHit.faceB,
-                        _castConvexVsTriangleMesh_posB,
-                        _castConvexVsTriangleMesh_quatB,
-                        _castConvexVsTriangleMesh_scaleB,
-                    );
+                    // transform to world space (rotation + translation only, no scale - vertices are already scaled)
+                    transformFaceWithMat4RotationTranslation(_castConvexVsTriangleMesh_castShapeHit.faceB, mat4_BtoWorld);
                 } else {
                     // clear faces
                     _castConvexVsTriangleMesh_castShapeHit.faceA.numVertices = 0;
@@ -1134,6 +1143,9 @@ const _collideConvexVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _collideConvexVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 
 const _collideConvexVsTriangleMesh_aabbTransform = /* @__PURE__ */ mat4.create();
+
+const _collideConvexVsTriangleMesh_mat4_BtoA = /* @__PURE__ */ mat4.create();
+const _collideConvexVsTriangleMesh_mat4_AtoWorld = /* @__PURE__ */ mat4.create();
 
 const _collideConvexVsTriangleMesh_activeEdgeMovementDirection = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
@@ -1258,6 +1270,21 @@ function collideConvexVsTriangleMesh(
         vec3.setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance),
     );
 
+    // pre-compute transformation matrices (align with joltphysics pattern)
+    // A-to-world matrix (rotation + translation only, no scale)
+    const mat4_AtoWorld = mat4.fromRotationTranslation(
+        _collideConvexVsTriangleMesh_mat4_AtoWorld,
+        _collideConvexVsTriangleMesh_quatA,
+        _collideConvexVsTriangleMesh_posA,
+    );
+
+    // B-to-A matrix (rotation + translation only, no scale - vertices are scaled separately)
+    const mat4_BtoA = mat4.fromRotationTranslation(
+        _collideConvexVsTriangleMesh_mat4_BtoA,
+        _collideConvexVsTriangleMesh_transform2To1Quat,
+        _collideConvexVsTriangleMesh_transform2To1Pos,
+    );
+
     // determine if mesh is inside-out
     const scaleSign = vec3.isScaleInsideOut(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
@@ -1315,7 +1342,8 @@ function collideConvexVsTriangleMesh(
                     triangleIndex,
                 );
 
-                // scale triangle in mesh local space
+                // scale triangle in mesh local space, then transform to shape A's local space
+                // using pre-computed mat4_BtoA matrix (joltphysics pattern)
                 const a = vec3.mul(
                     _collideConvexVsTriangleMesh_triangleA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_a,
@@ -1332,25 +1360,10 @@ function collideConvexVsTriangleMesh(
                     _collideConvexVsTriangleMesh_scaleB,
                 );
 
-                // transform triangle to shape A's local space
-                vec3.transformQuat(_collideConvexVsTriangleMesh_triangleA_inA, a, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(
-                    _collideConvexVsTriangleMesh_triangleA_inA,
-                    _collideConvexVsTriangleMesh_triangleA_inA,
-                    _collideConvexVsTriangleMesh_transform2To1Pos,
-                );
-                vec3.transformQuat(_collideConvexVsTriangleMesh_triangleB_inA, b, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(
-                    _collideConvexVsTriangleMesh_triangleB_inA,
-                    _collideConvexVsTriangleMesh_triangleB_inA,
-                    _collideConvexVsTriangleMesh_transform2To1Pos,
-                );
-                vec3.transformQuat(_collideConvexVsTriangleMesh_triangleC_inA, c, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(
-                    _collideConvexVsTriangleMesh_triangleC_inA,
-                    _collideConvexVsTriangleMesh_triangleC_inA,
-                    _collideConvexVsTriangleMesh_transform2To1Pos,
-                );
+                // transform scaled triangle vertices to shape A's local space using mat4
+                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleA_inA, a, mat4_BtoA);
+                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleB_inA, b, mat4_BtoA);
+                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleC_inA, c, mat4_BtoA);
 
                 // compute triangle AABB in shape A's local space
                 const triangleAABB = _collideConvexVsTriangleMesh_triangleAABB;
@@ -1523,31 +1536,21 @@ function collideConvexVsTriangleMesh(
                     vec3.copy(_collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis, correctedAxis);
                 }
 
-                // transform results to world space
-                vec3.transformQuat(
+                // transform results to world space using pre-computed mat4_AtoWorld
+                vec3.transformMat4(
                     _collideConvexVsTriangleMesh_worldPointA,
                     _collideConvexVsTriangleMesh_penetrationDepth.pointA,
-                    _collideConvexVsTriangleMesh_quatA,
+                    mat4_AtoWorld,
                 );
-                vec3.add(
-                    _collideConvexVsTriangleMesh_worldPointA,
-                    _collideConvexVsTriangleMesh_worldPointA,
-                    _collideConvexVsTriangleMesh_posA,
-                );
-                vec3.transformQuat(
+                vec3.transformMat4(
                     _collideConvexVsTriangleMesh_worldPointB,
                     _collideConvexVsTriangleMesh_penetrationDepth.pointB,
-                    _collideConvexVsTriangleMesh_quatA,
+                    mat4_AtoWorld,
                 );
-                vec3.add(
-                    _collideConvexVsTriangleMesh_worldPointB,
-                    _collideConvexVsTriangleMesh_worldPointB,
-                    _collideConvexVsTriangleMesh_posA,
-                );
-                vec3.transformQuat(
+                mat4.multiply3x3Vec(
                     _collideConvexVsTriangleMesh_collideShapeHit.penetrationAxis,
+                    mat4_AtoWorld,
                     _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis,
-                    _collideConvexVsTriangleMesh_quatA,
                 );
 
                 // push sub shape id for triangle
@@ -1585,8 +1588,7 @@ function collideConvexVsTriangleMesh(
                         shapeA,
                         subShapeIdA,
                         faceDirectionA,
-                        _collideConvexVsTriangleMesh_posA,
-                        _collideConvexVsTriangleMesh_quatA,
+                        _collideConvexVsTriangleMesh_mat4_AtoWorld,
                         _collideConvexVsTriangleMesh_scaleA,
                     );
 
@@ -1612,12 +1614,8 @@ function collideConvexVsTriangleMesh(
                         _collideConvexVsTriangleMesh_triangleC_inA[2];
 
                     // transform from shape A's local space to world space
-                    transformFace(
-                        _collideConvexVsTriangleMesh_collideShapeHit.faceB,
-                        _collideConvexVsTriangleMesh_posA,
-                        _collideConvexVsTriangleMesh_quatA,
-                        _collideConvexVsTriangleMesh_scaleA,
-                    );
+                    // note: vertices are already scaled (by scaleB), so we use mat4 without scale
+                    transformFaceWithMat4RotationTranslation(_collideConvexVsTriangleMesh_collideShapeHit.faceB, mat4_AtoWorld);
                 }
 
                 collector.addHit(_collideConvexVsTriangleMesh_collideShapeHit);

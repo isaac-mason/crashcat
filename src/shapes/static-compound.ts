@@ -261,8 +261,7 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundSh
     vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
 }
 
-const _getSupportingFace_childPos = /* @__PURE__ */ vec3.create();
-const _getSupportingFace_invChildRot = /* @__PURE__ */ quat.create();
+const _getSupportingFace_childTransform = /* @__PURE__ */ mat4.create();
 const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 function getSupportingFace(
@@ -282,13 +281,13 @@ function getSupportingFace(
 
     const child = shape.children[childIndex];
 
-    vec3.transformQuat(_getSupportingFace_childPos, child.position, ioResult.quaternion);
-    vec3.add(ioResult.position, ioResult.position, _getSupportingFace_childPos);
+    // build child transform matrix and accumulate: transform = transform * childTransform
+    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, child.position);
+    mat4.multiply(ioResult.transform, ioResult.transform, _getSupportingFace_childTransform);
 
-    quat.multiply(ioResult.quaternion, ioResult.quaternion, child.quaternion);
-
-    quat.conjugate(_getSupportingFace_invChildRot, child.quaternion);
-    vec3.transformQuat(_getSupportingFace_localDirection, direction, _getSupportingFace_invChildRot);
+    // transform direction to child local space using inverse child rotation
+    // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
+    mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
 
     shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
 }

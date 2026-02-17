@@ -1,4 +1,4 @@
-import { degreesToRadians, type Quat, type Vec3, vec3 } from 'mathcat';
+import { degreesToRadians, mat4, type Quat, type Vec3, vec3 } from 'mathcat';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
@@ -617,6 +617,7 @@ const _castShape_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
 const _castShape_addRadiusA = /* @__PURE__ */ createAddConvexRadiusSupport();
 const _castShape_addRadiusB = /* @__PURE__ */ createAddConvexRadiusSupport();
 const _castShape_transformedA = /* @__PURE__ */ createTransformedSupport();
+const _castShape_mat4_AtoB = /* @__PURE__ */ mat4.create();
 
 export function penetrationCastShape(
     out: GjkCastShapeResult,
@@ -663,7 +664,8 @@ export function penetrationCastShape(
         // if we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point
         setAddConvexRadiusSupport(_castShape_addRadiusA, convexRadiusA, shapeASupport);
         setAddConvexRadiusSupport(_castShape_addRadiusB, convexRadiusB, shapeBSupport);
-        setTransformedSupport(_castShape_transformedA, posAInB, quatAInB, _castShape_addRadiusA);
+        const mat4_AtoB = mat4.fromRotationTranslation(_castShape_mat4_AtoB, quatAInB, posAInB);
+        setTransformedSupport(_castShape_transformedA, mat4_AtoB, _castShape_addRadiusA);
 
         if (
             !penetrationDepthStepEPA(
