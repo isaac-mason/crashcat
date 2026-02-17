@@ -499,7 +499,12 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
             );
         } else {
             // single contact point
-            manifold.setContactPoint(_narrowphase_tempManifold, 0, hit.pointA, hit.pointB);
+            _narrowphase_tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - _narrowphase_tempManifold.baseOffset[0];
+            _narrowphase_tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - _narrowphase_tempManifold.baseOffset[1];
+            _narrowphase_tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - _narrowphase_tempManifold.baseOffset[2];
+            _narrowphase_tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - _narrowphase_tempManifold.baseOffset[0];
+            _narrowphase_tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - _narrowphase_tempManifold.baseOffset[1];
+            _narrowphase_tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - _narrowphase_tempManifold.baseOffset[2];
             _narrowphase_tempManifold.numContactPoints = 1;
         }
 
@@ -678,7 +683,12 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
             );
         } else {
             // single contact point
-            manifold.setContactPoint(tempManifold, 0, hit.pointA, hit.pointB);
+            tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - tempManifold.baseOffset[0];
+            tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - tempManifold.baseOffset[1];
+            tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - tempManifold.baseOffset[2];
+            tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - tempManifold.baseOffset[0];
+            tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - tempManifold.baseOffset[1];
+            tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - tempManifold.baseOffset[2];
             tempManifold.numContactPoints = 1;
         }
 
@@ -1406,7 +1416,12 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
                 );
             } else {
                 // single point contact
-                manifold.setContactPoint(contactManifold, 0, hit.pointA, hit.pointB);
+                contactManifold.relativeContactPointsOnA[0] = hit.pointA[0] - contactManifold.baseOffset[0];
+                contactManifold.relativeContactPointsOnA[1] = hit.pointA[1] - contactManifold.baseOffset[1];
+                contactManifold.relativeContactPointsOnA[2] = hit.pointA[2] - contactManifold.baseOffset[2];
+                contactManifold.relativeContactPointsOnB[0] = hit.pointB[0] - contactManifold.baseOffset[0];
+                contactManifold.relativeContactPointsOnB[1] = hit.pointB[1] - contactManifold.baseOffset[1];
+                contactManifold.relativeContactPointsOnB[2] = hit.pointB[2] - contactManifold.baseOffset[2];
                 contactManifold.numContactPoints = 1;
             }
 
