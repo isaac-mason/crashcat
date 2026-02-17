@@ -139,6 +139,7 @@ function getRelativeVelocity(
     axis: Vec3,
 ): number {
     // Jv = axis · (v1 - v2) + (r1×axis) · ω1 - (r2×axis) · ω2
+    // this is the velocity of body 1 relative to body 2 along the constraint axis
     const linearComponent = vec3.dot(axis, vec3.sub(_ecr_temp, linVel1, linVel2));
     const angularComponent1 = vec3.dot(constraint.r1PlusUxAxis, angVel1);
     const angularComponent2 = vec3.dot(constraint.r2xAxis, angVel2);
@@ -276,11 +277,11 @@ export function estimateCollisionResponse(
     vec3.normalize(result.tangent1, result.tangent1);
     vec3.cross(result.tangent2, normal, result.tangent1);
 
-    // copy body velocities (or zero for static/kinematic)
-    const isDynamic1 = body1.motionType === MotionType.DYNAMIC;
-    const isDynamic2 = body2.motionType === MotionType.DYNAMIC;
+    // copy body velocities (zero only for static, preserve for dynamic/kinematic)
+    const isStatic1 = body1.motionType === MotionType.STATIC;
+    const isStatic2 = body2.motionType === MotionType.STATIC;
 
-    if (isDynamic1 && body1.motionProperties) {
+    if (!isStatic1 && body1.motionProperties) {
         vec3.copy(result.linearVelocity1, body1.motionProperties.linearVelocity);
         vec3.copy(result.angularVelocity1, body1.motionProperties.angularVelocity);
     } else {
@@ -288,7 +289,7 @@ export function estimateCollisionResponse(
         vec3.set(result.angularVelocity1, 0, 0, 0);
     }
 
-    if (isDynamic2 && body2.motionProperties) {
+    if (!isStatic2 && body2.motionProperties) {
         vec3.copy(result.linearVelocity2, body2.motionProperties.linearVelocity);
         vec3.copy(result.angularVelocity2, body2.motionProperties.angularVelocity);
     } else {
@@ -296,7 +297,11 @@ export function estimateCollisionResponse(
         vec3.set(result.angularVelocity2, 0, 0, 0);
     }
 
-    // get inverse mass and inertia
+    // get inverse mass and inertia ONLY for dynamic bodies
+    // kinematic bodies have zero invMass/invInertia in constraint solving
+    const isDynamic1 = body1.motionType === MotionType.DYNAMIC;
+    const isDynamic2 = body2.motionType === MotionType.DYNAMIC;
+
     const invMass1 = isDynamic1 && body1.motionProperties ? body1.motionProperties.invMass : 0;
     const invMass2 = isDynamic2 && body2.motionProperties ? body2.motionProperties.invMass : 0;
 
@@ -304,14 +309,14 @@ export function estimateCollisionResponse(
         mat4.fromQuat(_ecr_rotation1, body1.quaternion);
         getInverseInertiaForRotation(_ecr_invInertia1, body1.motionProperties, _ecr_rotation1);
     } else {
-        mat4.identity(_ecr_invInertia1);
+        mat4.zero(_ecr_invInertia1); // static/kinematic bodies have zero inverse inertia
     }
 
     if (isDynamic2 && body2.motionProperties) {
         mat4.fromQuat(_ecr_rotation2, body2.quaternion);
         getInverseInertiaForRotation(_ecr_invInertia2, body2.motionProperties, _ecr_rotation2);
     } else {
-        mat4.identity(_ecr_invInertia2);
+        mat4.zero(_ecr_invInertia2); // static/kinematic bodies have zero inverse inertia
     }
 
     // compute COM relative to manifold.baseOffset
@@ -341,16 +346,7 @@ export function estimateCollisionResponse(
 
         // initialize normal constraint
         const normalConstraint = _ecr_normalConstraints[c];
-        initConstraint(
-            normalConstraint,
-            invMass1,
-            invMass2,
-            _ecr_invInertia1,
-            _ecr_invInertia2,
-            _ecr_r1,
-            _ecr_r2,
-            normal,
-        );
+        initConstraint(normalConstraint, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, normal);
 
         // restitution bias
         normalConstraint.bias = 0;
@@ -362,9 +358,11 @@ export function estimateCollisionResponse(
             vec3.cross(_ecr_vel2AtPoint, result.angularVelocity2, _ecr_r2);
             vec3.add(_ecr_vel2AtPoint, result.linearVelocity2, _ecr_vel2AtPoint);
 
+            // relative velocity of body 2 wrt body 1 at contact point
             vec3.sub(_ecr_relVel, _ecr_vel2AtPoint, _ecr_vel1AtPoint);
 
             const vn = vec3.dot(_ecr_relVel, normal);
+            // note: vn is negative when bodies are approaching (separating velocity is positive)
             if (vn < -minVelocityForRestitution) {
                 normalConstraint.bias = combinedRestitution * vn;
             }
@@ -414,28 +412,32 @@ export function estimateCollisionResponse(
                 const impulse = result.impulses[c];
 
                 // get candidate lambdas (total, not delta)
-                let lambda1 = impulse.frictionImpulse1 + solveGetLambda(
-                    frictionConstraint1,
-                    result.linearVelocity1,
-                    result.angularVelocity1,
-                    result.linearVelocity2,
-                    result.angularVelocity2,
-                    result.tangent1,
-                );
+                let lambda1 =
+                    impulse.frictionImpulse1 +
+                    solveGetLambda(
+                        frictionConstraint1,
+                        result.linearVelocity1,
+                        result.angularVelocity1,
+                        result.linearVelocity2,
+                        result.angularVelocity2,
+                        result.tangent1,
+                    );
 
-                let lambda2 = impulse.frictionImpulse2 + solveGetLambda(
-                    frictionConstraint2,
-                    result.linearVelocity1,
-                    result.angularVelocity1,
-                    result.linearVelocity2,
-                    result.angularVelocity2,
-                    result.tangent2,
-                );
+                let lambda2 =
+                    impulse.frictionImpulse2 +
+                    solveGetLambda(
+                        frictionConstraint2,
+                        result.linearVelocity1,
+                        result.angularVelocity1,
+                        result.linearVelocity2,
+                        result.angularVelocity2,
+                        result.tangent2,
+                    );
 
                 // circular coulomb friction cone clamping
                 const maxImpulse = combinedFriction * impulse.contactImpulse;
                 const totalLambdaSquared = lambda1 * lambda1 + lambda2 * lambda2;
-                
+
                 if (totalLambdaSquared > maxImpulse * maxImpulse) {
                     const scale = maxImpulse / Math.sqrt(totalLambdaSquared);
                     lambda1 *= scale;
