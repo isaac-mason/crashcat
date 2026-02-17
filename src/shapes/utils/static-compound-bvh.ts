@@ -11,7 +11,7 @@ import {
     NODE_RIGHT_OR_START,
     NODE_STRIDE,
     nodeIsLeaf,
-    nodeLeft as nodeLeftCommon,
+    nodeLeft,
     nodeRight,
 } from './bvh';
 
@@ -451,7 +451,7 @@ export function stats(bvh: StaticCompoundBVH): StaticCompoundBvhStats {
             totalChildren += nodeChildCount(buffer, offset);
         } else {
             stack.push([nodeRight(buffer, offset), depth + 1]);
-            stack.push([nodeLeftCommon(offset), depth + 1]);
+            stack.push([nodeLeft(offset), depth + 1]);
         }
     }
 
