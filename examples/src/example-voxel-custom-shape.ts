@@ -945,8 +945,8 @@ const _collideVoxelsVsConvex_aabbMatrix = mat4.create();
 const _collideVoxelsVsConvex_convexAABB = box3.create();
 const _collideVoxelsVsConvex_subShapeIdBuilder = subShape.builder();
 const _collideVoxelsVsConvex_posBRelativeToBox = vec3.create();
-const _collideVoxelsVsConvex_mat4_AtoWorld = mat4.create();
-const _collideVoxelsVsConvex_mat4_BtoA = mat4.create();
+const _collideVoxelsVsConvex_transformAInWorld = mat4.create();
+const _collideVoxelsVsConvex_transformBInA = mat4.create();
 
 function collideVoxelsVsConvex(
     collector: CollideShapeCollector,
@@ -1059,11 +1059,11 @@ function collideVoxelsVsConvex(
                 // voxel box is at origin with identity rotation (in its own local space)
                 // convex B is at posBRelativeToBox relative to the voxel box
                 // build transform matrices for the new API
-                // mat4_AtoWorld: voxel box local -> world (just translation, no rotation)
-                mat4.fromRotationTranslation(_collideVoxelsVsConvex_mat4_AtoWorld, _voxelBoxQuaternion, _voxelBoxPosition);
-                // mat4_BtoA: convex B local -> voxel box local
+                // transformAInWorld: voxel box local -> world (just translation, no rotation)
+                mat4.fromRotationTranslation(_collideVoxelsVsConvex_transformAInWorld, _voxelBoxQuaternion, _voxelBoxPosition);
+                // transformBInA: convex B local -> voxel box local
                 mat4.fromRotationTranslation(
-                    _collideVoxelsVsConvex_mat4_BtoA,
+                    _collideVoxelsVsConvex_transformBInA,
                     _collideVoxelsVsConvex_quatBInA,
                     _collideVoxelsVsConvex_posBRelativeToBox,
                 );
@@ -1074,8 +1074,8 @@ function collideVoxelsVsConvex(
                     _collideVoxelsVsConvex_subShapeIdBuilder.value,
                     shapeB,
                     subShapeIdB,
-                    _collideVoxelsVsConvex_mat4_BtoA,
-                    _collideVoxelsVsConvex_mat4_AtoWorld,
+                    _collideVoxelsVsConvex_transformBInA,
+                    _collideVoxelsVsConvex_transformAInWorld,
                     _voxelBoxScale,
                     _collideVoxelsVsConvex_scaleB,
                 );
