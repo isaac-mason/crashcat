@@ -59,14 +59,14 @@ import {
     setCollideShapeFn,
     shapeDefs,
 } from './shapes';
+import type { SphereShape } from './sphere';
+import * as bvh from './utils/bvh';
 import { buildTriangleMesh } from './utils/triangle-mesh-builder';
 import type { BvhSplitStrategy, TriangleMeshBVH } from './utils/triangle-mesh-bvh';
 import * as triangleMeshBvh from './utils/triangle-mesh-bvh';
-import * as bvh from './utils/bvh';
 import type { TriangleMeshData } from './utils/triangle-mesh-data';
 import * as triangleMeshData from './utils/triangle-mesh-data';
 import { calculateTriangleAABB, getActiveEdges, getTriangleNormal, getTriangleVertices } from './utils/triangle-mesh-data';
-import { SphereShape } from './sphere';
 
 export { BvhSplitStrategy } from './utils/triangle-mesh-bvh';
 
@@ -671,10 +671,10 @@ function castConvexVsTriangleMesh(
     scaleBZ: number,
 ): void {
     const meshShape = shapeB as TriangleMeshShape;
-    
+
     const buffer = meshShape.bvh.buffer;
     const meshData = meshShape.data;
-    
+
     // early out if buffer is empty (no triangles)
     if (buffer.length === 0) {
         return;
@@ -692,14 +692,31 @@ function castConvexVsTriangleMesh(
     quat.conjugate(_castConvexVsTriangleMesh_inverseQuaternionB, _castConvexVsTriangleMesh_quatB);
 
     vec3.sub(_castConvexVsTriangleMesh_positionDifference, _castConvexVsTriangleMesh_posA, _castConvexVsTriangleMesh_posB);
-    vec3.transformQuat(_castConvexVsTriangleMesh_posAInB, _castConvexVsTriangleMesh_positionDifference, _castConvexVsTriangleMesh_inverseQuaternionB);
+    vec3.transformQuat(
+        _castConvexVsTriangleMesh_posAInB,
+        _castConvexVsTriangleMesh_positionDifference,
+        _castConvexVsTriangleMesh_inverseQuaternionB,
+    );
 
-    quat.multiply(_castConvexVsTriangleMesh_quatAInB, _castConvexVsTriangleMesh_inverseQuaternionB, _castConvexVsTriangleMesh_quatA);
+    quat.multiply(
+        _castConvexVsTriangleMesh_quatAInB,
+        _castConvexVsTriangleMesh_inverseQuaternionB,
+        _castConvexVsTriangleMesh_quatA,
+    );
 
-    vec3.transformQuat(_castConvexVsTriangleMesh_displacementInB, _castConvexVsTriangleMesh_displacementA, _castConvexVsTriangleMesh_inverseQuaternionB);
+    vec3.transformQuat(
+        _castConvexVsTriangleMesh_displacementInB,
+        _castConvexVsTriangleMesh_displacementA,
+        _castConvexVsTriangleMesh_inverseQuaternionB,
+    );
 
     // compute base AABB of shape A at t=0 in mesh local space
-    const aabbMatrix = mat4.fromRotationTranslationScale(_castConvexVsTriangleMesh_aabbTransform, _castConvexVsTriangleMesh_quatAInB, _castConvexVsTriangleMesh_posAInB, _castConvexVsTriangleMesh_scaleA);
+    const aabbMatrix = mat4.fromRotationTranslationScale(
+        _castConvexVsTriangleMesh_aabbTransform,
+        _castConvexVsTriangleMesh_quatAInB,
+        _castConvexVsTriangleMesh_posAInB,
+        _castConvexVsTriangleMesh_scaleA,
+    );
     box3.transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, aabbMatrix);
 
     // determine if we want to use the actual shape or a shrunken shape with convex radius
@@ -708,8 +725,18 @@ function castConvexVsTriangleMesh(
         : SupportFunctionMode.DEFAULT;
 
     // get transformed support function for convex shape
-    const supportA = getShapeSupportFunction(_castConvexVsTriangleMesh_supportPoolA, shapeA, supportMode, _castConvexVsTriangleMesh_scaleA);
-    setTransformedSupport(_castConvexVsTriangleMesh_transformedSupportA, _castConvexVsTriangleMesh_posAInB, _castConvexVsTriangleMesh_quatAInB, supportA);
+    const supportA = getShapeSupportFunction(
+        _castConvexVsTriangleMesh_supportPoolA,
+        shapeA,
+        supportMode,
+        _castConvexVsTriangleMesh_scaleA,
+    );
+    setTransformedSupport(
+        _castConvexVsTriangleMesh_transformedSupportA,
+        _castConvexVsTriangleMesh_posAInB,
+        _castConvexVsTriangleMesh_quatAInB,
+        supportA,
+    );
 
     // determine if shape is inside out or not
     const scaleSign = vec3.isScaleInsideOut(_castConvexVsTriangleMesh_scaleB) ? -1 : 1;
@@ -796,14 +823,30 @@ function castConvexVsTriangleMesh(
                 );
 
                 // scale triangle
-                const a = vec3.mul(_castConvexVsTriangleMesh_triangleA, _castConvexVsTriangleMesh_getTriangleVertices_a, _castConvexVsTriangleMesh_scaleB);
-                const b = vec3.mul(_castConvexVsTriangleMesh_triangleB, _castConvexVsTriangleMesh_getTriangleVertices_b, _castConvexVsTriangleMesh_scaleB);
-                const c = vec3.mul(_castConvexVsTriangleMesh_triangleC, _castConvexVsTriangleMesh_getTriangleVertices_c, _castConvexVsTriangleMesh_scaleB);
+                const a = vec3.mul(
+                    _castConvexVsTriangleMesh_triangleA,
+                    _castConvexVsTriangleMesh_getTriangleVertices_a,
+                    _castConvexVsTriangleMesh_scaleB,
+                );
+                const b = vec3.mul(
+                    _castConvexVsTriangleMesh_triangleB,
+                    _castConvexVsTriangleMesh_getTriangleVertices_b,
+                    _castConvexVsTriangleMesh_scaleB,
+                );
+                const c = vec3.mul(
+                    _castConvexVsTriangleMesh_triangleC,
+                    _castConvexVsTriangleMesh_getTriangleVertices_c,
+                    _castConvexVsTriangleMesh_scaleB,
+                );
 
                 // calculate scaled triangle normal
                 const normal = vec3.scale(
                     _castConvexVsTriangleMesh_triangleNormal,
-                    vec3.cross(_castConvexVsTriangleMesh_triangleNormal, vec3.sub(_castConvexVsTriangleMesh_edgeA, b, a), vec3.sub(_castConvexVsTriangleMesh_edgeB, c, a)),
+                    vec3.cross(
+                        _castConvexVsTriangleMesh_triangleNormal,
+                        vec3.sub(_castConvexVsTriangleMesh_edgeA, b, a),
+                        vec3.sub(_castConvexVsTriangleMesh_edgeB, c, a),
+                    ),
                     scaleSign,
                 );
 
@@ -837,7 +880,13 @@ function castConvexVsTriangleMesh(
                 }
 
                 const fraction = _castConvexVsTriangleMesh_gjkResult.lambda;
-                const penetrationDepth = vec3.length(vec3.sub(_castConvexVsTriangleMesh_penetrationDifference, _castConvexVsTriangleMesh_gjkResult.pointA, _castConvexVsTriangleMesh_gjkResult.pointB));
+                const penetrationDepth = vec3.length(
+                    vec3.sub(
+                        _castConvexVsTriangleMesh_penetrationDifference,
+                        _castConvexVsTriangleMesh_gjkResult.pointA,
+                        _castConvexVsTriangleMesh_gjkResult.pointB,
+                    ),
+                );
 
                 // early out: if this hit is deeper than the collector's early out value
                 if (fraction === 0 && -penetrationDepth >= collector.earlyOutFraction) {
@@ -856,7 +905,8 @@ function castConvexVsTriangleMesh(
 
                     // prepare triangle normal for fixNormal
                     // back-facing check: if displacement dot normal > 0, we're approaching from back
-                    const backFacing = !settings.collideWithBackfaces || vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
+                    const backFacing =
+                        !settings.collideWithBackfaces || vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
                     if (backFacing) {
                         vec3.copy(_castConvexVsTriangleMesh_triangleNormalForFix, normal);
                     } else {
@@ -879,25 +929,53 @@ function castConvexVsTriangleMesh(
                 }
 
                 // convert to world space
-                vec3.transformQuat(_castConvexVsTriangleMesh_worldPointA, _castConvexVsTriangleMesh_gjkResult.pointA, _castConvexVsTriangleMesh_quatB);
-                vec3.add(_castConvexVsTriangleMesh_worldPointA, _castConvexVsTriangleMesh_worldPointA, _castConvexVsTriangleMesh_posB);
-                vec3.transformQuat(_castConvexVsTriangleMesh_worldPointB, _castConvexVsTriangleMesh_gjkResult.pointB, _castConvexVsTriangleMesh_quatB);
-                vec3.add(_castConvexVsTriangleMesh_worldPointB, _castConvexVsTriangleMesh_worldPointB, _castConvexVsTriangleMesh_posB);
-                vec3.transformQuat(_castConvexVsTriangleMesh_castShapeHit.penetrationAxis, _castConvexVsTriangleMesh_gjkResult.separatingAxis, _castConvexVsTriangleMesh_quatB);
+                vec3.transformQuat(
+                    _castConvexVsTriangleMesh_worldPointA,
+                    _castConvexVsTriangleMesh_gjkResult.pointA,
+                    _castConvexVsTriangleMesh_quatB,
+                );
+                vec3.add(
+                    _castConvexVsTriangleMesh_worldPointA,
+                    _castConvexVsTriangleMesh_worldPointA,
+                    _castConvexVsTriangleMesh_posB,
+                );
+                vec3.transformQuat(
+                    _castConvexVsTriangleMesh_worldPointB,
+                    _castConvexVsTriangleMesh_gjkResult.pointB,
+                    _castConvexVsTriangleMesh_quatB,
+                );
+                vec3.add(
+                    _castConvexVsTriangleMesh_worldPointB,
+                    _castConvexVsTriangleMesh_worldPointB,
+                    _castConvexVsTriangleMesh_posB,
+                );
+                vec3.transformQuat(
+                    _castConvexVsTriangleMesh_castShapeHit.penetrationAxis,
+                    _castConvexVsTriangleMesh_gjkResult.separatingAxis,
+                    _castConvexVsTriangleMesh_quatB,
+                );
 
                 // store hit info
                 _castConvexVsTriangleMesh_castShapeHit.status = CastShapeStatus.COLLIDING;
                 _castConvexVsTriangleMesh_castShapeHit.fraction = _castConvexVsTriangleMesh_gjkResult.lambda;
                 vec3.copy(_castConvexVsTriangleMesh_castShapeHit.pointA, _castConvexVsTriangleMesh_worldPointA);
                 vec3.copy(_castConvexVsTriangleMesh_castShapeHit.pointB, _castConvexVsTriangleMesh_worldPointB);
-                vec3.normalize(_castConvexVsTriangleMesh_castShapeHit.normal, _castConvexVsTriangleMesh_castShapeHit.penetrationAxis);
+                vec3.normalize(
+                    _castConvexVsTriangleMesh_castShapeHit.normal,
+                    _castConvexVsTriangleMesh_castShapeHit.penetrationAxis,
+                );
                 vec3.negate(_castConvexVsTriangleMesh_castShapeHit.normal, _castConvexVsTriangleMesh_castShapeHit.normal);
                 _castConvexVsTriangleMesh_castShapeHit.penetrationDepth = penetrationDepth;
                 _castConvexVsTriangleMesh_castShapeHit.subShapeIdA = subShapeIdA;
 
                 _castConvexVsTriangleMesh_subShapeIdBuilder.value = _subShapeIdB;
                 _castConvexVsTriangleMesh_subShapeIdBuilder.currentBit = _subShapeIdBitsB;
-                subShape.pushIndex(_castConvexVsTriangleMesh_subShapeIdBuilder, _castConvexVsTriangleMesh_subShapeIdBuilder, triangleIndex, meshData.triangleCount);
+                subShape.pushIndex(
+                    _castConvexVsTriangleMesh_subShapeIdBuilder,
+                    _castConvexVsTriangleMesh_subShapeIdBuilder,
+                    triangleIndex,
+                    meshData.triangleCount,
+                );
 
                 _castConvexVsTriangleMesh_castShapeHit.subShapeIdB = _castConvexVsTriangleMesh_subShapeIdBuilder.value;
                 _castConvexVsTriangleMesh_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
@@ -907,12 +985,31 @@ function castConvexVsTriangleMesh(
                 // gather faces if requested
                 if (settings.collectFaces) {
                     // face a: transform contact normal from B's local space to A's local space
-                    const scaledDisplacement = vec3.scale(_castConvexVsTriangleMesh_displacementScaled, _castConvexVsTriangleMesh_displacementA, _castConvexVsTriangleMesh_gjkResult.lambda);
-                    const position = vec3.add(_castConvexVsTriangleMesh_positionAtHitTime, _castConvexVsTriangleMesh_posA, scaledDisplacement);
-                    const normalInA = vec3.negate(_castConvexVsTriangleMesh_faceNormal, _castConvexVsTriangleMesh_gjkResult.separatingAxis);
+                    const scaledDisplacement = vec3.scale(
+                        _castConvexVsTriangleMesh_displacementScaled,
+                        _castConvexVsTriangleMesh_displacementA,
+                        _castConvexVsTriangleMesh_gjkResult.lambda,
+                    );
+                    const position = vec3.add(
+                        _castConvexVsTriangleMesh_positionAtHitTime,
+                        _castConvexVsTriangleMesh_posA,
+                        scaledDisplacement,
+                    );
+                    const normalInA = vec3.negate(
+                        _castConvexVsTriangleMesh_faceNormal,
+                        _castConvexVsTriangleMesh_gjkResult.separatingAxis,
+                    );
                     quat.conjugate(_castConvexVsTriangleMesh_inverseQuatAInB, _castConvexVsTriangleMesh_quatAInB);
                     vec3.transformQuat(normalInA, normalInA, _castConvexVsTriangleMesh_inverseQuatAInB);
-                    getShapeSupportingFace(_castConvexVsTriangleMesh_castShapeHit.faceA, shapeA, subShapeIdA, normalInA, position, _castConvexVsTriangleMesh_quatA, _castConvexVsTriangleMesh_scaleA);
+                    getShapeSupportingFace(
+                        _castConvexVsTriangleMesh_castShapeHit.faceA,
+                        shapeA,
+                        subShapeIdA,
+                        normalInA,
+                        position,
+                        _castConvexVsTriangleMesh_quatA,
+                        _castConvexVsTriangleMesh_scaleA,
+                    );
 
                     // face b: supporting face is the triangle vertices (already in B's local space)
                     _castConvexVsTriangleMesh_castShapeHit.faceB.numVertices = 3;
@@ -925,7 +1022,12 @@ function castConvexVsTriangleMesh(
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[6] = c[0];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[7] = c[1];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[8] = c[2];
-                    transformFace(_castConvexVsTriangleMesh_castShapeHit.faceB, _castConvexVsTriangleMesh_posB, _castConvexVsTriangleMesh_quatB, _castConvexVsTriangleMesh_scaleB);
+                    transformFace(
+                        _castConvexVsTriangleMesh_castShapeHit.faceB,
+                        _castConvexVsTriangleMesh_posB,
+                        _castConvexVsTriangleMesh_quatB,
+                        _castConvexVsTriangleMesh_scaleB,
+                    );
                 } else {
                     // clear faces
                     _castConvexVsTriangleMesh_castShapeHit.faceA.numVertices = 0;
@@ -1103,23 +1205,52 @@ function collideConvexVsTriangleMesh(
     // calculate transforms
     // transform B (mesh) into A's (convex) local space for triangle tests
     quat.conjugate(_collideConvexVsTriangleMesh_inverseQuatA, _collideConvexVsTriangleMesh_quatA);
-    quat.multiply(_collideConvexVsTriangleMesh_transform2To1Quat, _collideConvexVsTriangleMesh_inverseQuatA, _collideConvexVsTriangleMesh_quatB);
+    quat.multiply(
+        _collideConvexVsTriangleMesh_transform2To1Quat,
+        _collideConvexVsTriangleMesh_inverseQuatA,
+        _collideConvexVsTriangleMesh_quatB,
+    );
     vec3.subtract(_collideConvexVsTriangleMesh_vectorAB, _collideConvexVsTriangleMesh_posB, _collideConvexVsTriangleMesh_posA);
-    vec3.transformQuat(_collideConvexVsTriangleMesh_transform2To1Pos, _collideConvexVsTriangleMesh_vectorAB, _collideConvexVsTriangleMesh_inverseQuatA);
+    vec3.transformQuat(
+        _collideConvexVsTriangleMesh_transform2To1Pos,
+        _collideConvexVsTriangleMesh_vectorAB,
+        _collideConvexVsTriangleMesh_inverseQuatA,
+    );
 
     // transform A into B's space for BVH query
     quat.conjugate(_collideConvexVsTriangleMesh_inverseQuatB, _collideConvexVsTriangleMesh_quatB);
-    quat.multiply(_collideConvexVsTriangleMesh_quatAInB, _collideConvexVsTriangleMesh_inverseQuatB, _collideConvexVsTriangleMesh_quatA);
-    vec3.subtract(_collideConvexVsTriangleMesh_positionDifference, _collideConvexVsTriangleMesh_posA, _collideConvexVsTriangleMesh_posB);
-    vec3.transformQuat(_collideConvexVsTriangleMesh_posAInB, _collideConvexVsTriangleMesh_positionDifference, _collideConvexVsTriangleMesh_inverseQuatB);
+    quat.multiply(
+        _collideConvexVsTriangleMesh_quatAInB,
+        _collideConvexVsTriangleMesh_inverseQuatB,
+        _collideConvexVsTriangleMesh_quatA,
+    );
+    vec3.subtract(
+        _collideConvexVsTriangleMesh_positionDifference,
+        _collideConvexVsTriangleMesh_posA,
+        _collideConvexVsTriangleMesh_posB,
+    );
+    vec3.transformQuat(
+        _collideConvexVsTriangleMesh_posAInB,
+        _collideConvexVsTriangleMesh_positionDifference,
+        _collideConvexVsTriangleMesh_inverseQuatB,
+    );
 
     // compute shape A's bounds in its own local space
     const boundsOf1 = box3.copy(_collideConvexVsTriangleMesh_boundsOf1, shapeA.aabb);
     box3.scale(boundsOf1, boundsOf1, _collideConvexVsTriangleMesh_scaleA);
-    box3.expandByExtents(boundsOf1, boundsOf1, vec3.setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance));
+    box3.expandByExtents(
+        boundsOf1,
+        boundsOf1,
+        vec3.setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance),
+    );
 
     // compute shape A's bounds in shape B's space for BVH culling
-    const aabbMatrix = mat4.fromRotationTranslationScale(_collideConvexVsTriangleMesh_aabbTransform, _collideConvexVsTriangleMesh_quatAInB, _collideConvexVsTriangleMesh_posAInB, _collideConvexVsTriangleMesh_scaleA);
+    const aabbMatrix = mat4.fromRotationTranslationScale(
+        _collideConvexVsTriangleMesh_aabbTransform,
+        _collideConvexVsTriangleMesh_quatAInB,
+        _collideConvexVsTriangleMesh_posAInB,
+        _collideConvexVsTriangleMesh_scaleA,
+    );
     box3.transformMat4(_collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, shapeA.aabb, aabbMatrix);
     box3.expandByExtents(
         _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2,
@@ -1131,7 +1262,12 @@ function collideConvexVsTriangleMesh(
     const scaleSign = vec3.isScaleInsideOut(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
     // get support function for shape A
-    const supportA = getShapeSupportFunction(_collideConvexVsTriangleMesh_supportPoolA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
+    const supportA = getShapeSupportFunction(
+        _collideConvexVsTriangleMesh_supportPoolA,
+        shapeA,
+        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
+        _collideConvexVsTriangleMesh_scaleA,
+    );
 
     // bvh traversal
     bvhStack.reset(_collideConvexVsTriangleMesh_stack);
@@ -1180,32 +1316,77 @@ function collideConvexVsTriangleMesh(
                 );
 
                 // scale triangle in mesh local space
-                const a = vec3.mul(_collideConvexVsTriangleMesh_triangleA, _collideConvexVsTriangleMesh_getTriangleVertices_a, _collideConvexVsTriangleMesh_scaleB);
-                const b = vec3.mul(_collideConvexVsTriangleMesh_triangleB, _collideConvexVsTriangleMesh_getTriangleVertices_b, _collideConvexVsTriangleMesh_scaleB);
-                const c = vec3.mul(_collideConvexVsTriangleMesh_triangleC, _collideConvexVsTriangleMesh_getTriangleVertices_c, _collideConvexVsTriangleMesh_scaleB);
+                const a = vec3.mul(
+                    _collideConvexVsTriangleMesh_triangleA,
+                    _collideConvexVsTriangleMesh_getTriangleVertices_a,
+                    _collideConvexVsTriangleMesh_scaleB,
+                );
+                const b = vec3.mul(
+                    _collideConvexVsTriangleMesh_triangleB,
+                    _collideConvexVsTriangleMesh_getTriangleVertices_b,
+                    _collideConvexVsTriangleMesh_scaleB,
+                );
+                const c = vec3.mul(
+                    _collideConvexVsTriangleMesh_triangleC,
+                    _collideConvexVsTriangleMesh_getTriangleVertices_c,
+                    _collideConvexVsTriangleMesh_scaleB,
+                );
 
                 // transform triangle to shape A's local space
                 vec3.transformQuat(_collideConvexVsTriangleMesh_triangleA_inA, a, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(_collideConvexVsTriangleMesh_triangleA_inA, _collideConvexVsTriangleMesh_triangleA_inA, _collideConvexVsTriangleMesh_transform2To1Pos);
+                vec3.add(
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    _collideConvexVsTriangleMesh_transform2To1Pos,
+                );
                 vec3.transformQuat(_collideConvexVsTriangleMesh_triangleB_inA, b, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(_collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_transform2To1Pos);
+                vec3.add(
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    _collideConvexVsTriangleMesh_transform2To1Pos,
+                );
                 vec3.transformQuat(_collideConvexVsTriangleMesh_triangleC_inA, c, _collideConvexVsTriangleMesh_transform2To1Quat);
-                vec3.add(_collideConvexVsTriangleMesh_triangleC_inA, _collideConvexVsTriangleMesh_triangleC_inA, _collideConvexVsTriangleMesh_transform2To1Pos);
+                vec3.add(
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                    _collideConvexVsTriangleMesh_transform2To1Pos,
+                );
 
                 // compute triangle AABB in shape A's local space
                 const triangleAABB = _collideConvexVsTriangleMesh_triangleAABB;
-                triangle3.bounds(triangleAABB, _collideConvexVsTriangleMesh_triangleA_inA, _collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_triangleC_inA);
+                triangle3.bounds(
+                    triangleAABB,
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                );
 
                 // early out: if triangle AABB doesn't overlap shape AABB, skip this triangle
                 if (!box3.intersectsBox3(triangleAABB, boundsOf1)) {
                     continue;
                 }
 
-                vec3.sub(_collideConvexVsTriangleMesh_edgeA, _collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_triangleA_inA);
-                vec3.sub(_collideConvexVsTriangleMesh_edgeB, _collideConvexVsTriangleMesh_triangleC_inA, _collideConvexVsTriangleMesh_triangleA_inA);
+                vec3.sub(
+                    _collideConvexVsTriangleMesh_edgeA,
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                );
+                vec3.sub(
+                    _collideConvexVsTriangleMesh_edgeB,
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                );
 
                 // calculate triangle normal in A's local space
-                const normal = vec3.scale(_collideConvexVsTriangleMesh_triangleNormal, vec3.cross(_collideConvexVsTriangleMesh_triangleNormal, _collideConvexVsTriangleMesh_edgeA, _collideConvexVsTriangleMesh_edgeB), scaleSign);
+                const normal = vec3.scale(
+                    _collideConvexVsTriangleMesh_triangleNormal,
+                    vec3.cross(
+                        _collideConvexVsTriangleMesh_triangleNormal,
+                        _collideConvexVsTriangleMesh_edgeA,
+                        _collideConvexVsTriangleMesh_edgeB,
+                    ),
+                    scaleSign,
+                );
 
                 // back-face check
                 // check if triangle normal and first vertex both point in same direction from origin
@@ -1216,7 +1397,12 @@ function collideConvexVsTriangleMesh(
                 }
 
                 // create triangle support function
-                setTriangleSupport(_collideConvexVsTriangleMesh_triangleSupport, _collideConvexVsTriangleMesh_triangleA_inA, _collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_triangleC_inA);
+                setTriangleSupport(
+                    _collideConvexVsTriangleMesh_triangleSupport,
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                );
 
                 // run GJK with negative triangle normal as initial penetration axis
                 // (likely that shape A is in front of triangle B)
@@ -1261,7 +1447,11 @@ function collideConvexVsTriangleMesh(
                     );
 
                     // add separation distance
-                    setAddConvexRadiusSupport(_collideConvexVsTriangleMesh_addRadiusSupport, maxSeparationDistance, supportAWithRadius);
+                    setAddConvexRadiusSupport(
+                        _collideConvexVsTriangleMesh_addRadiusSupport,
+                        maxSeparationDistance,
+                        supportAWithRadius,
+                    );
 
                     // perform EPA step
                     if (
@@ -1278,7 +1468,11 @@ function collideConvexVsTriangleMesh(
                 }
 
                 // calculate penetration depth (subtract the inflation from the distance)
-                const penetration = vec3.distance(_collideConvexVsTriangleMesh_penetrationDepth.pointA, _collideConvexVsTriangleMesh_penetrationDepth.pointB) - maxSeparationDistance;
+                const penetration =
+                    vec3.distance(
+                        _collideConvexVsTriangleMesh_penetrationDepth.pointA,
+                        _collideConvexVsTriangleMesh_penetrationDepth.pointB,
+                    ) - maxSeparationDistance;
 
                 // check if penetration exceeds early-out threshold
                 if (-penetration >= collector.earlyOutFraction) {
@@ -1330,16 +1524,41 @@ function collideConvexVsTriangleMesh(
                 }
 
                 // transform results to world space
-                vec3.transformQuat(_collideConvexVsTriangleMesh_worldPointA, _collideConvexVsTriangleMesh_penetrationDepth.pointA, _collideConvexVsTriangleMesh_quatA);
-                vec3.add(_collideConvexVsTriangleMesh_worldPointA, _collideConvexVsTriangleMesh_worldPointA, _collideConvexVsTriangleMesh_posA);
-                vec3.transformQuat(_collideConvexVsTriangleMesh_worldPointB, _collideConvexVsTriangleMesh_penetrationDepth.pointB, _collideConvexVsTriangleMesh_quatA);
-                vec3.add(_collideConvexVsTriangleMesh_worldPointB, _collideConvexVsTriangleMesh_worldPointB, _collideConvexVsTriangleMesh_posA);
-                vec3.transformQuat(_collideConvexVsTriangleMesh_collideShapeHit.penetrationAxis, _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis, _collideConvexVsTriangleMesh_quatA);
+                vec3.transformQuat(
+                    _collideConvexVsTriangleMesh_worldPointA,
+                    _collideConvexVsTriangleMesh_penetrationDepth.pointA,
+                    _collideConvexVsTriangleMesh_quatA,
+                );
+                vec3.add(
+                    _collideConvexVsTriangleMesh_worldPointA,
+                    _collideConvexVsTriangleMesh_worldPointA,
+                    _collideConvexVsTriangleMesh_posA,
+                );
+                vec3.transformQuat(
+                    _collideConvexVsTriangleMesh_worldPointB,
+                    _collideConvexVsTriangleMesh_penetrationDepth.pointB,
+                    _collideConvexVsTriangleMesh_quatA,
+                );
+                vec3.add(
+                    _collideConvexVsTriangleMesh_worldPointB,
+                    _collideConvexVsTriangleMesh_worldPointB,
+                    _collideConvexVsTriangleMesh_posA,
+                );
+                vec3.transformQuat(
+                    _collideConvexVsTriangleMesh_collideShapeHit.penetrationAxis,
+                    _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis,
+                    _collideConvexVsTriangleMesh_quatA,
+                );
 
                 // push sub shape id for triangle
                 _collideConvexVsTriangleMesh_subShapeIdBuilder.value = subShapeIdB;
                 _collideConvexVsTriangleMesh_subShapeIdBuilder.currentBit = subShapeIdBitsB;
-                subShape.pushIndex(_collideConvexVsTriangleMesh_subShapeIdBuilder, _collideConvexVsTriangleMesh_subShapeIdBuilder, triangleIndex, meshShape.data.triangleCount);
+                subShape.pushIndex(
+                    _collideConvexVsTriangleMesh_subShapeIdBuilder,
+                    _collideConvexVsTriangleMesh_subShapeIdBuilder,
+                    triangleIndex,
+                    meshShape.data.triangleCount,
+                );
 
                 // report collision
                 vec3.copy(_collideConvexVsTriangleMesh_collideShapeHit.pointA, _collideConvexVsTriangleMesh_worldPointA);
@@ -1348,29 +1567,57 @@ function collideConvexVsTriangleMesh(
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdA = subShapeIdA;
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdB = _collideConvexVsTriangleMesh_subShapeIdBuilder.value;
                 _collideConvexVsTriangleMesh_collideShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-                _collideConvexVsTriangleMesh_collideShapeHit.materialIdB = triangleMeshData.getMaterialId(meshShape.data, triangleIndex);
+                _collideConvexVsTriangleMesh_collideShapeHit.materialIdB = triangleMeshData.getMaterialId(
+                    meshShape.data,
+                    triangleIndex,
+                );
                 _collideConvexVsTriangleMesh_collideShapeHit.bodyIdB = collector.bodyIdB;
 
                 // collect faces if requested
                 if (settings.collectFaces) {
                     // direction for shape A: opposite of penetration axis (local space)
-                    const faceDirectionA = vec3.negate(_collideConvexVsTriangleMesh_temp_faceDirA, _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis);
-                    getShapeSupportingFace(_collideConvexVsTriangleMesh_collideShapeHit.faceA, shapeA, subShapeIdA, faceDirectionA, _collideConvexVsTriangleMesh_posA, _collideConvexVsTriangleMesh_quatA, _collideConvexVsTriangleMesh_scaleA);
+                    const faceDirectionA = vec3.negate(
+                        _collideConvexVsTriangleMesh_temp_faceDirA,
+                        _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis,
+                    );
+                    getShapeSupportingFace(
+                        _collideConvexVsTriangleMesh_collideShapeHit.faceA,
+                        shapeA,
+                        subShapeIdA,
+                        faceDirectionA,
+                        _collideConvexVsTriangleMesh_posA,
+                        _collideConvexVsTriangleMesh_quatA,
+                        _collideConvexVsTriangleMesh_scaleA,
+                    );
 
                     // shape B face: triangle has 3 vertices in shape A's local space
                     _collideConvexVsTriangleMesh_collideShapeHit.faceB.numVertices = 3;
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[0] = _collideConvexVsTriangleMesh_triangleA_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[1] = _collideConvexVsTriangleMesh_triangleA_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[2] = _collideConvexVsTriangleMesh_triangleA_inA[2];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[3] = _collideConvexVsTriangleMesh_triangleB_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[4] = _collideConvexVsTriangleMesh_triangleB_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[5] = _collideConvexVsTriangleMesh_triangleB_inA[2];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[6] = _collideConvexVsTriangleMesh_triangleC_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[7] = _collideConvexVsTriangleMesh_triangleC_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[8] = _collideConvexVsTriangleMesh_triangleC_inA[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[0] =
+                        _collideConvexVsTriangleMesh_triangleA_inA[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[1] =
+                        _collideConvexVsTriangleMesh_triangleA_inA[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[2] =
+                        _collideConvexVsTriangleMesh_triangleA_inA[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[3] =
+                        _collideConvexVsTriangleMesh_triangleB_inA[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[4] =
+                        _collideConvexVsTriangleMesh_triangleB_inA[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[5] =
+                        _collideConvexVsTriangleMesh_triangleB_inA[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[6] =
+                        _collideConvexVsTriangleMesh_triangleC_inA[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[7] =
+                        _collideConvexVsTriangleMesh_triangleC_inA[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[8] =
+                        _collideConvexVsTriangleMesh_triangleC_inA[2];
 
                     // transform from shape A's local space to world space
-                    transformFace(_collideConvexVsTriangleMesh_collideShapeHit.faceB, _collideConvexVsTriangleMesh_posA, _collideConvexVsTriangleMesh_quatA, _collideConvexVsTriangleMesh_scaleA);
+                    transformFace(
+                        _collideConvexVsTriangleMesh_collideShapeHit.faceB,
+                        _collideConvexVsTriangleMesh_posA,
+                        _collideConvexVsTriangleMesh_quatA,
+                        _collideConvexVsTriangleMesh_scaleA,
+                    );
                 }
 
                 collector.addHit(_collideConvexVsTriangleMesh_collideShapeHit);
