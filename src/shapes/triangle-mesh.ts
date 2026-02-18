@@ -662,11 +662,11 @@ const _castConvexVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _castConvexVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 
-const _castConvexVsTriangleMesh_targetTransform = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_castTransform = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_transformA = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_inverseTargetTransform = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_transformAAtContact = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_BtoWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_AtoB = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_AtoWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_invBtoWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
 
 const _castConvexVsTriangleMesh_bvhStack = /* @__PURE__ */ bvhStack.create();
 const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
@@ -732,7 +732,7 @@ function castConvexVsTriangleMesh(
     // transform A into B's local space (aligned with castConvexVsConvex pattern)
     // transformA = A's transform in world space
     const transformA = mat4.fromRotationTranslationScale(
-        _castConvexVsTriangleMesh_transformA,
+        _castConvexVsTriangleMesh_AtoWorld,
         _castConvexVsTriangleMesh_quatA,
         _castConvexVsTriangleMesh_posA,
         _castConvexVsTriangleMesh_scaleA,
@@ -740,24 +740,24 @@ function castConvexVsTriangleMesh(
 
     // targetTransform = B's transform in world space
     const targetTransform = mat4.fromRotationTranslation(
-        _castConvexVsTriangleMesh_targetTransform,
+        _castConvexVsTriangleMesh_BtoWorld,
         _castConvexVsTriangleMesh_quatB,
         _castConvexVsTriangleMesh_posB,
     );
 
     // castTransform = targetTransform^-1 * transformA (A's transform in B's space)
-    mat4.invert(_castConvexVsTriangleMesh_inverseTargetTransform, targetTransform);
+    mat4.invert(_castConvexVsTriangleMesh_invBtoWorld, targetTransform);
     const castTransform = mat4.multiply(
-        _castConvexVsTriangleMesh_castTransform,
-        _castConvexVsTriangleMesh_inverseTargetTransform,
+        _castConvexVsTriangleMesh_AtoB,
+        _castConvexVsTriangleMesh_invBtoWorld,
         transformA,
     );
 
     // transform displacement to B's space using the inverse transform's rotation (3x3)
-    // _castConvexVsTriangleMesh_inverseTargetTransform is already B's inverse transform
+    // _castConvexVsTriangleMesh_invBtoWorld is already B's inverse transform
     mat4.multiply3x3Vec(
         _castConvexVsTriangleMesh_displacementInB,
-        _castConvexVsTriangleMesh_inverseTargetTransform,
+        _castConvexVsTriangleMesh_invBtoWorld,
         _castConvexVsTriangleMesh_displacementA,
     );
 
@@ -1029,19 +1029,19 @@ function castConvexVsTriangleMesh(
 
                     // calculate transform for shape A at contact point (aligned with castConvexVsConvex)
                     // castTransform with translation += fraction * displacementInB
-                    mat4.copy(_castConvexVsTriangleMesh_transformAAtContact, castTransform);
-                    _castConvexVsTriangleMesh_transformAAtContact[12] +=
+                    mat4.copy(_castConvexVsTriangleMesh_AtoWorldAtContact, castTransform);
+                    _castConvexVsTriangleMesh_AtoWorldAtContact[12] +=
                         _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[0];
-                    _castConvexVsTriangleMesh_transformAAtContact[13] +=
+                    _castConvexVsTriangleMesh_AtoWorldAtContact[13] +=
                         _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[1];
-                    _castConvexVsTriangleMesh_transformAAtContact[14] +=
+                    _castConvexVsTriangleMesh_AtoWorldAtContact[14] +=
                         _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[2];
 
                     // transform to world space: targetTransform * transformAAtContact
                     mat4.multiply(
-                        _castConvexVsTriangleMesh_transformAAtContact,
+                        _castConvexVsTriangleMesh_AtoWorldAtContact,
                         targetTransform,
-                        _castConvexVsTriangleMesh_transformAAtContact,
+                        _castConvexVsTriangleMesh_AtoWorldAtContact,
                     );
 
                     getShapeSupportingFace(
@@ -1049,7 +1049,7 @@ function castConvexVsTriangleMesh(
                         shapeA,
                         subShapeIdA,
                         normalInA,
-                        _castConvexVsTriangleMesh_transformAAtContact,
+                        _castConvexVsTriangleMesh_AtoWorldAtContact,
                         _castConvexVsTriangleMesh_scaleA,
                     );
 

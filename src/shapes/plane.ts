@@ -719,7 +719,7 @@ const _castConvexVsPlane_hit = /* @__PURE__ */ createCastShapeHit();
 const _castConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
 const _castConvexVsPlane_scaleA = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_scaleB = /* @__PURE__ */ vec3.create();
-const _castConvexVsPlane_startTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_AtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsPlane_normalInShapeSpace = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_supportPoint = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_direction = /* @__PURE__ */ vec3.create();
@@ -735,10 +735,10 @@ const _castConvexVsPlane_offsetByDistance = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_point1 = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_point2 = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_offset = /* @__PURE__ */ vec3.create();
-const _castConvexVsPlane_comHit = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
 const _castConvexVsPlane_contactLocal = /* @__PURE__ */ vec3.create();
 const _castConvexVsPlane_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
-const _castConvexVsPlane_shapeToWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsPlane_AtoWorldResult = /* @__PURE__ */ mat4.create();
 const _castConvexVsPlane_posFromMat4 = /* @__PURE__ */ vec3.create();
 
 export function castConvexVsPlane(
@@ -785,7 +785,7 @@ export function castConvexVsPlane(
     // build start transform for convex shape
     vec3.set(_castConvexVsPlane_posA, posAX, posAY, posAZ);
     quat.set(_castConvexVsPlane_quatA, quatAX, quatAY, quatAZ, quatAW);
-    mat4.fromRotationTranslation(_castConvexVsPlane_startTransform, _castConvexVsPlane_quatA, _castConvexVsPlane_posA);
+    mat4.fromRotationTranslation(_castConvexVsPlane_AtoWorld, _castConvexVsPlane_quatA, _castConvexVsPlane_posA);
 
     // get support function
     vec3.set(_castConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
@@ -809,7 +809,7 @@ export function castConvexVsPlane(
     supportFn.getSupport(_castConvexVsPlane_normalInShapeSpace, _castConvexVsPlane_supportPoint);
 
     // transform support point to world space
-    vec3.transformMat4(_castConvexVsPlane_supportPointWorld, _castConvexVsPlane_supportPoint, _castConvexVsPlane_startTransform);
+    vec3.transformMat4(_castConvexVsPlane_supportPointWorld, _castConvexVsPlane_supportPoint, _castConvexVsPlane_AtoWorld);
 
     // calculate initial penetration
     const signedDistance = plane3.distanceToPoint(_castConvexVsPlane_scaledPlane, _castConvexVsPlane_supportPointWorld);
@@ -841,7 +841,7 @@ export function castConvexVsPlane(
         vec3.set(_castConvexVsPlane_posB, posBX, posBY, posBZ);
         quat.set(_castConvexVsPlane_quatB, quatBX, quatBY, quatBZ, quatBW);
         mat4.fromRotationTranslation(_castConvexVsPlane_planeToWorld, _castConvexVsPlane_quatB, _castConvexVsPlane_posB);
-        mat4.copy(_castConvexVsPlane_comHit, _castConvexVsPlane_planeToWorld);
+        mat4.copy(_castConvexVsPlane_AtoWorldAtContact, _castConvexVsPlane_planeToWorld);
 
         vec3.scale(_castConvexVsPlane_offsetByRadius, normal, convexRadius);
         vec3.subtract(_castConvexVsPlane_contactLocal, _castConvexVsPlane_supportPointWorld, _castConvexVsPlane_offsetByRadius);
@@ -864,12 +864,12 @@ export function castConvexVsPlane(
         quat.set(_castConvexVsPlane_quatB, quatBX, quatBY, quatBZ, quatBW);
         mat4.fromRotationTranslation(_castConvexVsPlane_planeToWorld, _castConvexVsPlane_quatB, _castConvexVsPlane_posB);
         vec3.scale(_castConvexVsPlane_offset, _castConvexVsPlane_direction, fraction);
-        mat4.translate(_castConvexVsPlane_comHit, _castConvexVsPlane_planeToWorld, _castConvexVsPlane_offset);
+        mat4.translate(_castConvexVsPlane_AtoWorldAtContact, _castConvexVsPlane_planeToWorld, _castConvexVsPlane_offset);
 
         // contact point at time of impact
         vec3.scale(_castConvexVsPlane_offsetByRadius, normal, convexRadius);
         vec3.subtract(_castConvexVsPlane_contactLocal, _castConvexVsPlane_supportPointWorld, _castConvexVsPlane_offsetByRadius);
-        vec3.transformMat4(_castConvexVsPlane_point1, _castConvexVsPlane_contactLocal, _castConvexVsPlane_comHit);
+        vec3.transformMat4(_castConvexVsPlane_point1, _castConvexVsPlane_contactLocal, _castConvexVsPlane_AtoWorldAtContact);
         vec3.copy(_castConvexVsPlane_point2, _castConvexVsPlane_point1);
     } else {
         // moving away from plane or parallel
@@ -881,7 +881,7 @@ export function castConvexVsPlane(
     vec3.transformMat4(
         _castConvexVsPlane_penetrationAxisWorld,
         _castConvexVsPlane_penetrationAxisWorld,
-        _castConvexVsPlane_comHit,
+        _castConvexVsPlane_AtoWorldAtContact,
     );
 
     // create hit
@@ -902,7 +902,7 @@ export function castConvexVsPlane(
     // gather faces if requested
     if (settings.collectFaces) {
         // transform convex to world at impact
-        mat4.multiply(_castConvexVsPlane_shapeToWorld, _castConvexVsPlane_comHit, _castConvexVsPlane_startTransform);
+        mat4.multiply(_castConvexVsPlane_AtoWorldResult, _castConvexVsPlane_AtoWorldAtContact, _castConvexVsPlane_AtoWorld);
 
         vec3.set(_castConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
 
@@ -911,7 +911,7 @@ export function castConvexVsPlane(
             shapeA,
             subShapeIdA,
             _castConvexVsPlane_normalInShapeSpace,
-            _castConvexVsPlane_shapeToWorld,
+            _castConvexVsPlane_AtoWorldResult,
             _castConvexVsPlane_scaleA,
         );
 
@@ -919,16 +919,16 @@ export function castConvexVsPlane(
             // extract position for adaptive plane face
             vec3.set(
                 _castConvexVsPlane_posFromMat4,
-                _castConvexVsPlane_shapeToWorld[12],
-                _castConvexVsPlane_shapeToWorld[13],
-                _castConvexVsPlane_shapeToWorld[14],
+                _castConvexVsPlane_AtoWorldResult[12],
+                _castConvexVsPlane_AtoWorldResult[13],
+                _castConvexVsPlane_AtoWorldResult[14],
             );
             getAdaptivePlaneSupportingFace(
                 _castConvexVsPlane_hit.faceB,
                 shapeA,
                 _castConvexVsPlane_posFromMat4,
                 _castConvexVsPlane_scaledPlane,
-                _castConvexVsPlane_comHit,
+                _castConvexVsPlane_AtoWorldAtContact,
             );
         }
     }

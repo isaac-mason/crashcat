@@ -240,9 +240,9 @@ const _collideConvex_transformedSupport = /* @__PURE__ */ createTransformedSuppo
 
 const _collideConvex_penetrationAxis = /* @__PURE__ */ vec3.create();
 
-const _collideConvex_transformBInA = /* @__PURE__ */ mat4.create();
-const _collideConvex_transformAInWorld = /* @__PURE__ */ mat4.create();
-const _collideConvex_transformBtoWorld = /* @__PURE__ */ mat4.create();
+const _collideConvex_BtoA = /* @__PURE__ */ mat4.create();
+const _collideConvex_AtoWorld = /* @__PURE__ */ mat4.create();
+const _collideConvex_BtoWorld = /* @__PURE__ */ mat4.create();
 
 const _collideConvex_scaleA = /* @__PURE__ */ vec3.create();
 const _collideConvex_scaleB = /* @__PURE__ */ vec3.create();
@@ -341,7 +341,7 @@ export function collideConvexVsConvex(
     // [ 2xz-2yw      2yz+2xw      1-2x²-2y²    0 ]
     // [ 0            0            0            1 ]
     // combined with translation (posAX, posAY, posAZ) in the last column.
-    const transformAInWorld = _collideConvex_transformAInWorld;
+    const transformAInWorld = _collideConvex_AtoWorld;
     const x2 = quatAX + quatAX;
     const y2 = quatAY + quatAY;
     const z2 = quatAZ + quatAZ;
@@ -373,7 +373,7 @@ export function collideConvexVsConvex(
 
     // build the transformation matrix for B relative to A's local space.
     // this uses the relative rotation (relativeRot) and rotated relative position.
-    const transformBInA = _collideConvex_transformBInA;
+    const transformBInA = _collideConvex_BtoA;
     const rx2 = relativeRotX + relativeRotX;
     const ry2 = relativeRotY + relativeRotY;
     const rz2 = relativeRotZ + relativeRotZ;
@@ -607,14 +607,14 @@ export function collideConvexVsConvexLocal(
         mat4.multiply3x3TransposedVec(_collideConvex_faceDirB, transformBInA, penetrationDepth.penetrationAxis);
 
         // compute B's world transform: mat4_BtoWorld = transformAInWorld * transformBInA
-        mat4.multiply(_collideConvex_transformBtoWorld, transformAInWorld, transformBInA);
+        mat4.multiply(_collideConvex_BtoWorld, transformAInWorld, transformBInA);
 
         getShapeSupportingFace(
             _collideConvex_hit.faceB,
             shapeB,
             subShapeIdB,
             _collideConvex_faceDirB,
-            _collideConvex_transformBtoWorld,
+            _collideConvex_BtoWorld,
             scaleB,
         );
     }
@@ -642,10 +642,10 @@ const _castConvex_scaleB = /* @__PURE__ */ vec3.create();
 const _castConvex_displacementInB = /* @__PURE__ */ vec3.create();
 
 const _castConvex_convexQueryNormal = /* @__PURE__ */ vec3.create();
-const _castConvex_castTransform = /* @__PURE__ */ mat4.create();
-const _castConvex_transformAAtContact = /* @__PURE__ */ mat4.create();
-const _castConvex_targetTransform = /* @__PURE__  */ mat4.create();
-const _castConvex_inverseTargetTransform = /* @__PURE__  */ mat4.create();
+const _castConvex_AtoB = /* @__PURE__ */ mat4.create();
+const _castConvex_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
+const _castConvex_BtoWorld = /* @__PURE__  */ mat4.create();
+const _castConvex_invBtoWorld = /* @__PURE__  */ mat4.create();
 
 const _castConvex_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 
@@ -695,14 +695,14 @@ export function castConvexVsConvex(
 
     // transform A into B's local space using matrices
     // castTransform = inverse(targetTransform) * transformA
-    const transformA = mat4.fromRotationTranslation(_castConvex_castTransform, _castConvex_quatA, _castConvex_posA);
-    const targetTransform = mat4.fromRotationTranslation(_castConvex_targetTransform, _castConvex_quatB, _castConvex_posB);
+    const transformA = mat4.fromRotationTranslation(_castConvex_AtoB, _castConvex_quatA, _castConvex_posA);
+    const targetTransform = mat4.fromRotationTranslation(_castConvex_BtoWorld, _castConvex_quatB, _castConvex_posB);
 
     // inverse target transform (use separate temp to avoid overwriting targetTransform)
-    mat4.invert(_castConvex_inverseTargetTransform, targetTransform);
+    mat4.invert(_castConvex_invBtoWorld, targetTransform);
 
     // castTransform = targetTransform^-1 * transformA (A's start transform in B's space)
-    mat4.multiply(_castConvex_castTransform, _castConvex_inverseTargetTransform, transformA);
+    mat4.multiply(_castConvex_AtoB, _castConvex_invBtoWorld, transformA);
 
     // transform displacement to B's space
     vec3.transformQuat(_castConvex_displacementInB, _castConvex_displacementA, _castConvex_inverseQuaternionB);
@@ -715,7 +715,7 @@ export function castConvexVsConvex(
         subShapeIdA,
         shapeB,
         subShapeIdB,
-        _castConvex_castTransform,
+        _castConvex_AtoB,
         _castConvex_scaleA,
         _castConvex_displacementInB,
         _castConvex_scaleB,
@@ -809,13 +809,13 @@ export function castConvexVsConvexLocal(
     if (settings.collectFaces) {
         // calculate transform for shape A at contact point
         // transform_1_to_2 = castTransform with translation += fraction * displacementInB
-        mat4.copy(_castConvex_transformAAtContact, castTransform);
-        _castConvex_transformAAtContact[12] += _castConvex_gjkResult.lambda * displacementInB[0];
-        _castConvex_transformAAtContact[13] += _castConvex_gjkResult.lambda * displacementInB[1];
-        _castConvex_transformAAtContact[14] += _castConvex_gjkResult.lambda * displacementInB[2];
+        mat4.copy(_castConvex_AtoWorldAtContact, castTransform);
+        _castConvex_AtoWorldAtContact[12] += _castConvex_gjkResult.lambda * displacementInB[0];
+        _castConvex_AtoWorldAtContact[13] += _castConvex_gjkResult.lambda * displacementInB[1];
+        _castConvex_AtoWorldAtContact[14] += _castConvex_gjkResult.lambda * displacementInB[2];
 
         // shape A's world transform at contact = targetTransform * transformAAtContact
-        mat4.multiply(_castConvex_transformAAtContact, targetTransform, _castConvex_transformAAtContact);
+        mat4.multiply(_castConvex_AtoWorldAtContact, targetTransform, _castConvex_AtoWorldAtContact);
 
         // shape A: contact_normal is in B's local space, transform to A's local using transposed rotation
         mat4.multiply3x3TransposedVec(_castConvex_convexQueryNormal, castTransform, _castConvex_gjkResult.separatingAxis);
@@ -825,7 +825,7 @@ export function castConvexVsConvexLocal(
             shapeA,
             subShapeIdA,
             _castConvex_convexQueryNormal,
-            _castConvex_transformAAtContact,
+            _castConvex_AtoWorldAtContact,
             scaleA,
         );
 
