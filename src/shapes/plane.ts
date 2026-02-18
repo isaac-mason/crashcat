@@ -463,15 +463,15 @@ const _collideConvexVsPlane_supportPool = /* @__PURE__ */ createShapeSupportPool
 const _collideConvexVsPlane_hit = /* @__PURE__ */ createCollideShapeHit();
 const _collideConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
 const _collideConvexVsPlane_localPlane = /* @__PURE__ */ plane3.create();
-const _collideConvexVsPlane_transform = /* @__PURE__ */ mat4.create();
-const _collideConvexVsPlane_invTransform = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_planeToWorld = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_invConvexToWorld = /* @__PURE__ */ mat4.create();
 const _collideConvexVsPlane_scaleA = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_scaleB = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_supportPoint = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_normal = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_point1 = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_point2 = /* @__PURE__ */ vec3.create();
-const _collideConvexVsPlane_transformA = /* @__PURE__ */ mat4.create();
+const _collideConvexVsPlane_convexToWorld = /* @__PURE__ */ mat4.create();
 const _collideConvexVsPlane_quatA = /* @__PURE__ */ quat.create();
 const _collideConvexVsPlane_posA = /* @__PURE__ */ vec3.create();
 const _collideConvexVsPlane_quatB = /* @__PURE__ */ quat.create();
@@ -517,35 +517,37 @@ function collideConvexVsPlane(
     const convexShape = shapeA as ConvexShape;
     const planeShape = shapeB as PlaneShape;
 
-    // scale plane B
-    vec3.set(_collideConvexVsPlane_scaleB, scaleBX, scaleBY, scaleBZ);
-    scalePlane(_collideConvexVsPlane_scaledPlane, planeShape.plane, _collideConvexVsPlane_scaleB);
-
-    // build transform matrices
-    // transform A: convex shape world transform
     vec3.set(_collideConvexVsPlane_posA, posAX, posAY, posAZ);
     quat.set(_collideConvexVsPlane_quatA, quatAX, quatAY, quatAZ, quatAW);
-
-    // transform B: plane world transform (no scale, already applied to plane)
+    vec3.set(_collideConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
     vec3.set(_collideConvexVsPlane_posB, posBX, posBY, posBZ);
     quat.set(_collideConvexVsPlane_quatB, quatBX, quatBY, quatBZ, quatBW);
-    mat4.fromRotationTranslation(_collideConvexVsPlane_transform, _collideConvexVsPlane_quatB, _collideConvexVsPlane_posB);
+    vec3.set(_collideConvexVsPlane_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    // build transform A once and reuse (avoid redundant matrix construction)
-    mat4.fromRotationTranslation(_collideConvexVsPlane_transformA, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
+    // scale plane B
+    scalePlane(_collideConvexVsPlane_scaledPlane, planeShape.plane, _collideConvexVsPlane_scaleB);
+
+    // transform B: plane world transform, no scale (already applied to plane)
+    mat4.fromRotationTranslation(_collideConvexVsPlane_planeToWorld, _collideConvexVsPlane_quatB, _collideConvexVsPlane_posB);
+
+    // build transform A once and reuse
+    mat4.fromRotationTranslation(_collideConvexVsPlane_convexToWorld, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
 
     // compute inverse of transform A
-    mat4.copy(_collideConvexVsPlane_invTransform, _collideConvexVsPlane_transformA);
-    mat4.invert(_collideConvexVsPlane_invTransform, _collideConvexVsPlane_invTransform);
+    mat4.copy(_collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_convexToWorld);
+    mat4.invert(_collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_invConvexToWorld);
 
     // transform plane to convex shape's local space (invA * transformB)
-    mat4.multiply(_collideConvexVsPlane_combinedTransform, _collideConvexVsPlane_invTransform, _collideConvexVsPlane_transform);
+    mat4.multiply(
+        _collideConvexVsPlane_combinedTransform,
+        _collideConvexVsPlane_invConvexToWorld,
+        _collideConvexVsPlane_planeToWorld,
+    );
     transformPlane(_collideConvexVsPlane_localPlane, _collideConvexVsPlane_scaledPlane, _collideConvexVsPlane_combinedTransform);
 
     const normal = _collideConvexVsPlane_localPlane.normal;
 
     // get support function for convex shape with scale applied
-    vec3.set(_collideConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
     const supportFn = getShapeSupportFunction(
         _collideConvexVsPlane_supportPool,
         shapeA,
@@ -576,14 +578,14 @@ function collideConvexVsPlane(
         vec3.subtract(_collideConvexVsPlane_point2, _collideConvexVsPlane_supportPoint, _collideConvexVsPlane_offsetByDistance);
 
         // transform contact points to world space (using pre-built transformA)
-        vec3.transformMat4(_collideConvexVsPlane_point1World, _collideConvexVsPlane_point1, _collideConvexVsPlane_transformA);
-        vec3.transformMat4(_collideConvexVsPlane_point2World, _collideConvexVsPlane_point2, _collideConvexVsPlane_transformA);
+        vec3.transformMat4(_collideConvexVsPlane_point1World, _collideConvexVsPlane_point1, _collideConvexVsPlane_convexToWorld);
+        vec3.transformMat4(_collideConvexVsPlane_point2World, _collideConvexVsPlane_point2, _collideConvexVsPlane_convexToWorld);
 
         // transform penetration axis to world space (rotation only, using pre-built transformA)
         vec3.negate(_collideConvexVsPlane_normal, normal);
         mat4.multiply3x3Vec(
             _collideConvexVsPlane_penetrationAxisWorld,
-            _collideConvexVsPlane_transformA,
+            _collideConvexVsPlane_convexToWorld,
             _collideConvexVsPlane_normal,
         );
 
@@ -607,7 +609,7 @@ function collideConvexVsPlane(
                 shapeA,
                 subShapeIdA,
                 normal, // direction in local space
-                _collideConvexVsPlane_transformA,
+                _collideConvexVsPlane_convexToWorld,
                 _collideConvexVsPlane_scaleVec,
             );
 
@@ -618,7 +620,7 @@ function collideConvexVsPlane(
                     convexShape,
                     _collideConvexVsPlane_posA,
                     _collideConvexVsPlane_scaledPlane,
-                    _collideConvexVsPlane_transform,
+                    _collideConvexVsPlane_planeToWorld,
                 );
             }
         }
