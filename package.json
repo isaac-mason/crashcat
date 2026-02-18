@@ -50,6 +50,7 @@
         "mathcat": "0.0.10"
     },
     "peerDependencies": {
+        "mathcat": "0.0.10",
         "three": ">=0.182.0"
     },
     "peerDependenciesMeta": {
