@@ -693,7 +693,7 @@ export function castConvexVsConvex(
     // compute inverse of B's quaternion for transforming displacement
     quat.conjugate(_castConvex_inverseQuaternionB, _castConvex_quatB);
 
-    // transform A into B's local space using matrices (aligned with JoltPhysics)
+    // transform A into B's local space using matrices
     // castTransform = inverse(targetTransform) * transformA
     const transformA = mat4.fromRotationTranslation(_castConvex_castTransform, _castConvex_quatA, _castConvex_posA);
     const targetTransform = mat4.fromRotationTranslation(_castConvex_targetTransform, _castConvex_quatB, _castConvex_posB);
@@ -741,20 +741,12 @@ export function castConvexVsConvexLocal(
     const supportA = getShapeSupportFunction(castConvex_supportPoolA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
     const supportB = getShapeSupportFunction(castConvex_supportPoolB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
 
-    // extract position and quaternion from castTransform for penetrationCastShape
-    _castConvex_posA[0] = castTransform[12];
-    _castConvex_posA[1] = castTransform[13];
-    _castConvex_posA[2] = castTransform[14];
-    mat4.getRotation(_castConvex_quatA, castTransform);
-
     // run GJK casting with EPA fallback for deep penetration in B's local space
-    // penetrationCastShape will handle transform wrapping internally
     const tolerance = 1e-4;
     _castConvex_gjkResult.lambda = collector.earlyOutFraction;
     penetrationCastShape(
         _castConvex_gjkResult,
-        _castConvex_posA,
-        _castConvex_quatA,
+        castTransform,
         supportA,
         supportB,
         displacementInB,
@@ -815,7 +807,7 @@ export function castConvexVsConvexLocal(
 
     // extract supporting faces if requested
     if (settings.collectFaces) {
-        // calculate transform for shape A at contact point (aligned with JoltPhysics)
+        // calculate transform for shape A at contact point
         // transform_1_to_2 = castTransform with translation += fraction * displacementInB
         mat4.copy(_castConvex_transformAAtContact, castTransform);
         _castConvex_transformAAtContact[12] += _castConvex_gjkResult.lambda * displacementInB[0];

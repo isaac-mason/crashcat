@@ -634,14 +634,8 @@ const _castConvexVsTriangleMesh_gjkResult = /* @__PURE__ */ createGjkCastShapeRe
 
 const _castConvexVsTriangleMesh_worldPointA = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_worldPointB = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_displacementScaled = /* @__PURE__ */ vec3.create();
 
-const _castConvexVsTriangleMesh_posAInB = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_quatAInB = /* @__PURE__ */ quat.create();
-const _castConvexVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_inverseQuaternionB = /* @__PURE__ */ quat.create();
-const _castConvexVsTriangleMesh_positionAtHitTime = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_inverseQuatAInB = /* @__PURE__ */ quat.create();
 
 const _castConvexVsTriangleMesh_faceNormal = /* @__PURE__ */ vec3.create();
 
@@ -668,10 +662,11 @@ const _castConvexVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _castConvexVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 
-const _castConvexVsTriangleMesh_aabbTransform = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_mat4_BtoWorld = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_mat4_AtoB = /* @__PURE__ */ mat4.create();
-const _castConvexVsTriangleMesh_mat4_AtoWorld = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_targetTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_castTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_transformA = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_inverseTargetTransform = /* @__PURE__ */ mat4.create();
+const _castConvexVsTriangleMesh_transformAAtContact = /* @__PURE__ */ mat4.create();
 
 const _castConvexVsTriangleMesh_bvhStack = /* @__PURE__ */ bvhStack.create();
 const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
@@ -734,36 +729,40 @@ function castConvexVsTriangleMesh(
     quat.set(_castConvexVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     vec3.set(_castConvexVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    // transform A into B's local space
-    quat.conjugate(_castConvexVsTriangleMesh_inverseQuaternionB, _castConvexVsTriangleMesh_quatB);
-
-    vec3.sub(_castConvexVsTriangleMesh_positionDifference, _castConvexVsTriangleMesh_posA, _castConvexVsTriangleMesh_posB);
-    vec3.transformQuat(
-        _castConvexVsTriangleMesh_posAInB,
-        _castConvexVsTriangleMesh_positionDifference,
-        _castConvexVsTriangleMesh_inverseQuaternionB,
-    );
-
-    quat.multiply(
-        _castConvexVsTriangleMesh_quatAInB,
-        _castConvexVsTriangleMesh_inverseQuaternionB,
+    // transform A into B's local space (aligned with castConvexVsConvex pattern)
+    // transformA = A's transform in world space
+    const transformA = mat4.fromRotationTranslationScale(
+        _castConvexVsTriangleMesh_transformA,
         _castConvexVsTriangleMesh_quatA,
+        _castConvexVsTriangleMesh_posA,
+        _castConvexVsTriangleMesh_scaleA,
     );
 
-    vec3.transformQuat(
+    // targetTransform = B's transform in world space
+    const targetTransform = mat4.fromRotationTranslation(
+        _castConvexVsTriangleMesh_targetTransform,
+        _castConvexVsTriangleMesh_quatB,
+        _castConvexVsTriangleMesh_posB,
+    );
+
+    // castTransform = targetTransform^-1 * transformA (A's transform in B's space)
+    mat4.invert(_castConvexVsTriangleMesh_inverseTargetTransform, targetTransform);
+    const castTransform = mat4.multiply(
+        _castConvexVsTriangleMesh_castTransform,
+        _castConvexVsTriangleMesh_inverseTargetTransform,
+        transformA,
+    );
+
+    // transform displacement to B's space using the inverse transform's rotation (3x3)
+    // _castConvexVsTriangleMesh_inverseTargetTransform is already B's inverse transform
+    mat4.multiply3x3Vec(
         _castConvexVsTriangleMesh_displacementInB,
+        _castConvexVsTriangleMesh_inverseTargetTransform,
         _castConvexVsTriangleMesh_displacementA,
-        _castConvexVsTriangleMesh_inverseQuaternionB,
     );
 
     // compute base AABB of shape A at t=0 in mesh local space
-    const aabbMatrix = mat4.fromRotationTranslationScale(
-        _castConvexVsTriangleMesh_aabbTransform,
-        _castConvexVsTriangleMesh_quatAInB,
-        _castConvexVsTriangleMesh_posAInB,
-        _castConvexVsTriangleMesh_scaleA,
-    );
-    box3.transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, aabbMatrix);
+    box3.transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, castTransform);
 
     // determine if we want to use the actual shape or a shrunken shape with convex radius
     const supportMode = settings.useShrunkenShapeAndConvexRadius
@@ -771,34 +770,20 @@ function castConvexVsTriangleMesh(
         : SupportFunctionMode.DEFAULT;
 
     // get transformed support function for convex shape
+    // castTransform already contains A's transform in B's space
     const supportA = getShapeSupportFunction(
         _castConvexVsTriangleMesh_supportPoolA,
         shapeA,
         supportMode,
         _castConvexVsTriangleMesh_scaleA,
     );
-    const mat4_AtoB = mat4.fromRotationTranslation(
-        _castConvexVsTriangleMesh_mat4_AtoB,
-        _castConvexVsTriangleMesh_quatAInB,
-        _castConvexVsTriangleMesh_posAInB,
-    );
-    setTransformedSupport(_castConvexVsTriangleMesh_transformedSupportA, mat4_AtoB, supportA);
+    setTransformedSupport(_castConvexVsTriangleMesh_transformedSupportA, castTransform, supportA);
 
     // determine if shape is inside out or not
     const scaleSign = vec3.isScaleInsideOut(_castConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
-    // pre-compute B-to-world transformation matrix (rotation + translation only, no scale)
-    // vertices are already scaled, so matrix should only handle rotation and translation
-    const mat4_BtoWorld = mat4.fromRotationTranslation(
-        _castConvexVsTriangleMesh_mat4_BtoWorld,
-        _castConvexVsTriangleMesh_quatB,
-        _castConvexVsTriangleMesh_posB,
-    );
-
-    // pre-compute inverse of quatAInB if we'll be collecting faces
-    if (settings.collectFaces) {
-        quat.conjugate(_castConvexVsTriangleMesh_inverseQuatAInB, _castConvexVsTriangleMesh_quatAInB);
-    }
+    // targetTransform is already B-to-world from above
+    const mat4_BtoWorld = targetTransform;
 
     // compute centroid of base AABB
     const ray = _castConvexVsTriangleMesh_raycast;
@@ -918,10 +903,10 @@ function castConvexVsTriangleMesh(
                 setTriangleSupport(_castConvexVsTriangleMesh_triangleSupport, a, b, c);
 
                 // gjk shapecast with epa fallback for deep penetration
+                // castTransform already contains A in B's local space
                 penetrationCastShape(
                     _castConvexVsTriangleMesh_gjkResult,
-                    _castConvexVsTriangleMesh_posAInB,
-                    _castConvexVsTriangleMesh_quatAInB,
+                    castTransform,
                     supportA,
                     _castConvexVsTriangleMesh_triangleSupport,
                     _castConvexVsTriangleMesh_displacementInB,
@@ -1035,27 +1020,28 @@ function castConvexVsTriangleMesh(
                 // gather faces if requested
                 if (settings.collectFaces) {
                     // face a: transform contact normal from B's local space to A's local space
-                    const scaledDisplacement = vec3.scale(
-                        _castConvexVsTriangleMesh_displacementScaled,
-                        _castConvexVsTriangleMesh_displacementA,
-                        _castConvexVsTriangleMesh_gjkResult.lambda,
-                    );
-                    const position = vec3.add(
-                        _castConvexVsTriangleMesh_positionAtHitTime,
-                        _castConvexVsTriangleMesh_posA,
-                        scaledDisplacement,
-                    );
+                    // using transposed 3x3 of castTransform (inverse rotation)
                     const normalInA = vec3.negate(
                         _castConvexVsTriangleMesh_faceNormal,
                         _castConvexVsTriangleMesh_gjkResult.separatingAxis,
                     );
-                    vec3.transformQuat(normalInA, normalInA, _castConvexVsTriangleMesh_inverseQuatAInB);
+                    mat4.multiply3x3TransposedVec(normalInA, castTransform, normalInA);
 
-                    // build mat4 for shape A's world transform at hit time
-                    mat4.fromRotationTranslation(
-                        _castConvexVsTriangleMesh_mat4_AtoWorld,
-                        _castConvexVsTriangleMesh_quatA,
-                        position,
+                    // calculate transform for shape A at contact point (aligned with castConvexVsConvex)
+                    // castTransform with translation += fraction * displacementInB
+                    mat4.copy(_castConvexVsTriangleMesh_transformAAtContact, castTransform);
+                    _castConvexVsTriangleMesh_transformAAtContact[12] +=
+                        _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[0];
+                    _castConvexVsTriangleMesh_transformAAtContact[13] +=
+                        _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[1];
+                    _castConvexVsTriangleMesh_transformAAtContact[14] +=
+                        _castConvexVsTriangleMesh_gjkResult.lambda * _castConvexVsTriangleMesh_displacementInB[2];
+
+                    // transform to world space: targetTransform * transformAAtContact
+                    mat4.multiply(
+                        _castConvexVsTriangleMesh_transformAAtContact,
+                        targetTransform,
+                        _castConvexVsTriangleMesh_transformAAtContact,
                     );
 
                     getShapeSupportingFace(
@@ -1063,7 +1049,7 @@ function castConvexVsTriangleMesh(
                         shapeA,
                         subShapeIdA,
                         normalInA,
-                        _castConvexVsTriangleMesh_mat4_AtoWorld,
+                        _castConvexVsTriangleMesh_transformAAtContact,
                         _castConvexVsTriangleMesh_scaleA,
                     );
 
@@ -1078,6 +1064,7 @@ function castConvexVsTriangleMesh(
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[6] = c[0];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[7] = c[1];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[8] = c[2];
+
                     // transform to world space (rotation + translation only, no scale - vertices are already scaled)
                     transformFaceWithMat4RotationTranslation(_castConvexVsTriangleMesh_castShapeHit.faceB, mat4_BtoWorld);
                 } else {
@@ -1095,13 +1082,15 @@ function castConvexVsTriangleMesh(
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            // expand bounds by half-extents (same as triangle test)
+            // expanded bounds for left child
             expandedBounds[0][0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
             expandedBounds[0][1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
             expandedBounds[0][2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
             expandedBounds[1][0] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+
+            // get distance
             const leftDist = rayDistanceToBox3(
                 ray.origin[0],
                 ray.origin[1],
@@ -1113,12 +1102,15 @@ function castConvexVsTriangleMesh(
                 expandedBounds,
             );
 
+            // expanded bounds for right child
             expandedBounds[0][0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
             expandedBounds[0][1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
             expandedBounds[0][2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
             expandedBounds[1][0] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
             expandedBounds[1][1] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[1][2] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+
+            // get distance
             const rightDist = rayDistanceToBox3(
                 ray.origin[0],
                 ray.origin[1],

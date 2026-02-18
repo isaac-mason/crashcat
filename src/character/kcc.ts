@@ -1402,11 +1402,13 @@ function correctFractionForCharacterPadding(
     // at the convex level, perform the GJK cast
     const characterSupport = getShapeSupportFunction(supportPool, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
 
+    // build transform matrix from position and quaternion
+    const transform = mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position);
+
     // cast the shape against the polygon
     gjkCastShape(
         _paddingCorrection_gjkResult,
-        position,
-        quaternion,
+        transform,
         characterSupport,
         polygon,
         displacement,
