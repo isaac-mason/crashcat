@@ -252,6 +252,15 @@ const _collideConvex_faceDirB = /* @__PURE__ */ vec3.create();
 
 const _collideConvex_hit = /* @__PURE__ */ createCollideShapeHit();
 
+const _collideConvex_quatA = /* @__PURE__ */ quat.create();
+const _collideConvex_quatB = /* @__PURE__ */ quat.create();
+const _collideConvex_invQuatA = /* @__PURE__ */ quat.create();
+const _collideConvex_relativeRot = /* @__PURE__ */ quat.create();
+
+const _collideConvex_relativePos = /* @__PURE__ */ vec3.create();
+const _collideConvex_rotatedRelativePos = /* @__PURE__ */ vec3.create();
+const _collideConvex_posA = /* @__PURE__ */ vec3.create();
+
 /**
  * World-space entry point for convex vs convex collision detection.
  * Transforms shapes into local space and delegates to collideConvexVsConvexLocal.
@@ -289,119 +298,35 @@ export function collideConvexVsConvex(
     // to transform shape B into A's local space, we need to compute:
     // 1. the relative rotation: inv(quatA) * quatB
     // 2. the relative position: inv(quatA) * (posB - posA)
-    //
-    // first, compute the conjugate (inverse) of quatA.
-    // for a unit quaternion, the inverse is the conjugate: q^-1 = (w, -x, -y, -z)
-    const invQuatAX = -quatAX;
-    const invQuatAY = -quatAY;
-    const invQuatAZ = -quatAZ;
-    const invQuatAW = quatAW;
 
-    // compute relative rotation: inv(quatA) * quatB using quaternion multiplication.
-    // given q1 = (x1, y1, z1, w1) and q2 = (x2, y2, z2, w2):
-    // q1 * q2 = (
-    //   w1*x2 + x1*w2 + y1*z2 - z1*y2,
-    //   w1*y2 - x1*z2 + y1*w2 + z1*x2,
-    //   w1*z2 + x1*y2 - y1*x2 + z1*w2,
-    //   w1*w2 - x1*x2 - y1*y2 - z1*z2
-    // )
-    const relativeRotX = invQuatAW * quatBX + invQuatAX * quatBW + invQuatAY * quatBZ - invQuatAZ * quatBY;
-    const relativeRotY = invQuatAW * quatBY - invQuatAX * quatBZ + invQuatAY * quatBW + invQuatAZ * quatBX;
-    const relativeRotZ = invQuatAW * quatBZ + invQuatAX * quatBY - invQuatAY * quatBX + invQuatAZ * quatBW;
-    const relativeRotW = invQuatAW * quatBW - invQuatAX * quatBX - invQuatAY * quatBY - invQuatAZ * quatBZ;
+    // set up quaternions and position from parameters
+    quat.set(_collideConvex_quatA, quatAX, quatAY, quatAZ, quatAW);
+    quat.set(_collideConvex_quatB, quatBX, quatBY, quatBZ, quatBW);
+    vec3.set(_collideConvex_posA, posAX, posAY, posAZ);
+
+    // compute the conjugate (inverse) of quatA
+    quat.conjugate(_collideConvex_invQuatA, _collideConvex_quatA);
+
+    // compute relative rotation: inv(quatA) * quatB
+    quat.multiply(_collideConvex_relativeRot, _collideConvex_invQuatA, _collideConvex_quatB);
 
     // compute the relative position vector: posB - posA
-    const relativePosX = posBX - posAX;
-    const relativePosY = posBY - posAY;
-    const relativePosZ = posBZ - posAZ;
+    vec3.set(_collideConvex_relativePos, posBX - posAX, posBY - posAY, posBZ - posAZ);
 
-    // rotate the relative position by inv(quatA) to bring it into A's local space.
-    // this uses the formula: v' = q * (0, v) * q^-1, but optimized as:
-    // t = 2 * cross(q.xyz, v)
-    // v' = v + q.w * t + cross(q.xyz, t)
-    const tx = 2.0 * (invQuatAY * relativePosZ - invQuatAZ * relativePosY);
-    const ty = 2.0 * (invQuatAZ * relativePosX - invQuatAX * relativePosZ);
-    const tz = 2.0 * (invQuatAX * relativePosY - invQuatAY * relativePosX);
-    const rotatedRelativePosX = relativePosX + invQuatAW * tx + (invQuatAY * tz - invQuatAZ * ty);
-    const rotatedRelativePosY = relativePosY + invQuatAW * ty + (invQuatAZ * tx - invQuatAX * tz);
-    const rotatedRelativePosZ = relativePosZ + invQuatAW * tz + (invQuatAX * ty - invQuatAY * tx);
+    // rotate the relative position by inv(quatA) to bring it into A's local space
+    vec3.transformQuat(_collideConvex_rotatedRelativePos, _collideConvex_relativePos, _collideConvex_invQuatA);
 
     // store scales in scratch arrays (needed for the local function call)
-    _collideConvex_scaleA[0] = scaleAX;
-    _collideConvex_scaleA[1] = scaleAY;
-    _collideConvex_scaleA[2] = scaleAZ;
-    _collideConvex_scaleB[0] = scaleBX;
-    _collideConvex_scaleB[1] = scaleBY;
-    _collideConvex_scaleB[2] = scaleBZ;
+    vec3.set(_collideConvex_scaleA, scaleAX, scaleAY, scaleAZ);
+    vec3.set(_collideConvex_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    // build the transformation matrix for A in world space (4x4 column-major).
-    // a rotation matrix from quaternion q = (x, y, z, w) is:
-    // [ 1-2y²-2z²    2xy-2zw      2xz+2yw      0 ]
-    // [ 2xy+2zw      1-2x²-2z²    2yz-2xw      0 ]
-    // [ 2xz-2yw      2yz+2xw      1-2x²-2y²    0 ]
-    // [ 0            0            0            1 ]
-    // combined with translation (posAX, posAY, posAZ) in the last column.
+    // build the transformation matrix for A in world space (rotation + translation only, no scale)
     const transformAInWorld = _collideConvex_AtoWorld;
-    const x2 = quatAX + quatAX;
-    const y2 = quatAY + quatAY;
-    const z2 = quatAZ + quatAZ;
-    const xx = quatAX * x2;
-    const xy = quatAX * y2;
-    const xz = quatAZ * x2;
-    const yy = quatAY * y2;
-    const yz = quatAZ * y2;
-    const zz = quatAZ * z2;
-    const wx = quatAW * x2;
-    const wy = quatAW * y2;
-    const wz = quatAW * z2;
-    transformAInWorld[0] = 1.0 - yy - zz;
-    transformAInWorld[1] = xy + wz;
-    transformAInWorld[2] = xz - wy;
-    transformAInWorld[3] = 0.0;
-    transformAInWorld[4] = xy - wz;
-    transformAInWorld[5] = 1.0 - xx - zz;
-    transformAInWorld[6] = yz + wx;
-    transformAInWorld[7] = 0.0;
-    transformAInWorld[8] = xz + wy;
-    transformAInWorld[9] = yz - wx;
-    transformAInWorld[10] = 1.0 - xx - yy;
-    transformAInWorld[11] = 0.0;
-    transformAInWorld[12] = posAX;
-    transformAInWorld[13] = posAY;
-    transformAInWorld[14] = posAZ;
-    transformAInWorld[15] = 1.0;
+    mat4.fromRotationTranslation(transformAInWorld, _collideConvex_quatA, _collideConvex_posA);
 
-    // build the transformation matrix for B relative to A's local space.
-    // this uses the relative rotation (relativeRot) and rotated relative position.
+    // build the transformation matrix for B relative to A's local space
     const transformBInA = _collideConvex_BtoA;
-    const rx2 = relativeRotX + relativeRotX;
-    const ry2 = relativeRotY + relativeRotY;
-    const rz2 = relativeRotZ + relativeRotZ;
-    const rxx = relativeRotX * rx2;
-    const rxy = relativeRotX * ry2;
-    const rxz = relativeRotZ * rx2;
-    const ryy = relativeRotY * ry2;
-    const ryz = relativeRotZ * ry2;
-    const rzz = relativeRotZ * rz2;
-    const rwx = relativeRotW * rx2;
-    const rwy = relativeRotW * ry2;
-    const rwz = relativeRotW * rz2;
-    transformBInA[0] = 1.0 - ryy - rzz;
-    transformBInA[1] = rxy + rwz;
-    transformBInA[2] = rxz - rwy;
-    transformBInA[3] = 0.0;
-    transformBInA[4] = rxy - rwz;
-    transformBInA[5] = 1.0 - rxx - rzz;
-    transformBInA[6] = ryz + rwx;
-    transformBInA[7] = 0.0;
-    transformBInA[8] = rxz + rwy;
-    transformBInA[9] = ryz - rwx;
-    transformBInA[10] = 1.0 - rxx - ryy;
-    transformBInA[11] = 0.0;
-    transformBInA[12] = rotatedRelativePosX;
-    transformBInA[13] = rotatedRelativePosY;
-    transformBInA[14] = rotatedRelativePosZ;
-    transformBInA[15] = 1.0;
+    mat4.fromRotationTranslation(transformBInA, _collideConvex_relativeRot, _collideConvex_rotatedRelativePos);
 
     // delegate to local-space collision function
     collideConvexVsConvexLocal(
