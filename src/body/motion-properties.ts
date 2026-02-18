@@ -659,7 +659,6 @@ export function setLinearVelocity(motionProperties: MotionProperties, velocity: 
  * @param velocity new angular velocity
  */
 export function setAngularVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
-    // vec3.copy(motionProperties.angularVelocity, velocity);
     motionProperties.angularVelocity[0] = velocity[0];
     motionProperties.angularVelocity[1] = velocity[1];
     motionProperties.angularVelocity[2] = velocity[2];
@@ -673,7 +672,7 @@ export function setAngularVelocity(motionProperties: MotionProperties, velocity:
  * @param velocityDelta velocity change to add
  */
 export function addLinearVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    // vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, velocityDelta);
+    // linearVelocity += velocityDelta
     motionProperties.linearVelocity[0] += velocityDelta[0];
     motionProperties.linearVelocity[1] += velocityDelta[1];
     motionProperties.linearVelocity[2] += velocityDelta[2];
@@ -686,7 +685,7 @@ export function addLinearVelocity(motionProperties: MotionProperties, velocityDe
  * @param velocityDelta angular velocity change to add
  */
 export function addAngularVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    // vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, velocityDelta);
+    // angularVelocity += velocityDelta
     motionProperties.angularVelocity[0] += velocityDelta[0];
     motionProperties.angularVelocity[1] += velocityDelta[1];
     motionProperties.angularVelocity[2] += velocityDelta[2];
@@ -700,7 +699,6 @@ export function addAngularVelocity(motionProperties: MotionProperties, velocityD
  * @param linearVelocityChange velocity change to add
  */
 export function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
-    // mLinearVelocity = LockTranslation(mLinearVelocity + inLinearVelocityChange)
     vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
     applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 }
@@ -712,7 +710,7 @@ export function addLinearVelocityStep(motionProperties: MotionProperties, linear
  * @param linearVelocityChange velocity change to subtract
  */
 export function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
-    // vec3.sub(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
+    // linearVelocity -= linearVelocityChange
     motionProperties.linearVelocity[0] -= linearVelocityChange[0];
     motionProperties.linearVelocity[1] -= linearVelocityChange[1];
     motionProperties.linearVelocity[2] -= linearVelocityChange[2];
@@ -884,34 +882,6 @@ export function multiplyWorldSpaceInverseInertiaByVector(
     if (!(allowedRotationAxis & 0b001)) out[0] = 0;
     if (!(allowedRotationAxis & 0b010)) out[1] = 0;
     if (!(allowedRotationAxis & 0b100)) out[2] = 0;
-
-    return out;
-}
-
-/**
- * Get velocity of a point on the body (point relative to center of mass).
- * Velocity = v_linear + ω × r
- *
- * @param out output vector to store result
- * @param motionProperties motion properties containing velocity data
- * @param pointRelativeToCOM point position relative to center of mass
- * @returns out parameter
- */
-export function getPointVelocityCOM(out: Vec3, motionProperties: MotionProperties, pointRelativeToCOM: Vec3): Vec3 {
-    const [avX, avY, avZ] = motionProperties.angularVelocity;
-    const [rX, rY, rZ] = pointRelativeToCOM;
-
-    // v_point = v_linear + ω × r
-    
-    // cross: angular velocity x pointRelativeToCOM
-    const angularContribX = avY * rZ - avZ * rY;
-    const angularContribY = avZ * rX - avX * rZ;
-    const angularContribZ = avX * rY - avY * rX;
-
-    // add: linearVelocity + angularContrib
-    out[0] = motionProperties.linearVelocity[0] + angularContribX;
-    out[1] = motionProperties.linearVelocity[1] + angularContribY;
-    out[2] = motionProperties.linearVelocity[2] + angularContribZ;
 
     return out;
 }

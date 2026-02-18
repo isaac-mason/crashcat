@@ -1109,9 +1109,31 @@ const _getPointVelocity_pointRelativeToCOM = /* @__PURE__ */ vec3.create();
  */
 export function getVelocityAtPointCOM(out: Vec3, body: RigidBody, pointRelativeToCOM: Vec3): Vec3 {
     if (body.motionType !== MotionType.STATIC) {
-        return motionProperties.getPointVelocityCOM(out, body.motionProperties, pointRelativeToCOM);
+        const motionProperties = body.motionProperties;
+
+        const [avX, avY, avZ] = motionProperties.angularVelocity;
+        const [rX, rY, rZ] = pointRelativeToCOM;
+
+        // v_point = v_linear + ω × r
+
+        // cross: angular velocity x pointRelativeToCOM
+        const angularContribX = avY * rZ - avZ * rY;
+        const angularContribY = avZ * rX - avX * rZ;
+        const angularContribZ = avX * rY - avY * rX;
+
+        // add: linearVelocity + angularContrib
+        out[0] = motionProperties.linearVelocity[0] + angularContribX;
+        out[1] = motionProperties.linearVelocity[1] + angularContribY;
+        out[2] = motionProperties.linearVelocity[2] + angularContribZ;
+
+        return out;
     }
-    return vec3.zero(out);
+
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+
+    return out;
 }
 
 /**
