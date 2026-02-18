@@ -66,7 +66,6 @@ export function penetrationDepthStepGJK(
     }
 
     // copy results to output
-
     outPenetrationDepth.pointA[0] = _gjk_closestPoints.pointA[0];
     outPenetrationDepth.pointA[1] = _gjk_closestPoints.pointA[1];
     outPenetrationDepth.pointA[2] = _gjk_closestPoints.pointA[2];
@@ -201,8 +200,8 @@ const _epa_hullState = /* @__PURE__ */ (() => {
 const _epa_newTriangles: hull.NewTriangles = [];
 
 // rotation matrix constants for 120° rotation
-const COS_120_DEG = Math.cos(degreesToRadians(120));
-const SIN_120_DEG = Math.sin(degreesToRadians(120));
+const COS_120_DEG = /* @__PURE__ */ Math.cos(degreesToRadians(120));
+const SIN_120_DEG = /* @__PURE__ */ Math.sin(degreesToRadians(120));
 const ONE_MINUS_COS_120_DEG = 1 - COS_120_DEG;
 
 /**
@@ -409,10 +408,7 @@ export function penetrationDepthStepEPA(
     let last: hull.Triangle | null = null;
     let flipVSign = false;
 
-    // let iter = 0;
-
     do {
-        // iter++;
         const triangle = hull.popClosestTriangleFromQueue(hullState);
 
         if (!triangle) {
@@ -507,8 +503,6 @@ export function penetrationDepthStepEPA(
         }
     } while (hull.hasNextTriangle(hullState) && supportPoints.y.size < EPA_MAX_POINTS);
 
-    // console.log('epa main loop iters', iter, 'simplex size', simplex.size);
-
     // calculate results
     if (last === null) {
         out.status = PenetrationDepthStatus.NOT_COLLIDING;
@@ -522,7 +516,10 @@ export function penetrationDepthStepEPA(
 
     // penetration normal calculation
     const penetrationNormal = _epa_penetrationNormal;
-    vec3.scale(penetrationNormal, last.normal, centroidDotNormal / normalLengthSq);
+    const penetrationNormalScale = centroidDotNormal / normalLengthSq;
+    penetrationNormal[0] = last.normal[0] * penetrationNormalScale;
+    penetrationNormal[1] = last.normal[1] * penetrationNormalScale;
+    penetrationNormal[2] = last.normal[2] * penetrationNormalScale;
 
     // check for near-zero penetration
     const pnLenSq =
@@ -653,7 +650,11 @@ export function penetrationCastShape(
 
     // when our contact normal is too small, we don't have an accurate result
     const squaredTolerance = collisionTolerance * collisionTolerance;
-    const contactNormalInvalid = vec3.squaredLength(out.separatingAxis) < squaredTolerance;
+    const seperatingAxisSquaredLength =
+        out.separatingAxis[0] * out.separatingAxis[0] +
+        out.separatingAxis[1] * out.separatingAxis[1] +
+        out.separatingAxis[2] * out.separatingAxis[2];
+    const contactNormalInvalid = seperatingAxisSquaredLength < squaredTolerance;
 
     const combinedRadius = convexRadiusA + convexRadiusB;
     // only when lambda = 0 we can have the bodies overlap
@@ -680,11 +681,21 @@ export function penetrationCastShape(
             return;
         }
 
-        vec3.copy(out.separatingAxis, _castShape_penetrationDepth.penetrationAxis);
-        vec3.copy(out.pointA, _castShape_penetrationDepth.pointA);
-        vec3.copy(out.pointB, _castShape_penetrationDepth.pointB);
+        out.separatingAxis[0] = _castShape_penetrationDepth.penetrationAxis[0];
+        out.separatingAxis[1] = _castShape_penetrationDepth.penetrationAxis[1];
+        out.separatingAxis[2] = _castShape_penetrationDepth.penetrationAxis[2];
+
+        out.pointA[0] = _castShape_penetrationDepth.pointA[0];
+        out.pointA[1] = _castShape_penetrationDepth.pointA[1];
+        out.pointA[2] = _castShape_penetrationDepth.pointA[2];
+
+        out.pointB[0] = _castShape_penetrationDepth.pointB[0];
+        out.pointB[1] = _castShape_penetrationDepth.pointB[1];
+        out.pointB[2] = _castShape_penetrationDepth.pointB[2];
     } else if (contactNormalInvalid) {
         // if we weren't able to calculate a contact normal, use the cast direction instead
-        vec3.copy(out.separatingAxis, displacement);
+        out.separatingAxis[0] = displacement[0];
+        out.separatingAxis[1] = displacement[1];
+        out.separatingAxis[2] = displacement[2];
     }
 }
