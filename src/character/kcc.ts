@@ -364,7 +364,7 @@ export type CharacterListener = {
 const _create_supportingVolume = /* @__PURE__ */ vec4.create();
 
 /** default settings for kinematic character controller when settings are not specified */
-const DEFAULT_KCC_SETTINGS = {
+export const DEFAULT_KCC_SETTINGS = {
     up: [0, 1, 0] as Vec3,
     mass: 70,
     maxStrength: 100,
