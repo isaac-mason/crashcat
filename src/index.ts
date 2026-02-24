@@ -128,3 +128,4 @@ export * from './world-settings';
 export type { KCC, KCCSettings } from './character/kcc';
 export * as kcc from './character/kcc';
 
+export * as debug from './debug';

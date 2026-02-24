@@ -8,6 +8,7 @@
 - feat: add `estimateCollisionResponse()` utility for estimating collision impulses from contact manifolds
 - feat: change `castRayVsShape` signature to flatten `ray: Raycast3` to `originX, originY, originZ, directionX, directionY, directionZ, length`
 - feat: export `kcc.DEFAULT_KCC_SETTINGS`
+- feat: add renderer agnostic `debug` utils for drawing debug lines for bodies, contacts, joints
 
 ## v0.0.1
 
