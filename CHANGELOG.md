@@ -7,6 +7,7 @@
 - feat: rename `kcc.setRotation()` to `kcc.setQuaternion()`
 - feat: add `estimateCollisionResponse()` utility for estimating collision impulses from contact manifolds
 - feat: change `castRayVsShape` signature to flatten `ray: Raycast3` to `originX, originY, originZ, directionX, directionY, directionZ, length`
+- feat: export `kcc.DEFAULT_KCC_SETTINGS`
 
 ## v0.0.1
 
