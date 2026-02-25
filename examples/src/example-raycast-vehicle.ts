@@ -965,6 +965,8 @@ function createVehicleDebug(vehicle: Vehicle): VehicleDebug {
     };
 }
 
+const _updateVehicleDebug_suspOffset = vec3.create();
+
 function updateVehicleDebug(vehicle: Vehicle, debug: VehicleDebug): void {
     const offsetX = 0.1; // offset to separate the lines visually
 
@@ -992,8 +994,10 @@ function updateVehicleDebug(vehicle: Vehicle, debug: VehicleDebug): void {
         const maxSuspensionLength = wheel.options.suspensionRestLength + wheel.options.maxSuspensionTravel;
         const rayLength = wheel.options.radius + maxSuspensionLength;
 
-        // suspension offset: left wheels (-X), right wheels (+X)
-        const suspOffset = i % 2 === 0 ? -offsetX : offsetX;
+        // suspension offset: left wheels (-X), right wheels (+X), rotated by chassis orientation
+        const localOffset = i % 2 === 0 ? -offsetX : offsetX;
+        vec3.set(_updateVehicleDebug_suspOffset, localOffset, 0, 0);
+        vec3.transformQuat(_updateVehicleDebug_suspOffset, _updateVehicleDebug_suspOffset, vehicle.chassisBody.quaternion);
 
         // compute hit distance (or full ray length if no hit)
         const hitDistance = wheel.state.inContactWithGround ? wheel.state.suspensionLength + wheel.options.radius : rayLength;
@@ -1033,12 +1037,12 @@ function updateVehicleDebug(vehicle: Vehicle, debug: VehicleDebug): void {
         const suspensionLine = debug.suspensionLines[i];
         const suspensionPos = suspensionLine.geometry.attributes.position.array as Float32Array;
         const suspLen = Math.max(0, wheel.state.suspensionLength);
-        suspensionPos[0] = origin[0] + suspOffset;
-        suspensionPos[1] = origin[1];
-        suspensionPos[2] = origin[2];
-        suspensionPos[3] = origin[0] + suspOffset + dirX * suspLen;
-        suspensionPos[4] = origin[1] + dirY * suspLen;
-        suspensionPos[5] = origin[2] + dirZ * suspLen;
+        suspensionPos[0] = origin[0] + _updateVehicleDebug_suspOffset[0];
+        suspensionPos[1] = origin[1] + _updateVehicleDebug_suspOffset[1];
+        suspensionPos[2] = origin[2] + _updateVehicleDebug_suspOffset[2];
+        suspensionPos[3] = origin[0] + _updateVehicleDebug_suspOffset[0] + dirX * suspLen;
+        suspensionPos[4] = origin[1] + _updateVehicleDebug_suspOffset[1] + dirY * suspLen;
+        suspensionPos[5] = origin[2] + _updateVehicleDebug_suspOffset[2] + dirZ * suspLen;
         suspensionLine.geometry.attributes.position.needsUpdate = true;
     }
 }
