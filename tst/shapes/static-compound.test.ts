@@ -78,12 +78,12 @@ describe('StaticCompoundShape AABB', () => {
             children: [{ position: vec3.create(), quaternion: quat.create(), shape: s }],
         });
 
-        expect(shape.aabb[0][0]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[0][1]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[0][2]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[1][0]).toBeCloseTo(1, 5);
-        expect(shape.aabb[1][1]).toBeCloseTo(1, 5);
-        expect(shape.aabb[1][2]).toBeCloseTo(1, 5);
+        expect(shape.aabb[0]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[1]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[2]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[3]).toBeCloseTo(1, 5);
+        expect(shape.aabb[4]).toBeCloseTo(1, 5);
+        expect(shape.aabb[5]).toBeCloseTo(1, 5);
     });
 
     test('should have correct AABB for offset children', () => {
@@ -99,12 +99,12 @@ describe('StaticCompoundShape AABB', () => {
         // sphere at origin: [-1, -1, -1] to [1, 1, 1]
         // box at (10, 0, 0): [9, -1, -1] to [11, 1, 1]
         // union: [-1, -1, -1] to [11, 1, 1]
-        expect(shape.aabb[0][0]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[0][1]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[0][2]).toBeCloseTo(-1, 5);
-        expect(shape.aabb[1][0]).toBeCloseTo(11, 5);
-        expect(shape.aabb[1][1]).toBeCloseTo(1, 5);
-        expect(shape.aabb[1][2]).toBeCloseTo(1, 5);
+        expect(shape.aabb[0]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[1]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[2]).toBeCloseTo(-1, 5);
+        expect(shape.aabb[3]).toBeCloseTo(11, 5);
+        expect(shape.aabb[4]).toBeCloseTo(1, 5);
+        expect(shape.aabb[5]).toBeCloseTo(1, 5);
     });
 });
 
@@ -181,7 +181,7 @@ describe('StaticCompoundShape update', () => {
 
         // BVH should be rebuilt
         expect(shape.bvh.buffer.length).toBeGreaterThanOrEqual(originalBufferLength);
-        expect(shape.aabb[1][0]).toBeCloseTo(11, 5);
+        expect(shape.aabb[3]).toBeCloseTo(11, 5);
     });
 });
 
@@ -503,11 +503,11 @@ describe('StaticCompoundShape vs CompoundShape parity', () => {
         // sphere at origin: [-1,-1,-1] to [1,1,1]
         // box at (5,0,0): [3,-2,-2] to [7,2,2]
         // result: [-1,-2,-2] to [7,2,2]
-        expect(staticShape.aabb[0][0]).toBeCloseTo(-1, 5);
-        expect(staticShape.aabb[0][1]).toBeCloseTo(-2, 5);
-        expect(staticShape.aabb[0][2]).toBeCloseTo(-2, 5);
-        expect(staticShape.aabb[1][0]).toBeCloseTo(7, 5);
-        expect(staticShape.aabb[1][1]).toBeCloseTo(2, 5);
-        expect(staticShape.aabb[1][2]).toBeCloseTo(2, 5);
+        expect(staticShape.aabb[0]).toBeCloseTo(-1, 5);
+        expect(staticShape.aabb[1]).toBeCloseTo(-2, 5);
+        expect(staticShape.aabb[2]).toBeCloseTo(-2, 5);
+        expect(staticShape.aabb[3]).toBeCloseTo(7, 5);
+        expect(staticShape.aabb[4]).toBeCloseTo(2, 5);
+        expect(staticShape.aabb[5]).toBeCloseTo(2, 5);
     });
 });

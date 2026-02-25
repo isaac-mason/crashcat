@@ -80,22 +80,19 @@ function computeVolume(shape: StaticCompoundShape): number {
 const _computeLocalBounds_transformed = /* @__PURE__ */ vec3.create();
 
 function computeLocalBounds(out: Box3, shape: StaticCompoundShape): void {
-    out[0][0] = Infinity;
-    out[0][1] = Infinity;
-    out[0][2] = Infinity;
-    out[1][0] = -Infinity;
-    out[1][1] = -Infinity;
-    out[1][2] = -Infinity;
+    box3.empty(out);
 
     for (const child of shape.children) {
         const childAABB = child.shape.aabb;
+        const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
+        const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
 
         for (let x = 0; x < 2; x++) {
             for (let y = 0; y < 2; y++) {
                 for (let z = 0; z < 2; z++) {
-                    _computeLocalBounds_transformed[0] = childAABB[x][0];
-                    _computeLocalBounds_transformed[1] = childAABB[y][1];
-                    _computeLocalBounds_transformed[2] = childAABB[z][2];
+                    _computeLocalBounds_transformed[0] = x === 0 ? minX : maxX;
+                    _computeLocalBounds_transformed[1] = y === 0 ? minY : maxY;
+                    _computeLocalBounds_transformed[2] = z === 0 ? minZ : maxZ;
 
                     vec3.transformQuat(_computeLocalBounds_transformed, _computeLocalBounds_transformed, child.quaternion);
                     vec3.add(_computeLocalBounds_transformed, _computeLocalBounds_transformed, child.position);
@@ -505,7 +502,7 @@ function castRay(
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(buffer, leftOffset, _castRayVsStaticCompound_nodeBounds);
+            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, leftOffset);
             const leftDist = rayDistanceToBox3(
                 localOriginX,
                 localOriginY,
@@ -517,7 +514,7 @@ function castRay(
                 _castRayVsStaticCompound_nodeBounds,
             );
 
-            bvh.nodeGetBounds(buffer, rightOffset, _castRayVsStaticCompound_nodeBounds);
+            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
             const rightDist = rayDistanceToBox3(
                 localOriginX,
                 localOriginY,
@@ -710,7 +707,7 @@ const _collideStaticCompoundVsShape_worldRot = /* @__PURE__ */ quat.create();
 const _collideStaticCompoundVsShape_transformedTranslation = /* @__PURE__ */ vec3.create();
 
 const _collideStaticCompoundVsShape_queryBounds = /* @__PURE__ */ box3.create();
-const _collideStaticCompoundVsShape_corner = /* @__PURE__ */ vec3.create();
+const _collideStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create();
 
 const _collideStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _collideStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
@@ -773,37 +770,20 @@ function collideStaticCompoundVsShape(
 
     // transform shapeB's local AABB to compound A's local space
     const queryBounds = _collideStaticCompoundVsShape_queryBounds;
-    const aabbB = shapeB.aabb;
-    const minB = aabbB[0];
-    const maxB = aabbB[1];
-    const corner = _collideStaticCompoundVsShape_corner;
-
-    // initialize bounds with first corner
-    vec3.set(corner, minB[0], minB[1], minB[2]);
-    vec3.transformQuat(corner, corner, _collideStaticCompoundVsShape_localQuatB);
-    vec3.add(corner, corner, _collideStaticCompoundVsShape_localPosB);
-    vec3.copy(queryBounds[0], corner);
-    vec3.copy(queryBounds[1], corner);
-
-    // expand with remaining 7 corners
-    const cornersX = [minB[0], maxB[0], minB[0], maxB[0], minB[0], maxB[0], maxB[0]];
-    const cornersY = [minB[1], minB[1], maxB[1], maxB[1], minB[1], maxB[1], minB[1]];
-    const cornersZ = [minB[2], minB[2], minB[2], minB[2], maxB[2], maxB[2], maxB[2]];
-
-    for (let c = 0; c < 7; c++) {
-        vec3.set(corner, cornersX[c], cornersY[c], cornersZ[c]);
-        vec3.transformQuat(corner, corner, _collideStaticCompoundVsShape_localQuatB);
-        vec3.add(corner, corner, _collideStaticCompoundVsShape_localPosB);
-        box3.expandByPoint(queryBounds, queryBounds, corner);
-    }
+    mat4.fromRotationTranslation(
+        _collideStaticCompoundVsShape_aabbTransform,
+        _collideStaticCompoundVsShape_localQuatB,
+        _collideStaticCompoundVsShape_localPosB,
+    );
+    box3.transformMat4(queryBounds, shapeB.aabb, _collideStaticCompoundVsShape_aabbTransform);
 
     // expand by max separation distance
-    queryBounds[0][0] -= settings.maxSeparationDistance;
-    queryBounds[0][1] -= settings.maxSeparationDistance;
-    queryBounds[0][2] -= settings.maxSeparationDistance;
-    queryBounds[1][0] += settings.maxSeparationDistance;
-    queryBounds[1][1] += settings.maxSeparationDistance;
-    queryBounds[1][2] += settings.maxSeparationDistance;
+    queryBounds[0] -= settings.maxSeparationDistance;
+    queryBounds[1] -= settings.maxSeparationDistance;
+    queryBounds[2] -= settings.maxSeparationDistance;
+    queryBounds[3] += settings.maxSeparationDistance;
+    queryBounds[4] += settings.maxSeparationDistance;
+    queryBounds[5] += settings.maxSeparationDistance;
 
     bvhStack.reset(_collideStaticCompoundVsShape_stack);
     bvhStack.push(_collideStaticCompoundVsShape_stack, 0, 0);
@@ -819,12 +799,12 @@ function collideStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0][0],
-                queryBounds[0][1],
-                queryBounds[0][2],
-                queryBounds[1][0],
-                queryBounds[1][1],
-                queryBounds[1][2],
+                queryBounds[0],
+                queryBounds[1],
+                queryBounds[2],
+                queryBounds[3],
+                queryBounds[4],
+                queryBounds[5],
             )
         ) {
             continue;
@@ -990,12 +970,12 @@ function collideShapeVsStaticCompound(
     box3.transformMat4(queryBounds, shapeA.aabb, aabbMatrix);
 
     // expand by max separation distance
-    queryBounds[0][0] -= settings.maxSeparationDistance;
-    queryBounds[0][1] -= settings.maxSeparationDistance;
-    queryBounds[0][2] -= settings.maxSeparationDistance;
-    queryBounds[1][0] += settings.maxSeparationDistance;
-    queryBounds[1][1] += settings.maxSeparationDistance;
-    queryBounds[1][2] += settings.maxSeparationDistance;
+    queryBounds[0] -= settings.maxSeparationDistance;
+    queryBounds[1] -= settings.maxSeparationDistance;
+    queryBounds[2] -= settings.maxSeparationDistance;
+    queryBounds[3] += settings.maxSeparationDistance;
+    queryBounds[4] += settings.maxSeparationDistance;
+    queryBounds[5] += settings.maxSeparationDistance;
 
     bvhStack.reset(_collideShapeVsStaticCompound_stack);
     bvhStack.push(_collideShapeVsStaticCompound_stack, 0, 0);
@@ -1010,12 +990,12 @@ function collideShapeVsStaticCompound(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0][0],
-                queryBounds[0][1],
-                queryBounds[0][2],
-                queryBounds[1][0],
-                queryBounds[1][1],
-                queryBounds[1][2],
+                queryBounds[0],
+                queryBounds[1],
+                queryBounds[2],
+                queryBounds[3],
+                queryBounds[4],
+                queryBounds[5],
             )
         ) {
             continue;
@@ -1112,8 +1092,8 @@ const _castStaticCompoundVsShape_transformedTranslation = /* @__PURE__ */ vec3.c
 const _castStaticCompoundVsShape_displacementA = /* @__PURE__ */ vec3.create();
 
 const _castStaticCompoundVsShape_queryBounds = /* @__PURE__ */ box3.create();
-const _castStaticCompoundVsShape_corner = /* @__PURE__ */ vec3.create();
-const _castStaticCompoundVsShape_endCorner = /* @__PURE__ */ vec3.create();
+const _castStaticCompoundVsShape_endBounds = /* @__PURE__ */ box3.create();
+const _castStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create();
 
 const _castStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _castStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
@@ -1189,39 +1169,26 @@ function castStaticCompoundVsShape(
         _castStaticCompoundVsShape_invQuatA,
     );
 
-    // compute swept bounds of shapeB in compound A's local space
+    // compute swept bounds of shapeB in compound A's local space:
+    // transform shapeB AABB by localQuatB+localPosB to get start bounds,
+    // then translate by localDispA to get end bounds, and union them.
     const queryBounds = _castStaticCompoundVsShape_queryBounds;
-    const aabbB = shapeB.aabb;
-    const minB = aabbB[0];
-    const maxB = aabbB[1];
-    const corner = _castStaticCompoundVsShape_corner;
-    const endCorner = _castStaticCompoundVsShape_endCorner;
-
-    // initialize with first corner at start position
-    vec3.set(corner, minB[0], minB[1], minB[2]);
-    vec3.transformQuat(corner, corner, _castStaticCompoundVsShape_localQuatB);
-    vec3.add(corner, corner, _castStaticCompoundVsShape_localPosB);
-    vec3.copy(queryBounds[0], corner);
-    vec3.copy(queryBounds[1], corner);
-
-    // also include end position
-    vec3.add(endCorner, corner, _castStaticCompoundVsShape_localDispA);
-    box3.expandByPoint(queryBounds, queryBounds, endCorner);
-
-    // expand with remaining 7 corners at both start and end positions
-    const cornersX = [minB[0], maxB[0], minB[0], maxB[0], minB[0], maxB[0], maxB[0]];
-    const cornersY = [minB[1], minB[1], maxB[1], maxB[1], minB[1], maxB[1], minB[1]];
-    const cornersZ = [minB[2], minB[2], minB[2], minB[2], maxB[2], maxB[2], maxB[2]];
-
-    for (let c = 0; c < 7; c++) {
-        vec3.set(corner, cornersX[c], cornersY[c], cornersZ[c]);
-        vec3.transformQuat(corner, corner, _castStaticCompoundVsShape_localQuatB);
-        vec3.add(corner, corner, _castStaticCompoundVsShape_localPosB);
-        box3.expandByPoint(queryBounds, queryBounds, corner);
-        // also include end position
-        vec3.add(endCorner, corner, _castStaticCompoundVsShape_localDispA);
-        box3.expandByPoint(queryBounds, queryBounds, endCorner);
-    }
+    const endBounds = _castStaticCompoundVsShape_endBounds;
+    const localDisp = _castStaticCompoundVsShape_localDispA;
+    mat4.fromRotationTranslation(
+        _castStaticCompoundVsShape_aabbTransform,
+        _castStaticCompoundVsShape_localQuatB,
+        _castStaticCompoundVsShape_localPosB,
+    );
+    box3.transformMat4(queryBounds, shapeB.aabb, _castStaticCompoundVsShape_aabbTransform);
+    // end bounds = start bounds translated by displacement
+    endBounds[0] = queryBounds[0] + localDisp[0];
+    endBounds[1] = queryBounds[1] + localDisp[1];
+    endBounds[2] = queryBounds[2] + localDisp[2];
+    endBounds[3] = queryBounds[3] + localDisp[0];
+    endBounds[4] = queryBounds[4] + localDisp[1];
+    endBounds[5] = queryBounds[5] + localDisp[2];
+    box3.union(queryBounds, queryBounds, endBounds);
 
     bvhStack.reset(_castStaticCompoundVsShape_stack);
     bvhStack.push(_castStaticCompoundVsShape_stack, 0, 0);
@@ -1237,12 +1204,12 @@ function castStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0][0],
-                queryBounds[0][1],
-                queryBounds[0][2],
-                queryBounds[1][0],
-                queryBounds[1][1],
-                queryBounds[1][2],
+                queryBounds[0],
+                queryBounds[1],
+                queryBounds[2],
+                queryBounds[3],
+                queryBounds[4],
+                queryBounds[5],
             )
         ) {
             continue;
@@ -1448,9 +1415,9 @@ function castShapeVsStaticCompound(
 
     // compute centroid of base AABB
     const ray = _castShapeVsStaticCompound_raycast;
-    ray.origin[0] = (_castShapeVsStaticCompound_sweptAABB[0][0] + _castShapeVsStaticCompound_sweptAABB[1][0]) * 0.5;
-    ray.origin[1] = (_castShapeVsStaticCompound_sweptAABB[0][1] + _castShapeVsStaticCompound_sweptAABB[1][1]) * 0.5;
-    ray.origin[2] = (_castShapeVsStaticCompound_sweptAABB[0][2] + _castShapeVsStaticCompound_sweptAABB[1][2]) * 0.5;
+    ray.origin[0] = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
+    ray.origin[1] = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * 0.5;
+    ray.origin[2] = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * 0.5;
 
     // compute ray direction and length from displacement
     ray.length = vec3.length(_castShapeVsStaticCompound_displacementInB);
@@ -1464,9 +1431,9 @@ function castShapeVsStaticCompound(
 
     // compute half-extents of the base AABB
     const halfExtents = _castShapeVsStaticCompound_halfExtents;
-    halfExtents[0] = (_castShapeVsStaticCompound_sweptAABB[1][0] - _castShapeVsStaticCompound_sweptAABB[0][0]) * 0.5;
-    halfExtents[1] = (_castShapeVsStaticCompound_sweptAABB[1][1] - _castShapeVsStaticCompound_sweptAABB[0][1]) * 0.5;
-    halfExtents[2] = (_castShapeVsStaticCompound_sweptAABB[1][2] - _castShapeVsStaticCompound_sweptAABB[0][2]) * 0.5;
+    halfExtents[0] = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
+    halfExtents[1] = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
+    halfExtents[2] = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
 
     bvhStack.reset(_castShapeVsStaticCompound_stack);
     bvhStack.push(_castShapeVsStaticCompound_stack, 0, 0); // root always visited
@@ -1502,12 +1469,12 @@ function castShapeVsStaticCompound(
                 box3.copy(childBounds, _computeChildAABB_result);
 
                 // expand by half-extents
-                childBounds[0][0] -= halfExtents[0];
-                childBounds[0][1] -= halfExtents[1];
-                childBounds[0][2] -= halfExtents[2];
-                childBounds[1][0] += halfExtents[0];
-                childBounds[1][1] += halfExtents[1];
-                childBounds[1][2] += halfExtents[2];
+                childBounds[0] -= halfExtents[0];
+                childBounds[1] -= halfExtents[1];
+                childBounds[2] -= halfExtents[2];
+                childBounds[3] += halfExtents[0];
+                childBounds[4] += halfExtents[1];
+                childBounds[5] += halfExtents[2];
 
                 // early out: ray x child expanded bounds
                 if (!raycast3.intersectsBox3(ray, childBounds)) {
@@ -1587,12 +1554,12 @@ function castShapeVsStaticCompound(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // expand bounds by half-extents (same as child test)
-            expandedBounds[0][0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[0][1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[0][2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[1][0] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[1][1] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[1][2] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const leftDist = rayDistanceToBox3(
                 ray.origin[0],
                 ray.origin[1],
@@ -1604,12 +1571,12 @@ function castShapeVsStaticCompound(
                 expandedBounds,
             );
 
-            expandedBounds[0][0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[0][1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[0][2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[1][0] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[1][1] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[1][2] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const rightDist = rayDistanceToBox3(
                 ray.origin[0],
                 ray.origin[1],

@@ -70,24 +70,21 @@ const _computeCompoundLocalBounds_transformed = /* @__PURE__ */ vec3.create();
 
 function computeCompoundLocalBounds(out: Box3, shape: CompoundShape): void {
     // start with empty bounds
-    out[0][0] = Infinity;
-    out[0][1] = Infinity;
-    out[0][2] = Infinity;
-    out[1][0] = -Infinity;
-    out[1][1] = -Infinity;
-    out[1][2] = -Infinity;
+    box3.empty(out);
 
     for (const child of shape.children) {
         // Transform child AABB corners by child position and rotation
         const childAABB = child.shape.aabb;
+        const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
+        const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
 
         // Transform all 8 corners of the child AABB
         for (let x = 0; x < 2; x++) {
             for (let y = 0; y < 2; y++) {
                 for (let z = 0; z < 2; z++) {
-                    _computeCompoundLocalBounds_transformed[0] = childAABB[x][0];
-                    _computeCompoundLocalBounds_transformed[1] = childAABB[y][1];
-                    _computeCompoundLocalBounds_transformed[2] = childAABB[z][2];
+                    _computeCompoundLocalBounds_transformed[0] = x === 0 ? minX : maxX;
+                    _computeCompoundLocalBounds_transformed[1] = y === 0 ? minY : maxY;
+                    _computeCompoundLocalBounds_transformed[2] = z === 0 ? minZ : maxZ;
 
                     // Rotate and translate corner
                     vec3.transformQuat(

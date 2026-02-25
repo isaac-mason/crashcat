@@ -131,12 +131,12 @@ export function computeSweptAABB(out: Box3, body: RigidBody, displacement: Vec3)
 
     // end AABB (body AABB translated by displacement)
     // translate the AABB by adding displacement to both min and max
-    _computeSweptAABB_endAABB[0][0] = startAABB[0][0] + displacement[0];
-    _computeSweptAABB_endAABB[0][1] = startAABB[0][1] + displacement[1];
-    _computeSweptAABB_endAABB[0][2] = startAABB[0][2] + displacement[2];
-    _computeSweptAABB_endAABB[1][0] = startAABB[1][0] + displacement[0];
-    _computeSweptAABB_endAABB[1][1] = startAABB[1][1] + displacement[1];
-    _computeSweptAABB_endAABB[1][2] = startAABB[1][2] + displacement[2];
+    _computeSweptAABB_endAABB[0] = startAABB[0] + displacement[0];
+    _computeSweptAABB_endAABB[1] = startAABB[1] + displacement[1];
+    _computeSweptAABB_endAABB[2] = startAABB[2] + displacement[2];
+    _computeSweptAABB_endAABB[3] = startAABB[3] + displacement[0];
+    _computeSweptAABB_endAABB[4] = startAABB[4] + displacement[1];
+    _computeSweptAABB_endAABB[5] = startAABB[5] + displacement[2];
 
     // create union of start and end AABBs (swept AABB)
     box3.union(out, startAABB, _computeSweptAABB_endAABB);

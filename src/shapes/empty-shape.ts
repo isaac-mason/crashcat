@@ -1,4 +1,4 @@
-import { type Box3, quat, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import { defineShape, ShapeCategory, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
 
@@ -27,8 +27,8 @@ export type EmptyShape = {
 export function create(): EmptyShape {
     return {
         type: ShapeType.EMPTY,
-        // zero-size AABB at origin [min, max] both at [0,0,0]
-        aabb: [vec3.create(), vec3.create()],
+        // zero-size AABB at origin
+        aabb: box3.set(box3.create(), 0, 0, 0, 0, 0, 0),
         // center of mass at origin
         centerOfMass: vec3.create(),
         // zero volume

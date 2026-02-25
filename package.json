@@ -47,10 +47,10 @@
     },
     "packageManager": "pnpm@8.15.2+sha1.798034f615aa211c6c2ae00010cc20be5fc102ee",
     "dependencies": {
-        "mathcat": "0.0.10"
+        "mathcat": "0.0.11"
     },
     "peerDependencies": {
-        "mathcat": "0.0.10",
+        "mathcat": "0.0.11",
         "three": ">=0.182.0"
     },
     "peerDependenciesMeta": {

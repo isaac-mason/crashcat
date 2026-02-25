@@ -3,14 +3,14 @@ import type { Box3, Vec3 } from 'mathcat';
 /**
  * common BVH node utilities for binary tree structures.
  * shared between triangle mesh BVH and static compound BVH.
- * 
+ *
  * node layout (8 floats per node):
  * [minX, minY, minZ, maxX, maxY, maxZ, rightOrStart, axisOrCount]
- * 
+ *
  * internal nodes:
  * - rightOrStart: offset to right child
  * - axisOrCount: split axis (0-2)
- * 
+ *
  * leaf nodes:
  * - rightOrStart: start index of primitives
  * - axisOrCount: -(count + 1) to encode leaf + count
@@ -54,17 +54,17 @@ export function nodeSplitAxis(buffer: number[], offset: number): number {
 }
 
 /** copy bounds into existing Box3 */
-export function nodeGetBounds(buffer: number[], offset: number, out: Box3): void {
-    out[0][0] = buffer[offset + NODE_MIN_X];
-    out[0][1] = buffer[offset + NODE_MIN_Y];
-    out[0][2] = buffer[offset + NODE_MIN_Z];
-    out[1][0] = buffer[offset + NODE_MAX_X];
-    out[1][1] = buffer[offset + NODE_MAX_Y];
-    out[1][2] = buffer[offset + NODE_MAX_Z];
+export function nodeGetBounds(out: Box3, buffer: number[], offset: number): void {
+    out[0] = buffer[offset + NODE_MIN_X];
+    out[1] = buffer[offset + NODE_MIN_Y];
+    out[2] = buffer[offset + NODE_MIN_Z];
+    out[3] = buffer[offset + NODE_MAX_X];
+    out[4] = buffer[offset + NODE_MAX_Y];
+    out[5] = buffer[offset + NODE_MAX_Z];
 }
 
 /** get center of node bounds */
-export function nodeGetCenter(buffer: number[], offset: number, out: Vec3): void {
+export function nodeGetCenter(out: Vec3, buffer: number[], offset: number): void {
     out[0] = (buffer[offset + NODE_MIN_X] + buffer[offset + NODE_MAX_X]) * 0.5;
     out[1] = (buffer[offset + NODE_MIN_Y] + buffer[offset + NODE_MAX_Y]) * 0.5;
     out[2] = (buffer[offset + NODE_MIN_Z] + buffer[offset + NODE_MAX_Z]) * 0.5;

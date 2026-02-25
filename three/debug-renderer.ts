@@ -2108,37 +2108,37 @@ function updateBroadphaseDbvt(state: State, world: World): void {
                 : layerColorsNonLeaf[layerIndex % layerColorsNonLeaf.length];
 
             // Add box wireframe for this node
-            const min = node.aabb[0];
-            const max = node.aabb[1];
+            const minX = node.aabb[0], minY = node.aabb[1], minZ = node.aabb[2];
+            const maxX = node.aabb[3], maxY = node.aabb[4], maxZ = node.aabb[5];
 
             // Bottom face (4 edges)
-            positions.push(min[0], min[1], min[2], max[0], min[1], min[2]);
+            positions.push(minX, minY, minZ, maxX, minY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], min[2], max[0], min[1], max[2]);
+            positions.push(maxX, minY, minZ, maxX, minY, maxZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], max[2], min[0], min[1], max[2]);
+            positions.push(maxX, minY, maxZ, minX, minY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], min[1], max[2], min[0], min[1], min[2]);
+            positions.push(minX, minY, maxZ, minX, minY, minZ);
             colors.push(...color, ...color);
 
             // Top face (4 edges)
-            positions.push(min[0], max[1], min[2], max[0], max[1], min[2]);
+            positions.push(minX, maxY, minZ, maxX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], max[1], min[2], max[0], max[1], max[2]);
+            positions.push(maxX, maxY, minZ, maxX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(max[0], max[1], max[2], min[0], max[1], max[2]);
+            positions.push(maxX, maxY, maxZ, minX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], max[1], max[2], min[0], max[1], min[2]);
+            positions.push(minX, maxY, maxZ, minX, maxY, minZ);
             colors.push(...color, ...color);
 
             // Vertical edges (4 edges)
-            positions.push(min[0], min[1], min[2], min[0], max[1], min[2]);
+            positions.push(minX, minY, minZ, minX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], min[2], max[0], max[1], min[2]);
+            positions.push(maxX, minY, minZ, maxX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], max[2], max[0], max[1], max[2]);
+            positions.push(maxX, minY, maxZ, maxX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], min[1], max[2], min[0], max[1], max[2]);
+            positions.push(minX, minY, maxZ, minX, maxY, maxZ);
             colors.push(...color, ...color);
 
             // Continue traversal

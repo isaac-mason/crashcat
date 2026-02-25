@@ -211,7 +211,7 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
     const planes: ConvexHullPlane[] = [];
     const vertexIndices: number[] = [];
     const localBounds = box3.create();
-    box3.set(localBounds, [Infinity, Infinity, Infinity], [-Infinity, -Infinity, -Infinity]);
+    box3.empty(localBounds);
 
     for (const builderFace of faces) {
         const firstVertex = vertexIndices.length;

@@ -82,12 +82,12 @@ function calculateVolume(halfHeight: number, radius: number): number {
 
 /** calculate AABB for cylinder */
 function calculateAABB(out: Box3, halfHeight: number, radius: number): void {
-    out[0][0] = -radius;
-    out[0][1] = -halfHeight;
-    out[0][2] = -radius;
-    out[1][0] = radius;
-    out[1][1] = halfHeight;
-    out[1][2] = radius;
+    out[0] = -radius;
+    out[1] = -halfHeight;
+    out[2] = -radius;
+    out[3] = radius;
+    out[4] = halfHeight;
+    out[5] = radius;
 }
 
 /** update cylinder shape's derived properties */

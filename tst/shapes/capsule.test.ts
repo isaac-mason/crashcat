@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import * as massProperties from '../../src/body/mass-properties';
 import { capsule, computeMassProperties } from '../../src';
+import * as massProperties from '../../src/body/mass-properties';
 
 describe('Capsule Shape', () => {
     describe('Factory Function', () => {
@@ -55,12 +55,12 @@ describe('Capsule Shape', () => {
             const c = capsule.create({ halfHeightOfCylinder: 2.0, radius: 0.5 });
             // AABB should be [-r, -(h+r), -r] to [r, h+r, r]
             // Box3 is [Vec3, Vec3] where [0] = min, [1] = max
-            expect(c.aabb[0][0]).toBeCloseTo(-0.5); // min X
-            expect(c.aabb[0][1]).toBeCloseTo(-2.5); // min Y
-            expect(c.aabb[0][2]).toBeCloseTo(-0.5); // min Z
-            expect(c.aabb[1][0]).toBeCloseTo(0.5); // max X
-            expect(c.aabb[1][1]).toBeCloseTo(2.5); // max Y
-            expect(c.aabb[1][2]).toBeCloseTo(0.5); // max Z
+            expect(c.aabb[0]).toBeCloseTo(-0.5); // min X
+            expect(c.aabb[1]).toBeCloseTo(-2.5); // min Y
+            expect(c.aabb[2]).toBeCloseTo(-0.5); // min Z
+            expect(c.aabb[3]).toBeCloseTo(0.5); // max X
+            expect(c.aabb[4]).toBeCloseTo(2.5); // max Y
+            expect(c.aabb[5]).toBeCloseTo(0.5); // max Z
         });
 
         test('should have center of mass at origin', () => {

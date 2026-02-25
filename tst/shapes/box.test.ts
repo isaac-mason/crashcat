@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
 import { vec3 } from 'mathcat';
+import { describe, expect, test } from 'vitest';
 import { box, computeMassProperties, ShapeType } from '../../src';
 import * as massProperties from '../../src/body/mass-properties';
 
@@ -8,12 +8,12 @@ describe('Box AABB caching', () => {
         const b = box.create({ halfExtents: vec3.fromValues(1, 2, 3) });
         expect(b.aabb).toBeDefined();
         // AABB should be [-he[i], -he[i], -he[i]] to [he[i], he[i], he[i]]
-        expect(b.aabb[0][0]).toBe(-1);
-        expect(b.aabb[0][1]).toBe(-2);
-        expect(b.aabb[0][2]).toBe(-3);
-        expect(b.aabb[1][0]).toBe(1);
-        expect(b.aabb[1][1]).toBe(2);
-        expect(b.aabb[1][2]).toBe(3);
+        expect(b.aabb[0]).toBe(-1);
+        expect(b.aabb[1]).toBe(-2);
+        expect(b.aabb[2]).toBe(-3);
+        expect(b.aabb[3]).toBe(1);
+        expect(b.aabb[4]).toBe(2);
+        expect(b.aabb[5]).toBe(3);
     });
 });
 

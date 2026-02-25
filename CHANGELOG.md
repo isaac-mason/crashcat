@@ -9,6 +9,7 @@
 - feat: change `castRayVsShape` signature to flatten `ray: Raycast3` to `originX, originY, originZ, directionX, directionY, directionZ, length`
 - feat: export `kcc.DEFAULT_KCC_SETTINGS`
 - feat: add renderer agnostic `debug` utils for drawing debug lines for bodies, contacts, joints
+- feat: update mathcat to v0.0.11, update `Box3` usage, changed from `[min: Vec3, max: Vec3]` to `[minX, minY, minZ, maxX, maxY, maxZ]`
 
 ## v0.0.1
 

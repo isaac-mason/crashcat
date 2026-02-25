@@ -223,10 +223,7 @@ console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
 // useful when you need custom traversal logic or want to avoid narrowphase overhead
 
 // intersectAABB: find all bodies whose AABBs overlap a box
-const queryAABB: Box3 = [
-    [-5, -5, -5],
-    [5, 5, 5],
-];
+const queryAABB: Box3 = [-5, -5, -5, 5, 5, 5];
 
 const aabbVisitor: BodyVisitor = {
     shouldExit: false,

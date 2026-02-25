@@ -1072,7 +1072,7 @@ describe('Body - wakeInAABB', () => {
         expect(body3.sleeping).toBe(true);
 
         // define AABB that covers body1 and body2 but not body3
-        const aabb: Box3 = [[-2, -2, -2], [7, 2, 2]];
+        const aabb: Box3 = [-2, -2, -2, 7, 2, 2];
 
         // wake bodies in AABB
         rigidBody.wakeInAABB(world, aabb);
@@ -1102,7 +1102,7 @@ describe('Body - wakeInAABB', () => {
 
         rigidBody.sleep(world, dynamicBody);
 
-        const aabb: Box3 = [[-2, -2, -2], [4, 2, 2]];
+        const aabb: Box3 = [-2, -2, -2, 4, 2, 2];
 
         rigidBody.wakeInAABB(world, aabb);
 
@@ -1125,7 +1125,7 @@ describe('Body - wakeInAABB', () => {
         rigidBody.sleep(world, kinematicBody);
         expect(kinematicBody.sleeping).toBe(true);
 
-        const aabb: Box3 = [[-2, -2, -2], [2, 2, 2]];
+        const aabb: Box3 = [-2, -2, -2, 2, 2, 2];
 
         rigidBody.wakeInAABB(world, aabb);
 
@@ -1147,7 +1147,7 @@ describe('Body - wakeInAABB', () => {
         rigidBody.sleep(world, body);
 
         // AABB that doesn't contain any bodies
-        const aabb: Box3 = [[100, 100, 100], [110, 110, 110]];
+        const aabb: Box3 = [100, 100, 100, 110, 110, 110];
 
         rigidBody.wakeInAABB(world, aabb);
 
@@ -1175,7 +1175,7 @@ describe('Body - wakeInAABB', () => {
         rigidBody.sleep(world, sleepingBody);
         // awakeBody is already awake (default state)
 
-        const aabb: Box3 = [[-2, -2, -2], [4, 2, 2]];
+        const aabb: Box3 = [-2, -2, -2, 4, 2, 2];
 
         rigidBody.wakeInAABB(world, aabb);
 

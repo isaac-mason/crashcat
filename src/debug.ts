@@ -701,11 +701,11 @@ export function contactConstraints(world: World, _options?: Partial<ContactConst
     return finalizeLineBuffer(out);
 }
 
-const _worldXAxis: Vec3 = /* @__PURE__ */ [1, 0, 0];
-const _worldYAxis: Vec3 = /* @__PURE__ */ [0, 1, 0];
-const _worldZAxis: Vec3 = /* @__PURE__ */ [0, 0, 1];
+const _worldXAxis: Vec3 = [1, 0, 0];
+const _worldYAxis: Vec3 = [0, 1, 0];
+const _worldZAxis: Vec3 = [0, 0, 1];
 const _constraintNormalAxis  = /* @__PURE__ */ vec3.create();
-const _constraintSpaceQuat     = /* @__PURE__ */ quat.create();
+const _constraintSpaceQuat = /* @__PURE__ */ quat.create();
 
 /**
  * Render joint/constraint axes and limits.

@@ -71,13 +71,13 @@ function computeScaledLocalBounds(out: Box3, shape: ScaledShape): void {
     const scaleY = Math.abs(shape.scale[1]);
     const scaleZ = Math.abs(shape.scale[2]);
 
-    out[0][0] = innerAABB[0][0] * scaleX;
-    out[0][1] = innerAABB[0][1] * scaleY;
-    out[0][2] = innerAABB[0][2] * scaleZ;
+    out[0] = innerAABB[0] * scaleX;
+    out[1] = innerAABB[1] * scaleY;
+    out[2] = innerAABB[2] * scaleZ;
 
-    out[1][0] = innerAABB[1][0] * scaleX;
-    out[1][1] = innerAABB[1][1] * scaleY;
-    out[1][2] = innerAABB[1][2] * scaleZ;
+    out[3] = innerAABB[3] * scaleX;
+    out[4] = innerAABB[4] * scaleY;
+    out[5] = innerAABB[5] * scaleZ;
 }
 
 function computeScaledCenterOfMass(out: Vec3, shape: ScaledShape): void {

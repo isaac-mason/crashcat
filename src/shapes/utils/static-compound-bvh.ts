@@ -100,12 +100,12 @@ function precomputeChildBuildData(
 
         computeChildBounds(childBounds, child);
 
-        const minX = childBounds[0][0];
-        const minY = childBounds[0][1];
-        const minZ = childBounds[0][2];
-        const maxX = childBounds[1][0];
-        const maxY = childBounds[1][1];
-        const maxZ = childBounds[1][2];
+        const minX = childBounds[0];
+        const minY = childBounds[1];
+        const minZ = childBounds[2];
+        const maxX = childBounds[3];
+        const maxY = childBounds[4];
+        const maxZ = childBounds[5];
 
         const centerX = (minX + maxX) * 0.5;
         const centerY = (minY + maxY) * 0.5;
@@ -207,12 +207,12 @@ function countNodes(node: TempBvhNode): number {
 /** write nodes to buffer in pre-order. returns next available offset. */
 function populateBuffer(buffer: number[], node: TempBvhNode, offset: number): number {
     // write bounds
-    buffer[offset + NODE_MIN_X] = node.bounds[0][0];
-    buffer[offset + NODE_MIN_Y] = node.bounds[0][1];
-    buffer[offset + NODE_MIN_Z] = node.bounds[0][2];
-    buffer[offset + NODE_MAX_X] = node.bounds[1][0];
-    buffer[offset + NODE_MAX_Y] = node.bounds[1][1];
-    buffer[offset + NODE_MAX_Z] = node.bounds[1][2];
+    buffer[offset + NODE_MIN_X] = node.bounds[0];
+    buffer[offset + NODE_MIN_Y] = node.bounds[1];
+    buffer[offset + NODE_MIN_Z] = node.bounds[2];
+    buffer[offset + NODE_MAX_X] = node.bounds[3];
+    buffer[offset + NODE_MAX_Y] = node.bounds[4];
+    buffer[offset + NODE_MAX_Z] = node.bounds[5];
 
     if (node.left === null) {
         // leaf node
@@ -265,12 +265,12 @@ function buildRecursive(
         const cz = buildData[offset + BUILD_DATA_CENTER_Z];
         const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
 
-        node.bounds[0][0] = cx - hx;
-        node.bounds[0][1] = cy - hy;
-        node.bounds[0][2] = cz - hz;
-        node.bounds[1][0] = cx + hx;
-        node.bounds[1][1] = cy + hy;
-        node.bounds[1][2] = cz + hz;
+        node.bounds[0] = cx - hx;
+        node.bounds[1] = cy - hy;
+        node.bounds[2] = cz - hz;
+        node.bounds[3] = cx + hx;
+        node.bounds[4] = cy + hy;
+        node.bounds[5] = cz + hz;
 
         _centerMin[0] = cx;
         _centerMin[1] = cy;
@@ -295,12 +295,12 @@ function buildRecursive(
             const maxY = cy + hy;
             const maxZ = cz + hz;
 
-            if (minX < node.bounds[0][0]) node.bounds[0][0] = minX;
-            if (minY < node.bounds[0][1]) node.bounds[0][1] = minY;
-            if (minZ < node.bounds[0][2]) node.bounds[0][2] = minZ;
-            if (maxX > node.bounds[1][0]) node.bounds[1][0] = maxX;
-            if (maxY > node.bounds[1][1]) node.bounds[1][1] = maxY;
-            if (maxZ > node.bounds[1][2]) node.bounds[1][2] = maxZ;
+            if (minX < node.bounds[0]) node.bounds[0] = minX;
+            if (minY < node.bounds[1]) node.bounds[1] = minY;
+            if (minZ < node.bounds[2]) node.bounds[2] = minZ;
+            if (maxX > node.bounds[3]) node.bounds[3] = maxX;
+            if (maxY > node.bounds[4]) node.bounds[4] = maxY;
+            if (maxZ > node.bounds[5]) node.bounds[5] = maxZ;
 
             if (cx < _centerMin[0]) _centerMin[0] = cx;
             if (cy < _centerMin[1]) _centerMin[1] = cy;

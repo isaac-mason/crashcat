@@ -7,12 +7,12 @@ describe('Sphere AABB caching', () => {
         const s = sphere.create({ radius: 2.0 });
         expect(s.aabb).toBeDefined();
         // AABB should be [-r, -r, -r] to [r, r, r]
-        expect(s.aabb[0][0]).toBe(-2.0);
-        expect(s.aabb[0][1]).toBe(-2.0);
-        expect(s.aabb[0][2]).toBe(-2.0);
-        expect(s.aabb[1][0]).toBe(2.0);
-        expect(s.aabb[1][1]).toBe(2.0);
-        expect(s.aabb[1][2]).toBe(2.0);
+        expect(s.aabb[0]).toBe(-2.0);
+        expect(s.aabb[1]).toBe(-2.0);
+        expect(s.aabb[2]).toBe(-2.0);
+        expect(s.aabb[3]).toBe(2.0);
+        expect(s.aabb[4]).toBe(2.0);
+        expect(s.aabb[5]).toBe(2.0);
     });
 });
 

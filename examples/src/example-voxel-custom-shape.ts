@@ -170,9 +170,9 @@ function createVoxelShape(settings: VoxelShapeSettings): VoxelShape {
 
     // calculate chunk count from bounds
     const chunkCount = vec3.create();
-    chunkCount[0] = chunkBounds[1][0] - chunkBounds[0][0];
-    chunkCount[1] = chunkBounds[1][1] - chunkBounds[0][1];
-    chunkCount[2] = chunkBounds[1][2] - chunkBounds[0][2];
+    chunkCount[0] = chunkBounds[3] - chunkBounds[0];
+    chunkCount[1] = chunkBounds[4] - chunkBounds[1];
+    chunkCount[2] = chunkBounds[5] - chunkBounds[2];
 
     // flat array for chunks
     const totalChunks = chunkCount[0] * chunkCount[1] * chunkCount[2];
@@ -180,14 +180,14 @@ function createVoxelShape(settings: VoxelShapeSettings): VoxelShape {
 
     // initialize aabb from chunk bounds
     const aabb = box3.create();
-    const minVX = chunkBounds[0][0] * CHUNK_SIZE;
-    const minVY = chunkBounds[0][1] * CHUNK_SIZE;
-    const minVZ = chunkBounds[0][2] * CHUNK_SIZE;
-    const maxVX = chunkBounds[1][0] * CHUNK_SIZE;
-    const maxVY = chunkBounds[1][1] * CHUNK_SIZE;
-    const maxVZ = chunkBounds[1][2] * CHUNK_SIZE;
-    vec3.set(aabb[0], minVX, minVY, minVZ);
-    vec3.set(aabb[1], maxVX, maxVY, maxVZ);
+    const minVX = chunkBounds[0] * CHUNK_SIZE;
+    const minVY = chunkBounds[1] * CHUNK_SIZE;
+    const minVZ = chunkBounds[2] * CHUNK_SIZE;
+    const maxVX = chunkBounds[3] * CHUNK_SIZE;
+    const maxVY = chunkBounds[4] * CHUNK_SIZE;
+    const maxVZ = chunkBounds[5] * CHUNK_SIZE;
+    aabb[0] = minVX; aabb[1] = minVY; aabb[2] = minVZ;
+    aabb[3] = maxVX; aabb[4] = maxVY; aabb[5] = maxVZ;
 
     const centerOfMass = vec3.create();
     const volume = 0;
@@ -211,15 +211,15 @@ function getVoxel(shape: VoxelShape, wx: number, wy: number, wz: number): boolea
     const cz = Math.floor(wz / CHUNK_SIZE);
 
     // check bounds
-    if (cx < shape.chunkBounds[0][0] || cx >= shape.chunkBounds[1][0]) return false;
-    if (cy < shape.chunkBounds[0][1] || cy >= shape.chunkBounds[1][1]) return false;
-    if (cz < shape.chunkBounds[0][2] || cz >= shape.chunkBounds[1][2]) return false;
+    if (cx < shape.chunkBounds[0] || cx >= shape.chunkBounds[3]) return false;
+    if (cy < shape.chunkBounds[1] || cy >= shape.chunkBounds[4]) return false;
+    if (cz < shape.chunkBounds[2] || cz >= shape.chunkBounds[5]) return false;
 
     // get chunk
     const chunkIndex =
-        (cz - shape.chunkBounds[0][2]) * shape.chunkCount[1] * shape.chunkCount[0] +
-        (cy - shape.chunkBounds[0][1]) * shape.chunkCount[0] +
-        (cx - shape.chunkBounds[0][0]);
+        (cz - shape.chunkBounds[2]) * shape.chunkCount[1] * shape.chunkCount[0] +
+        (cy - shape.chunkBounds[1]) * shape.chunkCount[0] +
+        (cx - shape.chunkBounds[0]);
     const chunk = shape.chunks[chunkIndex];
 
     if (!chunk) return false;
@@ -262,15 +262,15 @@ function setVoxel(shape: VoxelShape, voxelX: number, voxelY: number, voxelZ: num
     const cz = Math.floor(voxelZ / CHUNK_SIZE);
 
     // check bounds
-    if (cx < shape.chunkBounds[0][0] || cx >= shape.chunkBounds[1][0]) return;
-    if (cy < shape.chunkBounds[0][1] || cy >= shape.chunkBounds[1][1]) return;
-    if (cz < shape.chunkBounds[0][2] || cz >= shape.chunkBounds[1][2]) return;
+    if (cx < shape.chunkBounds[0] || cx >= shape.chunkBounds[3]) return;
+    if (cy < shape.chunkBounds[1] || cy >= shape.chunkBounds[4]) return;
+    if (cz < shape.chunkBounds[2] || cz >= shape.chunkBounds[5]) return;
 
     // get or create chunk
     const chunkIndex =
-        (cz - shape.chunkBounds[0][2]) * shape.chunkCount[1] * shape.chunkCount[0] +
-        (cy - shape.chunkBounds[0][1]) * shape.chunkCount[0] +
-        (cx - shape.chunkBounds[0][0]);
+        (cz - shape.chunkBounds[2]) * shape.chunkCount[1] * shape.chunkCount[0] +
+        (cy - shape.chunkBounds[1]) * shape.chunkCount[0] +
+        (cx - shape.chunkBounds[0]);
 
     let chunk = shape.chunks[chunkIndex];
     if (!chunk) {
@@ -542,12 +542,12 @@ function castRayVsVoxels(
     const maxDistance = length * dirLength;
 
     // get voxel bounds in local space
-    const boundsMinX = shape.chunkBounds[0][0] * CHUNK_SIZE;
-    const boundsMinY = shape.chunkBounds[0][1] * CHUNK_SIZE;
-    const boundsMinZ = shape.chunkBounds[0][2] * CHUNK_SIZE;
-    const boundsMaxX = shape.chunkBounds[1][0] * CHUNK_SIZE;
-    const boundsMaxY = shape.chunkBounds[1][1] * CHUNK_SIZE;
-    const boundsMaxZ = shape.chunkBounds[1][2] * CHUNK_SIZE;
+    const boundsMinX = shape.chunkBounds[0] * CHUNK_SIZE;
+    const boundsMinY = shape.chunkBounds[1] * CHUNK_SIZE;
+    const boundsMinZ = shape.chunkBounds[2] * CHUNK_SIZE;
+    const boundsMaxX = shape.chunkBounds[3] * CHUNK_SIZE;
+    const boundsMaxY = shape.chunkBounds[4] * CHUNK_SIZE;
+    const boundsMaxZ = shape.chunkBounds[5] * CHUNK_SIZE;
 
     // dda algorithm setup
     const ox = _castRayVsVoxels_rayOriginLocal[0];
@@ -672,12 +672,12 @@ function castRayVsVoxels(
 
         // check if chunk is in bounds
         const inBounds =
-            cx >= shape.chunkBounds[0][0] &&
-            cx < shape.chunkBounds[1][0] &&
-            cy >= shape.chunkBounds[0][1] &&
-            cy < shape.chunkBounds[1][1] &&
-            cz >= shape.chunkBounds[0][2] &&
-            cz < shape.chunkBounds[1][2];
+            cx >= shape.chunkBounds[0] &&
+            cx < shape.chunkBounds[3] &&
+            cy >= shape.chunkBounds[1] &&
+            cy < shape.chunkBounds[4] &&
+            cz >= shape.chunkBounds[2] &&
+            cz < shape.chunkBounds[5];
 
         // if chunk doesn't exist or is empty, skip to chunk exit boundary
         if (!inBounds) {
@@ -685,9 +685,9 @@ function castRayVsVoxels(
         }
 
         const chunkIndex =
-            (cz - shape.chunkBounds[0][2]) * shape.chunkCount[1] * shape.chunkCount[0] +
-            (cy - shape.chunkBounds[0][1]) * shape.chunkCount[0] +
-            (cx - shape.chunkBounds[0][0]);
+            (cz - shape.chunkBounds[2]) * shape.chunkCount[1] * shape.chunkCount[0] +
+            (cy - shape.chunkBounds[1]) * shape.chunkCount[0] +
+            (cx - shape.chunkBounds[0]);
         const chunk = shape.chunks[chunkIndex];
 
         if (!chunk || chunk.sum === 0) {
@@ -1019,12 +1019,12 @@ function collideVoxelsVsConvex(
     box3.expandByMargin(_collideVoxelsVsConvex_convexAABB, _collideVoxelsVsConvex_convexAABB, settings.maxSeparationDistance);
 
     // get integer voxel bounds
-    const minVX = Math.floor(_collideVoxelsVsConvex_convexAABB[0][0]);
-    const minVY = Math.floor(_collideVoxelsVsConvex_convexAABB[0][1]);
-    const minVZ = Math.floor(_collideVoxelsVsConvex_convexAABB[0][2]);
-    const maxVX = Math.ceil(_collideVoxelsVsConvex_convexAABB[1][0]);
-    const maxVY = Math.ceil(_collideVoxelsVsConvex_convexAABB[1][1]);
-    const maxVZ = Math.ceil(_collideVoxelsVsConvex_convexAABB[1][2]);
+    const minVX = Math.floor(_collideVoxelsVsConvex_convexAABB[0]);
+    const minVY = Math.floor(_collideVoxelsVsConvex_convexAABB[1]);
+    const minVZ = Math.floor(_collideVoxelsVsConvex_convexAABB[2]);
+    const maxVX = Math.ceil(_collideVoxelsVsConvex_convexAABB[3]);
+    const maxVY = Math.ceil(_collideVoxelsVsConvex_convexAABB[4]);
+    const maxVZ = Math.ceil(_collideVoxelsVsConvex_convexAABB[5]);
 
     for (let vz = minVZ; vz <= maxVZ; vz++) {
         for (let vy = minVY; vy <= maxVY; vy++) {
@@ -1312,29 +1312,29 @@ function markVoxelAndNeighborsDirty(voxelShape: VoxelShape, vx: number, vy: numb
 
     // mark current chunk dirty
     const chunkIndex =
-        (cz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-        (cy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-        (cx - voxelShape.chunkBounds[0][0]);
+        (cz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+        (cy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+        (cx - voxelShape.chunkBounds[0]);
     markChunkDirty(chunkIndex);
 
     // check if voxel is on chunk boundaries and mark neighboring chunks dirty
     // X boundary
     if (lx === 0) {
         const neighborCx = cx - 1;
-        if (neighborCx >= voxelShape.chunkBounds[0][0] && neighborCx < voxelShape.chunkBounds[1][0]) {
+        if (neighborCx >= voxelShape.chunkBounds[0] && neighborCx < voxelShape.chunkBounds[3]) {
             const neighborIndex =
-                (cz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (cy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (neighborCx - voxelShape.chunkBounds[0][0]);
+                (cz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (cy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (neighborCx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     } else if (lx === CHUNK_SIZE - 1) {
         const neighborCx = cx + 1;
-        if (neighborCx >= voxelShape.chunkBounds[0][0] && neighborCx < voxelShape.chunkBounds[1][0]) {
+        if (neighborCx >= voxelShape.chunkBounds[0] && neighborCx < voxelShape.chunkBounds[3]) {
             const neighborIndex =
-                (cz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (cy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (neighborCx - voxelShape.chunkBounds[0][0]);
+                (cz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (cy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (neighborCx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     }
@@ -1342,20 +1342,20 @@ function markVoxelAndNeighborsDirty(voxelShape: VoxelShape, vx: number, vy: numb
     // Y boundary
     if (ly === 0) {
         const neighborCy = cy - 1;
-        if (neighborCy >= voxelShape.chunkBounds[0][1] && neighborCy < voxelShape.chunkBounds[1][1]) {
+        if (neighborCy >= voxelShape.chunkBounds[1] && neighborCy < voxelShape.chunkBounds[4]) {
             const neighborIndex =
-                (cz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (neighborCy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (cx - voxelShape.chunkBounds[0][0]);
+                (cz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (neighborCy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (cx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     } else if (ly === CHUNK_SIZE - 1) {
         const neighborCy = cy + 1;
-        if (neighborCy >= voxelShape.chunkBounds[0][1] && neighborCy < voxelShape.chunkBounds[1][1]) {
+        if (neighborCy >= voxelShape.chunkBounds[1] && neighborCy < voxelShape.chunkBounds[4]) {
             const neighborIndex =
-                (cz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (neighborCy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (cx - voxelShape.chunkBounds[0][0]);
+                (cz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (neighborCy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (cx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     }
@@ -1363,20 +1363,20 @@ function markVoxelAndNeighborsDirty(voxelShape: VoxelShape, vx: number, vy: numb
     // Z boundary
     if (lz === 0) {
         const neighborCz = cz - 1;
-        if (neighborCz >= voxelShape.chunkBounds[0][2] && neighborCz < voxelShape.chunkBounds[1][2]) {
+        if (neighborCz >= voxelShape.chunkBounds[2] && neighborCz < voxelShape.chunkBounds[5]) {
             const neighborIndex =
-                (neighborCz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (cy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (cx - voxelShape.chunkBounds[0][0]);
+                (neighborCz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (cy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (cx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     } else if (lz === CHUNK_SIZE - 1) {
         const neighborCz = cz + 1;
-        if (neighborCz >= voxelShape.chunkBounds[0][2] && neighborCz < voxelShape.chunkBounds[1][2]) {
+        if (neighborCz >= voxelShape.chunkBounds[2] && neighborCz < voxelShape.chunkBounds[5]) {
             const neighborIndex =
-                (neighborCz - voxelShape.chunkBounds[0][2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
-                (cy - voxelShape.chunkBounds[0][1]) * voxelShape.chunkCount[0] +
-                (cx - voxelShape.chunkBounds[0][0]);
+                (neighborCz - voxelShape.chunkBounds[2]) * voxelShape.chunkCount[1] * voxelShape.chunkCount[0] +
+                (cy - voxelShape.chunkBounds[1]) * voxelShape.chunkCount[0] +
+                (cx - voxelShape.chunkBounds[0]);
             markChunkDirty(neighborIndex);
         }
     }
@@ -1424,10 +1424,7 @@ const CHUNKS_MAX_Y = Math.ceil((BASE_HEIGHT + TERRAIN_HEIGHT) / CHUNK_SIZE);
 const CHUNKS_MIN_Z = Math.floor(-TERRAIN_SIZE / CHUNK_SIZE);
 const CHUNKS_MAX_Z = Math.ceil(TERRAIN_SIZE / CHUNK_SIZE);
 
-const chunkBounds: Box3 = [
-    [CHUNKS_MIN_X, CHUNKS_MIN_Y, CHUNKS_MIN_Z],
-    [CHUNKS_MAX_X, CHUNKS_MAX_Y, CHUNKS_MAX_Z],
-];
+const chunkBounds: Box3 = [CHUNKS_MIN_X, CHUNKS_MIN_Y, CHUNKS_MIN_Z, CHUNKS_MAX_X, CHUNKS_MAX_Y, CHUNKS_MAX_Z];
 
 const voxelShape = createVoxelShape({ chunkBounds });
 
@@ -1608,9 +1605,11 @@ window.addEventListener('mousedown', (event) => {
         }
 
         // wake bodies in area around the modified region
-        const wakeAABB = box3.create();
-        vec3.set(wakeAABB[0], centerVx - halfSize - 1, centerVy - halfSize - 1, centerVz - halfSize - 1);
-        vec3.set(wakeAABB[1], centerVx + halfSize + 1, centerVy + halfSize + 1, centerVz + halfSize + 1);
+        const wakeAABB = box3.set(
+            box3.create(),
+            centerVx - halfSize - 1, centerVy - halfSize - 1, centerVz - halfSize - 1,
+            centerVx + halfSize + 1, centerVy + halfSize + 1, centerVz + halfSize + 1,
+        );
         rigidBody.wakeInAABB(world, wakeAABB);
     } else {
         // build: step along normal (away from surface) to place center voxel
@@ -1638,9 +1637,11 @@ window.addEventListener('mousedown', (event) => {
         }
 
         // wake bodies in area around the modified region
-        const wakeAABB = box3.create();
-        vec3.set(wakeAABB[0], centerVx - halfSize - 1, centerVy - halfSize - 1, centerVz - halfSize - 1);
-        vec3.set(wakeAABB[1], centerVx + halfSize + 1, centerVy + halfSize + 1, centerVz + halfSize + 1);
+        const wakeAABB = box3.set(
+            box3.create(),
+            centerVx - halfSize - 1, centerVy - halfSize - 1, centerVz - halfSize - 1,
+            centerVx + halfSize + 1, centerVy + halfSize + 1, centerVz + halfSize + 1,
+        );
         rigidBody.wakeInAABB(world, wakeAABB);
     }
 });

@@ -273,13 +273,8 @@ const _computePlaneLocalBounds_behind = /* @__PURE__ */ vec3.create();
 function computePlaneLocalBounds(out: Box3, shape: PlaneShape): void {
     getPlaneVertices(_computePlaneLocalBounds_vertices, shape);
 
-    // start with empty bounds - box3 is [min, max]
-    out[0][0] = Number.POSITIVE_INFINITY;
-    out[0][1] = Number.POSITIVE_INFINITY;
-    out[0][2] = Number.POSITIVE_INFINITY;
-    out[1][0] = Number.NEGATIVE_INFINITY;
-    out[1][1] = Number.NEGATIVE_INFINITY;
-    out[1][2] = Number.NEGATIVE_INFINITY;
+    // start with empty bounds
+    box3.empty(out);
 
     const normal = shape.plane.normal;
     vec3.scale(_computePlaneLocalBounds_offset, normal, shape.halfExtent);

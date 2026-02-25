@@ -98,9 +98,9 @@ function isLeaf(node: DBVTNode): boolean {
 }
 
 function proximity(a: Box3, b: Box3): number {
-    const dx = a[0][0] + a[1][0] - (b[0][0] + b[1][0]);
-    const dy = a[0][1] + a[1][1] - (b[0][1] + b[1][1]);
-    const dz = a[0][2] + a[1][2] - (b[0][2] + b[1][2]);
+    const dx = a[0] + a[3] - (b[0] + b[3]);
+    const dy = a[1] + a[4] - (b[1] + b[4]);
+    const dz = a[2] + a[5] - (b[2] + b[5]);
     return Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
 }
 
@@ -194,9 +194,9 @@ function fetchLeaves(dbvt: DBVT, rootIndex: number, leaves: number[], depth = -1
 }
 
 function surfaceArea(aabb: Box3): number {
-    const sx = aabb[1][0] - aabb[0][0];
-    const sy = aabb[1][1] - aabb[0][1];
-    const sz = aabb[1][2] - aabb[0][2];
+    const sx = aabb[3] - aabb[0];
+    const sy = aabb[4] - aabb[1];
+    const sz = aabb[5] - aabb[2];
     return 2 * (sx * sy + sx * sz + sy * sz);
 }
 
@@ -262,7 +262,7 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
     if (leaves.length > 1) {
         if (leaves.length > buThreshold) {
             const vol = boundsOfLeaves(dbvt, leaves);
-            const org = [(vol[0][0] + vol[1][0]) * 0.5, (vol[0][1] + vol[1][1]) * 0.5, (vol[0][2] + vol[1][2]) * 0.5] as Vec3;
+            const org = [(vol[0] + vol[3]) * 0.5, (vol[1] + vol[4]) * 0.5, (vol[2] + vol[5]) * 0.5] as Vec3;
 
             // find best axis to split on
             let bestAxis = -1;
@@ -275,9 +275,9 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
 
             for (const leafIndex of leaves) {
                 const leaf = dbvt.nodes[leafIndex];
-                _center[0] = (leaf.aabb[0][0] + leaf.aabb[1][0]) * 0.5;
-                _center[1] = (leaf.aabb[0][1] + leaf.aabb[1][1]) * 0.5;
-                _center[2] = (leaf.aabb[0][2] + leaf.aabb[1][2]) * 0.5;
+                _center[0] = (leaf.aabb[0] + leaf.aabb[3]) * 0.5;
+                _center[1] = (leaf.aabb[1] + leaf.aabb[4]) * 0.5;
+                _center[2] = (leaf.aabb[2] + leaf.aabb[5]) * 0.5;
 
                 for (let j = 0; j < 3; j++) {
                     splitCount[j][_center[j] > org[j] ? 1 : 0]++;
@@ -300,9 +300,9 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
 
                 for (const leafIndex of leaves) {
                     const leaf = dbvt.nodes[leafIndex];
-                    _center[0] = (leaf.aabb[0][0] + leaf.aabb[1][0]) * 0.5;
-                    _center[1] = (leaf.aabb[0][1] + leaf.aabb[1][1]) * 0.5;
-                    _center[2] = (leaf.aabb[0][2] + leaf.aabb[1][2]) * 0.5;
+                    _center[0] = (leaf.aabb[0] + leaf.aabb[3]) * 0.5;
+                    _center[1] = (leaf.aabb[1] + leaf.aabb[4]) * 0.5;
+                    _center[2] = (leaf.aabb[2] + leaf.aabb[5]) * 0.5;
                     const side = _center[bestAxis] > org[bestAxis] ? 1 : 0;
                     sets[side].push(leafIndex);
                 }
@@ -492,14 +492,14 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     // velocity-based expansion, expands AABB only in the direction of motion to reduce update frequency
     if (dbvt.velocityPrediction > 0) {
         // compute delta from AABB min movement
-        const deltaX = body.aabb[0][0] - leaf.previousAabb[0][0];
-        const deltaY = body.aabb[0][1] - leaf.previousAabb[0][1];
-        const deltaZ = body.aabb[0][2] - leaf.previousAabb[0][2];
+        const deltaX = body.aabb[0] - leaf.previousAabb[0];
+        const deltaY = body.aabb[1] - leaf.previousAabb[1];
+        const deltaZ = body.aabb[2] - leaf.previousAabb[2];
 
         // compute half extents from PREVIOUS AABB
-        const halfExtentX = (leaf.previousAabb[1][0] - leaf.previousAabb[0][0]) * 0.5;
-        const halfExtentY = (leaf.previousAabb[1][1] - leaf.previousAabb[0][1]) * 0.5;
-        const halfExtentZ = (leaf.previousAabb[1][2] - leaf.previousAabb[0][2]) * 0.5;
+        const halfExtentX = (leaf.previousAabb[3] - leaf.previousAabb[0]) * 0.5;
+        const halfExtentY = (leaf.previousAabb[4] - leaf.previousAabb[1]) * 0.5;
+        const halfExtentZ = (leaf.previousAabb[5] - leaf.previousAabb[2]) * 0.5;
 
         // velocity expansion = (half extents) * prediction factor
         let velocityX = halfExtentX * dbvt.velocityPrediction;
@@ -513,19 +513,19 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
 
         // expand min/max based on velocity direction
         if (velocityX > 0) {
-            _bounds[1][0] += velocityX;
+            _bounds[3] += velocityX;
         } else {
-            _bounds[0][0] += velocityX;
+            _bounds[0] += velocityX;
         }
         if (velocityY > 0) {
-            _bounds[1][1] += velocityY;
+            _bounds[4] += velocityY;
         } else {
-            _bounds[0][1] += velocityY;
+            _bounds[1] += velocityY;
         }
         if (velocityZ > 0) {
-            _bounds[1][2] += velocityZ;
+            _bounds[5] += velocityZ;
         } else {
-            _bounds[0][2] += velocityZ;
+            _bounds[2] += velocityZ;
         }
     }
 
@@ -620,6 +620,13 @@ export function optimizeIncremental(dbvt: DBVT, passes: number): void {
 export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
+    const qMinX = aabb[0],
+        qMinY = aabb[1],
+        qMinZ = aabb[2];
+    const qMaxX = aabb[3],
+        qMaxY = aabb[4],
+        qMaxZ = aabb[5];
+
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, 0);
 
@@ -628,8 +635,15 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
         const nodeIndex = entry.nodeIndex;
         const node = dbvt.nodes[nodeIndex];
 
-        // node aabb test
-        if (!box3.intersectsBox3(node.aabb, aabb)) {
+        // node aabb test (inlined box3.intersectsBox3)
+        if (
+            node.aabb[0] > qMaxX ||
+            node.aabb[3] < qMinX ||
+            node.aabb[1] > qMaxY ||
+            node.aabb[4] < qMinY ||
+            node.aabb[2] > qMaxZ ||
+            node.aabb[5] < qMinZ
+        ) {
             continue;
         }
 
@@ -665,8 +679,15 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
             continue;
         }
 
-        // body aabb test
-        if (!box3.intersectsBox3(body.aabb, aabb)) {
+        // body aabb test (inlined box3.intersectsBox3)
+        if (
+            body.aabb[0] > qMaxX ||
+            body.aabb[3] < qMinX ||
+            body.aabb[1] > qMaxY ||
+            body.aabb[4] < qMinY ||
+            body.aabb[2] > qMaxZ ||
+            body.aabb[5] < qMinZ
+        ) {
             continue;
         }
 
@@ -683,6 +704,10 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
+    const px = point[0],
+        py = point[1],
+        pz = point[2];
+
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, 0);
 
@@ -691,8 +716,15 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
         const nodeIndex = entry.nodeIndex;
         const node = dbvt.nodes[nodeIndex];
 
-        // skip if point is not inside node's AABB
-        if (!box3.containsPoint(node.aabb, point)) {
+        // skip if point is not inside node's AABB (inlined box3.containsPoint)
+        if (
+            px < node.aabb[0] ||
+            px > node.aabb[3] ||
+            py < node.aabb[1] ||
+            py > node.aabb[4] ||
+            pz < node.aabb[2] ||
+            pz > node.aabb[5]
+        ) {
             continue;
         }
 
@@ -729,7 +761,15 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
             continue;
         }
 
-        if (!box3.containsPoint(body.aabb, point)) {
+        // body contains point (inlined box3.containsPoint)
+        if (
+            px < body.aabb[0] ||
+            px > body.aabb[3] ||
+            py < body.aabb[1] ||
+            py > body.aabb[4] ||
+            pz < body.aabb[2] ||
+            pz > body.aabb[5]
+        ) {
             continue;
         }
 
@@ -770,11 +810,7 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
 }
 
 const _ray = /* @__PURE__ */ raycast3.create();
-const _rayDirection = /* @__PURE__ */ vec3.create();
-const _rayOrigin = /* @__PURE__ */ vec3.create();
-const _halfExtents = /* @__PURE__ */ vec3.create();
-const _nodeBounds = /* @__PURE__ */ box3.create();
-const _bodyBounds = /* @__PURE__ */ box3.create();
+const _nodeBounds = /* @__PURE__ */ box3.create(); // scratch for expanded child bounds in castAABB distance sort
 
 export function castRay(
     world: World,
@@ -788,6 +824,16 @@ export function castRay(
     if (dbvt.root === -1) return;
 
     raycast3.set(_ray, origin, direction, length);
+
+    // hoist ray scalars out of the loop
+    const originX = _ray.origin[0],
+        originY = _ray.origin[1],
+        originZ = _ray.origin[2];
+    const dirX = _ray.direction[0],
+        dirY = _ray.direction[1],
+        dirZ = _ray.direction[2];
+    const rayLen = _ray.length;
+
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, -Infinity); // root always visited
 
@@ -802,9 +848,53 @@ export function castRay(
             continue;
         }
 
-        // early out: ray x node aabb
-        if (!raycast3.intersectsBox3(_ray, node.aabb)) {
-            continue;
+        // early out: ray x node aabb (inlined raycast3.intersectsBox3)
+        let tNear = 0,
+            tFar = rayLen;
+        if (Math.abs(dirX) < 1e-10) {
+            if (originX < node.aabb[0] || originX > node.aabb[3]) continue;
+        } else {
+            const inv = 1 / dirX;
+            let tEnter = (node.aabb[0] - originX) * inv,
+                tExit = (node.aabb[3] - originX) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
+        }
+        if (Math.abs(dirY) < 1e-10) {
+            if (originY < node.aabb[1] || originY > node.aabb[4]) continue;
+        } else {
+            const inv = 1 / dirY;
+            let tEnter = (node.aabb[1] - originY) * inv,
+                tExit = (node.aabb[4] - originY) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
+        }
+        if (Math.abs(dirZ) < 1e-10) {
+            if (originZ < node.aabb[2] || originZ > node.aabb[5]) continue;
+        } else {
+            const inv = 1 / dirZ;
+            let tEnter = (node.aabb[2] - originZ) * inv,
+                tExit = (node.aabb[5] - originZ) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
         }
 
         // if internal node, push children sorted by distance
@@ -812,27 +902,8 @@ export function castRay(
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
 
-            // calculate distances to children
-            const leftDist = rayDistanceToBox3(
-                _ray.origin[0],
-                _ray.origin[1],
-                _ray.origin[2],
-                _ray.direction[0],
-                _ray.direction[1],
-                _ray.direction[2],
-                _ray.length,
-                leftNode.aabb,
-            );
-            const rightDist = rayDistanceToBox3(
-                _ray.origin[0],
-                _ray.origin[1],
-                _ray.origin[2],
-                _ray.direction[0],
-                _ray.direction[1],
-                _ray.direction[2],
-                _ray.length,
-                rightNode.aabb,
-            );
+            const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, leftNode.aabb);
+            const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, rightNode.aabb);
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
@@ -870,9 +941,53 @@ export function castRay(
             continue;
         }
 
-        // early out: ray-aabb test
-        if (!raycast3.intersectsBox3(_ray, body.aabb)) {
-            continue;
+        // early out: ray-aabb test on body bounds (inlined raycast3.intersectsBox3)
+        let bodyTNear = 0,
+            bodyTFar = rayLen;
+        if (Math.abs(dirX) < 1e-10) {
+            if (originX < body.aabb[0] || originX > body.aabb[3]) continue;
+        } else {
+            const inv = 1 / dirX;
+            let tEnter = (body.aabb[0] - originX) * inv,
+                tExit = (body.aabb[3] - originX) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
+        }
+        if (Math.abs(dirY) < 1e-10) {
+            if (originY < body.aabb[1] || originY > body.aabb[4]) continue;
+        } else {
+            const inv = 1 / dirY;
+            let tEnter = (body.aabb[1] - originY) * inv,
+                tExit = (body.aabb[4] - originY) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
+        }
+        if (Math.abs(dirZ) < 1e-10) {
+            if (originZ < body.aabb[2] || originZ > body.aabb[5]) continue;
+        } else {
+            const inv = 1 / dirZ;
+            let tEnter = (body.aabb[2] - originZ) * inv,
+                tExit = (body.aabb[5] - originZ) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
         }
 
         // visit
@@ -896,19 +1011,21 @@ export function castAABB(
 
     // AABB cast is done by:
     // 1. Shrink the shape aabb by its own extents down to a point (compute ray origin from AABB center)
-    // 2. Expand the block aabb by the extents of the shape aabb
-    // 3. Cast the point by the displacement against the expanded block aabb (raycast vs aabb test)
+    // 2. Expand each node aabb by the shape's half extents
+    // 3. Cast the point by the displacement against the expanded node aabb (ray-slab test)
 
-    // Compute ray origin from AABB center
-    _rayOrigin[0] = (bounds[0][0] + bounds[1][0]) * 0.5;
-    _rayOrigin[1] = (bounds[0][1] + bounds[1][1]) * 0.5;
-    _rayOrigin[2] = (bounds[0][2] + bounds[1][2]) * 0.5;
-    vec3.normalize(_rayDirection, displacement);
-    const rayLength = vec3.length(displacement);
-    raycast3.set(_ray, _rayOrigin, _rayDirection, rayLength);
+    // compute ray origin from AABB center and half extents — all as plain scalars
+    const originX = (bounds[0] + bounds[3]) * 0.5;
+    const originY = (bounds[1] + bounds[4]) * 0.5;
+    const originZ = (bounds[2] + bounds[5]) * 0.5;
+    const halfX = (bounds[3] - bounds[0]) * 0.5;
+    const halfY = (bounds[4] - bounds[1]) * 0.5;
+    const halfZ = (bounds[5] - bounds[2]) * 0.5;
 
-    box3.size(_halfExtents, bounds);
-    vec3.scale(_halfExtents, _halfExtents, 0.5);
+    const castLen = vec3.length(displacement);
+    const dirX = castLen > 0 ? displacement[0] / castLen : 0;
+    const dirY = castLen > 0 ? displacement[1] / castLen : 0;
+    const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
 
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, -Infinity); // root always visited
@@ -920,45 +1037,88 @@ export function castAABB(
         const node = dbvt.nodes[nodeIndex];
 
         // early-out: skip nodes beyond cast length
-        if (nodeDistance > rayLength) {
+        if (nodeDistance > castLen) {
             continue;
         }
 
-        // skip if node's expanded AABB doesn't intersect with the shape's ray
-        box3.expandByExtents(_nodeBounds, node.aabb, _halfExtents);
-        if (!raycast3.intersectsBox3(_ray, _nodeBounds)) {
-            continue;
+        // expand node aabb by the shape's half extents (minkowski sum)
+        const minX = node.aabb[0] - halfX,
+            minY = node.aabb[1] - halfY,
+            minZ = node.aabb[2] - halfZ;
+        const maxX = node.aabb[3] + halfX,
+            maxY = node.aabb[4] + halfY,
+            maxZ = node.aabb[5] + halfZ;
+
+        // ray-slab test against expanded node aabb (inlined raycast3.intersectsBox3)
+        let tNear = 0,
+            tFar = castLen;
+        if (Math.abs(dirX) < 1e-10) {
+            if (originX < minX || originX > maxX) continue;
+        } else {
+            const inv = 1 / dirX;
+            let tEnter = (minX - originX) * inv,
+                tExit = (maxX - originX) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
+        }
+        if (Math.abs(dirY) < 1e-10) {
+            if (originY < minY || originY > maxY) continue;
+        } else {
+            const inv = 1 / dirY;
+            let tEnter = (minY - originY) * inv,
+                tExit = (maxY - originY) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
+        }
+        if (Math.abs(dirZ) < 1e-10) {
+            if (originZ < minZ || originZ > maxZ) continue;
+        } else {
+            const inv = 1 / dirZ;
+            let tEnter = (minZ - originZ) * inv,
+                tExit = (maxZ - originZ) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            tNear = tEnter > tNear ? tEnter : tNear;
+            tFar = tExit < tFar ? tExit : tFar;
+            if (tFar < tNear) continue;
         }
 
         // if internal node, push children sorted by distance
+        // inlined: expandByExtents into rayDistanceToBox3 — compute expanded min/max directly
         if (!isLeaf(node)) {
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
 
-            // calculate distances to expanded children bounds
-            box3.expandByExtents(_nodeBounds, leftNode.aabb, _halfExtents);
-            const leftDist = rayDistanceToBox3(
-                _ray.origin[0],
-                _ray.origin[1],
-                _ray.origin[2],
-                _ray.direction[0],
-                _ray.direction[1],
-                _ray.direction[2],
-                _ray.length,
-                _nodeBounds,
-            );
+            _nodeBounds[0] = leftNode.aabb[0] - halfX;
+            _nodeBounds[1] = leftNode.aabb[1] - halfY;
+            _nodeBounds[2] = leftNode.aabb[2] - halfZ;
+            _nodeBounds[3] = leftNode.aabb[3] + halfX;
+            _nodeBounds[4] = leftNode.aabb[4] + halfY;
+            _nodeBounds[5] = leftNode.aabb[5] + halfZ;
+            const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
-            box3.expandByExtents(_nodeBounds, rightNode.aabb, _halfExtents);
-            const rightDist = rayDistanceToBox3(
-                _ray.origin[0],
-                _ray.origin[1],
-                _ray.origin[2],
-                _ray.direction[0],
-                _ray.direction[1],
-                _ray.direction[2],
-                _ray.length,
-                _nodeBounds,
-            );
+            _nodeBounds[0] = rightNode.aabb[0] - halfX;
+            _nodeBounds[1] = rightNode.aabb[1] - halfY;
+            _nodeBounds[2] = rightNode.aabb[2] - halfZ;
+            _nodeBounds[3] = rightNode.aabb[3] + halfX;
+            _nodeBounds[4] = rightNode.aabb[4] + halfY;
+            _nodeBounds[5] = rightNode.aabb[5] + halfZ;
+            const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
@@ -997,10 +1157,61 @@ export function castAABB(
             continue;
         }
 
-        // expand the body aabb by the shape's half extents
-        box3.expandByExtents(_bodyBounds, body.aabb, _halfExtents);
-        if (!raycast3.intersectsBox3(_ray, _bodyBounds)) {
-            continue;
+        // expand body aabb by the shape's half extents (minkowski sum)
+        const bMinX = body.aabb[0] - halfX,
+            bMinY = body.aabb[1] - halfY,
+            bMinZ = body.aabb[2] - halfZ;
+        const bMaxX = body.aabb[3] + halfX,
+            bMaxY = body.aabb[4] + halfY,
+            bMaxZ = body.aabb[5] + halfZ;
+
+        // ray-slab test against expanded body aabb (inlined raycast3.intersectsBox3)
+        let bodyTNear = 0,
+            bodyTFar = castLen;
+        if (Math.abs(dirX) < 1e-10) {
+            if (originX < bMinX || originX > bMaxX) continue;
+        } else {
+            const inv = 1 / dirX;
+            let tEnter = (bMinX - originX) * inv,
+                tExit = (bMaxX - originX) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
+        }
+        if (Math.abs(dirY) < 1e-10) {
+            if (originY < bMinY || originY > bMaxY) continue;
+        } else {
+            const inv = 1 / dirY;
+            let tEnter = (bMinY - originY) * inv,
+                tExit = (bMaxY - originY) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
+        }
+        if (Math.abs(dirZ) < 1e-10) {
+            if (originZ < bMinZ || originZ > bMaxZ) continue;
+        } else {
+            const inv = 1 / dirZ;
+            let tEnter = (bMinZ - originZ) * inv,
+                tExit = (bMaxZ - originZ) * inv;
+            if (inv < 0) {
+                const tmp = tEnter;
+                tEnter = tExit;
+                tExit = tmp;
+            }
+            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
+            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
+            if (bodyTFar < bodyTNear) continue;
         }
 
         visitor.visit(body);

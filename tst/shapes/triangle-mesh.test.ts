@@ -10,12 +10,12 @@ describe('Triangle mesh AABB caching', () => {
         expect(mesh.aabb).toBeDefined();
         // Triangle vertices: (0,0,0), (1,0,0), (0,1,0)
         // AABB should be [0,0,0] to [1,1,0]
-        expect(mesh.aabb[0][0]).toBe(0);
-        expect(mesh.aabb[0][1]).toBe(0);
-        expect(mesh.aabb[0][2]).toBe(0);
-        expect(mesh.aabb[1][0]).toBe(1);
-        expect(mesh.aabb[1][1]).toBe(1);
-        expect(mesh.aabb[1][2]).toBe(0);
+        expect(mesh.aabb[0]).toBe(0);
+        expect(mesh.aabb[1]).toBe(0);
+        expect(mesh.aabb[2]).toBe(0);
+        expect(mesh.aabb[3]).toBe(1);
+        expect(mesh.aabb[4]).toBe(1);
+        expect(mesh.aabb[5]).toBe(0);
     });
 });
 

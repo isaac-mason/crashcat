@@ -75,12 +75,12 @@ function computeBoxVolume(halfExtents: Vec3): number {
 }
 
 function computeBoxLocalBounds(out: Box3, halfExtents: Vec3): void {
-    out[0][0] = -halfExtents[0];
-    out[0][1] = -halfExtents[1];
-    out[0][2] = -halfExtents[2];
-    out[1][0] = halfExtents[0];
-    out[1][1] = halfExtents[1];
-    out[1][2] = halfExtents[2];
+    out[0] = -halfExtents[0];
+    out[1] = -halfExtents[1];
+    out[2] = -halfExtents[2];
+    out[3] = halfExtents[0];
+    out[4] = halfExtents[1];
+    out[5] = halfExtents[2];
 }
 
 /** updates a box shape after it's properties have changed */

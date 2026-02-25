@@ -1,6 +1,4 @@
 import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
-import type { TriangleMeshData } from './triangle-mesh-data';
-import { OFFSET_INDEX_A, OFFSET_INDEX_B, OFFSET_INDEX_C, swapTriangles } from './triangle-mesh-data';
 import {
     NODE_AXIS_OR_COUNT,
     NODE_MAX_X,
@@ -15,6 +13,8 @@ import {
     nodeLeft,
     nodeRight,
 } from './bvh';
+import type { TriangleMeshData } from './triangle-mesh-data';
+import { OFFSET_INDEX_A, OFFSET_INDEX_B, OFFSET_INDEX_C, swapTriangles } from './triangle-mesh-data';
 
 /** cost of traversing a BVH node */
 const TRAVERSAL_COST = 1;
@@ -126,7 +126,7 @@ const _sahBins: PreallocatedSahBin[] = /* @__PURE__ */ new Array(BIN_COUNT)
         candidate: 0,
     }));
 
-    function resetSahBin(bin: PreallocatedSahBin): void {
+function resetSahBin(bin: PreallocatedSahBin): void {
     box3.empty(bin.bounds);
     box3.empty(bin.leftCacheBounds);
     box3.empty(bin.rightCacheBounds);
@@ -162,8 +162,8 @@ function precomputeTriangleBuildData(out: number[], data: TriangleMeshData): voi
         const buildOffset = triIdx * BUILD_DATA_STRIDE;
 
         // get vertex indices
-        const ia = buffer[bufferOffset + OFFSET_INDEX_A]; 
-        const ib = buffer[bufferOffset + OFFSET_INDEX_B]; 
+        const ia = buffer[bufferOffset + OFFSET_INDEX_A];
+        const ib = buffer[bufferOffset + OFFSET_INDEX_B];
         const ic = buffer[bufferOffset + OFFSET_INDEX_C];
 
         // get vertex positions
@@ -277,12 +277,12 @@ function countNodes(node: TempBvhNode): number {
 /** Write nodes to buffer in pre-order. Returns next available offset. */
 function populateBuffer(buffer: number[], node: TempBvhNode, offset: number): number {
     // Write bounds
-    buffer[offset + NODE_MIN_X] = node.bounds[0][0];
-    buffer[offset + NODE_MIN_Y] = node.bounds[0][1];
-    buffer[offset + NODE_MIN_Z] = node.bounds[0][2];
-    buffer[offset + NODE_MAX_X] = node.bounds[1][0];
-    buffer[offset + NODE_MAX_Y] = node.bounds[1][1];
-    buffer[offset + NODE_MAX_Z] = node.bounds[1][2];
+    buffer[offset + NODE_MIN_X] = node.bounds[0];
+    buffer[offset + NODE_MIN_Y] = node.bounds[1];
+    buffer[offset + NODE_MIN_Z] = node.bounds[2];
+    buffer[offset + NODE_MAX_X] = node.bounds[3];
+    buffer[offset + NODE_MAX_Y] = node.bounds[4];
+    buffer[offset + NODE_MAX_Z] = node.bounds[5];
 
     if (node.left === null) {
         // Leaf node
@@ -339,12 +339,12 @@ function buildRecursive(
         const cz = buildData[offset + BUILD_DATA_CENTER_Z];
         const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
 
-        node.bounds[0][0] = cx - hx; // minX
-        node.bounds[0][1] = cy - hy; // minY
-        node.bounds[0][2] = cz - hz; // minZ
-        node.bounds[1][0] = cx + hx; // maxX
-        node.bounds[1][1] = cy + hy; // maxY
-        node.bounds[1][2] = cz + hz; // maxZ
+        node.bounds[0] = cx - hx; // minX
+        node.bounds[1] = cy - hy; // minY
+        node.bounds[2] = cz - hz; // minZ
+        node.bounds[3] = cx + hx; // maxX
+        node.bounds[4] = cy + hy; // maxY
+        node.bounds[5] = cz + hz; // maxZ
 
         // center bounds initialization
         _centerMin[0] = cx;
@@ -372,12 +372,12 @@ function buildRecursive(
             const maxY = cy + hy;
             const maxZ = cz + hz;
 
-            if (minX < node.bounds[0][0]) node.bounds[0][0] = minX;
-            if (minY < node.bounds[0][1]) node.bounds[0][1] = minY;
-            if (minZ < node.bounds[0][2]) node.bounds[0][2] = minZ;
-            if (maxX > node.bounds[1][0]) node.bounds[1][0] = maxX;
-            if (maxY > node.bounds[1][1]) node.bounds[1][1] = maxY;
-            if (maxZ > node.bounds[1][2]) node.bounds[1][2] = maxZ;
+            if (minX < node.bounds[0]) node.bounds[0] = minX;
+            if (minY < node.bounds[1]) node.bounds[1] = minY;
+            if (minZ < node.bounds[2]) node.bounds[2] = minZ;
+            if (maxX > node.bounds[3]) node.bounds[3] = maxX;
+            if (maxY > node.bounds[4]) node.bounds[4] = maxY;
+            if (maxZ > node.bounds[5]) node.bounds[5] = maxZ;
 
             // expand center bounds
             if (cx < _centerMin[0]) _centerMin[0] = cx;
@@ -481,7 +481,9 @@ function getOptimalSplit(
         // AVERAGE: Use longest node bounds extent (NOT center extent)
         // This matches three-mesh-bvh which uses nodeBoundingData for axis selection
         // Use precomputed node bounds rather than recomputing (O(1) vs O(n))
-        vec3.subtract(_extent, nodeBounds[1], nodeBounds[0]);
+        _extent[0] = nodeBounds[3] - nodeBounds[0];
+        _extent[1] = nodeBounds[4] - nodeBounds[1];
+        _extent[2] = nodeBounds[5] - nodeBounds[2];
         axis = _extent[0] >= _extent[1] && _extent[0] >= _extent[2] ? 0 : _extent[1] >= _extent[2] ? 1 : 2;
 
         if (axis !== -1) {
@@ -536,12 +538,12 @@ function getOptimalSplit(
                         bin.candidate = center;
 
                         // initialize bounds with this triangle's AABB
-                        bin.bounds[0][0] = cx - hx;
-                        bin.bounds[0][1] = cy - hy;
-                        bin.bounds[0][2] = cz - hz;
-                        bin.bounds[1][0] = cx + hx;
-                        bin.bounds[1][1] = cy + hy;
-                        bin.bounds[1][2] = cz + hz;
+                        bin.bounds[0] = cx - hx;
+                        bin.bounds[1] = cy - hy;
+                        bin.bounds[2] = cz - hz;
+                        bin.bounds[3] = cx + hx;
+                        bin.bounds[4] = cy + hy;
+                        bin.bounds[5] = cz + hz;
                     }
 
                     // Sort bins by candidate position (sort in-place, only first 'count' bins)
@@ -589,20 +591,20 @@ function getOptimalSplit(
                             const bin = _sahBins[bi];
                             if (center >= bin.candidate) {
                                 // Right side - expand right cache bounds
-                                if (minX < bin.rightCacheBounds[0][0]) bin.rightCacheBounds[0][0] = minX;
-                                if (minY < bin.rightCacheBounds[0][1]) bin.rightCacheBounds[0][1] = minY;
-                                if (minZ < bin.rightCacheBounds[0][2]) bin.rightCacheBounds[0][2] = minZ;
-                                if (maxX > bin.rightCacheBounds[1][0]) bin.rightCacheBounds[1][0] = maxX;
-                                if (maxY > bin.rightCacheBounds[1][1]) bin.rightCacheBounds[1][1] = maxY;
-                                if (maxZ > bin.rightCacheBounds[1][2]) bin.rightCacheBounds[1][2] = maxZ;
+                                if (minX < bin.rightCacheBounds[0]) bin.rightCacheBounds[0] = minX;
+                                if (minY < bin.rightCacheBounds[1]) bin.rightCacheBounds[1] = minY;
+                                if (minZ < bin.rightCacheBounds[2]) bin.rightCacheBounds[2] = minZ;
+                                if (maxX > bin.rightCacheBounds[3]) bin.rightCacheBounds[3] = maxX;
+                                if (maxY > bin.rightCacheBounds[4]) bin.rightCacheBounds[4] = maxY;
+                                if (maxZ > bin.rightCacheBounds[5]) bin.rightCacheBounds[5] = maxZ;
                             } else {
                                 // Left side - expand left cache bounds and increment count
-                                if (minX < bin.leftCacheBounds[0][0]) bin.leftCacheBounds[0][0] = minX;
-                                if (minY < bin.leftCacheBounds[0][1]) bin.leftCacheBounds[0][1] = minY;
-                                if (minZ < bin.leftCacheBounds[0][2]) bin.leftCacheBounds[0][2] = minZ;
-                                if (maxX > bin.leftCacheBounds[1][0]) bin.leftCacheBounds[1][0] = maxX;
-                                if (maxY > bin.leftCacheBounds[1][1]) bin.leftCacheBounds[1][1] = maxY;
-                                if (maxZ > bin.leftCacheBounds[1][2]) bin.leftCacheBounds[1][2] = maxZ;
+                                if (minX < bin.leftCacheBounds[0]) bin.leftCacheBounds[0] = minX;
+                                if (minY < bin.leftCacheBounds[1]) bin.leftCacheBounds[1] = minY;
+                                if (minZ < bin.leftCacheBounds[2]) bin.leftCacheBounds[2] = minZ;
+                                if (maxX > bin.leftCacheBounds[3]) bin.leftCacheBounds[3] = maxX;
+                                if (maxY > bin.leftCacheBounds[4]) bin.leftCacheBounds[4] = maxY;
+                                if (maxZ > bin.leftCacheBounds[5]) bin.leftCacheBounds[5] = maxZ;
                                 bin.count++;
                             }
                         }
@@ -671,12 +673,12 @@ function getOptimalSplit(
                         bin.count++;
 
                         // Expand bin bounds to include this triangle's AABB
-                        if (minX < bin.bounds[0][0]) bin.bounds[0][0] = minX;
-                        if (minY < bin.bounds[0][1]) bin.bounds[0][1] = minY;
-                        if (minZ < bin.bounds[0][2]) bin.bounds[0][2] = minZ;
-                        if (maxX > bin.bounds[1][0]) bin.bounds[1][0] = maxX;
-                        if (maxY > bin.bounds[1][1]) bin.bounds[1][1] = maxY;
-                        if (maxZ > bin.bounds[1][2]) bin.bounds[1][2] = maxZ;
+                        if (minX < bin.bounds[0]) bin.bounds[0] = minX;
+                        if (minY < bin.bounds[1]) bin.bounds[1] = minY;
+                        if (minZ < bin.bounds[2]) bin.bounds[2] = minZ;
+                        if (maxX > bin.bounds[3]) bin.bounds[3] = maxX;
+                        if (maxY > bin.bounds[4]) bin.bounds[4] = maxY;
+                        if (maxZ > bin.bounds[5]) bin.bounds[5] = maxZ;
                     }
 
                     // Cache right bounds from right-to-left

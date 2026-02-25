@@ -127,7 +127,7 @@ export function create(o: TriangleMeshShapeSettings): TriangleMeshShape {
     let aabb: Box3;
     if (result.bvh.buffer.length > 0) {
         aabb = box3.create();
-        bvh.nodeGetBounds(result.bvh.buffer, 0, aabb);
+        bvh.nodeGetBounds(aabb, result.bvh.buffer, 0);
     } else {
         aabb = box3.create();
     }
@@ -427,8 +427,8 @@ function castRayVsTriangleMesh(
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(buffer, leftOffset, _castRayVsTriangleMesh_leftBounds);
-            bvh.nodeGetBounds(buffer, rightOffset, _castRayVsTriangleMesh_rightBounds);
+            bvh.nodeGetBounds(_castRayVsTriangleMesh_leftBounds, buffer, leftOffset);
+            bvh.nodeGetBounds(_castRayVsTriangleMesh_rightBounds, buffer, rightOffset);
 
             const leftDist = rayDistanceToBox3(
                 _castRayVsTriangleMesh_rayForMathcat.origin[0],
@@ -747,11 +747,7 @@ function castConvexVsTriangleMesh(
 
     // castTransform = targetTransform^-1 * transformA (A's transform in B's space)
     mat4.invert(_castConvexVsTriangleMesh_invBtoWorld, targetTransform);
-    const castTransform = mat4.multiply(
-        _castConvexVsTriangleMesh_AtoB,
-        _castConvexVsTriangleMesh_invBtoWorld,
-        transformA,
-    );
+    const castTransform = mat4.multiply(_castConvexVsTriangleMesh_AtoB, _castConvexVsTriangleMesh_invBtoWorld, transformA);
 
     // transform displacement to B's space using the inverse transform's rotation (3x3)
     // _castConvexVsTriangleMesh_invBtoWorld is already B's inverse transform
@@ -787,9 +783,9 @@ function castConvexVsTriangleMesh(
 
     // compute centroid of base AABB
     const ray = _castConvexVsTriangleMesh_raycast;
-    ray.origin[0] = (_castConvexVsTriangleMesh_sweptAABB[0][0] + _castConvexVsTriangleMesh_sweptAABB[1][0]) * 0.5;
-    ray.origin[1] = (_castConvexVsTriangleMesh_sweptAABB[0][1] + _castConvexVsTriangleMesh_sweptAABB[1][1]) * 0.5;
-    ray.origin[2] = (_castConvexVsTriangleMesh_sweptAABB[0][2] + _castConvexVsTriangleMesh_sweptAABB[1][2]) * 0.5;
+    ray.origin[0] = (_castConvexVsTriangleMesh_sweptAABB[0] + _castConvexVsTriangleMesh_sweptAABB[3]) * 0.5;
+    ray.origin[1] = (_castConvexVsTriangleMesh_sweptAABB[1] + _castConvexVsTriangleMesh_sweptAABB[4]) * 0.5;
+    ray.origin[2] = (_castConvexVsTriangleMesh_sweptAABB[2] + _castConvexVsTriangleMesh_sweptAABB[5]) * 0.5;
 
     // compute ray direction and length from displacement
     ray.length = vec3.length(_castConvexVsTriangleMesh_displacementInB);
@@ -803,9 +799,9 @@ function castConvexVsTriangleMesh(
 
     // compute half-extents of the base AABB
     const halfExtents = _castConvexVsTriangleMesh_halfExtents;
-    halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[1][0] - _castConvexVsTriangleMesh_sweptAABB[0][0]) * 0.5;
-    halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[1][1] - _castConvexVsTriangleMesh_sweptAABB[0][1]) * 0.5;
-    halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[1][2] - _castConvexVsTriangleMesh_sweptAABB[0][2]) * 0.5;
+    halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * 0.5;
+    halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5;
+    halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5;
 
     bvhStack.reset(_castConvexVsTriangleMesh_bvhStack);
     bvhStack.push(_castConvexVsTriangleMesh_bvhStack, 0, 0); // root always visited
@@ -840,12 +836,12 @@ function castConvexVsTriangleMesh(
                 box3.copy(triBounds, _castConvexVsTriangleMesh_computeTriangleAABB_result);
 
                 // expand by half-extents
-                triBounds[0][0] -= halfExtents[0];
-                triBounds[0][1] -= halfExtents[1];
-                triBounds[0][2] -= halfExtents[2];
-                triBounds[1][0] += halfExtents[0];
-                triBounds[1][1] += halfExtents[1];
-                triBounds[1][2] += halfExtents[2];
+                triBounds[0] -= halfExtents[0];
+                triBounds[1] -= halfExtents[1];
+                triBounds[2] -= halfExtents[2];
+                triBounds[3] += halfExtents[0];
+                triBounds[4] += halfExtents[1];
+                triBounds[5] += halfExtents[2];
 
                 // early out: ray x triangle expanded bounds
                 if (!raycast3.intersectsBox3(ray, triBounds)) {
@@ -1083,12 +1079,12 @@ function castConvexVsTriangleMesh(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // expanded bounds for left child
-            expandedBounds[0][0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[0][1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[0][2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[1][0] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[1][1] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[1][2] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
 
             // get distance
             const leftDist = rayDistanceToBox3(
@@ -1103,12 +1099,12 @@ function castConvexVsTriangleMesh(
             );
 
             // expanded bounds for right child
-            expandedBounds[0][0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[0][1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[0][2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[1][0] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[1][1] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[1][2] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
 
             // get distance
             const rightDist = rayDistanceToBox3(
@@ -1368,12 +1364,12 @@ function collideConvexVsTriangleMesh(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[0][0],
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[0][1],
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[0][2],
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[1][0],
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[1][1],
-                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[1][2],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[0],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[1],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[2],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[3],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[4],
+                _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2[5],
             )
         ) {
             continue;
@@ -1680,13 +1676,13 @@ function collideConvexVsTriangleMesh(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // compute squared distances from query center to child node centers
-            bvh.nodeGetCenter(buffer, leftOffset, _collideConvexVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_collideConvexVsTriangleMesh_nodeCenter, buffer, leftOffset);
             const leftDist = vec3.squaredDistance(
                 _collideConvexVsTriangleMesh_queryCenter,
                 _collideConvexVsTriangleMesh_nodeCenter,
             );
 
-            bvh.nodeGetCenter(buffer, rightOffset, _collideConvexVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_collideConvexVsTriangleMesh_nodeCenter, buffer, rightOffset);
             const rightDist = vec3.squaredDistance(
                 _collideConvexVsTriangleMesh_queryCenter,
                 _collideConvexVsTriangleMesh_nodeCenter,
@@ -1809,12 +1805,12 @@ function collideSphereVsTriangleMesh(
     // create sphere AABB for BVH culling
     const sphereBounds = _collideSphereVsTriangleMesh_boundsOfSphere;
     const expandedRadius = sphereRadius + settings.maxSeparationDistance;
-    sphereBounds[0][0] = sphereCenterInMesh[0] - expandedRadius;
-    sphereBounds[0][1] = sphereCenterInMesh[1] - expandedRadius;
-    sphereBounds[0][2] = sphereCenterInMesh[2] - expandedRadius;
-    sphereBounds[1][0] = sphereCenterInMesh[0] + expandedRadius;
-    sphereBounds[1][1] = sphereCenterInMesh[1] + expandedRadius;
-    sphereBounds[1][2] = sphereCenterInMesh[2] + expandedRadius;
+    sphereBounds[0] = sphereCenterInMesh[0] - expandedRadius;
+    sphereBounds[1] = sphereCenterInMesh[1] - expandedRadius;
+    sphereBounds[2] = sphereCenterInMesh[2] - expandedRadius;
+    sphereBounds[3] = sphereCenterInMesh[0] + expandedRadius;
+    sphereBounds[4] = sphereCenterInMesh[1] + expandedRadius;
+    sphereBounds[5] = sphereCenterInMesh[2] + expandedRadius;
 
     // BVH traversal
     bvhStack.reset(_collideSphereVsTriangleMesh_stack);
@@ -1833,12 +1829,12 @@ function collideSphereVsTriangleMesh(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                sphereBounds[0][0],
-                sphereBounds[0][1],
-                sphereBounds[0][2],
-                sphereBounds[1][0],
-                sphereBounds[1][1],
-                sphereBounds[1][2],
+                sphereBounds[0],
+                sphereBounds[1],
+                sphereBounds[2],
+                sphereBounds[3],
+                sphereBounds[4],
+                sphereBounds[5],
             )
         ) {
             continue;
@@ -2023,13 +2019,13 @@ function collideSphereVsTriangleMesh(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // compute squared distances from sphere center to child node centers
-            bvh.nodeGetCenter(buffer, leftOffset, _collideSphereVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_collideSphereVsTriangleMesh_nodeCenter, buffer, leftOffset);
             const leftDist = vec3.squaredDistance(
                 _collideSphereVsTriangleMesh_queryCenter,
                 _collideSphereVsTriangleMesh_nodeCenter,
             );
 
-            bvh.nodeGetCenter(buffer, rightOffset, _collideSphereVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_collideSphereVsTriangleMesh_nodeCenter, buffer, rightOffset);
             const rightDist = vec3.squaredDistance(
                 _collideSphereVsTriangleMesh_queryCenter,
                 _collideSphereVsTriangleMesh_nodeCenter,
@@ -2270,12 +2266,12 @@ function castSphereVsTriangleMesh(
     const sweptBounds = _castSphereVsTriangleMesh_sweptBounds;
     const endPoint = vec3.add(_castSphereVsTriangleMesh_endPoint, start, direction);
 
-    sweptBounds[0][0] = Math.min(start[0], endPoint[0]) - sphereRadius;
-    sweptBounds[0][1] = Math.min(start[1], endPoint[1]) - sphereRadius;
-    sweptBounds[0][2] = Math.min(start[2], endPoint[2]) - sphereRadius;
-    sweptBounds[1][0] = Math.max(start[0], endPoint[0]) + sphereRadius;
-    sweptBounds[1][1] = Math.max(start[1], endPoint[1]) + sphereRadius;
-    sweptBounds[1][2] = Math.max(start[2], endPoint[2]) + sphereRadius;
+    sweptBounds[0] = Math.min(start[0], endPoint[0]) - sphereRadius;
+    sweptBounds[1] = Math.min(start[1], endPoint[1]) - sphereRadius;
+    sweptBounds[2] = Math.min(start[2], endPoint[2]) - sphereRadius;
+    sweptBounds[3] = Math.max(start[0], endPoint[0]) + sphereRadius;
+    sweptBounds[4] = Math.max(start[1], endPoint[1]) + sphereRadius;
+    sweptBounds[5] = Math.max(start[2], endPoint[2]) + sphereRadius;
 
     // bvh traversal
     bvhStack.reset(_castSphereVsTriangleMesh_stack);
@@ -2291,12 +2287,12 @@ function castSphereVsTriangleMesh(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                sweptBounds[0][0],
-                sweptBounds[0][1],
-                sweptBounds[0][2],
-                sweptBounds[1][0],
-                sweptBounds[1][1],
-                sweptBounds[1][2],
+                sweptBounds[0],
+                sweptBounds[1],
+                sweptBounds[2],
+                sweptBounds[3],
+                sweptBounds[4],
+                sweptBounds[5],
             )
         ) {
             continue;
@@ -2547,10 +2543,10 @@ function castSphereVsTriangleMesh(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // compute squared distances from query center to child node centers
-            bvh.nodeGetCenter(buffer, leftOffset, _castSphereVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, leftOffset);
             const leftDist = vec3.squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
 
-            bvh.nodeGetCenter(buffer, rightOffset, _castSphereVsTriangleMesh_nodeCenter);
+            bvh.nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, rightOffset);
             const rightDist = vec3.squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
 
             // sort: push farther child first (so closer child is on top of stack)

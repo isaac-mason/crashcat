@@ -67,19 +67,25 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
       </a>
     </td>
     <td align="center">
+      <a href="https://crashcat.dev/examples#example-kcc-stress-test">
+        <img src="./examples/public/screenshots/example-kcc-stress-test.png" width="180" height="120" style="object-fit:cover;"/><br/>
+        KCC Stress Test
+      </a>
+    </td>
+    <td align="center">
       <a href="https://crashcat.dev/examples#example-floating-character-controller">
         <img src="./examples/public/screenshots/example-floating-character-controller.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Floating Character Controller
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-pointer-ray">
         <img src="./examples/public/screenshots/example-pointer-ray.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Pointer Raycast
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cluster">
         <img src="./examples/public/screenshots/example-cluster.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -92,14 +98,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Cube Heap
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-ccd">
         <img src="./examples/public/screenshots/example-ccd.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Continuous Collision Detection
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-kinematic">
         <img src="./examples/public/screenshots/example-kinematic.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -112,14 +118,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Constraints
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-constraints-motors">
         <img src="./examples/public/screenshots/example-constraints-motors.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Constraint Motors
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-hinge-motor">
         <img src="./examples/public/screenshots/example-hinge-motor.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -132,14 +138,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Voxel Triangle Mesh
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-voxel-custom-shape">
         <img src="./examples/public/screenshots/example-voxel-custom-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Voxel Custom Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-restitution">
         <img src="./examples/public/screenshots/example-restitution.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -152,14 +158,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Friction
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-conveyor-belt">
         <img src="./examples/public/screenshots/example-conveyor-belt.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Conveyor Belt
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-linear-damping">
         <img src="./examples/public/screenshots/example-linear-damping.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -172,14 +178,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Angular Damping
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-gravity-factor">
         <img src="./examples/public/screenshots/example-gravity-factor.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Gravity Factor
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-mass-properties">
         <img src="./examples/public/screenshots/example-mass-properties.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -192,14 +198,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Add Impulse at Position
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-ray">
         <img src="./examples/public/screenshots/example-cast-ray.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Cast Ray
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-shape">
         <img src="./examples/public/screenshots/example-cast-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -212,14 +218,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Collide Point
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-shape">
         <img src="./examples/public/screenshots/example-collide-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Collide Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-sensor">
         <img src="./examples/public/screenshots/example-sensor.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -232,14 +238,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Object Layer Filtering
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collision-filtering">
         <img src="./examples/public/screenshots/example-collision-filtering.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Collision Filtering
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-collide-shape-vs-shape">
         <img src="./examples/public/screenshots/example-collide-shape-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -252,14 +258,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         Collide Point vs Shape
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-ray-vs-shape">
         <img src="./examples/public/screenshots/example-cast-ray-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Cast Ray vs Shape
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-cast-shape-vs-shape">
         <img src="./examples/public/screenshots/example-cast-shape-vs-shape.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -272,14 +278,14 @@ See the [CHANGELOG.md](./CHANGELOG.md) for a detailed list of changes in each ve
         GJK Collision Detection
       </a>
     </td>
+  </tr>
+  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-get-supporting-face">
         <img src="./examples/public/screenshots/example-get-supporting-face.png" width="180" height="120" style="object-fit:cover;"/><br/>
         Get Supporting Face
       </a>
     </td>
-  </tr>
-  <tr>
     <td align="center">
       <a href="https://crashcat.dev/examples#example-convex-hull-builder">
         <img src="./examples/public/screenshots/example-convex-hull-builder.png" width="180" height="120" style="object-fit:cover;"/><br/>
@@ -828,7 +834,7 @@ You can also wake all sleeping bodies within a specific region:
 ```ts
 // wake all sleeping bodies within a region
 // useful after explosions, level loading, or regional activation
-rigidBody.wakeInAABB(world, [[-10, 0, -10], [10, 20, 10]]);
+rigidBody.wakeInAABB(world, [-10, 0, -10, 10, 20, 10]);
 ```
 
 ### Gravity Factor
@@ -1808,10 +1814,7 @@ For advanced scenarios, you can query the broadphase spatial acceleration struct
 // useful when you need custom traversal logic or want to avoid narrowphase overhead
 
 // intersectAABB: find all bodies whose AABBs overlap a box
-const queryAABB: Box3 = [
-    [-5, -5, -5],
-    [5, 5, 5],
-];
+const queryAABB: Box3 = [-5, -5, -5, 5, 5, 5];
 
 const aabbVisitor: BodyVisitor = {
     shouldExit: false,

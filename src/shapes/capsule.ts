@@ -1,7 +1,7 @@
 import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
-import { SupportFunctionMode, type Support } from '../collision/support';
+import { type Support, SupportFunctionMode } from '../collision/support';
 import { assert } from '../utils/assert';
 import { transformFaceWithMat4Scale } from '../utils/face';
 import * as convex from './convex';
@@ -9,12 +9,13 @@ import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
     ShapeCategory,
-    shapeDefs,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
+    setCastShapeFn,
+    setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
-import { setCastShapeFn, setCollideShapeFn } from './shapes';
 
 /** settings for creating a capsule shape */
 export type CapsuleShapeSettings = {
@@ -86,12 +87,12 @@ function computeCapsuleVolume(halfHeightOfCylinder: number, radius: number): num
 function computeCapsuleLocalBounds(out: Box3, halfHeightOfCylinder: number, radius: number): void {
     // capsule extends from -halfHeight-radius to +halfHeight+radius along Yand ±radius in X and Z
     const totalHalfHeight = halfHeightOfCylinder + radius;
-    out[0][0] = -radius;
-    out[0][1] = -totalHalfHeight;
-    out[0][2] = -radius;
-    out[1][0] = radius;
-    out[1][1] = totalHalfHeight;
-    out[1][2] = radius;
+    out[0] = -radius;
+    out[1] = -totalHalfHeight;
+    out[2] = -radius;
+    out[3] = radius;
+    out[4] = totalHalfHeight;
+    out[5] = radius;
 }
 
 function computeCapsuleCenterOfMass(out: Vec3): void {

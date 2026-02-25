@@ -27,8 +27,12 @@ export function rayDistanceToBox3(
     length: number,
     box: Box3,
 ): number {
-    const boxMin = box[0];
-    const boxMax = box[1];
+    const boxMinX = box[0];
+    const boxMinY = box[1];
+    const boxMinZ = box[2];
+    const boxMaxX = box[3];
+    const boxMaxY = box[4];
+    const boxMaxZ = box[5];
 
     let tMin = 0;
     let tMax = length;
@@ -36,13 +40,13 @@ export function rayDistanceToBox3(
     // unrolled loop for x axis
     if (Math.abs(directionX) < 1e-10) {
         // ray is parallel to slab - check if origin is within slab
-        if (originX < boxMin[0] || originX > boxMax[0]) {
+        if (originX < boxMinX || originX > boxMaxX) {
             return Infinity;
         }
     } else {
         const invD = 1.0 / directionX;
-        const t0 = (boxMin[0] - originX) * invD;
-        const t1 = (boxMax[0] - originX) * invD;
+        const t0 = (boxMinX - originX) * invD;
+        const t1 = (boxMaxX - originX) * invD;
 
         const tNear = t0 < t1 ? t0 : t1;
         const tFar = t0 < t1 ? t1 : t0;
@@ -57,13 +61,13 @@ export function rayDistanceToBox3(
 
     // unrolled loop for y axis
     if (Math.abs(directionY) < 1e-10) {
-        if (originY < boxMin[1] || originY > boxMax[1]) {
+        if (originY < boxMinY || originY > boxMaxY) {
             return Infinity;
         }
     } else {
         const invD = 1.0 / directionY;
-        const t0 = (boxMin[1] - originY) * invD;
-        const t1 = (boxMax[1] - originY) * invD;
+        const t0 = (boxMinY - originY) * invD;
+        const t1 = (boxMaxY - originY) * invD;
 
         const tNear = t0 < t1 ? t0 : t1;
         const tFar = t0 < t1 ? t1 : t0;
@@ -78,13 +82,13 @@ export function rayDistanceToBox3(
 
     // unrolled loop for z axis
     if (Math.abs(directionZ) < 1e-10) {
-        if (originZ < boxMin[2] || originZ > boxMax[2]) {
+        if (originZ < boxMinZ || originZ > boxMaxZ) {
             return Infinity;
         }
     } else {
         const invD = 1.0 / directionZ;
-        const t0 = (boxMin[2] - originZ) * invD;
-        const t1 = (boxMax[2] - originZ) * invD;
+        const t0 = (boxMinZ - originZ) * invD;
+        const t1 = (boxMaxZ - originZ) * invD;
 
         const tNear = t0 < t1 ? t0 : t1;
         const tFar = t0 < t1 ? t1 : t0;

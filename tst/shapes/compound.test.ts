@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'vitest';
 import { quat, vec3 } from 'mathcat';
-import { ShapeType, box, compound, sphere } from '../../src';
+import { describe, expect, test } from 'vitest';
+import { box, compound, ShapeType, sphere } from '../../src';
 
 describe('Compound shape AABB caching', () => {
     test('compound shape should have correct AABB', () => {
@@ -15,12 +15,12 @@ describe('Compound shape AABB caching', () => {
         expect(cs.aabb).toBeDefined();
         // Union of sphere [-1,-1,-1] to [1,1,1] and box [-2,-2,-2] to [2,2,2]
         // Result: [-2,-2,-2] to [2,2,2]
-        expect(cs.aabb[0][0]).toBe(-2);
-        expect(cs.aabb[0][1]).toBe(-2);
-        expect(cs.aabb[0][2]).toBe(-2);
-        expect(cs.aabb[1][0]).toBe(2);
-        expect(cs.aabb[1][1]).toBe(2);
-        expect(cs.aabb[1][2]).toBe(2);
+        expect(cs.aabb[0]).toBe(-2);
+        expect(cs.aabb[1]).toBe(-2);
+        expect(cs.aabb[2]).toBe(-2);
+        expect(cs.aabb[3]).toBe(2);
+        expect(cs.aabb[4]).toBe(2);
+        expect(cs.aabb[5]).toBe(2);
     });
 });
 

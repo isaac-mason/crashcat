@@ -74,12 +74,12 @@ function computeSphereVolume(radius: number): number {
 }
 
 function computeSphereLocalBounds(out: Box3, radius: number): void {
-    out[0][0] = -radius;
-    out[0][1] = -radius;
-    out[0][2] = -radius;
-    out[1][0] = radius;
-    out[1][1] = radius;
-    out[1][2] = radius;
+    out[0] = -radius;
+    out[1] = -radius;
+    out[2] = -radius;
+    out[3] = radius;
+    out[4] = radius;
+    out[5] = radius;
 }
 
 /** updates a sphere shape after it's properties have changed */
