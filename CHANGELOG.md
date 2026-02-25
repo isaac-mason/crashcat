@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## v0.0.2 (Unreleased)
+## v0.0.2
 
 - feat: add `StaticCompoundShape`, alternative to `CompoundShape` with a BVH for faster queries
 - feat: early exit velocity solving for island when converged
