@@ -620,12 +620,12 @@ export function optimizeIncremental(dbvt: DBVT, passes: number): void {
 export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
-    const qMinX = aabb[0],
-        qMinY = aabb[1],
-        qMinZ = aabb[2];
-    const qMaxX = aabb[3],
-        qMaxY = aabb[4],
-        qMaxZ = aabb[5];
+    const qMinX = aabb[0];
+    const qMinY = aabb[1];
+    const qMinZ = aabb[2];
+    const qMaxX = aabb[3];
+    const qMaxY = aabb[4];
+    const qMaxZ = aabb[5];
 
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, 0);
@@ -635,7 +635,7 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
         const nodeIndex = entry.nodeIndex;
         const node = dbvt.nodes[nodeIndex];
 
-        // node aabb test (inlined box3.intersectsBox3)
+        // node aabb test
         if (
             node.aabb[0] > qMaxX ||
             node.aabb[3] < qMinX ||
@@ -679,7 +679,7 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
             continue;
         }
 
-        // body aabb test (inlined box3.intersectsBox3)
+        // body aabb test
         if (
             body.aabb[0] > qMaxX ||
             body.aabb[3] < qMinX ||
@@ -704,9 +704,9 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
-    const px = point[0],
-        py = point[1],
-        pz = point[2];
+    const px = point[0];
+    const py = point[1];
+    const pz = point[2];
 
     bvhStack.reset(_stack);
     bvhStack.push(_stack, dbvt.root, 0);
@@ -716,7 +716,7 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
         const nodeIndex = entry.nodeIndex;
         const node = dbvt.nodes[nodeIndex];
 
-        // skip if point is not inside node's AABB (inlined box3.containsPoint)
+        // skip if point is not inside node's AABB
         if (
             px < node.aabb[0] ||
             px > node.aabb[3] ||
@@ -761,7 +761,7 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
             continue;
         }
 
-        // body contains point (inlined box3.containsPoint)
+        // body contains point
         if (
             px < body.aabb[0] ||
             px > body.aabb[3] ||
@@ -825,13 +825,12 @@ export function castRay(
 
     raycast3.set(_ray, origin, direction, length);
 
-    // hoist ray scalars out of the loop
-    const originX = _ray.origin[0],
-        originY = _ray.origin[1],
-        originZ = _ray.origin[2];
-    const dirX = _ray.direction[0],
-        dirY = _ray.direction[1],
-        dirZ = _ray.direction[2];
+    const originX = _ray.origin[0];
+    const originY = _ray.origin[1];
+    const originZ = _ray.origin[2];
+    const dirX = _ray.direction[0];
+    const dirY = _ray.direction[1];
+    const dirZ = _ray.direction[2];
     const rayLen = _ray.length;
 
     bvhStack.reset(_stack);
@@ -848,15 +847,15 @@ export function castRay(
             continue;
         }
 
-        // early out: ray x node aabb (inlined raycast3.intersectsBox3)
-        let tNear = 0,
-            tFar = rayLen;
+        // early out: ray x node aabb
+        let tNear = 0
+        let tFar = rayLen;
         if (Math.abs(dirX) < 1e-10) {
             if (originX < node.aabb[0] || originX > node.aabb[3]) continue;
         } else {
             const inv = 1 / dirX;
-            let tEnter = (node.aabb[0] - originX) * inv,
-                tExit = (node.aabb[3] - originX) * inv;
+            let tEnter = (node.aabb[0] - originX) * inv;
+            let tExit = (node.aabb[3] - originX) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -870,8 +869,8 @@ export function castRay(
             if (originY < node.aabb[1] || originY > node.aabb[4]) continue;
         } else {
             const inv = 1 / dirY;
-            let tEnter = (node.aabb[1] - originY) * inv,
-                tExit = (node.aabb[4] - originY) * inv;
+            let tEnter = (node.aabb[1] - originY) * inv;
+            let tExit = (node.aabb[4] - originY) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -885,8 +884,8 @@ export function castRay(
             if (originZ < node.aabb[2] || originZ > node.aabb[5]) continue;
         } else {
             const inv = 1 / dirZ;
-            let tEnter = (node.aabb[2] - originZ) * inv,
-                tExit = (node.aabb[5] - originZ) * inv;
+            let tEnter = (node.aabb[2] - originZ) * inv;
+            let tExit = (node.aabb[5] - originZ) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -941,15 +940,15 @@ export function castRay(
             continue;
         }
 
-        // early out: ray-aabb test on body bounds (inlined raycast3.intersectsBox3)
+        // early out: ray-aabb test on body bounds
         let bodyTNear = 0,
             bodyTFar = rayLen;
         if (Math.abs(dirX) < 1e-10) {
             if (originX < body.aabb[0] || originX > body.aabb[3]) continue;
         } else {
             const inv = 1 / dirX;
-            let tEnter = (body.aabb[0] - originX) * inv,
-                tExit = (body.aabb[3] - originX) * inv;
+            let tEnter = (body.aabb[0] - originX) * inv;
+            let tExit = (body.aabb[3] - originX) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -963,8 +962,8 @@ export function castRay(
             if (originY < body.aabb[1] || originY > body.aabb[4]) continue;
         } else {
             const inv = 1 / dirY;
-            let tEnter = (body.aabb[1] - originY) * inv,
-                tExit = (body.aabb[4] - originY) * inv;
+            let tEnter = (body.aabb[1] - originY) * inv;
+            let tExit = (body.aabb[4] - originY) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -978,8 +977,8 @@ export function castRay(
             if (originZ < body.aabb[2] || originZ > body.aabb[5]) continue;
         } else {
             const inv = 1 / dirZ;
-            let tEnter = (body.aabb[2] - originZ) * inv,
-                tExit = (body.aabb[5] - originZ) * inv;
+            let tEnter = (body.aabb[2] - originZ) * inv;
+            let tExit = (body.aabb[5] - originZ) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -1042,22 +1041,22 @@ export function castAABB(
         }
 
         // expand node aabb by the shape's half extents (minkowski sum)
-        const minX = node.aabb[0] - halfX,
-            minY = node.aabb[1] - halfY,
-            minZ = node.aabb[2] - halfZ;
-        const maxX = node.aabb[3] + halfX,
-            maxY = node.aabb[4] + halfY,
-            maxZ = node.aabb[5] + halfZ;
+        const minX = node.aabb[0] - halfX;
+        const minY = node.aabb[1] - halfY;
+        const minZ = node.aabb[2] - halfZ;
+        const maxX = node.aabb[3] + halfX;
+        const maxY = node.aabb[4] + halfY;
+        const maxZ = node.aabb[5] + halfZ;
 
-        // ray-slab test against expanded node aabb (inlined raycast3.intersectsBox3)
-        let tNear = 0,
-            tFar = castLen;
+        // ray-slab test against expanded node aabb
+        let tNear = 0;
+        let tFar = castLen;
         if (Math.abs(dirX) < 1e-10) {
             if (originX < minX || originX > maxX) continue;
         } else {
             const inv = 1 / dirX;
-            let tEnter = (minX - originX) * inv,
-                tExit = (maxX - originX) * inv;
+            let tEnter = (minX - originX) * inv;
+            let tExit = (maxX - originX) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -1071,8 +1070,8 @@ export function castAABB(
             if (originY < minY || originY > maxY) continue;
         } else {
             const inv = 1 / dirY;
-            let tEnter = (minY - originY) * inv,
-                tExit = (maxY - originY) * inv;
+            let tEnter = (minY - originY) * inv;
+            let tExit = (maxY - originY) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -1086,8 +1085,8 @@ export function castAABB(
             if (originZ < minZ || originZ > maxZ) continue;
         } else {
             const inv = 1 / dirZ;
-            let tEnter = (minZ - originZ) * inv,
-                tExit = (maxZ - originZ) * inv;
+            let tEnter = (minZ - originZ) * inv;
+            let tExit = (maxZ - originZ) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -1099,7 +1098,6 @@ export function castAABB(
         }
 
         // if internal node, push children sorted by distance
-        // inlined: expandByExtents into rayDistanceToBox3 — compute expanded min/max directly
         if (!isLeaf(node)) {
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
@@ -1165,9 +1163,9 @@ export function castAABB(
             bMaxY = body.aabb[4] + halfY,
             bMaxZ = body.aabb[5] + halfZ;
 
-        // ray-slab test against expanded body aabb (inlined raycast3.intersectsBox3)
-        let bodyTNear = 0,
-            bodyTFar = castLen;
+        // ray-slab test against expanded body aabb
+        let bodyTNear = 0;
+        let bodyTFar = castLen;
         if (Math.abs(dirX) < 1e-10) {
             if (originX < bMinX || originX > bMaxX) continue;
         } else {
@@ -1187,8 +1185,8 @@ export function castAABB(
             if (originY < bMinY || originY > bMaxY) continue;
         } else {
             const inv = 1 / dirY;
-            let tEnter = (bMinY - originY) * inv,
-                tExit = (bMaxY - originY) * inv;
+            let tEnter = (bMinY - originY) * inv;
+            let tExit = (bMaxY - originY) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
@@ -1202,8 +1200,8 @@ export function castAABB(
             if (originZ < bMinZ || originZ > bMaxZ) continue;
         } else {
             const inv = 1 / dirZ;
-            let tEnter = (bMinZ - originZ) * inv,
-                tExit = (bMaxZ - originZ) * inv;
+            let tEnter = (bMinZ - originZ) * inv;
+            let tExit = (bMaxZ - originZ) * inv;
             if (inv < 0) {
                 const tmp = tEnter;
                 tEnter = tExit;
