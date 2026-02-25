@@ -7,6 +7,10 @@
         "title": "Triangle Mesh",
         "tags": ["world", "physics", "triangle-mesh", "gltf", "dynamics", "shapes"]
     },
+    "example-raycast-vehicle": {
+        "title": "Raycast Vehicle",
+        "tags": ["world", "physics", "vehicle", "raycast", "dynamics", "suspension", "friction"]
+    },
     "example-ragdoll": {
         "title": "Ragdoll",
         "tags": ["world", "physics", "ragdoll", "constraints", "joints", "dynamics"]
