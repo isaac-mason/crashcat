@@ -121,10 +121,17 @@ type Vehicle = {
     chassisWorldMatrix: Mat4;
     chassisInvRotationMatrix: Mat4;
 
-    // raycast resources
-    rayCollector: ReturnType<typeof createClosestCastRayCollector>;
-    raySettings: ReturnType<typeof createDefaultCastRaySettings>;
+    // raycast filter
     queryFilter: ReturnType<typeof filter.create>;
+
+    // anti-roll bars
+    antiRollBars: AntiRollBar[];
+};
+
+type AntiRollBar = {
+    leftWheel: number;
+    rightWheel: number;
+    stiffness: number;
 };
 
 /* vehicle creation */
@@ -135,7 +142,7 @@ type CreateVehicleSettings = {
 };
 
 function createVehicle(settings: CreateVehicleSettings): Vehicle {
-    return {
+    const vehicle: Vehicle = {
         wheels: [],
         state: {
             sliding: false,
@@ -144,10 +151,17 @@ function createVehicle(settings: CreateVehicleSettings): Vehicle {
         chassisBody: settings.chassisBody,
         chassisWorldMatrix: mat4.create(),
         chassisInvRotationMatrix: mat4.create(),
-        rayCollector: createClosestCastRayCollector(),
-        raySettings: createDefaultCastRaySettings(),
         queryFilter: settings.queryFilter,
+        antiRollBars: [],
     };
+    return vehicle;
+}
+
+const vehicleRayCollector = createClosestCastRayCollector();
+const vehicleRaySettings = createDefaultCastRaySettings();
+
+function addAntiRollBar(vehicle: Vehicle, arb: AntiRollBar): void {
+    vehicle.antiRollBars.push(arb);
 }
 
 function createWheelState(): WheelState {
@@ -432,18 +446,18 @@ function updateWheelSuspension(world: World, vehicle: Vehicle): void {
         vehicle.queryFilter.bodyFilter = (body: RigidBody) => body.id !== chassisId;
 
         // perform raycast
-        vehicle.rayCollector.reset();
+        vehicleRayCollector.reset();
         castRay(
             world,
-            vehicle.rayCollector,
-            vehicle.raySettings,
+            vehicleRayCollector,
+            vehicleRaySettings,
             origin,
             _updateWheelSuspension_direction,
             rayLength,
             vehicle.queryFilter,
         );
 
-        const hit = vehicle.rayCollector.hit;
+        const hit = vehicleRayCollector.hit;
 
         // get the hit body from the body id
         const hitBody = hit.status === CastRayStatus.COLLIDING ? rigidBody.get(world, hit.bodyIdB) : undefined;
@@ -618,6 +632,39 @@ function applyWheelSuspensionForce(world: World, vehicle: Vehicle, delta: number
         vec3.scale(_applyWheelSuspensionForce_impulse, _applyWheelSuspensionForce_impulse, suspensionForce * delta);
 
         rigidBody.addImpulseAtPosition(world, vehicle.chassisBody, _applyWheelSuspensionForce_impulse, wheel.state.hitPointWorld);
+    }
+
+    // apply anti-roll bar forces
+    for (const arb of vehicle.antiRollBars) {
+        if (arb.stiffness <= 0) continue;
+
+        const lw = vehicle.wheels[arb.leftWheel];
+        const rw = vehicle.wheels[arb.rightWheel];
+
+        if (lw.state.inContactWithGround && rw.state.inContactWithGround) {
+            const diff = rw.state.suspensionLength - lw.state.suspensionLength;
+            const impulse = diff * arb.stiffness * delta;
+
+            // apply to left wheel (push up if diff is positive)
+            vec3.copy(_applyWheelSuspensionForce_impulse, lw.state.hitNormalWorld);
+            vec3.scale(_applyWheelSuspensionForce_impulse, _applyWheelSuspensionForce_impulse, -impulse);
+            rigidBody.addImpulseAtPosition(
+                world,
+                vehicle.chassisBody,
+                _applyWheelSuspensionForce_impulse,
+                lw.state.hitPointWorld,
+            );
+
+            // apply to right wheel
+            vec3.copy(_applyWheelSuspensionForce_impulse, rw.state.hitNormalWorld);
+            vec3.scale(_applyWheelSuspensionForce_impulse, _applyWheelSuspensionForce_impulse, impulse);
+            rigidBody.addImpulseAtPosition(
+                world,
+                vehicle.chassisBody,
+                _applyWheelSuspensionForce_impulse,
+                rw.state.hitPointWorld,
+            );
+        }
     }
 }
 
@@ -805,9 +852,8 @@ function updateWheelRotation(vehicle: Vehicle, delta: number): void {
 
         rigidBody.getVelocityAtPoint(vel, vehicle.chassisBody, wheel.state.chassisConnectionPointWorld);
 
-        // hack to get the rotation in the correct direction (Y-up convention)
-        const m = -1;
-
+        // wheel rotation based on velocity at contact point
+        // positive rotation = wheel rolls forward (car moves in +Z direction)
         if (wheel.state.inContactWithGround) {
             getVehicleAxisWorld(fwd, vehicle, 2);
 
@@ -820,7 +866,7 @@ function updateWheelRotation(vehicle: Vehicle, delta: number): void {
 
             const proj2 = vec3.dot(fwd, vel);
 
-            wheel.state.deltaRotation = (m * proj2 * delta) / wheel.options.radius;
+            wheel.state.deltaRotation = (proj2 * delta) / wheel.options.radius;
         }
 
         if (
@@ -946,48 +992,51 @@ function updateVehicleDebug(vehicle: Vehicle, debug: VehicleDebug): void {
         const maxSuspensionLength = wheel.options.suspensionRestLength + wheel.options.maxSuspensionTravel;
         const rayLength = wheel.options.radius + maxSuspensionLength;
 
+        // suspension offset: left wheels (-X), right wheels (+X)
+        const suspOffset = i % 2 === 0 ? -offsetX : offsetX;
+
         // compute hit distance (or full ray length if no hit)
         const hitDistance = wheel.state.inContactWithGround ? wheel.state.suspensionLength + wheel.options.radius : rayLength;
 
-        // ray hit line (green) - origin to hit point, offset left
+        // ray hit line (green) - on the wheel spot
         const rayHitLine = debug.rayHitLines[i];
         const rayHitPos = rayHitLine.geometry.attributes.position.array as Float32Array;
-        rayHitPos[0] = origin[0] - offsetX;
+        rayHitPos[0] = origin[0];
         rayHitPos[1] = origin[1];
         rayHitPos[2] = origin[2];
-        rayHitPos[3] = origin[0] - offsetX + dirX * hitDistance;
+        rayHitPos[3] = origin[0] + dirX * hitDistance;
         rayHitPos[4] = origin[1] + dirY * hitDistance;
         rayHitPos[5] = origin[2] + dirZ * hitDistance;
         rayHitLine.geometry.attributes.position.needsUpdate = true;
         rayHitLine.visible = wheel.state.inContactWithGround;
 
-        // ray miss line (red) - hit point to max ray length (or full ray if no hit), offset left
+        // ray miss line (red) - on the wheel spot
         const rayMissLine = debug.rayMissLines[i];
         const rayMissPos = rayMissLine.geometry.attributes.position.array as Float32Array;
         if (wheel.state.inContactWithGround) {
             // from hit point to end of ray
-            rayMissPos[0] = origin[0] - offsetX + dirX * hitDistance;
+            rayMissPos[0] = origin[0] + dirX * hitDistance;
             rayMissPos[1] = origin[1] + dirY * hitDistance;
             rayMissPos[2] = origin[2] + dirZ * hitDistance;
         } else {
             // no hit - start from origin
-            rayMissPos[0] = origin[0] - offsetX;
+            rayMissPos[0] = origin[0];
             rayMissPos[1] = origin[1];
             rayMissPos[2] = origin[2];
         }
-        rayMissPos[3] = origin[0] - offsetX + dirX * rayLength;
+        rayMissPos[3] = origin[0] + dirX * rayLength;
         rayMissPos[4] = origin[1] + dirY * rayLength;
         rayMissPos[5] = origin[2] + dirZ * rayLength;
         rayMissLine.geometry.attributes.position.needsUpdate = true;
 
-        // update suspension line (cyan) - current suspension length, offset right
+        // update suspension line (cyan) - offset to outside of vehicle
         const suspensionLine = debug.suspensionLines[i];
         const suspensionPos = suspensionLine.geometry.attributes.position.array as Float32Array;
         const suspLen = Math.max(0, wheel.state.suspensionLength);
-        suspensionPos[0] = origin[0] + offsetX;
+        suspensionPos[0] = origin[0] + suspOffset;
         suspensionPos[1] = origin[1];
         suspensionPos[2] = origin[2];
-        suspensionPos[3] = origin[0] + offsetX + dirX * suspLen;
+        suspensionPos[3] = origin[0] + suspOffset + dirX * suspLen;
         suspensionPos[4] = origin[1] + dirY * suspLen;
         suspensionPos[5] = origin[2] + dirZ * suspLen;
         suspensionLine.geometry.attributes.position.needsUpdate = true;
@@ -1341,6 +1390,10 @@ addWheel(vehicle, {
     chassisConnectionPointLocal: vec3.fromValues(vehicleWidth * 0.5, vehicleHeight, vehicleBack),
 });
 
+// add anti-roll bars
+addAntiRollBar(vehicle, { leftWheel: 0, rightWheel: 1, stiffness: 500 }); // front axle
+addAntiRollBar(vehicle, { leftWheel: 2, rightWheel: 3, stiffness: 500 }); // rear axle
+
 // create chassis mesh
 const chassisMesh = new THREE.Mesh(
     new THREE.BoxGeometry(chassisHalfWidth * 2, chassisHalfHeight * 2, chassisHalfLength * 2),
@@ -1443,6 +1496,8 @@ vehicleTuningFolder.add(vehicleSettings, 'maxSuspensionForce', 1000, 200000).nam
 vehicleTuningFolder.add(vehicleSettings, 'frictionSlip', 0.1, 5).name('Friction Slip');
 vehicleTuningFolder.add(vehicleSettings, 'sideFrictionStiffness', 0.1, 3).name('Side Friction Stiffness');
 vehicleTuningFolder.add(vehicleSettings, 'rollInfluence', 0, 1).name('Roll Influence');
+vehicleTuningFolder.add(vehicle.antiRollBars[0], 'stiffness', 0, 2000).name('Front ARB Stiffness');
+vehicleTuningFolder.add(vehicle.antiRollBars[1], 'stiffness', 0, 2000).name('Rear ARB Stiffness');
 vehicleTuningFolder.open();
 
 /* loop */
