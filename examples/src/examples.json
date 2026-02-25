@@ -35,6 +35,10 @@
         "title": "Cube Heap",
         "tags": ["world", "physics", "cube-heap"]
     },
+    "example-static-compound": {
+        "title": "Static Compound Shapes",
+        "tags": ["world", "physics", "shapes", "compound", "static-compound", "stress-test", "performance"]
+    },
     "example-ccd": {
         "title": "Continuous Collision Detection",
         "tags": ["world", "physics", "ccd", "continuous", "collision", "dynamics"]
