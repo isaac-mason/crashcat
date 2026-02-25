@@ -1,10 +1,4 @@
 import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
-import {
-    addAngularVelocityStep,
-    addLinearVelocityStep,
-    subAngularVelocityStep,
-    subLinearVelocityStep,
-} from '../../body/motion-properties';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addPositionStep, addRotationStep, subPositionStep, subRotationStep } from '../../body/rigid-body-step';
@@ -119,7 +113,8 @@ function calculateInverseEffectiveMass(
         part.invI1_r1PlusUxAxis[2] = invInertiaA[2] * cx + invInertiaA[6] * cy + invInertiaA[10] * cz;
 
         // invMass + (r × axis) · (I^-1 × (r × axis))
-        invEffectiveMass += invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
+        invEffectiveMass +=
+            invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
@@ -483,8 +478,6 @@ export function getTotalLambdaValue(part: AxisConstraintPart): number {
     return part.totalLambda;
 }
 
-const _acp_ws_impulse = /* @__PURE__ */ vec3.create();
-
 /**
  * Apply warm start impulse from previous frame.
  * Call this once before velocity iterations.
@@ -511,28 +504,55 @@ export function warmStart(
 
     if (part.totalLambda === 0) return;
 
-    // body a: subtract impulse (opposite direction)
-    if (bodyA.motionType === MotionType.DYNAMIC) {
-        const mpA = bodyA.motionProperties;
-        // linear: v -= (axis × totalLambda) × invMassA
-        vec3.scale(_acp_ws_impulse, axis, part.totalLambda * invMassA);
-        subLinearVelocityStep(mpA, _acp_ws_impulse);
+    const isDynamicA = bodyA.motionType === MotionType.DYNAMIC;
+    const isDynamicB = bodyB.motionType === MotionType.DYNAMIC;
+    const mpA = bodyA.motionProperties;
+    const mpB = bodyB.motionProperties;
 
+    // body a: subtract impulse (opposite direction)
+    if (isDynamicA) {
+        // inlined subLinearVelocityStep
+        // linear: v -= (axis × totalLambda) × invMassA
+        const linearScaleA = part.totalLambda * invMassA;
+        mpA.linearVelocity[0] -= axis[0] * linearScaleA;
+        mpA.linearVelocity[1] -= axis[1] * linearScaleA;
+        mpA.linearVelocity[2] -= axis[2] * linearScaleA;
+
+        // apply DOF constraints
+        const allowedTranslationA = mpA.allowedDegreesOfFreedom & 0b111;
+        if (!(allowedTranslationA & 0b001)) mpA.linearVelocity[0] = 0;
+        if (!(allowedTranslationA & 0b010)) mpA.linearVelocity[1] = 0;
+        if (!(allowedTranslationA & 0b100)) mpA.linearVelocity[2] = 0;
+
+        // inlined subAngularVelocityStep
         // angular: ω -= lambda × (I^-1 × (r × axis))
-        vec3.scale(_acp_ws_impulse, part.invI1_r1PlusUxAxis, part.totalLambda);
-        subAngularVelocityStep(mpA, _acp_ws_impulse);
+        const angularImpulseA = part.invI1_r1PlusUxAxis;
+        mpA.angularVelocity[0] -= angularImpulseA[0] * part.totalLambda;
+        mpA.angularVelocity[1] -= angularImpulseA[1] * part.totalLambda;
+        mpA.angularVelocity[2] -= angularImpulseA[2] * part.totalLambda;
     }
 
     // body b: add impulse
-    if (bodyB.motionType === MotionType.DYNAMIC) {
-        const mpB = bodyB.motionProperties;
+    if (isDynamicB) {
+        // inlined addLinearVelocityStep
         // linear: v += (axis × totalLambda) × invMassB
-        vec3.scale(_acp_ws_impulse, axis, part.totalLambda * invMassB);
-        addLinearVelocityStep(mpB, _acp_ws_impulse);
+        const linearScaleB = part.totalLambda * invMassB;
+        mpB.linearVelocity[0] += axis[0] * linearScaleB;
+        mpB.linearVelocity[1] += axis[1] * linearScaleB;
+        mpB.linearVelocity[2] += axis[2] * linearScaleB;
 
+        // apply DOF constraints
+        const allowedTranslationB = mpB.allowedDegreesOfFreedom & 0b111;
+        if (!(allowedTranslationB & 0b001)) mpB.linearVelocity[0] = 0;
+        if (!(allowedTranslationB & 0b010)) mpB.linearVelocity[1] = 0;
+        if (!(allowedTranslationB & 0b100)) mpB.linearVelocity[2] = 0;
+
+        // inlined addAngularVelocityStep
         // angular: ω += lambda × (I^-1 × (r × axis))
-        vec3.scale(_acp_ws_impulse, part.invI2_r2xAxis, part.totalLambda);
-        addAngularVelocityStep(mpB, _acp_ws_impulse);
+        const angularImpulseB = part.invI2_r2xAxis;
+        mpB.angularVelocity[0] += angularImpulseB[0] * part.totalLambda;
+        mpB.angularVelocity[1] += angularImpulseB[1] * part.totalLambda;
+        mpB.angularVelocity[2] += angularImpulseB[2] * part.totalLambda;
     }
 }
 

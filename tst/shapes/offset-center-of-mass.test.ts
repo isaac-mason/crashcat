@@ -53,12 +53,12 @@ describe('OffsetCenterOfMassShape - Phase 1', () => {
 		// offsetting COM does not change collision bounds
 		// inner sphere bounds: [-1, -1, -1] to [1, 1, 1]
 		// expected: same as inner shape
-		expect(shape.aabb[0][0]).toBeCloseTo(-1, 5);
-		expect(shape.aabb[0][1]).toBeCloseTo(-1, 5);
-		expect(shape.aabb[0][2]).toBeCloseTo(-1, 5);
-		expect(shape.aabb[1][0]).toBeCloseTo(1, 5);
-		expect(shape.aabb[1][1]).toBeCloseTo(1, 5);
-		expect(shape.aabb[1][2]).toBeCloseTo(1, 5);
+		expect(shape.aabb[0]).toBeCloseTo(-1, 5);
+		expect(shape.aabb[1]).toBeCloseTo(-1, 5);
+		expect(shape.aabb[2]).toBeCloseTo(-1, 5);
+		expect(shape.aabb[3]).toBeCloseTo(1, 5);
+		expect(shape.aabb[4]).toBeCloseTo(1, 5);
+		expect(shape.aabb[5]).toBeCloseTo(1, 5);
 	});
 
 	test('volume should be unchanged from inner shape', () => {
@@ -127,8 +127,8 @@ describe('OffsetCenterOfMassShape - Phase 2', () => {
 		expect(shape2.centerOfMass[1]).toBeCloseTo(0.8);
 
 		// bounds stay at shape origin (collision geometry unchanged)
-		expect(shape2.aabb[0][1]).toBeCloseTo(-1); // min Y
-		expect(shape2.aabb[1][1]).toBeCloseTo(1); // max Y
+		expect(shape2.aabb[1]).toBeCloseTo(-1); // min Y
+		expect(shape2.aabb[4]).toBeCloseTo(1); // max Y
 	});
 
 	test('should compute mass properties for complex offset', () => {

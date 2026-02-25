@@ -81,6 +81,12 @@ export function init(options: debugRenderer.DebugRendererOptions): DebugUI {
     triangleMeshBvhFolder.add(options.triangleMeshBvh, 'showNonLeafNodes').name('Show Non-Leaf Nodes');
     triangleMeshBvhFolder.open();
 
+    const staticCompoundBvhFolder = gui.addFolder('Static Compound BVH');
+    staticCompoundBvhFolder.add(options.staticCompoundBvh, 'enabled').name('Enabled');
+    staticCompoundBvhFolder.add(options.staticCompoundBvh, 'showLeafNodes').name('Show Leaf Nodes');
+    staticCompoundBvhFolder.add(options.staticCompoundBvh, 'showNonLeafNodes').name('Show Non-Leaf Nodes');
+    staticCompoundBvhFolder.open();
+
     const stats: DebugStats = {
         bodies: {
             count: 0,

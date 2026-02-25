@@ -1,4 +1,4 @@
-import { box3, mat4, type Quat, quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import * as broadphase from './broadphase/broadphase';
@@ -18,8 +18,6 @@ import type { Filter } from './filter';
 import type { Shape } from './shapes/shapes';
 import type { World } from './world';
 
-const _castRay_ray = /* @__PURE__ */ raycast3.create();
-
 const CastRayBodyVisitor = {
     shouldExit: false,
     collector: null! as CastRayCollector,
@@ -32,14 +30,18 @@ const CastRayBodyVisitor = {
 
         const { collector, settings, origin, direction, maxDistance } = this;
 
-        raycast3.set(_castRay_ray, origin, direction, maxDistance);
-
         collector.bodyIdB = body.id;
 
         castRayVsShape(
             collector,
             settings,
-            _castRay_ray,
+            origin[0],
+            origin[1],
+            origin[2],
+            direction[0],
+            direction[1],
+            direction[2],
+            maxDistance,
             body.shape,
             EMPTY_SUB_SHAPE_ID,
             0,

@@ -1,4 +1,4 @@
-import { type Box3, quat, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import { defineShape, ShapeCategory, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
 
@@ -27,8 +27,8 @@ export type EmptyShape = {
 export function create(): EmptyShape {
     return {
         type: ShapeType.EMPTY,
-        // zero-size AABB at origin [min, max] both at [0,0,0]
-        aabb: [vec3.create(), vec3.create()],
+        // zero-size AABB at origin
+        aabb: box3.set(box3.create(), 0, 0, 0, 0, 0, 0),
         // center of mass at origin
         centerOfMass: vec3.create(),
         // zero volume
@@ -45,7 +45,6 @@ export const def = /* @__PURE__ */ (() =>
             out.mass = 0;
             // inertia matrix is already initialized to zeros in massProperties.create()
         },
-
         getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: EmptyShape, _subShapeId: number): void {
             // no surface, return zero normal
             vec3.zero(ioResult.normal);
@@ -53,24 +52,9 @@ export const def = /* @__PURE__ */ (() =>
             quat.identity(ioResult.quaternion);
             vec3.set(ioResult.scale, 1, 1, 1);
         },
-
         getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: EmptyShape, _subShapeId: number): void {
             // no faces, return empty face
             ioResult.face.numVertices = 0;
-        },
-
-        getInnerRadius(_shape: EmptyShape): number {
-            return 0;
-        },
-        getLeafShape(out, shape, subShapeId): void {
-            // leaf shape returns itself
-            out.shape = shape;
-            out.remainder = subShapeId;
-        },
-        getSubShapeTransformedShape(out, shape, subShapeId): void {
-            // leaf shape returns itself with accumulated transforms
-            out.shape = shape;
-            out.remainder = subShapeId;
         },
         castRay: () => {
             /* no-op */

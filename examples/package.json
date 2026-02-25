@@ -11,11 +11,11 @@
     "dependencies": {
         "lil-gui": "^0.20.0",
         "crashcat": "workspace:*",
-        "three": "^0.182.0"
+        "three": "^0.183.0"
     },
     "devDependencies": {
-        "@types/three": "^0.182.0",
+        "@types/three": "^0.183.0",
         "typescript": "^5.9.3",
-        "vite": "^7.1.10"
+        "vite": "^7.3.1"
     }
 }

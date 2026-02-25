@@ -299,13 +299,15 @@ export function warmStartVelocityConstraints(constraintsState: Constraints, bodi
     }
 }
 
-/** solve velocity constraints for an island, called once per velocity iteration */
+/** solve velocity constraints for an island, called once per velocity iteration, returns true if any constraint applied an impulse */
 export function solveVelocityConstraintsForIsland(
     constraints: Constraints,
     bodies: Bodies,
     constraintIds: ConstraintId[],
     deltaTime: number,
-): void {
+): boolean {
+    let anyImpulseApplied = false;
+
     for (const constraintId of constraintIds) {
         const type = getConstraintIdType(constraintId);
         const index = getConstraintIdIndex(constraintId);
@@ -313,11 +315,14 @@ export function solveVelocityConstraintsForIsland(
         const pool = constraints.pools[type];
         if (!pool || !def) continue;
         const constraint = pool.constraints[index];
-        def.solveVelocity(constraint, bodies, deltaTime);
+        const applied = def.solveVelocity(constraint, bodies, deltaTime);
+        anyImpulseApplied = anyImpulseApplied || applied;
     }
+
+    return anyImpulseApplied;
 }
 
-/** solve position constraints for an island, called once per position iteration, true if any constraint applied an impulse (not yet converged) */
+/** solve position constraints for an island, called once per position iteration, returns true if any constraint applied an impulse */
 export function solvePositionConstraintsForIsland(
     constraints: Constraints,
     bodies: Bodies,

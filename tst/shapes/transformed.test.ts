@@ -14,12 +14,12 @@ describe('Transformed shape AABB caching', () => {
         // Transformed sphere with translation [5,3,2] should have AABB offset by that amount
         // Original sphere AABB: [-1,-1,-1] to [1,1,1]
         // After translation: [4,2,1] to [6,4,3]
-        expect(ts.aabb[0][0]).toBe(4);
-        expect(ts.aabb[0][1]).toBe(2);
-        expect(ts.aabb[0][2]).toBe(1);
-        expect(ts.aabb[1][0]).toBe(6);
-        expect(ts.aabb[1][1]).toBe(4);
-        expect(ts.aabb[1][2]).toBe(3);
+        expect(ts.aabb[0]).toBe(4);
+        expect(ts.aabb[1]).toBe(2);
+        expect(ts.aabb[2]).toBe(1);
+        expect(ts.aabb[3]).toBe(6);
+        expect(ts.aabb[4]).toBe(4);
+        expect(ts.aabb[5]).toBe(3);
     });
 });
 

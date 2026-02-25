@@ -10,6 +10,8 @@ export type { CapsuleShape, CapsuleShapeSettings } from './shapes/capsule';
 export * as capsule from './shapes/capsule';
 export type { CompoundShape, CompoundShapeSettings } from './shapes/compound';
 export * as compound from './shapes/compound';
+export type { StaticCompoundShape, StaticCompoundShapeSettings } from './shapes/static-compound';
+export * as staticCompound from './shapes/static-compound';
 export type { CylinderShape, CylinderShapeSettings } from './shapes/cylinder';
 export * as cylinder from './shapes/cylinder';
 export type { ConvexHullShape, ConvexHullShapeSettings } from './shapes/convex-hull';
@@ -31,6 +33,8 @@ export * as plane from './shapes/plane';
 export * as convexHullBuilder from './shapes/utils/convex-hull-builder';
 export * as triangleMeshBuilder from './shapes/utils/triangle-mesh-builder';
 export * as triangleMeshBvh from './shapes/utils/triangle-mesh-bvh';
+export * as staticCompoundBvh from './shapes/utils/static-compound-bvh';
+export * as bvh from './shapes/utils/bvh';
 
 export * from './collision/narrowphase';
 export * from './collision/cast-ray-vs-shape';
@@ -42,6 +46,9 @@ export * from './collision/penetration';
 export * from './collision/simplex';
 export * from './collision/support';
 export * as activeEdges from './collision/active-edges';
+
+export type { CollisionEstimationResult, CollisionEstimationImpulse } from './collision/estimate-collision-response';
+export { estimateCollisionResponse, createCollisionEstimationResult } from './collision/estimate-collision-response';
 
 export * as broadphase from './broadphase/broadphase';
 export * as dbvt from './broadphase/dbvt';
@@ -121,3 +128,4 @@ export * from './world-settings';
 export type { KCC, KCCSettings } from './character/kcc';
 export * as kcc from './character/kcc';
 
+export * as debug from './debug';

@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
 import { type Shape, type ShapeDef, type ShapeType, shapeDefs } from '../shapes/shapes';
 import type { Face } from '../utils/face';
 
@@ -270,11 +270,26 @@ export function createTransformedSupport(): TransformedSupport {
     };
 }
 
-export function setTransformedSupport(out: TransformedSupport, position: Vec3, quaternion: Quat, innerSupport: Support): void {
+export function setTransformedSupport(out: TransformedSupport, transform: Mat4, innerSupport: Support): void {
     out.support = innerSupport;
     out.innerSupport = innerSupport;
     out.convexRadius = innerSupport.convexRadius;
-    mat4.fromRotationTranslation(out.transform, quaternion, position);
+    out.transform[0] = transform[0];
+    out.transform[1] = transform[1];
+    out.transform[2] = transform[2];
+    out.transform[3] = transform[3];
+    out.transform[4] = transform[4];
+    out.transform[5] = transform[5];
+    out.transform[6] = transform[6];
+    out.transform[7] = transform[7];
+    out.transform[8] = transform[8];
+    out.transform[9] = transform[9];
+    out.transform[10] = transform[10];
+    out.transform[11] = transform[11];
+    out.transform[12] = transform[12];
+    out.transform[13] = transform[13];
+    out.transform[14] = transform[14];
+    out.transform[15] = transform[15];
 }
 
 /* add convex radius to support function */

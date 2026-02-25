@@ -131,12 +131,12 @@ export function calculateTriangleAABB(out: Box3, data: TriangleMeshData, triIdx:
 	if (cy > maxY) maxY = cy;
 	if (cz > maxZ) maxZ = cz;
 
-	out[0][0] = minX;
-	out[0][1] = minY;
-	out[0][2] = minZ;
-	out[1][0] = maxX;
-	out[1][1] = maxY;
-	out[1][2] = maxZ;
+	out[0] = minX;
+	out[1] = minY;
+	out[2] = minZ;
+	out[3] = maxX;
+	out[4] = maxY;
+	out[5] = maxZ;
 }
 
 /** calculate triangle centroid from vertices */

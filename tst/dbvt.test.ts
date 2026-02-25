@@ -80,8 +80,8 @@ describe('DBVT', () => {
             const leaf = tree.nodes[leafIndex];
 
             // leaf AABB should be larger than body AABB due to margin
-            expect(leaf.aabb[0][0]).toBeLessThan(body.aabb[0][0]);
-            expect(leaf.aabb[1][0]).toBeGreaterThan(body.aabb[1][0]);
+            expect(leaf.aabb[0]).toBeLessThan(body.aabb[0]);
+            expect(leaf.aabb[3]).toBeGreaterThan(body.aabb[3]);
         });
     });
 
@@ -145,7 +145,7 @@ describe('DBVT', () => {
 
             // Move body significantly
             body.position[0] += 5;
-            box3.set(body.aabb, [4.5, -0.5, -0.5], [5.5, 0.5, 0.5]);
+            box3.set(body.aabb, 4.5, -0.5, -0.5, 5.5, 0.5, 0.5);
             dbvt.update(tree, body, -1);
 
             const leaf = tree.nodes[body.dbvtNode];
@@ -167,7 +167,7 @@ describe('DBVT', () => {
             dbvt.add(tree, body2);
             dbvt.add(tree, body3);
 
-            const queryAABB = box3.set(box3.create(), [-0.5, -0.5, -0.5], [1.5, 1.5, 1.5]);
+            const queryAABB = box3.set(box3.create(), -0.5, -0.5, -0.5, 1.5, 1.5, 1.5);
             const found: RigidBody[] = [];
             const visitor: BodyVisitor = {
                 shouldExit: false,
@@ -191,7 +191,7 @@ describe('DBVT', () => {
             dbvt.add(tree, body1);
             dbvt.add(tree, body2);
 
-            const queryAABB = box3.set(box3.create(), [-1, -1, -1], [2, 2, 2]);
+            const queryAABB = box3.set(box3.create(), -1, -1, -1, 2, 2, 2);
             const found: RigidBody[] = [];
             const visitor: BodyVisitor = {
                 shouldExit: false,
@@ -217,7 +217,7 @@ describe('DBVT', () => {
             dbvt.add(tree, body1);
             dbvt.add(tree, body2);
 
-            const queryAABB = box3.set(box3.create(), [-1, -1, -1], [2, 2, 2]);
+            const queryAABB = box3.set(box3.create(), -1, -1, -1, 2, 2, 2);
             const found: RigidBody[] = [];
             const visitor: BodyVisitor = {
                 shouldExit: false,
@@ -327,7 +327,7 @@ describe('DBVT', () => {
             dbvt.add(tree, body1);
             dbvt.add(tree, body2);
 
-            const bounds = box3.set(box3.create(), [0, 0, 0], [0.5, 0.5, 0.5]);
+            const bounds = box3.set(box3.create(), 0, 0, 0, 0.5, 0.5, 0.5);
             const displacement = vec3.fromValues(5, 0, 0);
 
             const found: RigidBody[] = [];

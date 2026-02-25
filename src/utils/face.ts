@@ -1,4 +1,4 @@
-import type { Quat, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'mathcat';
 
 export type Face = {
     /**
@@ -27,47 +27,24 @@ export function cloneFace(face: Face): Face {
     };
 }
 
-export function transformFace(face: Face, position: Vec3, quaternion: Quat, scale: Vec3): void {
-    // inline mat4.fromRotationTranslationScale to build transformation matrix
-    const qx = quaternion[0];
-    const qy = quaternion[1];
-    const qz = quaternion[2];
-    const qw = quaternion[3];
-
-    const qx2 = qx + qx;
-    const qy2 = qy + qy;
-    const qz2 = qz + qz;
-    const qxx = qx * qx2;
-    const qyx = qy * qx2;
-    const qyy = qy * qy2;
-    const qzx = qz * qx2;
-    const qzy = qz * qy2;
-    const qzz = qz * qz2;
-    const qwx = qw * qx2;
-    const qwy = qw * qy2;
-    const qwz = qw * qz2;
-    
-    const sx = scale[0];
-    const sy = scale[1];
-    const sz = scale[2];
-    
-    // transformation matrix columns (rotation × scale)
-    // column 0
-    const m00 = (1 - qyy - qzz) * sx;
-    const m01 = (qyx + qwz) * sx;
-    const m02 = (qzx - qwy) * sx;
-    // column 1
-    const m10 = (qyx - qwz) * sy;
-    const m11 = (1 - qxx - qzz) * sy;
-    const m12 = (qzy + qwx) * sy;
-    // column 2
-    const m20 = (qzx + qwy) * sz;
-    const m21 = (qzy - qwx) * sz;
-    const m22 = (1 - qxx - qyy) * sz;
-    // column 3 (translation)
-    const m30 = position[0];
-    const m31 = position[1];
-    const m32 = position[2];
+/**
+ * transform face vertices using a pre-computed transformation matrix (rotation + translation only, no scale).
+ * assumes vertices are already scaled.
+ */
+export function transformFaceWithMat4RotationTranslation(face: Face, matrix: Mat4): void {
+    // extract matrix components for affine transformation
+    const m00 = matrix[0];
+    const m01 = matrix[1];
+    const m02 = matrix[2];
+    const m10 = matrix[4];
+    const m11 = matrix[5];
+    const m12 = matrix[6];
+    const m20 = matrix[8];
+    const m21 = matrix[9];
+    const m22 = matrix[10];
+    const m30 = matrix[12];
+    const m31 = matrix[13];
+    const m32 = matrix[14];
 
     // apply transformation to each vertex
     for (let i = 0; i < face.numVertices; i++) {
@@ -77,6 +54,41 @@ export function transformFace(face: Face, position: Vec3, quaternion: Quat, scal
         const z = face.vertices[idx + 2];
 
         // mat4 × vec3 (affine transformation)
+        face.vertices[idx] = m00 * x + m10 * y + m20 * z + m30;
+        face.vertices[idx + 1] = m01 * x + m11 * y + m21 * z + m31;
+        face.vertices[idx + 2] = m02 * x + m12 * y + m22 * z + m32;
+    }
+}
+
+/**
+ * transform face vertices using a rotation+translation matrix plus separate scale.
+ * the matrix provides rotation and translation, scale is applied separately.
+ * this allows callers to pass pre-computed rotation+translation matrices.
+ */
+export function transformFaceWithMat4Scale(face: Face, matrix: Mat4, scale: Vec3): void {
+    // extract rotation from matrix and combine with scale
+    const sx = scale[0], sy = scale[1], sz = scale[2];
+    const m00 = matrix[0] * sx;
+    const m01 = matrix[1] * sx;
+    const m02 = matrix[2] * sx;
+    const m10 = matrix[4] * sy;
+    const m11 = matrix[5] * sy;
+    const m12 = matrix[6] * sy;
+    const m20 = matrix[8] * sz;
+    const m21 = matrix[9] * sz;
+    const m22 = matrix[10] * sz;
+    const m30 = matrix[12];
+    const m31 = matrix[13];
+    const m32 = matrix[14];
+
+    // apply transformation to each vertex
+    for (let i = 0; i < face.numVertices; i++) {
+        const idx = i * 3;
+        const x = face.vertices[idx];
+        const y = face.vertices[idx + 1];
+        const z = face.vertices[idx + 2];
+
+        // mat4 × vec3 (affine transformation with scale)
         face.vertices[idx] = m00 * x + m10 * y + m20 * z + m30;
         face.vertices[idx + 1] = m01 * x + m11 * y + m21 * z + m31;
         face.vertices[idx + 2] = m02 * x + m12 * y + m22 * z + m32;

@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import { quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
@@ -181,10 +181,9 @@ function updateDirection() {
     // get supporting face with this direction
     // shapes are at origin with identity transforms
     const face = { vertices: [], numVertices: 0 };
-    const position = vec3.fromValues(0, 0, 0);
-    const quaternion = quat.fromValues(0, 0, 0, 1);
+    const transform = mat4.create(); // identity
     const scale = vec3.fromValues(1, 1, 1);
-    getShapeSupportingFace(face, currentShape, 0, normalizedDir, position, quaternion, scale);
+    getShapeSupportingFace(face, currentShape, 0, normalizedDir, transform, scale);
 
     // visualize face vertices
     for (let i = 0; i < 8; i++) {

@@ -1,19 +1,15 @@
 import { type Box3, box3, type Vec3 } from 'mathcat';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
+import { INACTIVE_BODY_INDEX } from '../body/sleep';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
-import {
-    broadphaseLayerCollidesWithBroadphaseLayer,
-    type Layers,
-    objectLayerCollidesWithBroadphaseLayer,
-} from '../layers';
+import { broadphaseLayerCollidesWithBroadphaseLayer, type Layers, objectLayerCollidesWithBroadphaseLayer } from '../layers';
 import type { Listener } from '../listener';
 import { assert } from '../utils/assert';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
 import * as dbvt from './dbvt';
-import { INACTIVE_BODY_INDEX } from '../body/sleep';
 
 /** broadphase state for a physics world */
 export type Broadphase = {
@@ -271,7 +267,13 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
             _collisionBodyPairVisitor.setup(body, broadphase.pairs, listener);
 
             // query bvh with filter
-            dbvt.intersectAABB(world, tree, _findCollidingPairs_expandedAABB, _findCollidingPairs_filter, _collisionBodyPairVisitor);
+            dbvt.intersectAABB(
+                world,
+                tree,
+                _findCollidingPairs_expandedAABB,
+                _findCollidingPairs_filter,
+                _collisionBodyPairVisitor,
+            );
         }
     }
 }
@@ -324,13 +326,7 @@ export function intersectPoint(world: World, point: Vec3, queryFilter: Filter, v
 }
 
 /** finds bodies with AABBs that intersect the given swept AABB */
-export function castAABB(
-    world: World,
-    bounds: Box3,
-    displacement: Vec3,
-    queryFilter: Filter,
-    visitor: BodyVisitor,
-): void {
+export function castAABB(world: World, bounds: Box3, displacement: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
         if (!filter.filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
 

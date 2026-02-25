@@ -16,7 +16,7 @@ import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 export type ContactConstraints = {
     /** pool of contact constraints (grows as needed, never shrinks) */
     pool: ContactConstraint[];
-    
+
     /** number of active constraints (first count entries in pool array are valid) */
     count: number;
 };
@@ -532,7 +532,7 @@ export function addContactConstraint(
         constraint.normal[0] = contactManifold.worldSpaceNormal[0];
         constraint.normal[1] = contactManifold.worldSpaceNormal[1];
         constraint.normal[2] = contactManifold.worldSpaceNormal[2];
-        
+
         // compute orthonormal tangent basis from normal
         const normalX = constraint.normal[0];
         const normalY = constraint.normal[1];
@@ -959,14 +959,17 @@ export function warmStartVelocityConstraints(
  * @param contactConstraints contact constraint state
  * @param bodies body array
  * @param constraintIndices indices of constraints to solve (from island)
+ * @returns true if any impulse was applied (not yet converged)
  */
 export function solveVelocityConstraintsForIsland(
     contactConstraints: ContactConstraints,
     bodies: Bodies,
     constraintIndices: number[],
-): void {
+): boolean {
     // PGS (Projected Gauss-Seidel) solver - one pass
     // CRITICAL ORDER: Friction first, then normal (non-penetration is more important so solved last)
+
+    let anyImpulseApplied = false;
 
     for (const constraintIndex of constraintIndices) {
         const constraint = contactConstraints.pool[constraintIndex];
@@ -985,16 +988,12 @@ export function solveVelocityConstraintsForIsland(
 
         const { normal, tangent1, tangent2, friction } = constraint;
 
-        
         // solve friction constraints for this constraint
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
-            
+
             // check if either friction constraint is active
-            if (
-                axisConstraintPart.isActive(cp.tangentConstraint1) ||
-                axisConstraintPart.isActive(cp.tangentConstraint2)
-            ) {
+            if (axisConstraintPart.isActive(cp.tangentConstraint1) || axisConstraintPart.isActive(cp.tangentConstraint2)) {
                 let lambda1 = axisConstraintPart.getTotalLambda(cp.tangentConstraint1, bodyA, bodyB, tangent1);
                 let lambda2 = axisConstraintPart.getTotalLambda(cp.tangentConstraint2, bodyA, bodyB, tangent2);
 
@@ -1009,7 +1008,7 @@ export function solveVelocityConstraintsForIsland(
                     lambda2 *= scale;
                 }
 
-                axisConstraintPart.applyLambda(
+                const appliedFriction1 = axisConstraintPart.applyLambda(
                     cp.tangentConstraint1,
                     bodyA,
                     bodyB,
@@ -1018,7 +1017,9 @@ export function solveVelocityConstraintsForIsland(
                     tangent1,
                     lambda1,
                 );
-                axisConstraintPart.applyLambda(
+                anyImpulseApplied = anyImpulseApplied || appliedFriction1;
+
+                const appliedFriction2 = axisConstraintPart.applyLambda(
                     cp.tangentConstraint2,
                     bodyA,
                     bodyB,
@@ -1027,6 +1028,7 @@ export function solveVelocityConstraintsForIsland(
                     tangent2,
                     lambda2,
                 );
+                anyImpulseApplied = anyImpulseApplied || appliedFriction2;
             }
         }
 
@@ -1039,7 +1041,7 @@ export function solveVelocityConstraintsForIsland(
             // clamp to [0, ∞) → applyLambda
             // contacts can only push, never pull
             const clampedLambda = Math.max(0, totalLambda);
-            axisConstraintPart.applyLambda(
+            const appliedNormal = axisConstraintPart.applyLambda(
                 cp.normalConstraint,
                 bodyA,
                 bodyB,
@@ -1048,8 +1050,11 @@ export function solveVelocityConstraintsForIsland(
                 normal,
                 clampedLambda,
             );
+            anyImpulseApplied = anyImpulseApplied || appliedNormal;
         }
     }
+
+    return anyImpulseApplied;
 }
 
 /**
@@ -1153,7 +1158,7 @@ export function solvePositionConstraintsForIsland(
             const penVecY = pointBY - pointAY;
             const penVecZ = pointBZ - pointAZ;
             // separation = penetrationVector · normal + penetrationSlop
-            let separation = (penVecX * normal[0] + penVecY * normal[1] + penVecZ * normal[2]) + penetrationSlop;
+            let separation = penVecX * normal[0] + penVecY * normal[1] + penVecZ * normal[2] + penetrationSlop;
             separation = Math.max(separation, -maxPenetrationDistance);
 
             // early exit if not penetrating
@@ -1166,12 +1171,12 @@ export function solvePositionConstraintsForIsland(
             const midpointX = (pointAX + pointBX) * 0.5;
             const midpointY = (pointAY + pointBY) * 0.5;
             const midpointZ = (pointAZ + pointBZ) * 0.5;
-            
+
             // _solvePos_rA = midpoint - bodyA.centerOfMassPosition
             _solvePos_rA[0] = midpointX - bodyA.centerOfMassPosition[0];
             _solvePos_rA[1] = midpointY - bodyA.centerOfMassPosition[1];
             _solvePos_rA[2] = midpointZ - bodyA.centerOfMassPosition[2];
-            
+
             // _solvePos_rB = midpoint - bodyB.centerOfMassPosition
             _solvePos_rB[0] = midpointX - bodyB.centerOfMassPosition[0];
             _solvePos_rB[1] = midpointY - bodyB.centerOfMassPosition[1];

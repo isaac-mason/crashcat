@@ -1,16 +1,16 @@
-import type { Raycast3 } from 'mathcat';
-import { collisionDispatch, shapeDefs, type Shape } from '../shapes/shapes';
+import { collisionDispatch, type Shape, shapeDefs } from '../shapes/shapes';
 import type { CastRayCollector, CastRaySettings } from './cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from './cast-shape-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from './collide-point-vs-shape';
 import {
-    copyCollideShapeSettings,
-    createDefaultCollideShapeSettings,
     type CollideShapeCollector,
     type CollideShapeSettings,
+    copyCollideShapeSettings,
+    createDefaultCollideShapeSettings,
 } from './collide-shape-vs-shape';
 import { InternalEdgeRemovingCollector } from './internal-edge-removing-collector';
 
+export type { CastRayCollector, CastRayHit, CastRaySettings } from './cast-ray-vs-shape';
 export {
     CastRayStatus,
     copyCastRayHit,
@@ -20,12 +20,17 @@ export {
     createClosestCastRayCollector,
     createDefaultCastRaySettings,
 } from './cast-ray-vs-shape';
-export type { CastRayCollector, CastRayHit, CastRaySettings } from './cast-ray-vs-shape';
 
 export function castRayVsShape(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: Shape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -49,7 +54,13 @@ export function castRayVsShape(
     def.castRay(
         collector,
         settings,
-        ray,
+        originX,
+        originY,
+        originZ,
+        directionX,
+        directionY,
+        directionZ,
+        length,
         shape,
         subShapeId,
         subShapeIdBits,
@@ -66,6 +77,7 @@ export function castRayVsShape(
     );
 }
 
+export type { CastShapeCollector, CastShapeHit, CastShapeSettings } from './cast-shape-vs-shape';
 export {
     CastShapeStatus,
     copyCastShapeHit,
@@ -75,7 +87,6 @@ export {
     createClosestCastShapeCollector,
     createDefaultCastShapeSettings,
 } from './cast-shape-vs-shape';
-export type { CastShapeCollector, CastShapeHit, CastShapeSettings } from './cast-shape-vs-shape';
 
 export function castShapeVsShape(
     collector: CastShapeCollector,
@@ -151,6 +162,7 @@ export function castShapeVsShape(
     );
 }
 
+export type { CollideShapeCollector, CollideShapeHit, CollideShapeSettings } from './collide-shape-vs-shape';
 export {
     copyCollideShapeHit,
     createAllCollideShapeCollector,
@@ -159,7 +171,6 @@ export {
     createCollideShapeHit,
     createDefaultCollideShapeSettings,
 } from './collide-shape-vs-shape';
-export type { CollideShapeCollector, CollideShapeHit, CollideShapeSettings } from './collide-shape-vs-shape';
 export { InternalEdgeRemovingCollector, type VoidedFeature } from './internal-edge-removing-collector';
 
 const _internalEdgeRemovingCollector = /* @__PURE__ */ new InternalEdgeRemovingCollector();
@@ -324,6 +335,7 @@ export function collideShapeVsShapeWithInternalEdgeRemoval(
     _internalEdgeRemovingCollector.flush();
 }
 
+export type { CollidePointCollector, CollidePointHit, CollidePointSettings } from './collide-point-vs-shape';
 export {
     copyCollidePointHit,
     createAllCollidePointCollector,
@@ -331,7 +343,6 @@ export {
     createCollidePointHit,
     createDefaultCollidePointSettings,
 } from './collide-point-vs-shape';
-export type { CollidePointCollector, CollidePointHit, CollidePointSettings } from './collide-point-vs-shape';
 
 export function collidePointVsShape(
     collector: CollidePointCollector,

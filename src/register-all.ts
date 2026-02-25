@@ -17,6 +17,7 @@ import * as offsetCenterOfMass from './shapes/offset-center-of-mass';
 import * as plane from './shapes/plane';
 import * as scaled from './shapes/scaled';
 import * as sphere from './shapes/sphere';
+import * as staticCompound from './shapes/static-compound';
 import * as transformed from './shapes/transformed';
 import * as triangleMesh from './shapes/triangle-mesh';
 
@@ -29,6 +30,7 @@ export const ALL_SHAPE_DEFS = [
     plane.def,
     triangleMesh.def,
     compound.def,
+    staticCompound.def,
     transformed.def,
     scaled.def,
     emptyShape.def,

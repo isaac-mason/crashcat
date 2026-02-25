@@ -1,4 +1,4 @@
-import { type Box3, box3, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -7,10 +7,10 @@ import type { CollidePointCollector, CollidePointSettings } from '../collision/c
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import {
     collisionDispatch,
-    computeMassProperties,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
-    shapeDefs,
     type Shape,
     ShapeCategory,
     ShapeType,
@@ -18,6 +18,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 /**
@@ -70,13 +71,13 @@ function computeScaledLocalBounds(out: Box3, shape: ScaledShape): void {
     const scaleY = Math.abs(shape.scale[1]);
     const scaleZ = Math.abs(shape.scale[2]);
 
-    out[0][0] = innerAABB[0][0] * scaleX;
-    out[0][1] = innerAABB[0][1] * scaleY;
-    out[0][2] = innerAABB[0][2] * scaleZ;
+    out[0] = innerAABB[0] * scaleX;
+    out[1] = innerAABB[1] * scaleY;
+    out[2] = innerAABB[2] * scaleZ;
 
-    out[1][0] = innerAABB[1][0] * scaleX;
-    out[1][1] = innerAABB[1][1] * scaleY;
-    out[1][2] = innerAABB[1][2] * scaleZ;
+    out[3] = innerAABB[3] * scaleX;
+    out[4] = innerAABB[4] * scaleY;
+    out[5] = innerAABB[5] * scaleZ;
 }
 
 function computeScaledCenterOfMass(out: Vec3, shape: ScaledShape): void {
@@ -98,49 +99,12 @@ export const def = /* @__PURE__ */ (() =>
     defineShape<ScaledShape>({
         type: ShapeType.SCALED,
         category: ShapeCategory.DECORATOR,
-        computeMassProperties(out: MassProperties, shape: ScaledShape): void {
-            computeMassProperties(_childMassProperties, shape.shape);
-            massProperties.scale(out, _childMassProperties, shape.scale);
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ScaledShape, subShapeId: number): void {
-            // accumulate scale
-            vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
-
-            // transform surface position to local space: divide by scale (inverse transform)
-            vec3.divide(ioResult.position, ioResult.position, shape.scale);
-
-            // get normal from inner shape
-            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
-
-            // transform normal: divide by scale and renormalize
-            // this handles the (M^-1)^T transformation for plane normals
-            vec3.divide(ioResult.normal, ioResult.normal, shape.scale);
-            vec3.normalize(ioResult.normal, ioResult.normal);
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ScaledShape, subShapeId: number): void {
-            // accumulate scale: scale = scale * shape.scale
-            vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
-
-            // compute face in inner shape space - pass SubShapeID unchanged (decorator shapes don't consume bits)
-            shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
-        },
-        getInnerRadius(shape: ScaledShape): number {
-            const minScale = Math.min(Math.abs(shape.scale[0]), Math.abs(shape.scale[1]), Math.abs(shape.scale[2]));
-            return minScale * getShapeInnerRadius(shape.shape);
-        },
-        getLeafShape(outResult, shape, subShapeId): void {
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getLeafShape(outResult, shape.shape, subShapeId);
-        },
-        getSubShapeTransformedShape(out, shape, subShapeId): void {
-            // apply scale
-            vec3.multiply(out.scale, out.scale, shape.scale);
-
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getSubShapeTransformedShape(out, shape.shape, subShapeId);
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsScaled,
         collidePoint: collidePointVsScaled,
         register: () => {
@@ -154,12 +118,68 @@ export const def = /* @__PURE__ */ (() =>
         },
     }))();
 
+function computeMassProperties(out: MassProperties, shape: ScaledShape): void {
+    const shapeDef = shapeDefs[shape.shape.type];
+    shapeDef.computeMassProperties(_childMassProperties, shape.shape);
+    massProperties.scale(out, _childMassProperties, shape.scale);
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ScaledShape, subShapeId: number): void {
+    // accumulate scale
+    vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
+
+    // transform surface position to local space: divide by scale (inverse transform)
+    vec3.divide(ioResult.position, ioResult.position, shape.scale);
+
+    // get normal from inner shape
+    shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+
+    // transform normal: divide by scale and renormalize
+    // this handles the (M^-1)^T transformation for plane normals
+    vec3.divide(ioResult.normal, ioResult.normal, shape.scale);
+    vec3.normalize(ioResult.normal, ioResult.normal);
+}
+
+function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ScaledShape, subShapeId: number): void {
+    // accumulate scale: scale = scale * shape.scale
+    vec3.multiply(ioResult.scale, ioResult.scale, shape.scale);
+
+    // compute face in inner shape space - pass SubShapeID unchanged (decorator shapes don't consume bits)
+    shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
+}
+
+function getInnerRadius(shape: ScaledShape): number {
+    const minScale = Math.min(Math.abs(shape.scale[0]), Math.abs(shape.scale[1]), Math.abs(shape.scale[2]));
+    return minScale * getShapeInnerRadius(shape.shape);
+}
+
+function getLeafShape(outResult: GetLeafShapeResult, shape: ScaledShape, subShapeId: number): void {
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getLeafShape(outResult, shape.shape, subShapeId);
+}
+
+function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, shape: ScaledShape, subShapeId: number): void {
+    // apply scale
+    vec3.multiply(out.scale, out.scale, shape.scale);
+
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getSubShapeTransformedShape(out, shape.shape, subShapeId);
+}
+
 /* cast ray */
 
 function castRayVsScaled(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: ScaledShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -180,11 +200,18 @@ function castRayVsScaled(
     const newScaleZ = scaleZ * shape.scale[2];
 
     // cast against the inner shape with accumulated scale
+    // pass through ray components directly
     const innerShapeDef = shapeDefs[shape.shape.type];
     innerShapeDef.castRay(
         collector,
         settings,
-        ray,
+        originX,
+        originY,
+        originZ,
+        directionX,
+        directionY,
+        directionZ,
+        length,
         shape.shape,
         subShapeId,
         subShapeIdBits,

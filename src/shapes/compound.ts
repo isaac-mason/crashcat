@@ -1,4 +1,4 @@
-import { type Box3, box3, mat3, mat4, type Quat, quat, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -9,10 +9,10 @@ import type { CollideShapeCollector, CollideShapeSettings } from '../collision/c
 import { assert } from '../utils/assert';
 import {
     collisionDispatch,
-    computeMassProperties,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
-    shapeDefs,
     type Shape,
     ShapeCategory,
     ShapeType,
@@ -20,6 +20,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 export type CompoundShapeChild = {
@@ -69,24 +70,21 @@ const _computeCompoundLocalBounds_transformed = /* @__PURE__ */ vec3.create();
 
 function computeCompoundLocalBounds(out: Box3, shape: CompoundShape): void {
     // start with empty bounds
-    out[0][0] = Infinity;
-    out[0][1] = Infinity;
-    out[0][2] = Infinity;
-    out[1][0] = -Infinity;
-    out[1][1] = -Infinity;
-    out[1][2] = -Infinity;
+    box3.empty(out);
 
     for (const child of shape.children) {
         // Transform child AABB corners by child position and rotation
         const childAABB = child.shape.aabb;
+        const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
+        const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
 
         // Transform all 8 corners of the child AABB
         for (let x = 0; x < 2; x++) {
             for (let y = 0; y < 2; y++) {
                 for (let z = 0; z < 2; z++) {
-                    _computeCompoundLocalBounds_transformed[0] = childAABB[x][0];
-                    _computeCompoundLocalBounds_transformed[1] = childAABB[y][1];
-                    _computeCompoundLocalBounds_transformed[2] = childAABB[z][2];
+                    _computeCompoundLocalBounds_transformed[0] = x === 0 ? minX : maxX;
+                    _computeCompoundLocalBounds_transformed[1] = y === 0 ? minY : maxY;
+                    _computeCompoundLocalBounds_transformed[2] = z === 0 ? minZ : maxZ;
 
                     // Rotate and translate corner
                     vec3.transformQuat(
@@ -116,7 +114,8 @@ function computeCompoundCenterOfMass(out: Vec3, shape: CompoundShape): void {
 
     for (const child of shape.children) {
         // Get child mass properties to weight COM calculation
-        computeMassProperties(childMass, child.shape);
+        const shapeDef = shapeDefs[child.shape.type];
+        shapeDef.computeMassProperties(childMass, child.shape);
 
         // Transform child COM to compound space:
         // worldChildCOM = child.position + rotate(child.quaternion, child.shape.centerOfMass)
@@ -158,173 +157,19 @@ const _getSurfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
 const _subShapeIdPopResult = /* @__PURE__ */ subShape.popResult();
 
-const _getSupportingFace_childPos = /* @__PURE__ */ vec3.create();
-const _getSupportingFace_invChildRot = /* @__PURE__ */ quat.create();
+const _getSupportingFace_childTransform = /* @__PURE__ */ mat4.create();
 const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 export const def = /* @__PURE__ */ (() =>
     defineShape<CompoundShape>({
         type: ShapeType.COMPOUND,
         category: ShapeCategory.COMPOSITE,
-        computeMassProperties(out: MassProperties, shape: CompoundShape): void {
-            out.mass = 0;
-
-            // initialize inertia to zero
-            for (let i = 0; i < 16; i++) {
-                out.inertia[i] = 0;
-            }
-
-            if (shape.children.length === 0) {
-                out.inertia[15] = 1.0;
-                return;
-            }
-
-            const childMass = _computeCompoundMassProperties_childMass;
-            const rotatedInertia = _computeCompoundMassProperties_rotatedInertia;
-            const childRotMat3 = _computeCompoundMassProperties_childRotMat3;
-            const childRotMat4 = _computeCompoundMassProperties_childRotMat4;
-
-            // accumulate mass properties from all children with proper transforms
-            for (const child of shape.children) {
-                // get child mass properties
-                computeMassProperties(childMass, child.shape);
-
-                // calculate child COM position relative to compound COM:
-                vec3.transformQuat(_computeCompoundMassProperties_childCOM, child.shape.centerOfMass, child.quaternion);
-                vec3.add(_computeCompoundMassProperties_childCOM, _computeCompoundMassProperties_childCOM, child.position);
-                vec3.subtract(
-                    _computeCompoundMassProperties_childCOMRelative,
-                    _computeCompoundMassProperties_childCOM,
-                    shape.centerOfMass,
-                );
-
-                // accumulate mass
-                out.mass += childMass.mass;
-
-                // transform child inertia to compound space:
-                // 1. convert child rotation to mat4
-                mat3.fromQuat(childRotMat3, child.quaternion);
-                mat4.identity(childRotMat4);
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 3; j++) {
-                        childRotMat4[i + j * 4] = childRotMat3[i + j * 3];
-                    }
-                }
-
-                // 2. rotate inertia by child rotation
-                massProperties.rotate(rotatedInertia, childMass, childRotMat4);
-
-                // 3. apply parallel axis theorem to translate inertia
-                massProperties.translate(rotatedInertia, rotatedInertia, _computeCompoundMassProperties_childCOMRelative);
-
-                // add to compound inertia
-                for (let i = 0; i < 15; i++) {
-                    out.inertia[i] += rotatedInertia.inertia[i];
-                }
-            }
-
-            out.inertia[15] = 1.0;
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CompoundShape, subShapeId: number): void {
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
-
-            const childIndex = _subShapeIdPopResult.value;
-            const remainder = _subShapeIdPopResult.remainder;
-
-            if (childIndex < 0 || childIndex >= shape.children.length) {
-                assert(false, 'Invalid SubShapeID for CompoundShape');
-                return;
-            }
-
-            const child = shape.children[childIndex];
-
-            // accumulate transform: position = position - child.position (inverse transform)
-            vec3.subtract(ioResult.position, ioResult.position, child.position);
-
-            // accumulate rotation: quaternion = conjugate(child.quaternion) * quaternion (inverse transform)
-            const invRotation = quat.conjugate(_getSurfaceNormal_invRotation, child.quaternion);
-            quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
-            // transform position to local space
-            vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
-
-            // get normal from child shape in its local space
-            shapeDefs[child.shape.type].getSurfaceNormal(ioResult, child.shape, remainder);
-
-            // transform normal back to compound space using accumulated rotation.
-            // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
-            // to get the forward transformation for the normal.
-            const forwardAccumulatedRotation = quat.conjugate(_getSurfaceNormal_forwardRotation, ioResult.quaternion);
-            vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CompoundShape, subShapeId: number): void {
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
-            const childIndex = _subShapeIdPopResult.value;
-            const remainder = _subShapeIdPopResult.remainder;
-
-            if (childIndex < 0 || childIndex >= shape.children.length) {
-                assert(false, 'Invalid SubShapeID for CompoundShape');
-                return;
-            }
-
-            const child = shape.children[childIndex];
-
-            // accumulate transform: position += rotation * child.position
-            vec3.transformQuat(_getSupportingFace_childPos, child.position, ioResult.quaternion);
-            vec3.add(ioResult.position, ioResult.position, _getSupportingFace_childPos);
-
-            // accumulate rotation: rotation = rotation * child.quaternion
-            quat.multiply(ioResult.quaternion, ioResult.quaternion, child.quaternion);
-
-            // transform direction to child local space
-            quat.conjugate(_getSupportingFace_invChildRot, child.quaternion);
-            vec3.transformQuat(_getSupportingFace_localDirection, direction, _getSupportingFace_invChildRot);
-
-            shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
-        },
-        getInnerRadius(shape: CompoundShape): number {
-            let innerRadius = Number.MAX_VALUE;
-            for (const child of shape.children) {
-                innerRadius = Math.min(innerRadius, getShapeInnerRadius(child.shape));
-            }
-            return innerRadius;
-        },
-        getLeafShape(out, shape, subShapeId): void {
-            // navigate to child shape
-            if (subShape.isEmpty(subShapeId)) {
-                out.shape = null;
-                out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
-                return;
-            }
-
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
-            const childShape = shape.children[_subShapeIdPopResult.value].shape;
-
-            // get leaf shape from child
-            const childShapeDef = shapeDefs[childShape.type];
-            childShapeDef.getLeafShape(out, childShape, _subShapeIdPopResult.remainder);
-        },
-        getSubShapeTransformedShape(out, shape, subShapeId): void {
-            // navigate to child shape
-            if (subShape.isEmpty(subShapeId)) {
-                out.shape = null;
-                out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
-                return;
-            }
-
-            subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
-            const child = shape.children[_subShapeIdPopResult.value];
-
-            // apply child's transform: pos = pos + rotate(rot, childPos), rot = rot * childRot
-            const rotatedChildPos = vec3.create();
-            vec3.transformQuat(rotatedChildPos, child.position, out.rotation);
-            vec3.add(out.position, out.position, rotatedChildPos);
-            quat.multiply(out.rotation, out.rotation, child.quaternion);
-
-            // recursively get transformed shape from child
-            const childShapeDef = shapeDefs[child.shape.type];
-            childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsCompound,
         collidePoint: collidePointVsCompound,
         register: () => {
@@ -338,6 +183,169 @@ export const def = /* @__PURE__ */ (() =>
         },
     }))();
 
+function computeMassProperties(out: MassProperties, shape: CompoundShape): void {
+    out.mass = 0;
+
+    // initialize inertia to zero
+    for (let i = 0; i < 16; i++) {
+        out.inertia[i] = 0;
+    }
+
+    if (shape.children.length === 0) {
+        out.inertia[15] = 1.0;
+        return;
+    }
+
+    const childMass = _computeCompoundMassProperties_childMass;
+    const rotatedInertia = _computeCompoundMassProperties_rotatedInertia;
+    const childRotMat3 = _computeCompoundMassProperties_childRotMat3;
+    const childRotMat4 = _computeCompoundMassProperties_childRotMat4;
+
+    // accumulate mass properties from all children with proper transforms
+    for (const child of shape.children) {
+        // get child mass properties
+        const shapeDef = shapeDefs[child.shape.type];
+        shapeDef.computeMassProperties(childMass, child.shape);
+
+        // calculate child COM position relative to compound COM:
+        vec3.transformQuat(_computeCompoundMassProperties_childCOM, child.shape.centerOfMass, child.quaternion);
+        vec3.add(_computeCompoundMassProperties_childCOM, _computeCompoundMassProperties_childCOM, child.position);
+        vec3.subtract(
+            _computeCompoundMassProperties_childCOMRelative,
+            _computeCompoundMassProperties_childCOM,
+            shape.centerOfMass,
+        );
+
+        // accumulate mass
+        out.mass += childMass.mass;
+
+        // transform child inertia to compound space:
+        // 1. convert child rotation to mat4
+        mat3.fromQuat(childRotMat3, child.quaternion);
+        mat4.identity(childRotMat4);
+        for (let i = 0; i < 3; i++) {
+            for (let j = 0; j < 3; j++) {
+                childRotMat4[i + j * 4] = childRotMat3[i + j * 3];
+            }
+        }
+
+        // 2. rotate inertia by child rotation
+        massProperties.rotate(rotatedInertia, childMass, childRotMat4);
+
+        // 3. apply parallel axis theorem to translate inertia
+        massProperties.translate(rotatedInertia, rotatedInertia, _computeCompoundMassProperties_childCOMRelative);
+
+        // add to compound inertia
+        for (let i = 0; i < 15; i++) {
+            out.inertia[i] += rotatedInertia.inertia[i];
+        }
+    }
+
+    out.inertia[15] = 1.0;
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CompoundShape, subShapeId: number): void {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+
+    const childIndex = _subShapeIdPopResult.value;
+    const remainder = _subShapeIdPopResult.remainder;
+
+    if (childIndex < 0 || childIndex >= shape.children.length) {
+        assert(false, 'Invalid SubShapeID for CompoundShape');
+        return;
+    }
+
+    const child = shape.children[childIndex];
+
+    // accumulate transform: position = position - child.position (inverse transform)
+    vec3.subtract(ioResult.position, ioResult.position, child.position);
+
+    // accumulate rotation: quaternion = conjugate(child.quaternion) * quaternion (inverse transform)
+    const invRotation = quat.conjugate(_getSurfaceNormal_invRotation, child.quaternion);
+    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
+
+    // transform position to local space
+    vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
+
+    // get normal from child shape in its local space
+    shapeDefs[child.shape.type].getSurfaceNormal(ioResult, child.shape, remainder);
+
+    // transform normal back to compound space using accumulated rotation.
+    // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
+    // to get the forward transformation for the normal.
+    const forwardAccumulatedRotation = quat.conjugate(_getSurfaceNormal_forwardRotation, ioResult.quaternion);
+    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+}
+
+function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CompoundShape, subShapeId: number): void {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childIndex = _subShapeIdPopResult.value;
+    const remainder = _subShapeIdPopResult.remainder;
+
+    if (childIndex < 0 || childIndex >= shape.children.length) {
+        assert(false, 'Invalid SubShapeID for CompoundShape');
+        return;
+    }
+
+    const child = shape.children[childIndex];
+
+    // build child transform matrix and accumulate: transform = transform * childTransform
+    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, child.position);
+    mat4.multiply(ioResult.transform, ioResult.transform, _getSupportingFace_childTransform);
+
+    // transform direction to child local space using inverse child rotation
+    // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
+    mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
+
+    shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
+}
+
+function getInnerRadius(shape: CompoundShape): number {
+    let innerRadius = Number.MAX_VALUE;
+    for (const child of shape.children) {
+        innerRadius = Math.min(innerRadius, getShapeInnerRadius(child.shape));
+    }
+    return innerRadius;
+}
+
+function getLeafShape(out: GetLeafShapeResult, shape: CompoundShape, subShapeId: number): void {
+    // navigate to child shape
+    if (subShape.isEmpty(subShapeId)) {
+        out.shape = null;
+        out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
+        return;
+    }
+
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childShape = shape.children[_subShapeIdPopResult.value].shape;
+
+    // get leaf shape from child
+    const childShapeDef = shapeDefs[childShape.type];
+    childShapeDef.getLeafShape(out, childShape, _subShapeIdPopResult.remainder);
+}
+
+function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, shape: CompoundShape, subShapeId: number): void {
+    // navigate to child shape
+    if (subShape.isEmpty(subShapeId)) {
+        out.shape = null;
+        out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
+        return;
+    }
+
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const child = shape.children[_subShapeIdPopResult.value];
+
+    // apply child's transform: pos = pos + rotate(rot, childPos), rot = rot * childRot
+    const rotatedChildPos = vec3.create();
+    vec3.transformQuat(rotatedChildPos, child.position, out.rotation);
+    vec3.add(out.position, out.position, rotatedChildPos);
+    quat.multiply(out.rotation, out.rotation, child.quaternion);
+
+    // recursively get transformed shape from child
+    const childShapeDef = shapeDefs[child.shape.type];
+    childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
+}
+
 /* cast ray */
 
 const _castRayVsCompound_pos = /* @__PURE__ */ vec3.create();
@@ -350,7 +358,13 @@ const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 function castRayVsCompound(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: CompoundShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -393,7 +407,13 @@ function castRayVsCompound(
         childShapeDef.castRay(
             collector,
             settings,
-            ray,
+            originX,
+            originY,
+            originZ,
+            directionX,
+            directionY,
+            directionZ,
+            length,
             child.shape,
             _castRayVsCompound_subShapeIdBuilder.value,
             _castRayVsCompound_subShapeIdBuilder.currentBit,

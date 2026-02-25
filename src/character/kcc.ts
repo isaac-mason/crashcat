@@ -1,4 +1,4 @@
-import { type Quat, quat, type Vec3, vec3, type Vec4, vec4 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, type Vec4, vec3, vec4 } from 'mathcat';
 import type { BodyId } from '../body/body-id';
 import { INVALID_BODY_ID } from '../body/body-id';
 import * as motionProperties from '../body/motion-properties';
@@ -23,10 +23,10 @@ import {
     createPolygonSupport,
     createShapeSupportPool,
     getShapeSupportFunction,
-    setAddConvexRadiusSupport,
-    setPolygonSupport,
     type ShapeSupportPool,
     SupportFunctionMode,
+    setAddConvexRadiusSupport,
+    setPolygonSupport,
 } from '../collision/support';
 import type { Filter } from '../filter';
 import * as query from '../query';
@@ -364,7 +364,7 @@ export type CharacterListener = {
 const _create_supportingVolume = /* @__PURE__ */ vec4.create();
 
 /** default settings for kinematic character controller when settings are not specified */
-const DEFAULT_KCC_SETTINGS = {
+export const DEFAULT_KCC_SETTINGS = {
     up: [0, 1, 0] as Vec3,
     mass: 70,
     maxStrength: 100,
@@ -884,6 +884,7 @@ const _paddingCorrection_face = /* @__PURE__ */ createFace();
 const _paddingCorrection_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 const _paddingCorrection_negativeNormal = /* @__PURE__ */ vec3.create();
 const _paddingCorrection_scale = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
+const _paddingCorrection_mat4_transform = /* @__PURE__ */ mat4.create();
 const _paddingCorrection_fractionWrapper = { value: 0 };
 const _correctFraction_tempPos = /* @__PURE__ */ vec3.create();
 const _correctFraction_tempQuat = /* @__PURE__ */ quat.create();
@@ -1401,11 +1402,13 @@ function correctFractionForCharacterPadding(
     // at the convex level, perform the GJK cast
     const characterSupport = getShapeSupportFunction(supportPool, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
 
+    // build transform matrix from position and quaternion
+    const transform = mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position);
+
     // cast the shape against the polygon
     gjkCastShape(
         _paddingCorrection_gjkResult,
-        position,
-        quaternion,
+        transform,
         characterSupport,
         polygon,
         displacement,
@@ -1524,13 +1527,15 @@ function getFirstContactForSweep(
         // direction: negative contact normal (pointing into the body)
         vec3.negate(_paddingCorrection_negativeNormal, out.contactNormal);
 
+        // build mat4 for hit body's world transform
+        mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, hitBody.quaternion, hitBody.position);
+
         getShapeSupportingFace(
             _paddingCorrection_face,
             hitBody.shape,
             out.subShapeId,
             _paddingCorrection_negativeNormal,
-            hitBody.position,
-            hitBody.quaternion,
+            _paddingCorrection_mat4_transform,
             _paddingCorrection_scale,
         );
 
@@ -3053,7 +3058,7 @@ export function setPosition(world: World, character: KCC, position: Vec3): void 
  * @param character the character controller
  * @param quaternion the new rotation quaternion
  */
-export function setRotation(world: World, character: KCC, quaternion: Quat): void {
+export function setQuaternion(world: World, character: KCC, quaternion: Quat): void {
     quat.copy(character.quaternion, quaternion);
     updateInnerBodyTransform(world, character);
 }

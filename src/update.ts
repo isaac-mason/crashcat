@@ -146,8 +146,10 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
 
             /* solve velocity constraints for this island */
             for (let i = 0; i < island.numVelocitySteps; i++) {
+                let appliedImpulse = false;
+
                 if (island.contactIndices.length > 0) {
-                    contactConstraints.solveVelocityConstraintsForIsland(
+                    appliedImpulse = contactConstraints.solveVelocityConstraintsForIsland(
                         world.contactConstraints,
                         world.bodies,
                         island.contactIndices,
@@ -155,12 +157,18 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
                 }
 
                 if (island.constraintIds.length > 0) {
-                    constraints.solveVelocityConstraintsForIsland(
-                        world.constraints,
-                        world.bodies,
-                        island.constraintIds,
-                        timeStep,
-                    );
+                    appliedImpulse =
+                        constraints.solveVelocityConstraintsForIsland(
+                            world.constraints,
+                            world.bodies,
+                            island.constraintIds,
+                            timeStep,
+                        ) || appliedImpulse;
+                }
+
+                // early termination: island converged if no impulses applied
+                if (!appliedImpulse) {
+                    break;
                 }
             }
         }
@@ -265,7 +273,9 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mp.linearVelocity[2] *= linearDampingFactor;
 
         // clamp linear velocity to max
-        const lvx = mp.linearVelocity[0], lvy = mp.linearVelocity[1], lvz = mp.linearVelocity[2];
+        const lvx = mp.linearVelocity[0],
+            lvy = mp.linearVelocity[1],
+            lvz = mp.linearVelocity[2];
         const linearSpeedSq = lvx * lvx + lvy * lvy + lvz * lvz;
         const maxLinearSq = mp.maxLinearVelocity * mp.maxLinearVelocity;
         if (linearSpeedSq > maxLinearSq) {
@@ -285,10 +295,12 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mat4.fromQuat(_acceleration_rotation, body.quaternion);
         const worldInverseInertia = _acceleration_worldInverseInertia;
         motionProperties.getInverseInertiaForRotation(worldInverseInertia, mp, _acceleration_rotation);
-        
+
         // integrate angular velocity: ω += α * dt, where α = I^-1 * τ
         const m = worldInverseInertia;
-        const tx = mp.torque[0], ty = mp.torque[1], tz = mp.torque[2];
+        const tx = mp.torque[0],
+            ty = mp.torque[1],
+            tz = mp.torque[2];
         mp.angularVelocity[0] += (m[0] * tx + m[4] * ty + m[8] * tz) * timeStep;
         mp.angularVelocity[1] += (m[1] * tx + m[5] * ty + m[9] * tz) * timeStep;
         mp.angularVelocity[2] += (m[2] * tx + m[6] * ty + m[10] * tz) * timeStep;
@@ -300,7 +312,9 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mp.angularVelocity[2] *= angularDampingFactor;
 
         // clamp angular velocity to max
-        const avx = mp.angularVelocity[0], avy = mp.angularVelocity[1], avz = mp.angularVelocity[2];
+        const avx = mp.angularVelocity[0],
+            avy = mp.angularVelocity[1],
+            avz = mp.angularVelocity[2];
         const angularSpeedSq = avx * avx + avy * avy + avz * avz;
         const maxAngularSq = mp.maxAngularVelocity * mp.maxAngularVelocity;
         if (angularSpeedSq > maxAngularSq) {
@@ -485,7 +499,12 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
             );
         } else {
             // single contact point
-            manifold.setContactPoint(_narrowphase_tempManifold, 0, hit.pointA, hit.pointB);
+            _narrowphase_tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - _narrowphase_tempManifold.baseOffset[0];
+            _narrowphase_tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - _narrowphase_tempManifold.baseOffset[1];
+            _narrowphase_tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - _narrowphase_tempManifold.baseOffset[2];
+            _narrowphase_tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - _narrowphase_tempManifold.baseOffset[0];
+            _narrowphase_tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - _narrowphase_tempManifold.baseOffset[1];
+            _narrowphase_tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - _narrowphase_tempManifold.baseOffset[2];
             _narrowphase_tempManifold.numContactPoints = 1;
         }
 
@@ -664,7 +683,12 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
             );
         } else {
             // single contact point
-            manifold.setContactPoint(tempManifold, 0, hit.pointA, hit.pointB);
+            tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - tempManifold.baseOffset[0];
+            tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - tempManifold.baseOffset[1];
+            tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - tempManifold.baseOffset[2];
+            tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - tempManifold.baseOffset[0];
+            tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - tempManifold.baseOffset[1];
+            tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - tempManifold.baseOffset[2];
             tempManifold.numContactPoints = 1;
         }
 
@@ -1392,7 +1416,12 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
                 );
             } else {
                 // single point contact
-                manifold.setContactPoint(contactManifold, 0, hit.pointA, hit.pointB);
+                contactManifold.relativeContactPointsOnA[0] = hit.pointA[0] - contactManifold.baseOffset[0];
+                contactManifold.relativeContactPointsOnA[1] = hit.pointA[1] - contactManifold.baseOffset[1];
+                contactManifold.relativeContactPointsOnA[2] = hit.pointA[2] - contactManifold.baseOffset[2];
+                contactManifold.relativeContactPointsOnB[0] = hit.pointB[0] - contactManifold.baseOffset[0];
+                contactManifold.relativeContactPointsOnB[1] = hit.pointB[1] - contactManifold.baseOffset[1];
+                contactManifold.relativeContactPointsOnB[2] = hit.pointB[2] - contactManifold.baseOffset[2];
                 contactManifold.numContactPoints = 1;
             }
 

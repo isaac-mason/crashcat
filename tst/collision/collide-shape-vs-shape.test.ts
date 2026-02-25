@@ -2130,6 +2130,208 @@ describe('collideShapeVsShape - Supporting Face Collection', () => {
             expect(Math.abs(z)).toBeLessThanOrEqual(1.0);
         }
     });
+
+    test('convex vs triangle mesh with non-uniform scaleB - face scaled once not twice', () => {
+        // this test verifies the fix for double-scaling bug in collideConvexVsTriangleMesh.
+        // previously, triangle vertices were scaled by scaleB, then transformFace would
+        // incorrectly apply scaleA to the already-transformed face vertices.
+        // the fix uses transformFaceWithMat4 which only applies rotation+translation.
+        const shapeA = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5), convexRadius: 0 });
+        const posA = vec3.fromValues(1, 1, 0.4); // penetrating the scaled triangle
+        const quatA = quat.create();
+        const scaleA = vec3.fromValues(1, 1, 1);
+
+        // create a unit triangle mesh: vertices at (0,0,0), (1,0,0), (0,1,0)
+        const shapeB = triangleMesh.create({
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+        });
+        const posB = vec3.fromValues(0, 0, 0);
+        const quatB = quat.create();
+        // non-uniform scale: 2x in X, 3x in Y
+        const scaleB = vec3.fromValues(2, 3, 1);
+
+        const settings = createDefaultCollideShapeSettings();
+        settings.collectFaces = true;
+
+        const collector = createAllCollideShapeCollector();
+        const hits = collector.hits;
+
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posA[0], posA[1], posA[2],
+            quatA[0], quatA[1], quatA[2], quatA[3],
+            scaleA[0], scaleA[1], scaleA[2],
+            shapeB,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posB[0], posB[1], posB[2],
+            quatB[0], quatB[1], quatB[2], quatB[3],
+            scaleB[0], scaleB[1], scaleB[2],
+        );
+
+        expect(hits.length).toBeGreaterThan(0);
+
+        const hit = hits[0];
+
+        // triangle (face B) should have 3 vertices
+        expect(hit.faceB.numVertices).toBe(3);
+
+        // expected world-space vertices after scaling:
+        // v0: (0,0,0) scaled by (2,3,1) = (0,0,0)
+        // v1: (1,0,0) scaled by (2,3,1) = (2,0,0)
+        // v2: (0,1,0) scaled by (2,3,1) = (0,3,0)
+        // max X should be 2 (not 4 from double-scaling)
+        // max Y should be 3 (not 9 from double-scaling)
+
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+
+        for (let i = 0; i < hit.faceB.numVertices; i++) {
+            const x = hit.faceB.vertices[i * 3];
+            const y = hit.faceB.vertices[i * 3 + 1];
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+        }
+
+        // verify correct single scaling
+        expect(maxX).toBeCloseTo(2, 1); // should be 2, not 4
+        expect(maxY).toBeCloseTo(3, 1); // should be 3, not 9
+    });
+
+    test('convex vs triangle mesh with non-uniform scale - contact points correct', () => {
+        // verify that contact points are correctly computed with non-uniform scale
+        const shapeA = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5), convexRadius: 0 });
+        const posA = vec3.fromValues(1, 1.5, 0.4); // slightly above center of scaled triangle
+        const quatA = quat.create();
+        const scaleA = vec3.fromValues(1, 1, 1);
+
+        // unit triangle
+        const shapeB = triangleMesh.create({
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+        });
+        const posB = vec3.fromValues(0, 0, 0);
+        const quatB = quat.create();
+        // non-uniform scale: 2x in X, 3x in Y
+        const scaleB = vec3.fromValues(2, 3, 1);
+
+        const settings = createDefaultCollideShapeSettings();
+
+        const collector = createAllCollideShapeCollector();
+        const hits = collector.hits;
+
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posA[0], posA[1], posA[2],
+            quatA[0], quatA[1], quatA[2], quatA[3],
+            scaleA[0], scaleA[1], scaleA[2],
+            shapeB,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posB[0], posB[1], posB[2],
+            quatB[0], quatB[1], quatB[2], quatB[3],
+            scaleB[0], scaleB[1], scaleB[2],
+        );
+
+        expect(hits.length).toBeGreaterThan(0);
+
+        const hit = hits[0];
+
+        // contact point B should be on the triangle surface (z ≈ 0 since triangle is at z=0)
+        expect(hit.pointB[2]).toBeCloseTo(0, 1);
+
+        // contact point B should be within the scaled triangle bounds
+        // scaled triangle: (0,0,0), (2,0,0), (0,3,0)
+        expect(hit.pointB[0]).toBeGreaterThanOrEqual(-0.1);
+        expect(hit.pointB[0]).toBeLessThanOrEqual(2.1);
+        expect(hit.pointB[1]).toBeGreaterThanOrEqual(-0.1);
+        expect(hit.pointB[1]).toBeLessThanOrEqual(3.1);
+
+        // verify penetration axis exists (non-zero)
+        const axisLen = Math.sqrt(
+            hit.penetrationAxis[0] * hit.penetrationAxis[0] +
+            hit.penetrationAxis[1] * hit.penetrationAxis[1] +
+            hit.penetrationAxis[2] * hit.penetrationAxis[2]
+        );
+        expect(axisLen).toBeGreaterThan(0);
+    });
+
+    test('convex vs rotated+scaled triangle mesh - face vertices in world space', () => {
+        // verify face vertices are correctly transformed to world space with rotation + scale
+        const shapeA = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5), convexRadius: 0 });
+        const posA = vec3.fromValues(0, 0, 1.4); // above the rotated triangle
+        const quatA = quat.create();
+        const scaleA = vec3.fromValues(1, 1, 1);
+
+        // unit triangle
+        const shapeB = triangleMesh.create({
+            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+            indices: [0, 1, 2],
+        });
+        const posB = vec3.fromValues(0, 0, 0);
+        // rotate 90 degrees around X axis - triangle now lies in XZ plane at y=0
+        const quatB = quat.create();
+        quat.setAxisAngle(quatB, vec3.fromValues(1, 0, 0), Math.PI / 2);
+        const scaleB = vec3.fromValues(2, 2, 2); // uniform 2x scale
+
+        const settings = createDefaultCollideShapeSettings();
+        settings.collectFaces = true;
+
+        const collector = createAllCollideShapeCollector();
+        const hits = collector.hits;
+
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posA[0], posA[1], posA[2],
+            quatA[0], quatA[1], quatA[2], quatA[3],
+            scaleA[0], scaleA[1], scaleA[2],
+            shapeB,
+            EMPTY_SUB_SHAPE_ID,
+            0,
+            posB[0], posB[1], posB[2],
+            quatB[0], quatB[1], quatB[2], quatB[3],
+            scaleB[0], scaleB[1], scaleB[2],
+        );
+
+        expect(hits.length).toBeGreaterThan(0);
+
+        const hit = hits[0];
+        expect(hit.faceB.numVertices).toBe(3);
+
+        // after rotation around X by 90° and scale by 2:
+        // original: (0,0,0), (1,0,0), (0,1,0)
+        // scaled: (0,0,0), (2,0,0), (0,2,0)
+        // rotated: (0,0,0), (2,0,0), (0,0,2) - Y becomes Z
+        // all Y coords should be 0 (triangle now in XZ plane)
+        for (let i = 0; i < hit.faceB.numVertices; i++) {
+            const y = hit.faceB.vertices[i * 3 + 1];
+            expect(Math.abs(y)).toBeLessThan(0.1);
+        }
+
+        // max Z should be 2 (from rotated (0,1,0) -> (0,0,1) scaled to (0,0,2))
+        let maxZ = -Infinity;
+        for (let i = 0; i < hit.faceB.numVertices; i++) {
+            const z = hit.faceB.vertices[i * 3 + 2];
+            maxZ = Math.max(maxZ, z);
+        }
+        expect(maxZ).toBeCloseTo(2, 1);
+    });
 });
 
 describe('collideShapeVsShape - ConvexHull vs Sphere', () => {

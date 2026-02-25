@@ -1,4 +1,4 @@
-import { type Box3, box3, mat4, type Quat, quat, type Raycast3, raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -7,10 +7,10 @@ import type { CollidePointCollector, CollidePointSettings } from '../collision/c
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import {
     collisionDispatch,
-    computeMassProperties,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
-    shapeDefs,
     type Shape,
     ShapeCategory,
     ShapeType,
@@ -18,6 +18,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    shapeDefs,
 } from './shapes';
 
 /** settings for creating a transformed shape */
@@ -64,22 +65,19 @@ const _computeTransformedLocalBounds_corner = /* @__PURE__ */ vec3.create();
 
 function computeTransformedLocalBounds(out: Box3, shape: TransformedShape): void {
     // start with empty bounds
-    out[0][0] = Infinity;
-    out[0][1] = Infinity;
-    out[0][2] = Infinity;
-    out[1][0] = -Infinity;
-    out[1][1] = -Infinity;
-    out[1][2] = -Infinity;
+    box3.empty(out);
 
     const childAABB = shape.shape.aabb;
+    const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
+    const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
 
     // transform all 8 corners of the child AABB
     for (let x = 0; x < 2; x++) {
         for (let y = 0; y < 2; y++) {
             for (let z = 0; z < 2; z++) {
-                _computeTransformedLocalBounds_corner[0] = childAABB[x][0];
-                _computeTransformedLocalBounds_corner[1] = childAABB[y][1];
-                _computeTransformedLocalBounds_corner[2] = childAABB[z][2];
+                _computeTransformedLocalBounds_corner[0] = x === 0 ? minX : maxX;
+                _computeTransformedLocalBounds_corner[1] = y === 0 ? minY : maxY;
+                _computeTransformedLocalBounds_corner[2] = z === 0 ? minZ : maxZ;
 
                 // rotate and translate corner
                 vec3.transformQuat(
@@ -118,78 +116,19 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 const _surfaceNormal_invRotation = /* @__PURE__ */ quat.create();
 const _surfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
-const _supportingFace_vec3 = /* @__PURE__ */ vec3.create();
-const _supportingFace_quat = /* @__PURE__ */ quat.create();
 const _supportingFace_localDirection = /* @__PURE__ */ vec3.create();
+const _supportingFace_shapeMat4 = /* @__PURE__ */ mat4.create();
 
 export const def = /* @__PURE__ */ (() =>
     defineShape<TransformedShape>({
         type: ShapeType.TRANSFORMED,
         category: ShapeCategory.DECORATOR,
-        computeMassProperties(out: MassProperties, shape: TransformedShape): void {
-            // only rotates the inertia (translation doesn't affect inertia about center of mass)
-            computeMassProperties(_childMassProperties, shape.shape);
-
-            // convert quaternion to rotation matrix
-            mat4.fromQuat(_rotationMat, shape.quaternion);
-
-            // only apply rotation to inertia
-            massProperties.rotate(out, _childMassProperties, _rotationMat);
-        },
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TransformedShape, subShapeId: number): void {
-            // accumulate transform: position = position - translation (inverse transform)
-            vec3.subtract(ioResult.position, ioResult.position, shape.position);
-
-            // accumulate rotation: quaternion = conjugate(shape.rotation) * quaternion (inverse transform)
-            const invRotation = quat.conjugate(_surfaceNormal_invRotation, shape.quaternion);
-            quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
-            // transform position to local space
-            vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
-
-            // get normal from inner shape in its local space
-            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
-
-            // transform normal back to outer space using accumulated rotation.
-            // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
-            // to get the forward transformation for the normal.
-            const forwardAccumulatedRotation = quat.conjugate(_surfaceNormal_forwardRotation, ioResult.quaternion);
-            vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
-        },
-        getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: TransformedShape, subShapeId: number): void {
-            // accumulate transform: position += rotation * translation
-            vec3.transformQuat(_supportingFace_vec3, shape.position, ioResult.quaternion);
-            vec3.add(ioResult.position, ioResult.position, _supportingFace_vec3);
-
-            // accumulate rotation: rotation = rotation * shape.rotation
-            quat.multiply(ioResult.quaternion, ioResult.quaternion, shape.quaternion);
-
-            // transform direction to local space (rotate by inverse quaternion)
-            const invRotation = quat.conjugate(_supportingFace_quat, shape.quaternion);
-            vec3.transformQuat(_supportingFace_localDirection, direction, invRotation);
-
-            // compute face in local space - pass SubShapeID unchanged (decorator shapes don't consume bits)
-            shapeDefs[shape.shape.type].getSupportingFace(ioResult, _supportingFace_localDirection, shape.shape, subShapeId);
-        },
-        getInnerRadius(shape: TransformedShape): number {
-            return getShapeInnerRadius(shape.shape);
-        },
-        getLeafShape(out, shape, subShapeId): void {
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getLeafShape(out, shape.shape, subShapeId);
-        },
-        getSubShapeTransformedShape(outResult, shape, subShapeId): void {
-            // apply decorated transform: pos = pos + rotate(rot, shapePos), rot = rot * shapeRot
-            const rotatedPos = vec3.create();
-            vec3.transformQuat(rotatedPos, shape.position, outResult.rotation);
-            vec3.add(outResult.position, outResult.position, rotatedPos);
-            quat.multiply(outResult.rotation, outResult.rotation, shape.quaternion);
-
-            // pass through to inner shape
-            const innerShapeDef = shapeDefs[shape.shape.type];
-            innerShapeDef.getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
-        },
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsTransformed,
         collidePoint: collidePointVsTransformed,
         register: () => {
@@ -203,6 +142,78 @@ export const def = /* @__PURE__ */ (() =>
         },
     }))();
 
+function computeMassProperties(out: MassProperties, shape: TransformedShape): void {
+    // only rotates the inertia (translation doesn't affect inertia about center of mass)
+    const shapeDef = shapeDefs[shape.shape.type];
+    shapeDef.computeMassProperties(_childMassProperties, shape.shape);
+
+    // convert quaternion to rotation matrix
+    mat4.fromQuat(_rotationMat, shape.quaternion);
+
+    // only apply rotation to inertia
+    massProperties.rotate(out, _childMassProperties, _rotationMat);
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TransformedShape, subShapeId: number): void {
+    // accumulate transform: position = position - translation (inverse transform)
+    vec3.subtract(ioResult.position, ioResult.position, shape.position);
+
+    // accumulate rotation: quaternion = conjugate(shape.rotation) * quaternion (inverse transform)
+    const invRotation = quat.conjugate(_surfaceNormal_invRotation, shape.quaternion);
+    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
+
+    // transform position to local space
+    vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
+
+    // get normal from inner shape in its local space
+    shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+
+    // transform normal back to outer space using accumulated rotation.
+    // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
+    // to get the forward transformation for the normal.
+    const forwardAccumulatedRotation = quat.conjugate(_surfaceNormal_forwardRotation, ioResult.quaternion);
+    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+}
+function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: TransformedShape, subShapeId: number): void {
+    // build shape's local transform matrix (position + quaternion)
+    const shapeMat4 = mat4.fromRotationTranslation(_supportingFace_shapeMat4, shape.quaternion, shape.position);
+
+    // accumulate transform: ioResult.transform = ioResult.transform * shapeMat4
+    mat4.multiply(ioResult.transform, ioResult.transform, shapeMat4);
+
+    // transform direction to local space using transposed rotation (inverse)
+    // for a rotation matrix, inverse is transpose
+    mat4.multiply3x3TransposedVec(_supportingFace_localDirection, shapeMat4, direction);
+
+    // compute face in local space - pass SubShapeID unchanged (decorator shapes don't consume bits)
+    shapeDefs[shape.shape.type].getSupportingFace(ioResult, _supportingFace_localDirection, shape.shape, subShapeId);
+}
+
+function getInnerRadius(shape: TransformedShape): number {
+    return getShapeInnerRadius(shape.shape);
+}
+
+function getLeafShape(out: GetLeafShapeResult, shape: TransformedShape, subShapeId: number): void {
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getLeafShape(out, shape.shape, subShapeId);
+}
+function getSubShapeTransformedShape(
+    outResult: GetSubShapeTransformedShapeResult,
+    shape: TransformedShape,
+    subShapeId: number,
+): void {
+    // apply decorated transform: pos = pos + rotate(rot, shapePos), rot = rot * shapeRot
+    const rotatedPos = vec3.create();
+    vec3.transformQuat(rotatedPos, shape.position, outResult.rotation);
+    vec3.add(outResult.position, outResult.position, rotatedPos);
+    quat.multiply(outResult.rotation, outResult.rotation, shape.quaternion);
+
+    // pass through to inner shape
+    const innerShapeDef = shapeDefs[shape.shape.type];
+    innerShapeDef.getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
+}
+
 /* cast ray */
 
 const _castRayVsTransformed_pos = /* @__PURE__ */ vec3.create();
@@ -212,12 +223,17 @@ const _castRayVsTransformed_worldQuat = /* @__PURE__ */ quat.create();
 const _castRayVsTransformed_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTransformed_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTransformed_invQuat = /* @__PURE__ */ quat.create();
-const _castRayVsTransformed_tempRay = /* @__PURE__ */ raycast3.create();
 
 function castRayVsTransformed(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: TransformedShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -246,42 +262,42 @@ function castRayVsTransformed(
     // first, compute inverse quaternion
     quat.conjugate(_castRayVsTransformed_invQuat, _castRayVsTransformed_worldQuat);
 
+    // set ray origin from parameters
+    vec3.set(_castRayVsTransformed_rayOriginLocal, originX, originY, originZ);
     // transform ray origin: (origin - position) rotated by inverse quaternion
-    vec3.subtract(_castRayVsTransformed_rayOriginLocal, ray.origin, _castRayVsTransformed_worldPos);
+    vec3.subtract(_castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_worldPos);
     vec3.transformQuat(_castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_rayOriginLocal, _castRayVsTransformed_invQuat);
 
+    // set ray direction from parameters
+    vec3.set(_castRayVsTransformed_rayDirectionLocal, directionX, directionY, directionZ);
     // transform ray direction: direction rotated by inverse quaternion
-    vec3.copy(_castRayVsTransformed_rayDirectionLocal, ray.direction);
     vec3.transformQuat(
         _castRayVsTransformed_rayDirectionLocal,
         _castRayVsTransformed_rayDirectionLocal,
         _castRayVsTransformed_invQuat,
     );
 
-    // prepare transformed ray for inner shape
-    vec3.copy(_castRayVsTransformed_tempRay.origin, _castRayVsTransformed_rayOriginLocal);
-    vec3.copy(_castRayVsTransformed_tempRay.direction, _castRayVsTransformed_rayDirectionLocal);
-    _castRayVsTransformed_tempRay.length = ray.length;
-
     // cast against the inner shape with identity transform (already accumulated)
+    // pass transformed ray components directly - no temp ray needed!
     const innerShapeDef = shapeDefs[transformedShape.shape.type];
+
+    // biome-ignore format: readability
     innerShapeDef.castRay(
         collector,
         settings,
-        _castRayVsTransformed_tempRay,
+        _castRayVsTransformed_rayOriginLocal[0],
+        _castRayVsTransformed_rayOriginLocal[1],
+        _castRayVsTransformed_rayOriginLocal[2],
+        _castRayVsTransformed_rayDirectionLocal[0],
+        _castRayVsTransformed_rayDirectionLocal[1],
+        _castRayVsTransformed_rayDirectionLocal[2],
+        length,
         transformedShape.shape,
         subShapeId,
         subShapeIdBits,
-        0,
-        0,
-        0, // identity position
-        0,
-        0,
-        0,
-        1, // identity quaternion
-        scaleX,
-        scaleY,
-        scaleZ, // pass through scale
+        0, 0, 0, // identity position
+        0, 0, 0, 1, // identity quaternion
+        scaleX, scaleY, scaleZ, // pass through scale
     );
 }
 

@@ -13,7 +13,7 @@ import type {
     SwingTwistConstraint,
     World,
 } from 'crashcat';
-import { ConstraintType, MotionType, rigidBody, ShapeType, triangleMeshBvh } from 'crashcat';
+import { bvh, ConstraintType, MotionType, rigidBody, ShapeType } from 'crashcat';
 
 export enum BodyColorMode {
     INSTANCE,
@@ -191,6 +191,11 @@ export type DebugRendererOptions = {
         showLeafNodes: boolean;
         showNonLeafNodes: boolean;
     };
+    staticCompoundBvh: {
+        enabled: boolean;
+        showLeafNodes: boolean;
+        showNonLeafNodes: boolean;
+    };
 };
 
 type BodiesState = {
@@ -250,6 +255,14 @@ type TriangleMeshBvhState = {
     previousShowNonLeafNodes: boolean;
 };
 
+type StaticCompoundBvhState = {
+    lines: THREE.LineSegments;
+    cache: Map<number, THREE.LineSegments>;
+    container: THREE.Object3D;
+    previousShowLeafNodes: boolean;
+    previousShowNonLeafNodes: boolean;
+};
+
 export type State = {
     object3d: THREE.Object3D;
     options: DebugRendererOptions;
@@ -260,6 +273,7 @@ export type State = {
     constraints: ConstraintsState;
     broadphase: BroadphaseState;
     triangleMeshBvh: TriangleMeshBvhState;
+    staticCompoundBvh: StaticCompoundBvhState;
 };
 
 /** create default debug renderer options */
@@ -289,6 +303,11 @@ export function createDefaultOptions(): DebugRendererOptions {
             showNonLeafNodes: true,
         },
         triangleMeshBvh: {
+            enabled: false,
+            showLeafNodes: true,
+            showNonLeafNodes: true,
+        },
+        staticCompoundBvh: {
             enabled: false,
             showLeafNodes: true,
             showNonLeafNodes: true,
@@ -400,6 +419,16 @@ export function init(options?: DebugRendererOptions): State {
         new THREE.LineBasicMaterial({ vertexColors: true }),
     );
     triangleMeshBvhLines.frustumCulled = false;
+    triangleMeshBvhContainer.add(triangleMeshBvhLines);
+
+    // create static compound bvh visualization container
+    const staticCompoundBvhContainer = new THREE.Object3D();
+    const staticCompoundBvhLines = new THREE.LineSegments(
+        new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ vertexColors: true }),
+    );
+    staticCompoundBvhLines.frustumCulled = false;
+    staticCompoundBvhContainer.add(staticCompoundBvhLines);
 
     // create constraints visualization
     const constraintsGeometry = new THREE.BufferGeometry();
@@ -420,6 +449,7 @@ export function init(options?: DebugRendererOptions): State {
     object3d.add(constraintsLineSegments);
     object3d.add(edgeWireframeContainer);
     object3d.add(triangleMeshBvhContainer);
+    object3d.add(staticCompoundBvhContainer);
 
     const resolvedOptions = options ?? createDefaultOptions();
 
@@ -475,6 +505,13 @@ export function init(options?: DebugRendererOptions): State {
             lines: triangleMeshBvhLines,
             cache: new Map(),
             container: triangleMeshBvhContainer,
+            previousShowLeafNodes: true,
+            previousShowNonLeafNodes: true,
+        },
+        staticCompoundBvh: {
+            lines: staticCompoundBvhLines,
+            cache: new Map(),
+            container: staticCompoundBvhContainer,
             previousShowLeafNodes: true,
             previousShowNonLeafNodes: true,
         },
@@ -776,6 +813,22 @@ function addShapeInstances(
             break;
         }
 
+        case ShapeType.STATIC_COMPOUND: {
+            for (const child of shape.children) {
+                const [tx, ty, tz] = child.position;
+                const [qx, qy, qz, qw] = child.quaternion;
+
+                _position.set(tx, ty, tz);
+                _quaternion.set(qx, qy, qz, qw);
+                _scale.set(1, 1, 1);
+                _matrix.compose(_position, _quaternion, _scale);
+                _childLocalMatrix.multiplyMatrices(localMatrix, _matrix);
+
+                addShapeInstances(state, child.shape, bodyMatrix, _childLocalMatrix, color, instanceIds);
+            }
+            break;
+        }
+
         case ShapeType.TRANSFORMED: {
             const [tx, ty, tz] = shape.position;
             const [qx, qy, qz, qw] = shape.quaternion;
@@ -920,6 +973,22 @@ function updateShapeInstances(
         }
 
         case ShapeType.COMPOUND: {
+            for (const child of shape.children) {
+                const [tx, ty, tz] = child.position;
+                const [qx, qy, qz, qw] = child.quaternion;
+
+                _position.set(tx, ty, tz);
+                _quaternion.set(qx, qy, qz, qw);
+                _scale.set(1, 1, 1);
+                _matrix.compose(_position, _quaternion, _scale);
+                _childLocalMatrix.multiplyMatrices(localMatrix, _matrix);
+
+                updateShapeInstances(mesh, child.shape, bodyMatrix, _childLocalMatrix, instanceIds, index, color);
+            }
+            break;
+        }
+
+        case ShapeType.STATIC_COMPOUND: {
             for (const child of shape.children) {
                 const [tx, ty, tz] = child.position;
                 const [qx, qy, qz, qw] = child.quaternion;
@@ -1297,6 +1366,31 @@ function createEdgeWireframeForShape(
         }
 
         case ShapeType.COMPOUND: {
+            for (const child of shape.children) {
+                const [tx, ty, tz] = child.position;
+                const [qx, qy, qz, qw] = child.quaternion;
+
+                _position.set(tx, ty, tz);
+                _quaternion.set(qx, qy, qz, qw);
+                _scale.set(1, 1, 1);
+                _matrix.compose(_position, _quaternion, _scale);
+                const childMatrix = parentMatrix.clone().multiply(_matrix);
+
+                createEdgeWireframeForShape(
+                    state,
+                    child.shape,
+                    childMatrix,
+                    linePositions,
+                    lineColors,
+                    geometries,
+                    localTransforms,
+                    color,
+                );
+            }
+            break;
+        }
+
+        case ShapeType.STATIC_COMPOUND: {
             for (const child of shape.children) {
                 const [tx, ty, tz] = child.position;
                 const [qx, qy, qz, qw] = child.quaternion;
@@ -2014,37 +2108,37 @@ function updateBroadphaseDbvt(state: State, world: World): void {
                 : layerColorsNonLeaf[layerIndex % layerColorsNonLeaf.length];
 
             // Add box wireframe for this node
-            const min = node.aabb[0];
-            const max = node.aabb[1];
+            const minX = node.aabb[0], minY = node.aabb[1], minZ = node.aabb[2];
+            const maxX = node.aabb[3], maxY = node.aabb[4], maxZ = node.aabb[5];
 
             // Bottom face (4 edges)
-            positions.push(min[0], min[1], min[2], max[0], min[1], min[2]);
+            positions.push(minX, minY, minZ, maxX, minY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], min[2], max[0], min[1], max[2]);
+            positions.push(maxX, minY, minZ, maxX, minY, maxZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], max[2], min[0], min[1], max[2]);
+            positions.push(maxX, minY, maxZ, minX, minY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], min[1], max[2], min[0], min[1], min[2]);
+            positions.push(minX, minY, maxZ, minX, minY, minZ);
             colors.push(...color, ...color);
 
             // Top face (4 edges)
-            positions.push(min[0], max[1], min[2], max[0], max[1], min[2]);
+            positions.push(minX, maxY, minZ, maxX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], max[1], min[2], max[0], max[1], max[2]);
+            positions.push(maxX, maxY, minZ, maxX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(max[0], max[1], max[2], min[0], max[1], max[2]);
+            positions.push(maxX, maxY, maxZ, minX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], max[1], max[2], min[0], max[1], min[2]);
+            positions.push(minX, maxY, maxZ, minX, maxY, minZ);
             colors.push(...color, ...color);
 
             // Vertical edges (4 edges)
-            positions.push(min[0], min[1], min[2], min[0], max[1], min[2]);
+            positions.push(minX, minY, minZ, minX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], min[2], max[0], max[1], min[2]);
+            positions.push(maxX, minY, minZ, maxX, maxY, minZ);
             colors.push(...color, ...color);
-            positions.push(max[0], min[1], max[2], max[0], max[1], max[2]);
+            positions.push(maxX, minY, maxZ, maxX, maxY, maxZ);
             colors.push(...color, ...color);
-            positions.push(min[0], min[1], max[2], min[0], max[1], max[2]);
+            positions.push(minX, minY, maxZ, minX, maxY, maxZ);
             colors.push(...color, ...color);
 
             // Continue traversal
@@ -2256,6 +2350,19 @@ function collectTriangleMeshShapes(
             }
             break;
 
+        case ShapeType.STATIC_COMPOUND:
+            for (const child of shape.children) {
+                const [tx, ty, tz] = child.position;
+                const [qx, qy, qz, qw] = child.quaternion;
+                _position.set(tx, ty, tz);
+                _quaternion.set(qx, qy, qz, qw);
+                _scale.set(1, 1, 1);
+                _matrix.compose(_position, _quaternion, _scale);
+                const childMatrix = parentMatrix.clone().multiply(_matrix);
+                collectTriangleMeshShapes(child.shape, childMatrix, output);
+            }
+            break;
+
         case ShapeType.TRANSFORMED: {
             const [tx, ty, tz] = shape.position;
             const [qx, qy, qz, qw] = shape.quaternion;
@@ -2280,6 +2387,58 @@ function collectTriangleMeshShapes(
         }
 
         // Other shape types don't contain triangle meshes
+        default:
+            break;
+    }
+}
+
+function collectStaticCompoundShapes(
+    shape: Shape,
+    parentMatrix: THREE.Matrix4,
+    output: { shape: Shape & { type: ShapeType.STATIC_COMPOUND }; worldMatrix: THREE.Matrix4 }[],
+): void {
+    switch (shape.type) {
+        case ShapeType.STATIC_COMPOUND:
+            output.push({ shape, worldMatrix: parentMatrix.clone() });
+            break;
+
+        case ShapeType.COMPOUND:
+            for (const child of shape.children) {
+                const [tx, ty, tz] = child.position;
+                const [qx, qy, qz, qw] = child.quaternion;
+                _position.set(tx, ty, tz);
+                _quaternion.set(qx, qy, qz, qw);
+                _scale.set(1, 1, 1);
+                _matrix.compose(_position, _quaternion, _scale);
+                const childMatrix = parentMatrix.clone().multiply(_matrix);
+                collectStaticCompoundShapes(child.shape, childMatrix, output);
+            }
+            break;
+
+        case ShapeType.TRANSFORMED: {
+            const [tx, ty, tz] = shape.position;
+            const [qx, qy, qz, qw] = shape.quaternion;
+            _position.set(tx, ty, tz);
+            _quaternion.set(qx, qy, qz, qw);
+            _scale.set(1, 1, 1);
+            _matrix.compose(_position, _quaternion, _scale);
+            const transformedMatrix = parentMatrix.clone().multiply(_matrix);
+            collectStaticCompoundShapes(shape.shape, transformedMatrix, output);
+            break;
+        }
+
+        case ShapeType.SCALED: {
+            const [sx, sy, sz] = shape.scale;
+            _position.set(0, 0, 0);
+            _quaternion.set(0, 0, 0, 1);
+            _scale.set(sx, sy, sz);
+            _matrix.compose(_position, _quaternion, _scale);
+            const scaledMatrix = parentMatrix.clone().multiply(_matrix);
+            collectStaticCompoundShapes(shape.shape, scaledMatrix, output);
+            break;
+        }
+
+        // other shape types don't contain static compounds
         default:
             break;
     }
@@ -2439,14 +2598,14 @@ function updateTriangleMeshBvh(state: State, world: World): void {
             while (stack.length > 0) {
                 const { offset, depth } = stack.pop()!;
 
-                const isLeaf = triangleMeshBvh.nodeIsLeaf(buffer, offset);
+                const isLeaf = bvh.nodeIsLeaf(buffer, offset);
 
                 if (isLeaf && !showLeafNodes) {
                     continue;
                 }
                 if (!isLeaf && !showNonLeafNodes) {
-                    stack.push({ offset: triangleMeshBvh.nodeLeft(offset), depth: depth + 1 });
-                    stack.push({ offset: triangleMeshBvh.nodeRight(buffer, offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeLeft(offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeRight(buffer, offset), depth: depth + 1 });
                     continue;
                 }
 
@@ -2454,21 +2613,21 @@ function updateTriangleMeshBvh(state: State, world: World): void {
                 const color = colorPalette[depth % colorPalette.length];
 
                 const aabbMin: [number, number, number] = [
-                    buffer[offset + triangleMeshBvh.NODE_MIN_X],
-                    buffer[offset + triangleMeshBvh.NODE_MIN_Y],
-                    buffer[offset + triangleMeshBvh.NODE_MIN_Z],
+                    buffer[offset + bvh.NODE_MIN_X],
+                    buffer[offset + bvh.NODE_MIN_Y],
+                    buffer[offset + bvh.NODE_MIN_Z],
                 ];
                 const aabbMax: [number, number, number] = [
-                    buffer[offset + triangleMeshBvh.NODE_MAX_X],
-                    buffer[offset + triangleMeshBvh.NODE_MAX_Y],
-                    buffer[offset + triangleMeshBvh.NODE_MAX_Z],
+                    buffer[offset + bvh.NODE_MAX_X],
+                    buffer[offset + bvh.NODE_MAX_Y],
+                    buffer[offset + bvh.NODE_MAX_Z],
                 ];
 
                 addBvhBoxWireframe(positions, colors, aabbMin, aabbMax, worldMatrix, color);
 
                 if (!isLeaf) {
-                    stack.push({ offset: triangleMeshBvh.nodeLeft(offset), depth: depth + 1 });
-                    stack.push({ offset: triangleMeshBvh.nodeRight(buffer, offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeLeft(offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeRight(buffer, offset), depth: depth + 1 });
                 }
             }
         }
@@ -2507,6 +2666,169 @@ function updateTriangleMeshBvh(state: State, world: World): void {
     }
 }
 
+function updateStaticCompoundBvh(state: State, world: World): void {
+    if (!state.options.staticCompoundBvh.enabled) {
+        state.staticCompoundBvh.container.visible = false;
+        return;
+    }
+
+    state.staticCompoundBvh.container.visible = true;
+
+    const showLeafNodes = state.options.staticCompoundBvh.showLeafNodes;
+    const showNonLeafNodes = state.options.staticCompoundBvh.showNonLeafNodes;
+
+    // invalidate cache if filter options changed
+    if (
+        showLeafNodes !== state.staticCompoundBvh.previousShowLeafNodes ||
+        showNonLeafNodes !== state.staticCompoundBvh.previousShowNonLeafNodes
+    ) {
+        // clear all cached visualizations
+        for (const [_bodyId, lineSegments] of state.staticCompoundBvh.cache) {
+            state.staticCompoundBvh.container.remove(lineSegments);
+            lineSegments.geometry.dispose();
+            if (lineSegments.material instanceof THREE.Material) {
+                lineSegments.material.dispose();
+            }
+        }
+        state.staticCompoundBvh.cache.clear();
+        state.staticCompoundBvh.previousShowLeafNodes = showLeafNodes;
+        state.staticCompoundBvh.previousShowNonLeafNodes = showNonLeafNodes;
+    }
+
+    // track which bodies we've seen this frame
+    const seenBodyIds = new Set<number>();
+
+    // iterate through all rigid bodies
+    for (const body of rigidBody.iterate(world)) {
+        seenBodyIds.add(body.id);
+
+        // check if we already have cached visualization for this body
+        if (state.staticCompoundBvh.cache.has(body.id)) {
+            // update the transform of existing line segments
+            const cachedLines = state.staticCompoundBvh.cache.get(body.id)!;
+            _position.set(body.position[0], body.position[1], body.position[2]);
+            _quaternion.set(body.quaternion[0], body.quaternion[1], body.quaternion[2], body.quaternion[3]);
+            _scale.set(1, 1, 1);
+            cachedLines.position.copy(_position);
+            cachedLines.quaternion.copy(_quaternion);
+            cachedLines.scale.copy(_scale);
+            continue;
+        }
+
+        // no cache - check if this body has static compound shapes
+        const identityMatrix = new THREE.Matrix4();
+        const staticCompounds: { shape: Shape & { type: ShapeType.STATIC_COMPOUND }; worldMatrix: THREE.Matrix4 }[] = [];
+        collectStaticCompoundShapes(body.shape, identityMatrix, staticCompounds);
+
+        if (staticCompounds.length === 0) {
+            // no static compounds in this body - cache empty marker
+            const emptyLines = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial());
+            emptyLines.visible = false;
+            state.staticCompoundBvh.cache.set(body.id, emptyLines);
+            state.staticCompoundBvh.container.add(emptyLines);
+            continue;
+        }
+
+        // create combined visualization for all static compounds in this body
+        const positions: number[] = [];
+        const colors: number[] = [];
+
+        for (const { shape: compoundShape, worldMatrix } of staticCompounds) {
+            const buffer = compoundShape.bvh.buffer;
+            if (buffer.length === 0) continue;
+
+            // color palette by depth (orange/yellow theme for static compounds)
+            const leafColors: [number, number, number][] = [
+                [1.0, 0.5, 0.0],
+                [1.0, 0.6, 0.0],
+                [1.0, 0.7, 0.2],
+                [1.0, 0.8, 0.3],
+                [1.0, 0.9, 0.4],
+                [1.0, 1.0, 0.5],
+            ];
+
+            const nonLeafColors: [number, number, number][] = [
+                [0.4, 0.2, 0.0],
+                [0.4, 0.25, 0.0],
+                [0.4, 0.3, 0.1],
+                [0.4, 0.35, 0.15],
+                [0.4, 0.4, 0.2],
+                [0.4, 0.45, 0.25],
+            ];
+
+            // traverse BVH using flat buffer
+            const stack: { offset: number; depth: number }[] = [{ offset: 0, depth: 0 }];
+            while (stack.length > 0) {
+                const { offset, depth } = stack.pop()!;
+
+                const isLeaf = bvh.nodeIsLeaf(buffer, offset);
+
+                if (isLeaf && !showLeafNodes) {
+                    continue;
+                }
+                if (!isLeaf && !showNonLeafNodes) {
+                    stack.push({ offset: bvh.nodeLeft(offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeRight(buffer, offset), depth: depth + 1 });
+                    continue;
+                }
+
+                const colorPalette = isLeaf ? leafColors : nonLeafColors;
+                const color = colorPalette[depth % colorPalette.length];
+
+                const aabbMin: [number, number, number] = [
+                    buffer[offset + bvh.NODE_MIN_X],
+                    buffer[offset + bvh.NODE_MIN_Y],
+                    buffer[offset + bvh.NODE_MIN_Z],
+                ];
+                const aabbMax: [number, number, number] = [
+                    buffer[offset + bvh.NODE_MAX_X],
+                    buffer[offset + bvh.NODE_MAX_Y],
+                    buffer[offset + bvh.NODE_MAX_Z],
+                ];
+
+                addBvhBoxWireframe(positions, colors, aabbMin, aabbMax, worldMatrix, color);
+
+                if (!isLeaf) {
+                    stack.push({ offset: bvh.nodeLeft(offset), depth: depth + 1 });
+                    stack.push({ offset: bvh.nodeRight(buffer, offset), depth: depth + 1 });
+                }
+            }
+        }
+
+        // create the line segments for this body
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+        const material = new THREE.LineBasicMaterial({ vertexColors: true });
+        const lineSegments = new THREE.LineSegments(geometry, material);
+        lineSegments.frustumCulled = false;
+
+        // set transform
+        _position.set(body.position[0], body.position[1], body.position[2]);
+        _quaternion.set(body.quaternion[0], body.quaternion[1], body.quaternion[2], body.quaternion[3]);
+        _scale.set(1, 1, 1);
+        lineSegments.position.copy(_position);
+        lineSegments.quaternion.copy(_quaternion);
+        lineSegments.scale.copy(_scale);
+
+        state.staticCompoundBvh.cache.set(body.id, lineSegments);
+        state.staticCompoundBvh.container.add(lineSegments);
+    }
+
+    // remove cached entries for bodies that no longer exist
+    for (const [bodyId, lineSegments] of state.staticCompoundBvh.cache) {
+        if (!seenBodyIds.has(bodyId)) {
+            state.staticCompoundBvh.container.remove(lineSegments);
+            lineSegments.geometry.dispose();
+            if (lineSegments.material instanceof THREE.Material) {
+                lineSegments.material.dispose();
+            }
+            state.staticCompoundBvh.cache.delete(bodyId);
+        }
+    }
+}
+
 export function update(state: State, world: World): void {
     updateBodies(state, world);
     updateContacts(state, world);
@@ -2515,6 +2837,7 @@ export function update(state: State, world: World): void {
     drawConstraints(state, world);
     updateVelocities(state, world);
     updateTriangleMeshBvh(state, world);
+    updateStaticCompoundBvh(state, world);
 }
 
 // Helper to add a line to constraints visualization
@@ -2728,576 +3051,587 @@ function drawConstraints(state: State, world: World): void {
     // Draw hinge constraints
     const hingePool = constraints.pools[ConstraintType.HINGE];
     if (hingePool) {
-    for (const constraint of hingePool.constraints as HingeConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of hingePool.constraints as HingeConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
-        transformDirectionToWorld(_transformDirOut, constraint.localSpaceHingeAxis1, bodyA);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformDirectionToWorld(_transformDirOut, constraint.localSpaceHingeAxis1, bodyA);
 
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
-        const axis1 = _transformDirOut;
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
+            const axis1 = _transformDirOut;
 
-        addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
-        addConstraintLine(
-            positions,
-            colors,
-            pos1,
-            [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
-            redColor,
-        );
-
-        addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
-
-        // Transform normal axis for limit drawing
-        if (drawLimits && constraint.hasLimits && constraint.limitsMax > constraint.limitsMin) {
-            vec3.set(
-                _constraint_normal1,
-                constraint.localSpaceNormalAxis1[0],
-                constraint.localSpaceNormalAxis1[1],
-                constraint.localSpaceNormalAxis1[2],
-            );
-            transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
+            addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
             addConstraintLine(
-                positions,
-                colors,
-                pos2,
-                [
-                    pos2[0] + _constraint_normal1[0] * size,
-                    pos2[1] + _constraint_normal1[1] * size,
-                    pos2[2] + _constraint_normal1[2] * size,
-                ],
-                whiteColor,
-            );
-            drawPie(
                 positions,
                 colors,
                 pos1,
-                size,
-                axis1,
-                _constraint_normal1,
-                constraint.limitsMin,
-                constraint.limitsMax,
-                purpleColor,
+                [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
+                redColor,
             );
-        } else {
-            vec3.set(
-                _constraint_normal1,
-                constraint.localSpaceNormalAxis1[0],
-                constraint.localSpaceNormalAxis1[1],
-                constraint.localSpaceNormalAxis1[2],
-            );
-            transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
-            addConstraintLine(
-                positions,
-                colors,
-                pos2,
-                [
-                    pos2[0] + _constraint_normal1[0] * size,
-                    pos2[1] + _constraint_normal1[1] * size,
-                    pos2[2] + _constraint_normal1[2] * size,
-                ],
-                whiteColor,
-            );
-        }
-    }
-    }
 
-    // Draw swing-twist constraints
-    const swingTwistPool = constraints.pools[ConstraintType.SWING_TWIST];
-    if (swingTwistPool) {
-    for (const constraint of swingTwistPool.constraints as SwingTwistConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+            addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
-
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
-
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
-
-        addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
-        addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
-        addConstraintLine(positions, colors, pos1, pos2, whiteColor);
-
-        // Draw limits if enabled
-        if (drawLimits) {
-            // Get constraint space orientation in world space
-            // constraintToBody1 transforms from constraint space to body1 space
-            // So: worldQuat = bodyA.quaternion * constraintToBody1
-            const c2b1 = constraint.constraintToBody1;
-            const qA = bodyA.quaternion;
-
-            // Multiply quaternions: qA * c2b1
-            quat.multiply(_constraint_quat, qA, c2b1 as Quat);
-
-            // Get constraint space axes in world space
-            // In constraint space: X = twist axis, Y = plane axis, Z = normal axis
-            const constraintTransform: BodyTransform = { ...bodyA, quaternion: _constraint_quat };
-
-            vec3.set(_constraint_xAxis, 1, 0, 0);
-            vec3.set(_constraint_yAxis, 0, 1, 0);
-            vec3.set(_constraint_zAxis, 0, 0, 1);
-
-            transformDirectionToWorld(_constraint_twistAxis, _constraint_xAxis, constraintTransform);
-            transformDirectionToWorld(_constraint_planeAxis, _constraint_yAxis, constraintTransform);
-            transformDirectionToWorld(_constraint_normalAxis, _constraint_zAxis, constraintTransform);
-
-            // Draw swing cone limits
-            const hasSwingLimits = constraint.planeHalfConeAngle > 0 || constraint.normalHalfConeAngle > 0;
-            if (hasSwingLimits) {
-                drawSwingConeLimits(
+            // Transform normal axis for limit drawing
+            if (drawLimits && constraint.hasLimits && constraint.limitsMax > constraint.limitsMin) {
+                vec3.set(
+                    _constraint_normal1,
+                    constraint.localSpaceNormalAxis1[0],
+                    constraint.localSpaceNormalAxis1[1],
+                    constraint.localSpaceNormalAxis1[2],
+                );
+                transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
+                addConstraintLine(
                     positions,
                     colors,
-                    pos1,
-                    _constraint_twistAxis,
-                    _constraint_planeAxis,
-                    _constraint_normalAxis,
-                    constraint.planeHalfConeAngle,
-                    constraint.normalHalfConeAngle,
-                    size,
-                    greenColor,
+                    pos2,
+                    [
+                        pos2[0] + _constraint_normal1[0] * size,
+                        pos2[1] + _constraint_normal1[1] * size,
+                        pos2[2] + _constraint_normal1[2] * size,
+                    ],
+                    whiteColor,
                 );
-            }
-
-            // Draw twist limits as a pie around the twist axis
-            const hasTwistLimits = constraint.twistMaxAngle > constraint.twistMinAngle;
-            if (hasTwistLimits) {
                 drawPie(
                     positions,
                     colors,
                     pos1,
                     size,
-                    _constraint_twistAxis,
-                    _constraint_planeAxis,
-                    constraint.twistMinAngle,
-                    constraint.twistMaxAngle,
+                    axis1,
+                    _constraint_normal1,
+                    constraint.limitsMin,
+                    constraint.limitsMax,
                     purpleColor,
+                );
+            } else {
+                vec3.set(
+                    _constraint_normal1,
+                    constraint.localSpaceNormalAxis1[0],
+                    constraint.localSpaceNormalAxis1[1],
+                    constraint.localSpaceNormalAxis1[2],
+                );
+                transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
+                addConstraintLine(
+                    positions,
+                    colors,
+                    pos2,
+                    [
+                        pos2[0] + _constraint_normal1[0] * size,
+                        pos2[1] + _constraint_normal1[1] * size,
+                        pos2[2] + _constraint_normal1[2] * size,
+                    ],
+                    whiteColor,
                 );
             }
         }
     }
+
+    // Draw swing-twist constraints
+    const swingTwistPool = constraints.pools[ConstraintType.SWING_TWIST];
+    if (swingTwistPool) {
+        for (const constraint of swingTwistPool.constraints as SwingTwistConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
+
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
+
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
+
+            addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
+            addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
+            addConstraintLine(positions, colors, pos1, pos2, whiteColor);
+
+            // Draw limits if enabled
+            if (drawLimits) {
+                // Get constraint space orientation in world space
+                // constraintToBody1 transforms from constraint space to body1 space
+                // So: worldQuat = bodyA.quaternion * constraintToBody1
+                const c2b1 = constraint.constraintToBody1;
+                const qA = bodyA.quaternion;
+
+                // Multiply quaternions: qA * c2b1
+                quat.multiply(_constraint_quat, qA, c2b1 as Quat);
+
+                // Get constraint space axes in world space
+                // In constraint space: X = twist axis, Y = plane axis, Z = normal axis
+                const constraintTransform: BodyTransform = { ...bodyA, quaternion: _constraint_quat };
+
+                vec3.set(_constraint_xAxis, 1, 0, 0);
+                vec3.set(_constraint_yAxis, 0, 1, 0);
+                vec3.set(_constraint_zAxis, 0, 0, 1);
+
+                transformDirectionToWorld(_constraint_twistAxis, _constraint_xAxis, constraintTransform);
+                transformDirectionToWorld(_constraint_planeAxis, _constraint_yAxis, constraintTransform);
+                transformDirectionToWorld(_constraint_normalAxis, _constraint_zAxis, constraintTransform);
+
+                // Draw swing cone limits
+                const hasSwingLimits = constraint.planeHalfConeAngle > 0 || constraint.normalHalfConeAngle > 0;
+                if (hasSwingLimits) {
+                    drawSwingConeLimits(
+                        positions,
+                        colors,
+                        pos1,
+                        _constraint_twistAxis,
+                        _constraint_planeAxis,
+                        _constraint_normalAxis,
+                        constraint.planeHalfConeAngle,
+                        constraint.normalHalfConeAngle,
+                        size,
+                        greenColor,
+                    );
+                }
+
+                // Draw twist limits as a pie around the twist axis
+                const hasTwistLimits = constraint.twistMaxAngle > constraint.twistMinAngle;
+                if (hasTwistLimits) {
+                    drawPie(
+                        positions,
+                        colors,
+                        pos1,
+                        size,
+                        _constraint_twistAxis,
+                        _constraint_planeAxis,
+                        constraint.twistMinAngle,
+                        constraint.twistMaxAngle,
+                        purpleColor,
+                    );
+                }
+            }
+        }
     }
 
     // Draw distance constraints
     const distancePool = constraints.pools[ConstraintType.DISTANCE];
     if (distancePool) {
-    for (const constraint of distancePool.constraints as DistanceConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of distancePool.constraints as DistanceConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
 
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
 
-        addConstraintLine(positions, colors, pos1, pos2, greenColor);
+            addConstraintLine(positions, colors, pos1, pos2, greenColor);
 
-        // Draw limits if enabled
-        if (drawLimits && constraint.minDistance !== constraint.maxDistance) {
-            // Draw spheres at min and max distances from pos1
-            const direction: [number, number, number] = [pos2[0] - pos1[0], pos2[1] - pos1[1], pos2[2] - pos1[2]];
-            const currentDistance = Math.sqrt(
-                direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2],
-            );
+            // Draw limits if enabled
+            if (drawLimits && constraint.minDistance !== constraint.maxDistance) {
+                // Draw spheres at min and max distances from pos1
+                const direction: [number, number, number] = [pos2[0] - pos1[0], pos2[1] - pos1[1], pos2[2] - pos1[2]];
+                const currentDistance = Math.sqrt(
+                    direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2],
+                );
 
-            if (currentDistance > 0.001) {
-                // Normalize direction
-                const invLen = 1 / currentDistance;
-                direction[0] *= invLen;
-                direction[1] *= invLen;
-                direction[2] *= invLen;
+                if (currentDistance > 0.001) {
+                    // Normalize direction
+                    const invLen = 1 / currentDistance;
+                    direction[0] *= invLen;
+                    direction[1] *= invLen;
+                    direction[2] *= invLen;
 
-                // Draw min distance sphere (as circle segments)
-                if (constraint.minDistance > 0) {
-                    const numSegments = 16;
-                    const angleStep = (2 * Math.PI) / numSegments;
+                    // Draw min distance sphere (as circle segments)
+                    if (constraint.minDistance > 0) {
+                        const numSegments = 16;
+                        const angleStep = (2 * Math.PI) / numSegments;
 
-                    // Find a perpendicular vector to direction
-                    let perpX: number, perpY: number, perpZ: number;
-                    if (Math.abs(direction[0]) < 0.9) {
-                        perpX = 0;
-                        perpY = -direction[2];
-                        perpZ = direction[1];
-                    } else {
-                        perpX = -direction[1];
-                        perpY = direction[0];
-                        perpZ = 0;
-                    }
-                    const perpLen = Math.sqrt(perpX * perpX + perpY * perpY + perpZ * perpZ);
-                    perpX /= perpLen;
-                    perpY /= perpLen;
-                    perpZ /= perpLen;
-
-                    let prevPoint: [number, number, number] | null = null;
-                    for (let i = 0; i <= numSegments; i++) {
-                        const angle = i * angleStep;
-                        const cos = Math.cos(angle);
-
-                        // Rotate perpendicular vector around direction
-                        const px = pos1[0] + perpX * cos * constraint.minDistance;
-                        const py = pos1[1] + perpY * cos * constraint.minDistance;
-                        const pz = pos1[2] + perpZ * cos * constraint.minDistance;
-
-                        const point: [number, number, number] = [px, py, pz];
-
-                        if (prevPoint !== null) {
-                            addConstraintLine(positions, colors, prevPoint, point, blueColor);
+                        // Find a perpendicular vector to direction
+                        let perpX: number, perpY: number, perpZ: number;
+                        if (Math.abs(direction[0]) < 0.9) {
+                            perpX = 0;
+                            perpY = -direction[2];
+                            perpZ = direction[1];
+                        } else {
+                            perpX = -direction[1];
+                            perpY = direction[0];
+                            perpZ = 0;
                         }
-                        prevPoint = point;
-                    }
-                }
+                        const perpLen = Math.sqrt(perpX * perpX + perpY * perpY + perpZ * perpZ);
+                        perpX /= perpLen;
+                        perpY /= perpLen;
+                        perpZ /= perpLen;
 
-                // Draw max distance sphere (as circle segments)
-                if (constraint.maxDistance < Infinity) {
-                    const numSegments = 16;
-                    const angleStep = (2 * Math.PI) / numSegments;
+                        let prevPoint: [number, number, number] | null = null;
+                        for (let i = 0; i <= numSegments; i++) {
+                            const angle = i * angleStep;
+                            const cos = Math.cos(angle);
 
-                    // Find a perpendicular vector to direction
-                    let perpX: number, perpY: number, perpZ: number;
-                    if (Math.abs(direction[0]) < 0.9) {
-                        perpX = 0;
-                        perpY = -direction[2];
-                        perpZ = direction[1];
-                    } else {
-                        perpX = -direction[1];
-                        perpY = direction[0];
-                        perpZ = 0;
-                    }
-                    const perpLen = Math.sqrt(perpX * perpX + perpY * perpY + perpZ * perpZ);
-                    perpX /= perpLen;
-                    perpY /= perpLen;
-                    perpZ /= perpLen;
+                            // Rotate perpendicular vector around direction
+                            const px = pos1[0] + perpX * cos * constraint.minDistance;
+                            const py = pos1[1] + perpY * cos * constraint.minDistance;
+                            const pz = pos1[2] + perpZ * cos * constraint.minDistance;
 
-                    let prevPoint: [number, number, number] | null = null;
-                    for (let i = 0; i <= numSegments; i++) {
-                        const angle = i * angleStep;
-                        const cos = Math.cos(angle);
+                            const point: [number, number, number] = [px, py, pz];
 
-                        const px = pos1[0] + perpX * cos * constraint.maxDistance;
-                        const py = pos1[1] + perpY * cos * constraint.maxDistance;
-                        const pz = pos1[2] + perpZ * cos * constraint.maxDistance;
-
-                        const point: [number, number, number] = [px, py, pz];
-
-                        if (prevPoint !== null) {
-                            addConstraintLine(positions, colors, prevPoint, point, redColor);
+                            if (prevPoint !== null) {
+                                addConstraintLine(positions, colors, prevPoint, point, blueColor);
+                            }
+                            prevPoint = point;
                         }
-                        prevPoint = point;
+                    }
+
+                    // Draw max distance sphere (as circle segments)
+                    if (constraint.maxDistance < Infinity) {
+                        const numSegments = 16;
+                        const angleStep = (2 * Math.PI) / numSegments;
+
+                        // Find a perpendicular vector to direction
+                        let perpX: number, perpY: number, perpZ: number;
+                        if (Math.abs(direction[0]) < 0.9) {
+                            perpX = 0;
+                            perpY = -direction[2];
+                            perpZ = direction[1];
+                        } else {
+                            perpX = -direction[1];
+                            perpY = direction[0];
+                            perpZ = 0;
+                        }
+                        const perpLen = Math.sqrt(perpX * perpX + perpY * perpY + perpZ * perpZ);
+                        perpX /= perpLen;
+                        perpY /= perpLen;
+                        perpZ /= perpLen;
+
+                        let prevPoint: [number, number, number] | null = null;
+                        for (let i = 0; i <= numSegments; i++) {
+                            const angle = i * angleStep;
+                            const cos = Math.cos(angle);
+
+                            const px = pos1[0] + perpX * cos * constraint.maxDistance;
+                            const py = pos1[1] + perpY * cos * constraint.maxDistance;
+                            const pz = pos1[2] + perpZ * cos * constraint.maxDistance;
+
+                            const point: [number, number, number] = [px, py, pz];
+
+                            if (prevPoint !== null) {
+                                addConstraintLine(positions, colors, prevPoint, point, redColor);
+                            }
+                            prevPoint = point;
+                        }
                     }
                 }
             }
         }
-    }
     }
 
     // Draw cone constraints
     const conePool = constraints.pools[ConstraintType.CONE];
     if (conePool) {
-    for (const constraint of conePool.constraints as ConeConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of conePool.constraints as ConeConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
-        transformDirectionToWorld(_transformDirOut, constraint.localSpaceTwistAxis1, bodyA);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformDirectionToWorld(_transformDirOut, constraint.localSpaceTwistAxis1, bodyA);
 
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
-        const axis1 = _transformDirOut;
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
+            const axis1 = _transformDirOut;
 
-        addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
-        addConstraintLine(
-            positions,
-            colors,
-            pos1,
-            [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
-            redColor,
-        );
+            addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
+            addConstraintLine(
+                positions,
+                colors,
+                pos1,
+                [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
+                redColor,
+            );
 
-        const axis2: [number, number, number] = [0, 0, 0];
-        transformDirectionToWorld(axis2, constraint.localSpaceTwistAxis2, bodyB);
+            const axis2: [number, number, number] = [0, 0, 0];
+            transformDirectionToWorld(axis2, constraint.localSpaceTwistAxis2, bodyB);
 
-        addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
-        addConstraintLine(
-            positions,
-            colors,
-            pos2,
-            [pos2[0] + axis2[0] * size, pos2[1] + axis2[1] * size, pos2[2] + axis2[2] * size],
-            greenColor,
-        );
+            addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
+            addConstraintLine(
+                positions,
+                colors,
+                pos2,
+                [pos2[0] + axis2[0] * size, pos2[1] + axis2[1] * size, pos2[2] + axis2[2] * size],
+                greenColor,
+            );
 
-        // Draw limits if enabled
-        if (drawLimits && constraint.cosHalfConeAngle < 1) {
-            const halfConeAngle = Math.acos(constraint.cosHalfConeAngle);
+            // Draw limits if enabled
+            if (drawLimits && constraint.cosHalfConeAngle < 1) {
+                const halfConeAngle = Math.acos(constraint.cosHalfConeAngle);
 
-            // Get perpendicular axes to twist axis
-            const perpX: [number, number, number] = [0, 0, 0];
-            const perpY: [number, number, number] = [0, 0, 0];
+                // Get perpendicular axes to twist axis
+                const perpX: [number, number, number] = [0, 0, 0];
+                const perpY: [number, number, number] = [0, 0, 0];
 
-            // Find first perpendicular
-            if (Math.abs(axis1[0]) < 0.9) {
-                perpX[0] = 0;
-                perpX[1] = -axis1[2];
-                perpX[2] = axis1[1];
-            } else {
-                perpX[0] = -axis1[1];
-                perpX[1] = axis1[0];
-                perpX[2] = 0;
+                // Find first perpendicular
+                if (Math.abs(axis1[0]) < 0.9) {
+                    perpX[0] = 0;
+                    perpX[1] = -axis1[2];
+                    perpX[2] = axis1[1];
+                } else {
+                    perpX[0] = -axis1[1];
+                    perpX[1] = axis1[0];
+                    perpX[2] = 0;
+                }
+                const perpXLen = Math.sqrt(perpX[0] * perpX[0] + perpX[1] * perpX[1] + perpX[2] * perpX[2]);
+                perpX[0] /= perpXLen;
+                perpX[1] /= perpXLen;
+                perpX[2] /= perpXLen;
+
+                // Second perpendicular = twist axis × first perpendicular
+                perpY[0] = axis1[1] * perpX[2] - axis1[2] * perpX[1];
+                perpY[1] = axis1[2] * perpX[0] - axis1[0] * perpX[2];
+                perpY[2] = axis1[0] * perpX[1] - axis1[1] * perpX[0];
+
+                // Draw cone using drawSwingConeLimits helper
+                drawSwingConeLimits(
+                    positions,
+                    colors,
+                    pos1,
+                    axis1,
+                    perpX,
+                    perpY,
+                    halfConeAngle,
+                    halfConeAngle,
+                    size,
+                    yellowColor,
+                );
             }
-            const perpXLen = Math.sqrt(perpX[0] * perpX[0] + perpX[1] * perpX[1] + perpX[2] * perpX[2]);
-            perpX[0] /= perpXLen;
-            perpX[1] /= perpXLen;
-            perpX[2] /= perpXLen;
-
-            // Second perpendicular = twist axis × first perpendicular
-            perpY[0] = axis1[1] * perpX[2] - axis1[2] * perpX[1];
-            perpY[1] = axis1[2] * perpX[0] - axis1[0] * perpX[2];
-            perpY[2] = axis1[0] * perpX[1] - axis1[1] * perpX[0];
-
-            // Draw cone using drawSwingConeLimits helper
-            drawSwingConeLimits(positions, colors, pos1, axis1, perpX, perpY, halfConeAngle, halfConeAngle, size, yellowColor);
         }
-    }
     }
 
     // Draw fixed constraints
     const fixedPool = constraints.pools[ConstraintType.FIXED];
     if (fixedPool) {
-    for (const constraint of fixedPool.constraints as FixedConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of fixedPool.constraints as FixedConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
 
-        addConstraintMarker(positions, colors, _transformPointOut, size * 0.1, blueColor);
-        addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, blueColor);
-    }
+            addConstraintMarker(positions, colors, _transformPointOut, size * 0.1, blueColor);
+            addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, blueColor);
+        }
     }
 
     // Draw point constraints
     const pointPool = constraints.pools[ConstraintType.POINT];
     if (pointPool) {
-    for (const constraint of pointPool.constraints as PointConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of pointPool.constraints as PointConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
 
-        addConstraintMarker(positions, colors, _transformPointOut, size * 0.1, whiteColor);
-        addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, whiteColor);
-        addConstraintLine(positions, colors, _transformPointOut, _transformPointOut2, whiteColor);
-    }
+            addConstraintMarker(positions, colors, _transformPointOut, size * 0.1, whiteColor);
+            addConstraintMarker(positions, colors, _transformPointOut2, size * 0.1, whiteColor);
+            addConstraintLine(positions, colors, _transformPointOut, _transformPointOut2, whiteColor);
+        }
     }
 
     // Draw slider constraints
     const sliderPool = constraints.pools[ConstraintType.SLIDER];
     if (sliderPool) {
-    for (const constraint of sliderPool.constraints as SliderConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of sliderPool.constraints as SliderConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePositionA, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePositionB, bodyB);
-        transformDirectionToWorld(_transformDirOut, constraint.localSpaceSliderAxisA, bodyA);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePositionA, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePositionB, bodyB);
+            transformDirectionToWorld(_transformDirOut, constraint.localSpaceSliderAxisA, bodyA);
 
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
-        const axis1 = _transformDirOut;
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
+            const axis1 = _transformDirOut;
 
-        addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
-        addConstraintLine(
-            positions,
-            colors,
-            pos1,
-            [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
-            redColor,
-        );
+            addConstraintMarker(positions, colors, pos1, size * 0.1, redColor);
+            addConstraintLine(
+                positions,
+                colors,
+                pos1,
+                [pos1[0] + axis1[0] * size, pos1[1] + axis1[1] * size, pos1[2] + axis1[2] * size],
+                redColor,
+            );
 
-        addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
+            addConstraintMarker(positions, colors, pos2, size * 0.1, greenColor);
 
-        // Draw limits if enabled
-        if (drawLimits && constraint.hasLimits) {
-            // Draw min limit marker (blue)
-            if (constraint.limitsMin > -Infinity) {
-                const minPos: [number, number, number] = [
-                    pos1[0] + axis1[0] * constraint.limitsMin,
-                    pos1[1] + axis1[1] * constraint.limitsMin,
-                    pos1[2] + axis1[2] * constraint.limitsMin,
-                ];
-                addConstraintMarker(positions, colors, minPos, size * 0.15, blueColor);
-            }
+            // Draw limits if enabled
+            if (drawLimits && constraint.hasLimits) {
+                // Draw min limit marker (blue)
+                if (constraint.limitsMin > -Infinity) {
+                    const minPos: [number, number, number] = [
+                        pos1[0] + axis1[0] * constraint.limitsMin,
+                        pos1[1] + axis1[1] * constraint.limitsMin,
+                        pos1[2] + axis1[2] * constraint.limitsMin,
+                    ];
+                    addConstraintMarker(positions, colors, minPos, size * 0.15, blueColor);
+                }
 
-            // Draw max limit marker (red)
-            if (constraint.limitsMax < Infinity) {
-                const maxPos: [number, number, number] = [
-                    pos1[0] + axis1[0] * constraint.limitsMax,
-                    pos1[1] + axis1[1] * constraint.limitsMax,
-                    pos1[2] + axis1[2] * constraint.limitsMax,
-                ];
-                addConstraintMarker(positions, colors, maxPos, size * 0.15, redColor);
-            }
+                // Draw max limit marker (red)
+                if (constraint.limitsMax < Infinity) {
+                    const maxPos: [number, number, number] = [
+                        pos1[0] + axis1[0] * constraint.limitsMax,
+                        pos1[1] + axis1[1] * constraint.limitsMax,
+                        pos1[2] + axis1[2] * constraint.limitsMax,
+                    ];
+                    addConstraintMarker(positions, colors, maxPos, size * 0.15, redColor);
+                }
 
-            // Draw line showing the slider range
-            if (constraint.limitsMin > -Infinity && constraint.limitsMax < Infinity) {
-                const minPos: [number, number, number] = [
-                    pos1[0] + axis1[0] * constraint.limitsMin,
-                    pos1[1] + axis1[1] * constraint.limitsMin,
-                    pos1[2] + axis1[2] * constraint.limitsMin,
-                ];
-                const maxPos: [number, number, number] = [
-                    pos1[0] + axis1[0] * constraint.limitsMax,
-                    pos1[1] + axis1[1] * constraint.limitsMax,
-                    pos1[2] + axis1[2] * constraint.limitsMax,
-                ];
-                addConstraintLine(positions, colors, minPos, maxPos, purpleColor);
+                // Draw line showing the slider range
+                if (constraint.limitsMin > -Infinity && constraint.limitsMax < Infinity) {
+                    const minPos: [number, number, number] = [
+                        pos1[0] + axis1[0] * constraint.limitsMin,
+                        pos1[1] + axis1[1] * constraint.limitsMin,
+                        pos1[2] + axis1[2] * constraint.limitsMin,
+                    ];
+                    const maxPos: [number, number, number] = [
+                        pos1[0] + axis1[0] * constraint.limitsMax,
+                        pos1[1] + axis1[1] * constraint.limitsMax,
+                        pos1[2] + axis1[2] * constraint.limitsMax,
+                    ];
+                    addConstraintLine(positions, colors, minPos, maxPos, purpleColor);
+                }
             }
         }
-    }
     }
 
     // Draw six DOF constraints
     const sixDOFPool = constraints.pools[ConstraintType.SIX_DOF];
     if (sixDOFPool) {
-    for (const constraint of sixDOFPool.constraints as SixDOFConstraint[]) {
-        if (constraint._pooled || !constraint.enabled) continue;
+        for (const constraint of sixDOFPool.constraints as SixDOFConstraint[]) {
+            if (constraint._pooled || !constraint.enabled) continue;
 
-        const bodyA = getBodyTransform(constraint.bodyIndexA);
-        const bodyB = getBodyTransform(constraint.bodyIndexB);
-        if (!bodyA || !bodyB) continue;
+            const bodyA = getBodyTransform(constraint.bodyIndexA);
+            const bodyB = getBodyTransform(constraint.bodyIndexB);
+            if (!bodyA || !bodyB) continue;
 
-        transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
-        transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
+            transformPointToWorld(_transformPointOut, constraint.localSpacePosition1, bodyA);
+            transformPointToWorld(_transformPointOut2, constraint.localSpacePosition2, bodyB);
 
-        const pos1 = _transformPointOut;
-        const pos2 = _transformPointOut2;
+            const pos1 = _transformPointOut;
+            const pos2 = _transformPointOut2;
 
-        addConstraintMarker(positions, colors, pos1, size * 0.1, purpleColor);
-        addConstraintMarker(positions, colors, pos2, size * 0.1, purpleColor);
+            addConstraintMarker(positions, colors, pos1, size * 0.1, purpleColor);
+            addConstraintMarker(positions, colors, pos2, size * 0.1, purpleColor);
 
-        // Draw limits if enabled
-        if (drawLimits) {
-            // Get constraint space orientation in world space (similar to swing-twist)
-            const c2b1 = constraint.constraintToBody1;
-            const qA = bodyA.quaternion;
+            // Draw limits if enabled
+            if (drawLimits) {
+                // Get constraint space orientation in world space (similar to swing-twist)
+                const c2b1 = constraint.constraintToBody1;
+                const qA = bodyA.quaternion;
 
-            // Multiply quaternions: qA * c2b1
-            const constraintQuat: [number, number, number, number] = [
-                qA[3] * c2b1[0] + qA[0] * c2b1[3] + qA[1] * c2b1[2] - qA[2] * c2b1[1],
-                qA[3] * c2b1[1] + qA[1] * c2b1[3] + qA[2] * c2b1[0] - qA[0] * c2b1[2],
-                qA[3] * c2b1[2] + qA[2] * c2b1[3] + qA[0] * c2b1[1] - qA[1] * c2b1[0],
-                qA[3] * c2b1[3] - qA[0] * c2b1[0] - qA[1] * c2b1[1] - qA[2] * c2b1[2],
-            ];
+                // Multiply quaternions: qA * c2b1
+                const constraintQuat: [number, number, number, number] = [
+                    qA[3] * c2b1[0] + qA[0] * c2b1[3] + qA[1] * c2b1[2] - qA[2] * c2b1[1],
+                    qA[3] * c2b1[1] + qA[1] * c2b1[3] + qA[2] * c2b1[0] - qA[0] * c2b1[2],
+                    qA[3] * c2b1[2] + qA[2] * c2b1[3] + qA[0] * c2b1[1] - qA[1] * c2b1[0],
+                    qA[3] * c2b1[3] - qA[0] * c2b1[0] - qA[1] * c2b1[1] - qA[2] * c2b1[2],
+                ];
 
-            // Get constraint space axes in world space
-            const constraintTransform: BodyTransform = { ...bodyA, quaternion: constraintQuat };
-            const axisX: [number, number, number] = [0, 0, 0];
-            const axisY: [number, number, number] = [0, 0, 0];
-            const axisZ: [number, number, number] = [0, 0, 0];
+                // Get constraint space axes in world space
+                const constraintTransform: BodyTransform = { ...bodyA, quaternion: constraintQuat };
+                const axisX: [number, number, number] = [0, 0, 0];
+                const axisY: [number, number, number] = [0, 0, 0];
+                const axisZ: [number, number, number] = [0, 0, 0];
 
-            transformDirectionToWorld(axisX, [1, 0, 0], constraintTransform);
-            transformDirectionToWorld(axisY, [0, 1, 0], constraintTransform);
-            transformDirectionToWorld(axisZ, [0, 0, 1], constraintTransform);
+                transformDirectionToWorld(axisX, [1, 0, 0], constraintTransform);
+                transformDirectionToWorld(axisY, [0, 1, 0], constraintTransform);
+                transformDirectionToWorld(axisZ, [0, 0, 1], constraintTransform);
 
-            const axes = [axisX, axisY, axisZ];
-            const axisColors: Array<[number, number, number]> = [redColor, greenColor, blueColor];
+                const axes = [axisX, axisY, axisZ];
+                const axisColors: Array<[number, number, number]> = [redColor, greenColor, blueColor];
 
-            // Draw translation limits for X, Y, Z axes
-            for (let i = 0; i < 3; i++) {
-                const minLimit = constraint.limitMin[i];
-                const maxLimit = constraint.limitMax[i];
-                const axis = axes[i];
-                const color = axisColors[i];
+                // Draw translation limits for X, Y, Z axes
+                for (let i = 0; i < 3; i++) {
+                    const minLimit = constraint.limitMin[i];
+                    const maxLimit = constraint.limitMax[i];
+                    const axis = axes[i];
+                    const color = axisColors[i];
 
-                // Check if this axis has limits (not free)
-                const isFree = minLimit <= -3.4e38 && maxLimit >= 3.4e38;
-                const isFixed = minLimit >= 3.4e38 && maxLimit <= -3.4e38;
+                    // Check if this axis has limits (not free)
+                    const isFree = minLimit <= -3.4e38 && maxLimit >= 3.4e38;
+                    const isFixed = minLimit >= 3.4e38 && maxLimit <= -3.4e38;
 
-                if (!isFree && !isFixed && minLimit < maxLimit) {
-                    // Draw min limit marker
-                    if (minLimit > -3.4e38) {
-                        const minPos: [number, number, number] = [
-                            pos1[0] + axis[0] * minLimit,
-                            pos1[1] + axis[1] * minLimit,
-                            pos1[2] + axis[2] * minLimit,
-                        ];
-                        addConstraintMarker(positions, colors, minPos, size * 0.08, color);
-                    }
+                    if (!isFree && !isFixed && minLimit < maxLimit) {
+                        // Draw min limit marker
+                        if (minLimit > -3.4e38) {
+                            const minPos: [number, number, number] = [
+                                pos1[0] + axis[0] * minLimit,
+                                pos1[1] + axis[1] * minLimit,
+                                pos1[2] + axis[2] * minLimit,
+                            ];
+                            addConstraintMarker(positions, colors, minPos, size * 0.08, color);
+                        }
 
-                    // Draw max limit marker
-                    if (maxLimit < 3.4e38) {
-                        const maxPos: [number, number, number] = [
-                            pos1[0] + axis[0] * maxLimit,
-                            pos1[1] + axis[1] * maxLimit,
-                            pos1[2] + axis[2] * maxLimit,
-                        ];
-                        addConstraintMarker(positions, colors, maxPos, size * 0.08, color);
-                    }
+                        // Draw max limit marker
+                        if (maxLimit < 3.4e38) {
+                            const maxPos: [number, number, number] = [
+                                pos1[0] + axis[0] * maxLimit,
+                                pos1[1] + axis[1] * maxLimit,
+                                pos1[2] + axis[2] * maxLimit,
+                            ];
+                            addConstraintMarker(positions, colors, maxPos, size * 0.08, color);
+                        }
 
-                    // Draw line showing the range
-                    if (minLimit > -3.4e38 && maxLimit < 3.4e38) {
-                        const minPos: [number, number, number] = [
-                            pos1[0] + axis[0] * minLimit,
-                            pos1[1] + axis[1] * minLimit,
-                            pos1[2] + axis[2] * minLimit,
-                        ];
-                        const maxPos: [number, number, number] = [
-                            pos1[0] + axis[0] * maxLimit,
-                            pos1[1] + axis[1] * maxLimit,
-                            pos1[2] + axis[2] * maxLimit,
-                        ];
-                        addConstraintLine(positions, colors, minPos, maxPos, color);
+                        // Draw line showing the range
+                        if (minLimit > -3.4e38 && maxLimit < 3.4e38) {
+                            const minPos: [number, number, number] = [
+                                pos1[0] + axis[0] * minLimit,
+                                pos1[1] + axis[1] * minLimit,
+                                pos1[2] + axis[2] * minLimit,
+                            ];
+                            const maxPos: [number, number, number] = [
+                                pos1[0] + axis[0] * maxLimit,
+                                pos1[1] + axis[1] * maxLimit,
+                                pos1[2] + axis[2] * maxLimit,
+                            ];
+                            addConstraintLine(positions, colors, minPos, maxPos, color);
+                        }
                     }
                 }
-            }
 
-            // Draw rotation limits for X, Y, Z axes (as small arcs)
-            for (let i = 0; i < 3; i++) {
-                const minLimit = constraint.limitMin[3 + i];
-                const maxLimit = constraint.limitMax[3 + i];
-                const axis = axes[i];
-                const color = axisColors[i];
+                // Draw rotation limits for X, Y, Z axes (as small arcs)
+                for (let i = 0; i < 3; i++) {
+                    const minLimit = constraint.limitMin[3 + i];
+                    const maxLimit = constraint.limitMax[3 + i];
+                    const axis = axes[i];
+                    const color = axisColors[i];
 
-                // Check if this rotation axis has limits
-                const isFree = minLimit <= -3.4e38 && maxLimit >= 3.4e38;
-                const isFixed = minLimit >= 3.4e38 && maxLimit <= -3.4e38;
+                    // Check if this rotation axis has limits
+                    const isFree = minLimit <= -3.4e38 && maxLimit >= 3.4e38;
+                    const isFixed = minLimit >= 3.4e38 && maxLimit <= -3.4e38;
 
-                if (!isFree && !isFixed && minLimit < maxLimit && Math.abs(maxLimit - minLimit) > 0.001) {
-                    // Get a perpendicular axis for drawing the arc
-                    const perpAxis = axes[(i + 1) % 3];
+                    if (!isFree && !isFixed && minLimit < maxLimit && Math.abs(maxLimit - minLimit) > 0.001) {
+                        // Get a perpendicular axis for drawing the arc
+                        const perpAxis = axes[(i + 1) % 3];
 
-                    // Draw a small pie showing the rotation limits
-                    drawPie(positions, colors, pos1, size * 0.5, axis, perpAxis, minLimit, maxLimit, color);
+                        // Draw a small pie showing the rotation limits
+                        drawPie(positions, colors, pos1, size * 0.5, axis, perpAxis, minLimit, maxLimit, color);
+                    }
                 }
             }
         }
-    }
     }
 
     // Update geometry

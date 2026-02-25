@@ -10,6 +10,7 @@ import {
     type Shape,
     ShapeType,
     type SphereShape,
+    type StaticCompoundShape,
     type TransformedShape,
     type TriangleMeshShape,
 } from 'crashcat';
@@ -39,6 +40,8 @@ export function createShapeHelper(shape: Shape, options?: ShapeHelperOptions): S
             return createTriangleMeshHelper(shape, options);
         case ShapeType.COMPOUND:
             return createCompoundHelper(shape, options);
+        case ShapeType.STATIC_COMPOUND:
+            return createStaticCompoundHelper(shape, options);
         case ShapeType.TRANSFORMED:
             return createTransformedHelper(shape, options);
         case ShapeType.SCALED:
@@ -213,6 +216,36 @@ function createCompoundHelper(shape: CompoundShape, options?: ShapeHelperOptions
         const childHelper = createShapeHelper(child.shape, options);
         
         // Apply child position and rotation
+        childHelper.object.position.set(child.position[0], child.position[1], child.position[2]);
+        childHelper.object.quaternion.set(
+            child.quaternion[0],
+            child.quaternion[1],
+            child.quaternion[2],
+            child.quaternion[3],
+        );
+        
+        childHelpers.push(childHelper);
+        group.add(childHelper.object);
+    }
+
+    return {
+        object: group,
+        dispose: () => {
+            for (const childHelper of childHelpers) {
+                childHelper.dispose();
+            }
+        },
+    };
+}
+
+function createStaticCompoundHelper(shape: StaticCompoundShape, options?: ShapeHelperOptions): ShapeHelper {
+    const group = new THREE.Group();
+    const childHelpers: ShapeHelper[] = [];
+
+    for (const child of shape.children) {
+        const childHelper = createShapeHelper(child.shape, options);
+        
+        // apply child position and rotation
         childHelper.object.position.set(child.position[0], child.position[1], child.position[2]);
         childHelper.object.quaternion.set(
             child.quaternion[0],

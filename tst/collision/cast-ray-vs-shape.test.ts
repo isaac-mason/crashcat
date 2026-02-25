@@ -1,4 +1,4 @@
-import { quat, type Raycast3, vec3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -16,12 +16,16 @@ import {
     triangleMesh,
 } from '../../src';
 
-function createRay(origin: [number, number, number], direction: [number, number, number], length: number = 1000): Raycast3 {
+function createRayParams(origin: [number, number, number], direction: [number, number, number], length: number = 1000) {
     const dir = vec3.fromValues(...direction);
     vec3.normalize(dir, dir);
     return {
-        origin: vec3.fromValues(...origin),
-        direction: dir,
+        originX: origin[0],
+        originY: origin[1],
+        originZ: origin[2],
+        directionX: dir[0],
+        directionY: dir[1],
+        directionZ: dir[2],
         length,
     };
 }
@@ -50,14 +54,20 @@ describe('castRay - Sphere', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the sphere
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -86,14 +96,20 @@ describe('castRay - Sphere', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing away from sphere
-        const ray = createRay([0, 5, 0], [0, 1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, 1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -119,14 +135,20 @@ describe('castRay - Sphere', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray starting at slightly lower y position pointing toward sphere
-        const ray = createRay([0, -0.5, 0], [1, 0, 0]);
+        const ray = createRayParams([0, -0.5, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -159,14 +181,20 @@ describe('castRay - Sphere', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray: origin=[-3, 0, 0], direction=[1, 0, 0], length=10
-        const ray = createRay([-3, 0, 0], [1, 0, 0], 10);
+        const ray = createRayParams([-3, 0, 0], [1, 0, 0], 10);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -202,14 +230,20 @@ describe('castRay - Sphere', () => {
         // Local space: ray from [-5, -0.1, 0], direction [1, 0, 0]
         // Sphere at origin, radius 1.0
         // Ray passes within 0.1 units of sphere center - should hit
-        const ray = createRay([0, -0.1, 0], [1, 0, 0]);
+        const ray = createRayParams([0, -0.1, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -238,14 +272,20 @@ describe('castRay - Sphere', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the sphere
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -274,14 +314,20 @@ describe('castRay - Box', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -309,14 +355,20 @@ describe('castRay - Box', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing away from box
-        const ray = createRay([0, 0, 0], [-1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [-1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -342,14 +394,20 @@ describe('castRay - Box', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box from the side
-        const ray = createRay([0, 5, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -377,14 +435,20 @@ describe('castRay - Box', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -414,14 +478,20 @@ describe('castRay - Transformed Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the sphere
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -453,14 +523,20 @@ describe('castRay - Transformed Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -490,14 +566,20 @@ describe('castRay - Scaled Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -525,14 +607,20 @@ describe('castRay - Scaled Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray missing the tiny box
-        const ray = createRay([0, 5, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -574,14 +662,20 @@ describe('castRay - Compound Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray that should hit the sphere at origin
-        const ray = createRay([-5, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([-5, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -623,14 +717,20 @@ describe('castRay - Compound Shape', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray passing through both
-        const ray = createRay([-5, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([-5, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -663,14 +763,20 @@ describe('castRay - Nested Decorators', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -704,14 +810,20 @@ describe('castRay - Nested Decorators', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward the box
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -743,14 +855,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward triangle in XY plane
-        const ray = createRay([0, 0, -1], [0, 0, 1]);
+        const ray = createRayParams([0, 0, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -782,14 +900,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing away from triangle
-        const ray = createRay([0, 0, 1], [0, 0, 1]);
+        const ray = createRayParams([0, 0, 1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -818,14 +942,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray parallel to triangle in XY plane
-        const ray = createRay([0, 0, 1], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 1], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -874,14 +1004,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing through both triangles
-        const ray = createRay([0, 0, -1], [0, 0, 1]);
+        const ray = createRayParams([0, 0, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -917,14 +1053,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward transformed mesh (now at x=5-6, y=0-1, z=0)
-        const ray = createRay([5, 0, -1], [0, 0, 1]);
+        const ray = createRayParams([5, 0, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -959,14 +1101,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward rotated mesh
-        const ray = createRay([-1, 0, -1], [1, 0, 1]);
+        const ray = createRayParams([-1, 0, -1], [1, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -999,14 +1147,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray pointing toward scaled mesh
-        const ray = createRay([0, 0, -1], [0, 0, 1]);
+        const ray = createRayParams([0, 0, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1036,14 +1190,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // Ray grazing the edge between vertices [1,0,0] and [0,1,0]
-        const ray = createRay([0.5, 0.5, -1], [0, 0, 1]);
+        const ray = createRayParams([0.5, 0.5, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1072,14 +1232,20 @@ describe('castRay - Triangle Mesh', () => {
         const quaternion = quat.create();
         const scale = vec3.fromValues(1, 1, 1);
 
-        const ray = createRay([0, 0, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 0, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1109,14 +1275,20 @@ describe('castRay - Triangle Mesh', () => {
         const scale = vec3.fromValues(2, 2, 2);
 
         // Ray pointing toward mesh (accounting for body scale)
-        const ray = createRay([0, 0, -1], [0, 0, 1]);
+        const ray = createRayParams([0, 0, -1], [0, 0, 1]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1180,14 +1352,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Ray from above, pointing down at the horizontal face
-            const ray = createRay([0.25, 0.25, 1], [0, 0, -1]);
+            const ray = createRayParams([0.25, 0.25, 1], [0, 0, -1]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1216,14 +1394,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Ray from the right, pointing left at the vertical face
-            const ray = createRay([1, 0.25, 0.25], [-1, 0, 0]);
+            const ray = createRayParams([1, 0.25, 0.25], [-1, 0, 0]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1252,14 +1436,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Test hitting near the edge (between the two triangles)
-            const ray = createRay([0.01, 0.25, 1], [0, 0, -1]);
+            const ray = createRayParams([0.01, 0.25, 1], [0, 0, -1]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1288,13 +1478,19 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Ray 1: Hit horizontal face
-            const ray1 = createRay([0.25, 0.25, 1], [0, 0, -1]);
+            const ray1 = createRayParams([0.25, 0.25, 1], [0, 0, -1]);
             const collector1 = createAllCastRayCollector();
             const hits1 = collector1.hits;
             castRayVsShape(
                 collector1,
                 defaultSettings,
-                ray1,
+                ray1.originX,
+                ray1.originY,
+                ray1.originZ,
+                ray1.directionX,
+                ray1.directionY,
+                ray1.directionZ,
+                ray1.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1311,13 +1507,19 @@ describe('castRay - Triangle Mesh', () => {
             );
 
             // Ray 2: Hit vertical face
-            const ray2 = createRay([1, 0.25, 0.25], [-1, 0, 0]);
+            const ray2 = createRayParams([1, 0.25, 0.25], [-1, 0, 0]);
             const collector2 = createAllCastRayCollector();
             const hits2 = collector2.hits;
             castRayVsShape(
                 collector2,
                 defaultSettings,
-                ray2,
+                ray2.originX,
+                ray2.originY,
+                ray2.originZ,
+                ray2.directionX,
+                ray2.directionY,
+                ray2.directionZ,
+                ray2.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1346,14 +1548,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Ray from inside the corner pointing outward toward the shared edge
-            const ray = createRay([0.1, 0.1, 0.1], [-1, 0, 0]);
+            const ray = createRayParams([0.1, 0.1, 0.1], [-1, 0, 0]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1384,14 +1592,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(1, 1, 1);
 
             // Ray pointing away from all surfaces
-            const ray = createRay([-1, -1, -1], [-1, -1, -1]);
+            const ray = createRayParams([-1, -1, -1], [-1, -1, -1]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1417,14 +1631,20 @@ describe('castRay - Triangle Mesh', () => {
             const scale = vec3.fromValues(2, 2, 2); // 2x scale
 
             // Ray from above at scaled position
-            const ray = createRay([0.5, 0.5, 2], [0, 0, -1]);
+            const ray = createRayParams([0.5, 0.5, 2], [0, 0, -1]);
 
             const collector = createAllCastRayCollector();
             const hits = collector.hits;
             castRayVsShape(
                 collector,
                 defaultSettings,
-                ray,
+                ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
                 shape,
                 EMPTY_SUB_SHAPE_ID,
                 0,
@@ -1458,14 +1678,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray from above pointing down
-        const ray = createRay([0, 5, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1496,14 +1722,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray starting below plane (inside solid region)
-        const ray = createRay([0, -5, 0], [0, 1, 0]);
+        const ray = createRayParams([0, -5, 0], [0, 1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1534,14 +1766,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray parallel to plane
-        const ray = createRay([0, 5, 0], [1, 0, 0]);
+        const ray = createRayParams([0, 5, 0], [1, 0, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1570,14 +1808,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray above plane pointing upward (away)
-        const ray = createRay([0, 5, 0], [0, 1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, 1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1609,14 +1853,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray from above pointing down
-        const ray = createRay([0, 5, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1649,14 +1899,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(1, 1, 1);
 
         // ray from above
-        const ray = createRay([0, 10, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 10, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1688,14 +1944,20 @@ describe('castRay - Plane', () => {
         const scale = vec3.fromValues(2, 0.5, 1); // non-uniform scale
 
         // ray from above
-        const ray = createRay([0, 5, 0], [0, -1, 0]);
+        const ray = createRayParams([0, 5, 0], [0, -1, 0]);
 
         const collector = createAllCastRayCollector();
         const hits = collector.hits;
         castRayVsShape(
             collector,
             defaultSettings,
-            ray,
+            ray.originX,
+            ray.originY,
+            ray.originZ,
+            ray.directionX,
+            ray.directionY,
+            ray.directionZ,
+            ray.length,
             shape,
             EMPTY_SUB_SHAPE_ID,
             0,
@@ -1716,4 +1978,3 @@ describe('castRay - Plane', () => {
         // plane scaling affects the distance
     });
 });
-

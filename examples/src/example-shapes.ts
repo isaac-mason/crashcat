@@ -18,6 +18,7 @@ import {
     registerAll,
     rigidBody,
     sphere,
+    staticCompound,
     transformed,
     updateWorld,
 } from 'crashcat';
@@ -143,6 +144,35 @@ const shapeConfigs: ShapeConfig[] = [
                 ],
             });
             return dumbbell;
+        },
+        color: 0x95e1d3,
+    },
+    {
+        name: 'ladder',
+        createShape: () => {
+            const ladder = staticCompound.create({
+                children: [
+                    // Left rail
+                    {
+                        position: vec3.fromValues(-0.5, 0, 0),
+                        quaternion: quat.create(),
+                        shape: box.create({ halfExtents: [0.1, 1.5, 0.1], convexRadius: 0.05 }),
+                    },
+                    // Right rail
+                    {
+                        position: vec3.fromValues(0.5, 0, 0),
+                        quaternion: quat.create(),
+                        shape: box.create({ halfExtents: [0.1, 1.5, 0.1], convexRadius: 0.05 }),
+                    },
+                    // Rungs (4 total)
+                    ...[ -0.75, -0.25, 0.25, 0.75 ].map(y => ({
+                        position: vec3.fromValues(0, y, 0),
+                        quaternion: quat.create(),
+                        shape: box.create({ halfExtents: [0.6, 0.1, 0.1], convexRadius: 0.05 }),
+                    })),
+                ],
+            });
+            return ladder;
         },
         color: 0x95e1d3,
     },

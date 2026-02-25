@@ -1,4 +1,4 @@
-import { type Box3, box3, type Raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -7,7 +7,6 @@ import type { CollidePointCollector, CollidePointSettings } from '../collision/c
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import {
     collisionDispatch,
-    computeMassProperties,
     defineShape,
     getShapeInnerRadius,
     type Shape,
@@ -83,54 +82,16 @@ function computeOffsetCenterOfMassCenterOfMass(out: Vec3, shape: OffsetCenterOfM
 }
 
 const _childMassProperties = /* @__PURE__ */ massProperties.create();
-const _supportingFace_scaledOffset = /* @__PURE__ */ vec3.create();
-const _supportingFace_transformedOffset = /* @__PURE__ */ vec3.create();
 
 export const def = /* @__PURE__ */ (() =>
     defineShape<OffsetCenterOfMassShape>({
         type: ShapeType.OFFSET_CENTER_OF_MASS,
         category: ShapeCategory.DECORATOR,
 
-        computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassShape): void {
-            // get inner shape mass properties
-            computeMassProperties(_childMassProperties, shape.shape);
-
-            // translate inertia by offset using parallel axis theorem
-            // this shifts the inertia tensor from the inner shape's COM to the new COM
-            massProperties.translate(out, _childMassProperties, shape.offset);
-        },
-
-        getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
-            // in crashcat, collision geometry is at origin, not COM-centered
-            // so we just pass through to the inner shape
-            shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
-        },
-
-        getSupportingFace(
-            ioResult: SupportingFaceResult,
-            direction: Vec3,
-            shape: OffsetCenterOfMassShape,
-            subShapeId: number,
-        ): void {
-            // compute -scale * offset
-            vec3.multiply(_supportingFace_scaledOffset, ioResult.scale, shape.offset);
-            vec3.negate(_supportingFace_scaledOffset, _supportingFace_scaledOffset);
-
-            // transform by rotation
-            vec3.transformQuat(_supportingFace_transformedOffset, _supportingFace_scaledOffset, ioResult.quaternion);
-
-            // pre-translate the position
-            vec3.add(ioResult.position, ioResult.position, _supportingFace_transformedOffset);
-
-            // delegate to inner shape
-            shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
-        },
-
-        getInnerRadius(shape: OffsetCenterOfMassShape): number {
-            // inner radius doesn't change with COM offset
-            return getShapeInnerRadius(shape.shape);
-        },
-
+        computeMassProperties,
+        getSurfaceNormal,
+        getSupportingFace,
+        getInnerRadius,
         castRay: castRayVsOffsetCenterOfMass,
         collidePoint: collidePointVsOffsetCenterOfMass,
 
@@ -146,12 +107,48 @@ export const def = /* @__PURE__ */ (() =>
         },
     }))();
 
+function computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassShape): void {
+    // get inner shape mass properties
+    const shapeDef = shapeDefs[shape.shape.type];
+    shapeDef.computeMassProperties(_childMassProperties, shape.shape);
+
+    // translate inertia by offset using parallel axis theorem
+    // this shifts the inertia tensor from the inner shape's COM to the new COM
+    massProperties.translate(out, _childMassProperties, shape.offset);
+}
+
+function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
+    // in crashcat, collision geometry is at origin, not COM-centered
+    // so we just pass through to the inner shape
+    shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
+}
+
+function getSupportingFace(
+    ioResult: SupportingFaceResult,
+    direction: Vec3,
+    shape: OffsetCenterOfMassShape,
+    subShapeId: number,
+): void {
+    shapeDefs[shape.shape.type].getSupportingFace(ioResult, direction, shape.shape, subShapeId);
+}
+
+function getInnerRadius(shape: OffsetCenterOfMassShape): number {
+    // inner radius doesn't change with COM offset
+    return getShapeInnerRadius(shape.shape);
+}
+
 // in crashcat, collision geometry is at origin, not COM-centered
 // so ray casting is a simple passthrough - no transformation needed
 function castRayVsOffsetCenterOfMass(
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: OffsetCenterOfMassShape,
     subShapeId: number,
     subShapeIdBits: number,
@@ -166,12 +163,18 @@ function castRayVsOffsetCenterOfMass(
     scaleY: number,
     scaleZ: number,
 ): void {
-    // geometry doesn't move when COM changes - just pass through
+    // geometry doesn't move when COM changes - just pass through ray components
     const innerShapeDef = shapeDefs[shape.shape.type];
     innerShapeDef.castRay(
         collector,
         settings,
-        ray,
+        originX,
+        originY,
+        originZ,
+        directionX,
+        directionY,
+        directionZ,
+        length,
         shape.shape,
         subShapeId,
         subShapeIdBits,

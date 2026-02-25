@@ -29,6 +29,7 @@ import {
     sixDOFConstraint,
     sliderConstraint,
     sphere,
+    staticCompound,
     swingTwistConstraint,
     triangleMesh,
     updateWorld,
@@ -1573,6 +1574,196 @@ addScene('100 Spheres x Suzanne', async () => {
             objectLayer: OBJECT_LAYER_MOVING,
             motionType: MotionType.DYNAMIC,
             position: [x * 10 - 5, y, z * 10 - 5],
+            restitution: 0.3,
+            friction: 0.5,
+        });
+    }
+
+    return { world };
+});
+
+addScene('100 Spheres x Static Compound Bridge', () => {
+    const worldSettings = createWorldSettings();
+
+    const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);
+    const BROADPHASE_LAYER_NOT_MOVING = addBroadphaseLayer(worldSettings);
+    const OBJECT_LAYER_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_MOVING);
+    const OBJECT_LAYER_NOT_MOVING = addObjectLayer(worldSettings, BROADPHASE_LAYER_NOT_MOVING);
+
+    enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_MOVING);
+    enableCollision(worldSettings, OBJECT_LAYER_MOVING, OBJECT_LAYER_NOT_MOVING);
+
+    const world = createWorld(worldSettings);
+
+    // floor
+    rigidBody.create(world, {
+        shape: box.create({ halfExtents: [20, 0.5, 20], convexRadius: 0.05 }),
+        objectLayer: OBJECT_LAYER_NOT_MOVING,
+        motionType: MotionType.STATIC,
+        position: [0, -0.5, 0],
+        restitution: 0.3,
+        friction: 0.5,
+    });
+
+    // create two cliff sides
+    rigidBody.create(world, {
+        shape: box.create({ halfExtents: [3, 6, 4], convexRadius: 0.05 }),
+        objectLayer: OBJECT_LAYER_NOT_MOVING,
+        motionType: MotionType.STATIC,
+        position: [-20, 6, 0],
+        restitution: 0.3,
+        friction: 0.5,
+    });
+
+    rigidBody.create(world, {
+        shape: box.create({ halfExtents: [3, 6, 4], convexRadius: 0.05 }),
+        objectLayer: OBJECT_LAYER_NOT_MOVING,
+        motionType: MotionType.STATIC,
+        position: [20, 6, 0],
+        restitution: 0.3,
+        friction: 0.5,
+    });
+
+    // create a complex bridge made of static compound beams
+    const identity: [number, number, number, number] = [0, 0, 0, 1];
+    const children: { shape: ReturnType<typeof box.create>; position: Vec3; quaternion: [number, number, number, number] }[] = [];
+
+    const bridgeLength = 36;
+    const bridgeWidth = 3;
+    const bridgeHeight = 8;
+    const beamThickness = 0.12;
+    const deckThickness = 0.15;
+
+    // main deck planks
+    const numPlanks = 12;
+    for (let i = 0; i < numPlanks; i++) {
+        const xPos = -bridgeLength / 2 + (i / (numPlanks - 1)) * bridgeLength;
+        children.push({
+            shape: box.create({ halfExtents: [bridgeLength / numPlanks / 2 + 0.05, deckThickness / 2, bridgeWidth / 2], convexRadius: 0.01 }),
+            position: [xPos, bridgeHeight, 0],
+            quaternion: identity,
+        });
+    }
+
+    // side rails
+    for (let side = 0; side < 2; side++) {
+        const zPos = (side === 0 ? -1 : 1) * (bridgeWidth / 2 + 0.2);
+        
+        // bottom rail
+        children.push({
+            shape: box.create({ halfExtents: [bridgeLength / 2, beamThickness, beamThickness], convexRadius: 0.01 }),
+            position: [0, bridgeHeight + 0.3, zPos],
+            quaternion: identity,
+        });
+        
+        // top rail
+        children.push({
+            shape: box.create({ halfExtents: [bridgeLength / 2, beamThickness, beamThickness], convexRadius: 0.01 }),
+            position: [0, bridgeHeight + 1.2, zPos],
+            quaternion: identity,
+        });
+        
+        // vertical posts every 3 units
+        for (let i = 0; i < 9; i++) {
+            const xPos = -bridgeLength / 2 + (i / 8) * bridgeLength;
+            children.push({
+                shape: box.create({ halfExtents: [beamThickness, 0.6, beamThickness], convexRadius: 0.01 }),
+                position: [xPos, bridgeHeight + 0.75, zPos],
+                quaternion: identity,
+            });
+        }
+    }
+
+    // support trusses underneath
+    const numTrusses = 8;
+    for (let i = 0; i < numTrusses; i++) {
+        const xPos = -bridgeLength / 2 + (i / (numTrusses - 1)) * bridgeLength;
+        
+        // vertical supports from bottom to deck
+        for (let side = 0; side < 2; side++) {
+            const zPos = (side === 0 ? -1 : 1) * (bridgeWidth / 2 - 0.3);
+            const supportHeight = 3.5;
+            
+            children.push({
+                shape: box.create({ halfExtents: [beamThickness * 1.5, supportHeight / 2, beamThickness * 1.5], convexRadius: 0.01 }),
+                position: [xPos, bridgeHeight - supportHeight / 2, zPos],
+                quaternion: identity,
+            });
+        }
+        
+        // diagonal cross-bracing between vertical supports
+        if (i < numTrusses - 1) {
+            const nextXPos = -bridgeLength / 2 + ((i + 1) / (numTrusses - 1)) * bridgeLength;
+            const crossLength = Math.sqrt(
+                (nextXPos - xPos) ** 2 + 
+                bridgeWidth ** 2 + 
+                1.5 ** 2
+            );
+            
+            // x-shaped bracing
+            for (let cross = 0; cross < 2; cross++) {
+                const angle = cross === 0 ? Math.atan2(bridgeWidth, nextXPos - xPos) : -Math.atan2(bridgeWidth, nextXPos - xPos);
+                const tiltAngle = Math.atan2(1.5, nextXPos - xPos);
+                
+                const crossQuat = quat.create();
+                quat.fromEuler(crossQuat, euler.fromValues(tiltAngle, angle, 0, 'xyz'));
+                
+                children.push({
+                    shape: box.create({ halfExtents: [crossLength / 2, beamThickness * 0.8, beamThickness * 0.8], convexRadius: 0.01 }),
+                    position: [(xPos + nextXPos) / 2, bridgeHeight - 1.5, 0],
+                    quaternion: crossQuat,
+                });
+            }
+        }
+    }
+
+    // bottom structural beams running the length
+    for (let side = 0; side < 2; side++) {
+        const zPos = (side === 0 ? -1 : 1) * (bridgeWidth / 2 - 0.3);
+        children.push({
+            shape: box.create({ halfExtents: [bridgeLength / 2, beamThickness * 1.5, beamThickness * 1.5], convexRadius: 0.01 }),
+            position: [0, bridgeHeight - 3.5, zPos],
+            quaternion: identity,
+        });
+    }
+
+    // cross beams connecting the two bottom structural beams
+    for (let i = 0; i < 9; i++) {
+        const xPos = -bridgeLength / 2 + (i / 8) * bridgeLength;
+        children.push({
+            shape: box.create({ halfExtents: [beamThickness, beamThickness * 1.5, bridgeWidth / 2 - 0.3], convexRadius: 0.01 }),
+            position: [xPos, bridgeHeight - 3.5, 0],
+            quaternion: identity,
+        });
+    }
+
+    const bridgeStructure = staticCompound.create({
+        children,
+    });
+
+    rigidBody.create(world, {
+        shape: bridgeStructure,
+        objectLayer: OBJECT_LAYER_NOT_MOVING,
+        motionType: MotionType.STATIC,
+        position: [0, 0, 0],
+        quaternion: identity,
+        restitution: 0.3,
+        friction: 0.5,
+    });
+
+    // create 100 spheres spawned above the bridge
+    const sphereShape = sphere.create({ radius: 0.2 });
+
+    for (let i = 0; i < 100; i++) {
+        const x = (Math.random() - 0.5) * 20;
+        const y = bridgeHeight + 5 + Math.random() * 3;
+        const z = (Math.random() - 0.5) * 2.5;
+
+        rigidBody.create(world, {
+            shape: sphereShape,
+            objectLayer: OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [x, y, z],
             restitution: 0.3,
             friction: 0.5,
         });

@@ -8,12 +8,12 @@ describe('Scaled shape AABB caching', () => {
         const ss = scaled.create({ shape: s, scale: vec3.fromValues(2, 3, 4) });
         expect(ss.aabb).toBeDefined();
         // Scaled sphere: [-2, -3, -4] to [2, 3, 4]
-        expect(ss.aabb[0][0]).toBe(-2);
-        expect(ss.aabb[0][1]).toBe(-3);
-        expect(ss.aabb[0][2]).toBe(-4);
-        expect(ss.aabb[1][0]).toBe(2);
-        expect(ss.aabb[1][1]).toBe(3);
-        expect(ss.aabb[1][2]).toBe(4);
+        expect(ss.aabb[0]).toBe(-2);
+        expect(ss.aabb[1]).toBe(-3);
+        expect(ss.aabb[2]).toBe(-4);
+        expect(ss.aabb[3]).toBe(2);
+        expect(ss.aabb[4]).toBe(3);
+        expect(ss.aabb[5]).toBe(4);
     });
 });
 

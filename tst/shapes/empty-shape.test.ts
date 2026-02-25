@@ -10,8 +10,7 @@ describe('EmptyShape', () => {
 		expect(shape.type).toBe(ShapeType.EMPTY);
 		expect(shape.volume).toBe(0);
 		expect(shape.centerOfMass).toEqual([0, 0, 0]);
-		expect(shape.aabb[0]).toEqual([0, 0, 0]);
-		expect(shape.aabb[1]).toEqual([0, 0, 0]);
+		expect(shape.aabb).toEqual([0, 0, 0, 0, 0, 0]);
 	});
 
 	test('should create static body with empty shape', () => {

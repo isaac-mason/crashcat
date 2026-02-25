@@ -1,5 +1,5 @@
-import type { Box3, Raycast3 } from 'mathcat';
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import type { Box3, Mat4 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import type { SubShapeId } from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -18,6 +18,7 @@ import type { OffsetCenterOfMassShape } from './offset-center-of-mass';
 import type { PlaneShape } from './plane';
 import type { ScaledShape } from './scaled';
 import type { SphereShape } from './sphere';
+import type { StaticCompoundShape } from './static-compound';
 import type { TransformedShape } from './transformed';
 import type { TriangleMeshShape } from './triangle-mesh';
 
@@ -48,6 +49,7 @@ export enum ShapeType {
     CYLINDER = 9,
     OFFSET_CENTER_OF_MASS = 10,
     PLANE = 11,
+    STATIC_COMPOUND = 12,
 
     // user-defined shapes: 101-110
     USER_1 = 101,
@@ -101,6 +103,7 @@ export interface ShapeTypeRegistry {
     [ShapeType.EMPTY]: EmptyShape;
     [ShapeType.OFFSET_CENTER_OF_MASS]: OffsetCenterOfMassShape;
     [ShapeType.PLANE]: PlaneShape;
+    [ShapeType.STATIC_COMPOUND]: StaticCompoundShape;
 }
 
 /** shape type, union derived from registry interface */
@@ -129,16 +132,14 @@ export type SurfaceNormalResult = {
 
 export type SupportingFaceResult = {
     face: Face;
-    position: Vec3;
-    quaternion: Quat;
+    transform: Mat4;
     scale: Vec3;
 };
 
 export function createSupportingFaceResult(): SupportingFaceResult {
     return {
         face: { vertices: [], numVertices: 0 },
-        position: vec3.create(),
-        quaternion: quat.create(),
+        transform: mat4.create(),
         scale: vec3.fromValues(1, 1, 1),
     };
 }
@@ -166,7 +167,13 @@ export type GetSubShapeTransformedShapeResult = {
 export type CastRayVsShapeFn<S> = (
     collector: CastRayCollector,
     settings: CastRaySettings,
-    ray: Raycast3,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
     shape: S,
     subShapeId: number,
     subShapeIdBits: number,
@@ -270,22 +277,32 @@ export type CastShapeVsShapeFn = (
     scaleBZ: number,
 ) => void;
 
-type OptionalShapeDef = 'computeMassProperties' | 'getInnerRadius' | 'createSupportPool' | 'getSupportFunction' | 'getLeafShape' | 'getSubShapeTransformedShape';
+type OptionalShapeDef =
+    | 'computeMassProperties'
+    | 'getInnerRadius'
+    | 'createSupportPool'
+    | 'getSupportFunction'
+    | 'getLeafShape'
+    | 'getSubShapeTransformedShape';
 
 export type ShapeDefOptions<S extends ShapeBase> = Omit<ShapeDef<S>, OptionalShapeDef> &
     Partial<Pick<ShapeDef<S>, OptionalShapeDef>>;
 
 export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): ShapeDef<S> {
-    const computeMassProperties = shapeDef.computeMassProperties ?? ((out: MassProperties, _shape: S) => {
-        // default: unit mass, identity inertia (don't change)
-        out.mass = 1;
-    });
+    const computeMassProperties =
+        shapeDef.computeMassProperties ??
+        ((out: MassProperties, _shape: S) => {
+            // default: unit mass, identity inertia (don't change)
+            out.mass = 1;
+        });
 
-    const getInnerRadius = shapeDef.getInnerRadius ?? ((_shape: S) => {
-        // default: zero inner radius
-        return 0;
-    });
-    
+    const getInnerRadius =
+        shapeDef.getInnerRadius ??
+        ((_shape: S) => {
+            // default: zero inner radius
+            return 0;
+        });
+
     const getLeafShape =
         shapeDef.getLeafShape ??
         ((out, shape, subShapeId) => {
@@ -338,11 +355,7 @@ export type GetSupportingFaceImpl<S extends ShapeBase> = (
 
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 
-export type GetLeafShapeImpl<S extends ShapeBase> = (
-    outResult: GetLeafShapeResult,
-    shape: S,
-    subShapeId: SubShapeId,
-) => void;
+export type GetLeafShapeImpl<S extends ShapeBase> = (outResult: GetLeafShapeResult, shape: S, subShapeId: SubShapeId) => void;
 
 export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
     outResult: GetSubShapeTransformedShapeResult,
@@ -482,8 +495,7 @@ const _supportingFaceResult = /* @__PURE__ */ createSupportingFaceResult();
  * @param shape shape to query
  * @param subShapeId sub-shape ID
  * @param localDirection query direction in local space to the shape
- * @param position world position of shape
- * @param quaternion world rotation of shape
+ * @param transform world transform of shape (rotation + translation, no scale)
  * @param scale scale in local space of the shape
  */
 export function getShapeSupportingFace(
@@ -491,12 +503,10 @@ export function getShapeSupportingFace(
     shape: Shape,
     subShapeId: number,
     localDirection: Vec3,
-    position: Vec3,
-    quaternion: Quat,
+    transform: Mat4,
     scale: Vec3,
 ): void {
-    vec3.copy(_supportingFaceResult.position, position);
-    quat.copy(_supportingFaceResult.quaternion, quaternion);
+    mat4.copy(_supportingFaceResult.transform, transform);
     vec3.copy(_supportingFaceResult.scale, scale);
 
     shapeDefs[shape.type].getSupportingFace(_supportingFaceResult, localDirection, shape, subShapeId);

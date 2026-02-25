@@ -271,7 +271,7 @@ describe('Broadphase Integration', () => {
 
             const layers = world.settings.layers;
 
-            const queryBox: Box3 = [vec3.fromValues(-1, -1, -1), vec3.fromValues(2, 2, 2)];
+            const queryBox: Box3 = [-1, -1, -1, 2, 2, 2];
             const testFilter = filter.create(layers);
             const hits: RigidBody[] = [];
 
@@ -300,7 +300,7 @@ describe('Broadphase Integration', () => {
 
             const layers = world.settings.layers;
 
-            const bounds: Box3 = [vec3.fromValues(-0.5, -0.5, -0.5), vec3.fromValues(0.5, 0.5, 0.5)];
+            const bounds: Box3 = [-0.5, -0.5, -0.5, 0.5, 0.5, 0.5];
             const displacement = vec3.fromValues(10, 0, 0);
             const testFilter = filter.create(layers);
             const hits: RigidBody[] = [];

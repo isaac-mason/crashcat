@@ -561,12 +561,12 @@ const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
 function updateAABB(body: RigidBody): void {
     // transform shape AABB to world space by transforming all 8 corners
     const shapeAABB = body.shape.aabb;
-    const minX = shapeAABB[0][0];
-    const minY = shapeAABB[0][1];
-    const minZ = shapeAABB[0][2];
-    const maxX = shapeAABB[1][0];
-    const maxY = shapeAABB[1][1];
-    const maxZ = shapeAABB[1][2];
+    const minX = shapeAABB[0];
+    const minY = shapeAABB[1];
+    const minZ = shapeAABB[2];
+    const maxX = shapeAABB[3];
+    const maxY = shapeAABB[4];
+    const maxZ = shapeAABB[5];
 
     // compute rotation matrix once
     mat4.fromQuat(_updateBodyAABB_rot, body.quaternion);
@@ -665,12 +665,12 @@ function updateAABB(body: RigidBody): void {
     aabbMaxZ = Math.max(aabbMaxZ, wz);
 
     // write final AABB
-    body.aabb[0][0] = aabbMinX;
-    body.aabb[0][1] = aabbMinY;
-    body.aabb[0][2] = aabbMinZ;
-    body.aabb[1][0] = aabbMaxX;
-    body.aabb[1][1] = aabbMaxY;
-    body.aabb[1][2] = aabbMaxZ;
+    body.aabb[0] = aabbMinX;
+    body.aabb[1] = aabbMinY;
+    body.aabb[2] = aabbMinZ;
+    body.aabb[3] = aabbMaxX;
+    body.aabb[4] = aabbMaxY;
+    body.aabb[5] = aabbMaxZ;
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
@@ -1109,9 +1109,31 @@ const _getPointVelocity_pointRelativeToCOM = /* @__PURE__ */ vec3.create();
  */
 export function getVelocityAtPointCOM(out: Vec3, body: RigidBody, pointRelativeToCOM: Vec3): Vec3 {
     if (body.motionType !== MotionType.STATIC) {
-        return motionProperties.getPointVelocityCOM(out, body.motionProperties, pointRelativeToCOM);
+        const motionProperties = body.motionProperties;
+
+        const [avX, avY, avZ] = motionProperties.angularVelocity;
+        const [rX, rY, rZ] = pointRelativeToCOM;
+
+        // v_point = v_linear + ω × r
+
+        // cross: angular velocity x pointRelativeToCOM
+        const angularContribX = avY * rZ - avZ * rY;
+        const angularContribY = avZ * rX - avX * rZ;
+        const angularContribZ = avX * rY - avY * rX;
+
+        // add: linearVelocity + angularContrib
+        out[0] = motionProperties.linearVelocity[0] + angularContribX;
+        out[1] = motionProperties.linearVelocity[1] + angularContribY;
+        out[2] = motionProperties.linearVelocity[2] + angularContribZ;
+
+        return out;
     }
-    return vec3.zero(out);
+
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
+
+    return out;
 }
 
 /**
