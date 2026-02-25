@@ -1014,39 +1014,54 @@ function createCameraRig(camera: THREE.PerspectiveCamera): CameraRig {
     };
 }
 
-const _updateChaseCamera_offset = vec3.create();
-const _updateChaseCamera_lookAt = vec3.create();
-const _updateChaseCamera_tmpPosition = new THREE.Vector3();
-const _updateChaseCamera_tmpLookAt = new THREE.Vector3();
+const _updateCameraRig_offset = vec3.create();
+const _updateCameraRig_lookAt = vec3.create();
+const _updateCameraRig_tmpPosition = new THREE.Vector3();
+const _updateCameraRig_tmpLookAt = new THREE.Vector3();
+
+function initCameraRig(state: CameraRig, chassisBody: RigidBody): void {
+    // compute initial camera position and look-at based on chassis transform
+    vec3.copy(_updateCameraRig_offset, state.idealOffset);
+    vec3.transformQuat(_updateCameraRig_offset, _updateCameraRig_offset, chassisBody.quaternion);
+    vec3.add(state.currentPosition, _updateCameraRig_offset, chassisBody.position);
+
+    vec3.copy(_updateCameraRig_lookAt, state.idealLookAt);
+    vec3.transformQuat(_updateCameraRig_lookAt, _updateCameraRig_lookAt, chassisBody.quaternion);
+    vec3.add(state.currentLookAt, _updateCameraRig_lookAt, chassisBody.position);
+
+    // set three.js camera
+    state.camera.position.set(state.currentPosition[0], state.currentPosition[1], state.currentPosition[2]);
+    state.camera.lookAt(state.currentLookAt[0], state.currentLookAt[1], state.currentLookAt[2]);
+}
 
 function updateCameraRig(state: CameraRig, chassisBody: RigidBody, delta: number): void {
     const t = 1.0 - 0.01 ** delta;
 
     // compute ideal offset in world space
-    vec3.copy(_updateChaseCamera_offset, state.idealOffset);
-    vec3.transformQuat(_updateChaseCamera_offset, _updateChaseCamera_offset, chassisBody.quaternion);
-    vec3.add(_updateChaseCamera_offset, _updateChaseCamera_offset, chassisBody.position);
+    vec3.copy(_updateCameraRig_offset, state.idealOffset);
+    vec3.transformQuat(_updateCameraRig_offset, _updateCameraRig_offset, chassisBody.quaternion);
+    vec3.add(_updateCameraRig_offset, _updateCameraRig_offset, chassisBody.position);
 
     // prevent camera from going below ground
-    if (_updateChaseCamera_offset[1] < 0.5) {
-        _updateChaseCamera_offset[1] = 0.5;
+    if (_updateCameraRig_offset[1] < 0.5) {
+        _updateCameraRig_offset[1] = 0.5;
     }
 
     // compute ideal look-at in world space
-    vec3.copy(_updateChaseCamera_lookAt, state.idealLookAt);
-    vec3.transformQuat(_updateChaseCamera_lookAt, _updateChaseCamera_lookAt, chassisBody.quaternion);
-    vec3.add(_updateChaseCamera_lookAt, _updateChaseCamera_lookAt, chassisBody.position);
+    vec3.copy(_updateCameraRig_lookAt, state.idealLookAt);
+    vec3.transformQuat(_updateCameraRig_lookAt, _updateCameraRig_lookAt, chassisBody.quaternion);
+    vec3.add(_updateCameraRig_lookAt, _updateCameraRig_lookAt, chassisBody.position);
 
     // lerp towards ideal positions
-    vec3.lerp(state.currentPosition, state.currentPosition, _updateChaseCamera_offset, t);
-    vec3.lerp(state.currentLookAt, state.currentLookAt, _updateChaseCamera_lookAt, t);
+    vec3.lerp(state.currentPosition, state.currentPosition, _updateCameraRig_offset, t);
+    vec3.lerp(state.currentLookAt, state.currentLookAt, _updateCameraRig_lookAt, t);
 
     // update three.js camera
-    _updateChaseCamera_tmpPosition.set(state.currentPosition[0], state.currentPosition[1], state.currentPosition[2]);
-    _updateChaseCamera_tmpLookAt.set(state.currentLookAt[0], state.currentLookAt[1], state.currentLookAt[2]);
+    _updateCameraRig_tmpPosition.set(state.currentPosition[0], state.currentPosition[1], state.currentPosition[2]);
+    _updateCameraRig_tmpLookAt.set(state.currentLookAt[0], state.currentLookAt[1], state.currentLookAt[2]);
 
-    state.camera.position.copy(_updateChaseCamera_tmpPosition);
-    state.camera.lookAt(_updateChaseCamera_tmpLookAt);
+    state.camera.position.copy(_updateCameraRig_tmpPosition);
+    state.camera.lookAt(_updateCameraRig_tmpLookAt);
 }
 
 /* input */
@@ -1130,8 +1145,6 @@ scene.background = new THREE.Color(0x1a1a1a);
 scene.add(trackGLTF.scene);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 1000, -1000);
-camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -1147,10 +1160,10 @@ const onResize = () => {
 window.addEventListener('resize', onResize);
 onResize();
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+const ambientLight = new THREE.AmbientLight(0xffffff, 1);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
 directionalLight.position.set(20, 30, 10);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 2048;
@@ -1369,6 +1382,7 @@ for (let i = 0; i < vehicle.wheels.length; i++) {
 
 const controls = createControls();
 const cameraRig = createCameraRig(camera);
+initCameraRig(cameraRig, vehicle.chassisBody);
 const orbitControls = new OrbitControls(camera, renderer.domElement);
 
 // vehicle tuning settings
