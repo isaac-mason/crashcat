@@ -25,7 +25,17 @@
     },
     "example-floating-character-controller": {
         "title": "Floating Character Controller",
-        "tags": ["world", "physics", "character-controller", "dynamic", "movement", "spring-damper", "floating", "auto-balance", "slopes"]
+        "tags": [
+            "world",
+            "physics",
+            "character-controller",
+            "dynamic",
+            "movement",
+            "spring-damper",
+            "floating",
+            "auto-balance",
+            "slopes"
+        ]
     },
     "example-pointer-ray": {
         "title": "Pointer Raycast",
@@ -162,5 +172,9 @@
     "example-test-scenarios": {
         "title": "Test Scenarios",
         "tags": ["tests", "scenarios"]
+    },
+    "example-debug": {
+        "title": "Debug Renderer",
+        "tags": ["world", "physics", "debug", "shapes", "constraints", "visualization"]
     }
 }
