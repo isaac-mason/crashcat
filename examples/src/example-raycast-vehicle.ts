@@ -421,6 +421,7 @@ const _updateWheelSuspension_chassisVelAtContact = vec3.create();
 
 const _computeEffectiveMass_forcePoint = vec3.create();
 const _computeEffectiveMass_forcePointCrossUp = vec3.create();
+const _computeEffectiveMass_negUp = vec3.create();
 const _computeEffectiveMass_temp = vec3.create();
 
 function updateWheelSuspension(world: World, vehicle: Vehicle): void {
@@ -563,10 +564,9 @@ function updateWheelSuspension(world: World, vehicle: Vehicle): void {
             const mp = vehicle.chassisBody.motionProperties;
             const invMass = mp.invMass;
 
-            // get up direction (negative of suspension direction in local space)
-            // suspension direction points down, so up = -directionLocal
-            vec3.negate(_computeEffectiveMass_temp, wheel.options.directionLocal);
-            const negUp = _computeEffectiveMass_temp;
+            // get up direction: suspension points down, so up = -directionLocal
+            vec3.negate(_computeEffectiveMass_negUp, wheel.options.directionLocal);
+            const negUp = _computeEffectiveMass_negUp;
 
             // r × (-up) = forcePoint × (-up)
             vec3.cross(_computeEffectiveMass_forcePointCrossUp, forcePointLocal, negUp);
@@ -892,6 +892,7 @@ function updateWheelRotation(vehicle: Vehicle, delta: number): void {
 function updateVehicle(world: World, vehicle: Vehicle, delta: number): void {
     updateChassisMatrices(vehicle);
     resetStates(vehicle);
+
     updateWheelTransform(vehicle);
     updateCurrentSpeed(vehicle);
     updateWheelSuspension(world, vehicle);
@@ -900,15 +901,13 @@ function updateVehicle(world: World, vehicle: Vehicle, delta: number): void {
     updateWheelRotation(vehicle, delta);
 }
 
-// ============================================================================
-// debug helpers
-// ============================================================================
+/* debug helpers */
 
 type VehicleDebug = {
     wheelHelpers: THREE.Group[];
     suspensionLines: THREE.Line[];
-    rayHitLines: THREE.Line[]; // green - origin to hit point
-    rayMissLines: THREE.Line[]; // red - hit point to max ray length
+    rayHitLines: THREE.Line[];
+    rayMissLines: THREE.Line[];
 };
 
 function createVehicleDebug(vehicle: Vehicle): VehicleDebug {
@@ -1473,6 +1472,7 @@ const cameraSettings = {
 /* debug ui */
 
 const options = debugRenderer.createDefaultOptions();
+options.bodies.enabled = false;
 options.bodies.wireframe = true;
 
 const debugRendererState = debugRenderer.init(options);
