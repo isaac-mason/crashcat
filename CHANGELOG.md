@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## v0.0.3 (Unreleased)
+
+- feat: minor refactors in dbvt
+- fix: `debug.bodies` output for capsule, sphere
+
 ## v0.0.2
 
 - feat: add `StaticCompoundShape`, alternative to `CompoundShape` with a BVH for faster queries

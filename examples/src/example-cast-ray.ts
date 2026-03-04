@@ -2,7 +2,7 @@ import GUI from 'lil-gui';
 import type { Quat, Vec3 } from 'mathcat';
 import { euler, quat, vec3 } from 'mathcat';
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
     addBroadphaseLayer,
     addObjectLayer,
