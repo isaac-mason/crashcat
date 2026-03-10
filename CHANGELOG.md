@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## v0.0.3 (Unreleased)
+## v0.0.3
 
 - feat: minor refactors in dbvt
 - fix: `debug.bodies` output for capsule, sphere
