@@ -65,7 +65,7 @@ const characterRadiusCrouching = 0.8;
 const characterMass = 1000;
 
 const controlMovementDuringJump = true;
-const characterSpeed = 6.0;
+const characterSpeed = 10.0;
 const jumpSpeed = 15.0;
 const enableCharacterInertia = true;
 
