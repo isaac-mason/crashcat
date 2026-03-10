@@ -6,6 +6,7 @@ import {
     ConstraintSpace,
     capsule,
     castRay,
+    compound,
     createClosestCastRayCollector,
     createDefaultCastRaySettings,
     createWorld,
@@ -160,8 +161,8 @@ function createFloatingCharacterControllerOptions(): FloatingCharacterController
         floatHeight: 0.3,
         floatSpringK: 1.2,
         floatDampingC: 0.08,
-        maxWalkSpeed: 2.5,
-        maxRunSpeed: 5.0,
+        maxWalkSpeed: 8.0,
+        maxRunSpeed: 13.0,
         accelerationTime: 8,
         turnSpeed: 40,
         turnVelMultiplier: 0.2,
@@ -177,7 +178,7 @@ function createFloatingCharacterControllerOptions(): FloatingCharacterController
         balanceDampingC: 0.1,
         balanceSpringOnY: 0.3,
         balanceDampingOnY: 0.05,
-        jumpVelocity: 4.0,
+        jumpVelocity: 6.0,
         jumpForceToGroundMult: 5.0,
         slopeJumpMult: 0.25,
         sprintJumpMult: 1.2,
@@ -269,6 +270,8 @@ const _animate_oldPosition: Vec3 = vec3.create();
 const _animate_deltaPos: Vec3 = vec3.create();
 const _animate_targetRotation = quat.create();
 const _animate_deltaRotation = quat.create();
+const _animate_windmillRotation = quat.create();
+const _animate_windmillDelta = quat.create();
 
 const rayCollector = createClosestCastRayCollector();
 const raySettings = createDefaultCastRaySettings();
@@ -1093,6 +1096,69 @@ const diagonalPlatformAmplitudeX = 6;
 const diagonalPlatformAmplitudeY = 2;
 const diagonalPlatformSpeed = 0.12;
 
+// windmill - kinematic compound body: a small hub box + 4 blade boxes arranged
+// at 90-degree intervals around the Z axis. spins continuously around Z.
+// positioned to the side of the main area at a height where blades sweep through
+// space the character can walk into.
+const windmillHubHalf: [number, number, number] = [0.3, 0.3, 0.5];
+const windmillBladeHalfX = 3.0; // long axis (radial extent of blade)
+const windmillBladeHalfY = 0.5; // flat thickness (jumpable surface height)
+const windmillBladeHalfZ = 0.5; // depth
+const windmillBladeOffset = 3.3; // distance from center to blade midpoint
+
+const windmillShape = compound.create({
+    children: [
+        // center hub
+        {
+            position: [0, 0, 0],
+            quaternion: [0, 0, 0, 1],
+            shape: box.create({ halfExtents: windmillHubHalf }),
+        },
+        // blade +Y (top)
+        {
+            position: [0, windmillBladeOffset, 0],
+            quaternion: [0, 0, 0, 1],
+            shape: box.create({ halfExtents: [windmillBladeHalfY, windmillBladeHalfX, windmillBladeHalfZ] }),
+        },
+        // blade -Y (bottom)
+        {
+            position: [0, -windmillBladeOffset, 0],
+            quaternion: [0, 0, 0, 1],
+            shape: box.create({ halfExtents: [windmillBladeHalfY, windmillBladeHalfX, windmillBladeHalfZ] }),
+        },
+        // blade +X (right)
+        {
+            position: [windmillBladeOffset, 0, 0],
+            quaternion: [0, 0, 0, 1],
+            shape: box.create({ halfExtents: [windmillBladeHalfX, windmillBladeHalfY, windmillBladeHalfZ] }),
+        },
+        // blade -X (left)
+        {
+            position: [-windmillBladeOffset, 0, 0],
+            quaternion: [0, 0, 0, 1],
+            shape: box.create({ halfExtents: [windmillBladeHalfX, windmillBladeHalfY, windmillBladeHalfZ] }),
+        },
+    ],
+});
+
+const windmillPosition: [number, number, number] = [-15, 6.5, 0];
+const windmill = rigidBody.create(world, {
+    shape: windmillShape,
+    position: windmillPosition,
+    motionType: MotionType.KINEMATIC,
+    objectLayer: LAYER_MOVING,
+});
+
+// a static post to visually anchor the windmill in the world
+rigidBody.create(world, {
+    shape: box.create({ halfExtents: [0.25, 6.5, 0.25] }),
+    position: [-15, 0, 0],
+    motionType: MotionType.STATIC,
+    objectLayer: LAYER_NON_MOVING,
+});
+
+const windmillSpinSpeed = 1.0; // radians per second
+
 // triangle mesh terrain - floor section with hills and valleys
 {
     const gridSize = 16;
@@ -1443,6 +1509,12 @@ function animate() {
         diagonalPlatformCenter[2],
     ];
     rigidBody.moveKinematic(diagonalPlatform, diagonalTargetPosition, diagonalPlatform.quaternion, delta);
+
+    // update windmill - spins around Z axis, blades sweep the XY plane
+    quat.copy(_animate_windmillRotation, windmill.quaternion);
+    quat.setAxisAngle(_animate_windmillDelta, [0, 0, 1], windmillSpinSpeed * delta);
+    quat.multiply(_animate_windmillRotation, _animate_windmillRotation, _animate_windmillDelta);
+    rigidBody.moveKinematic(windmill, windmill.position, _animate_windmillRotation, delta);
 
     // update world physics
     updateWorld(world, undefined, delta);
