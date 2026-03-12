@@ -1356,10 +1356,10 @@ const commonWheelOptions: Omit<WheelOptions, 'chassisConnectionPointLocal'> = {
     // no custom force point - apply at mid-suspension point
     suspensionForcePoint: null,
 
-    sideFrictionStiffness: 1,
-    frictionSlip: 1.4,
+    sideFrictionStiffness: 1.5,
+    frictionSlip: 1.6,
 
-    rollInfluence: 0.01,
+    rollInfluence: 0.2,
 
     customSlidingRotationalSpeed: -30,
     useCustomSlidingRotationalSpeed: true,
