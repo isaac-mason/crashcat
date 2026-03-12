@@ -25,7 +25,7 @@ import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
 import { loadGLTF } from './utils/gltf';
 
-const trackGLTF = await loadGLTF('/models/track.glb');
+const trackGLTF = await loadGLTF('./models/track.glb');
 
 /* vehicle types */
 
