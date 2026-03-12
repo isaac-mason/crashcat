@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
 import { loadGLTF } from './utils/gltf';
+import { color, mix } from 'three/tsl';
 
 const trackGLTF = await loadGLTF('./models/track.glb');
 
@@ -462,8 +463,6 @@ function updateWheelSuspension(world: World, vehicle: Vehicle): void {
 
         // get the hit body from the body id
         const hitBody = hit.status === CastRayStatus.COLLIDING ? rigidBody.get(world, hit.bodyIdB) : undefined;
-
-        console.log('hitBody', hitBody, 'rayLength', rayLength);
 
         if (hit.status === CastRayStatus.COLLIDING && hitBody) {
             // store ground body
@@ -1192,7 +1191,7 @@ function createControls(): Controls {
 /* rendering */
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1a1a);
+scene.background = new THREE.Color('#c4eeff');
 
 scene.add(trackGLTF.scene);
 
