@@ -1,5 +1,3 @@
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import * as THREE from 'three';
 import type {
     ConeConstraint,
     DistanceConstraint,
@@ -14,6 +12,8 @@ import type {
     World,
 } from 'crashcat';
 import { bvh, ConstraintType, MotionType, rigidBody, ShapeType } from 'crashcat';
+import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import * as THREE from 'three';
 
 export enum BodyColorMode {
     INSTANCE,
@@ -2108,8 +2108,12 @@ function updateBroadphaseDbvt(state: State, world: World): void {
                 : layerColorsNonLeaf[layerIndex % layerColorsNonLeaf.length];
 
             // Add box wireframe for this node
-            const minX = node.aabb[0], minY = node.aabb[1], minZ = node.aabb[2];
-            const maxX = node.aabb[3], maxY = node.aabb[4], maxZ = node.aabb[5];
+            const minX = node.aabb[0],
+                minY = node.aabb[1],
+                minZ = node.aabb[2];
+            const maxX = node.aabb[3],
+                maxY = node.aabb[4],
+                maxZ = node.aabb[5];
 
             // Bottom face (4 edges)
             positions.push(minX, minY, minZ, maxX, minY, minZ);
@@ -3647,7 +3651,99 @@ function drawConstraints(state: State, world: World): void {
     }
 }
 
-// Clears all debug renderer state and removes all debug visuals
+/** dispose all gpu resources and remove everything from the scene graph. the state should not be used after calling this. */
+export function dispose(state: State): void {
+    // dispose bodies batched mesh and its material
+    state.bodies.batchedMesh.dispose();
+    state.bodies.material.dispose();
+
+    // dispose velocities batched mesh and its material
+    state.bodies.velocitiesBatchedMesh.dispose();
+    state.bodies.velocitiesMaterial.dispose();
+
+    // dispose all cached geometries
+    for (const entry of state.bodies.geometryCache.values()) {
+        entry.geometry.dispose();
+    }
+
+    // dispose edge wireframe geometries
+    for (const instance of state.bodies.edgeWireframes.values()) {
+        instance.lineSegments.geometry.dispose();
+        for (const geometry of instance.geometries) {
+            geometry.dispose();
+        }
+    }
+
+    // contacts and contactConstraints share geometries (sphere, cylinder, cone)
+    // across their instanced meshes - collect unique ones to avoid double-dispose
+    const disposedGeometries = new Set<THREE.BufferGeometry>();
+    const disposedMaterials = new Set<THREE.Material>();
+
+    const allInstancedMeshes = [
+        state.contacts.spheresMesh,
+        state.contacts.cylindersMesh,
+        state.contacts.conesMesh,
+        state.contactConstraints.spheresMesh,
+        state.contactConstraints.cylindersMesh,
+        state.contactConstraints.conesMesh,
+    ];
+
+    for (const mesh of allInstancedMeshes) {
+        mesh.dispose();
+        if (!disposedGeometries.has(mesh.geometry)) {
+            mesh.geometry.dispose();
+            disposedGeometries.add(mesh.geometry);
+        }
+        const mat = mesh.material;
+        if (mat instanceof THREE.Material && !disposedMaterials.has(mat)) {
+            mat.dispose();
+            disposedMaterials.add(mat);
+        }
+    }
+
+    // dispose broadphase dbvt lines
+    state.broadphase.dbvtLines.geometry.dispose();
+    if (state.broadphase.dbvtLines.material instanceof THREE.Material) {
+        state.broadphase.dbvtLines.material.dispose();
+    }
+
+    // dispose constraints line segments
+    state.constraints.lineSegments.geometry.dispose();
+    if (state.constraints.lineSegments.material instanceof THREE.Material) {
+        state.constraints.lineSegments.material.dispose();
+    }
+
+    // dispose triangle mesh bvh cache and root lines
+    for (const lineSegments of state.triangleMeshBvh.cache.values()) {
+        lineSegments.geometry.dispose();
+        if (lineSegments.material instanceof THREE.Material) {
+            lineSegments.material.dispose();
+        }
+    }
+    state.triangleMeshBvh.lines.geometry.dispose();
+    if (state.triangleMeshBvh.lines.material instanceof THREE.Material) {
+        state.triangleMeshBvh.lines.material.dispose();
+    }
+
+    // dispose static compound bvh cache and root lines
+    for (const lineSegments of state.staticCompoundBvh.cache.values()) {
+        lineSegments.geometry.dispose();
+        if (lineSegments.material instanceof THREE.Material) {
+            lineSegments.material.dispose();
+        }
+    }
+    state.staticCompoundBvh.lines.geometry.dispose();
+    if (state.staticCompoundBvh.lines.material instanceof THREE.Material) {
+        state.staticCompoundBvh.lines.material.dispose();
+    }
+
+    // remove the root object3d from its parent (if attached to a scene)
+    if (state.object3d.parent) {
+        state.object3d.parent.remove(state.object3d);
+    }
+}
+
+// clears all debug renderer state and removes all debug visuals
 export function clear(state: State): void {
     // Remove all batched mesh body instances
     clearBatchedMeshBodies(state);

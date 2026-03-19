@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.0.4 (Unreleased)
+
+- feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
+
 ## v0.0.3
 
 - feat: minor refactors in dbvt
