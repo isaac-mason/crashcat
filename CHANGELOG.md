@@ -3,6 +3,7 @@
 ## v0.0.4 (Unreleased)
 
 - feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
+- feat: add `debug.body`, `debug.shape` debug utilities
 
 ## v0.0.3
 
