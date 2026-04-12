@@ -36,6 +36,19 @@ export type BodiesOptions = {
     showAngularVelocity: boolean;
 };
 
+export type BodyOptions = {
+    /** explicit [r,g,b] color override. when omitted, bodyColor() is used based on colorMode */
+    color: [number, number, number] | null;
+    colorMode: BodyColorMode;
+    showLinearVelocity: boolean;
+    showAngularVelocity: boolean;
+};
+
+export type ShapeOptions = {
+    /** explicit [r,g,b] color. defaults to white [1,1,1] */
+    color: [number, number, number];
+};
+
 export type ContactsOptions = Record<string, never>;
 
 export type ContactConstraintsOptions = Record<string, never>;
@@ -49,6 +62,14 @@ export type JointsOptions = {
 
 export function createBodiesOptions(): BodiesOptions {
     return { colorMode: BodyColorMode.MOTION_TYPE, showLinearVelocity: false, showAngularVelocity: false };
+}
+
+export function createBodyOptions(): BodyOptions {
+    return { color: null, colorMode: BodyColorMode.MOTION_TYPE, showLinearVelocity: false, showAngularVelocity: false };
+}
+
+export function createShapeOptions(): ShapeOptions {
+    return { color: [1, 1, 1] };
 }
 
 export function createContactsOptions(): ContactsOptions {
@@ -693,6 +714,45 @@ function drawSwingConeLimits(
     }
 }
 
+/** draw shape + velocity arrows for one body into an existing line buffer */
+function drawBodyLines(
+    out: LineBuffer,
+    b: RigidBody,
+    r: number,
+    g: number,
+    bl: number,
+    showLinearVelocity: boolean,
+    showAngularVelocity: boolean,
+): void {
+    const [px, py, pz] = b.position;
+    const [qx, qy, qz, qw] = b.quaternion;
+    drawShape(out, b.shape, px, py, pz, qx, qy, qz, qw, r, g, bl);
+
+    if (showLinearVelocity && b.motionType !== MotionType.STATIC) {
+        const mp = b.motionProperties;
+        const [vx, vy, vz] = mp.linearVelocity;
+        const mag = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (mag > 0.01) {
+            const len = Math.min(mag, 5.0);
+            const inv = 1 / mag;
+            const [cx, cy, cz] = b.centerOfMassPosition;
+            pushLine(out, cx, cy, cz, cx + vx * inv * len, cy + vy * inv * len, cz + vz * inv * len, 1, 1, 0);
+        }
+    }
+
+    if (showAngularVelocity && b.motionType !== MotionType.STATIC) {
+        const mp = b.motionProperties;
+        const [vx, vy, vz] = mp.angularVelocity;
+        const mag = Math.sqrt(vx * vx + vy * vy + vz * vz);
+        if (mag > 0.01) {
+            const len = Math.min(mag * 0.5, 3.0);
+            const inv = 1 / mag;
+            const [cx, cy, cz] = b.centerOfMassPosition;
+            pushLine(out, cx, cy, cz, cx + vx * inv * len, cy + vy * inv * len, cz + vz * inv * len, 1, 0.5, 0);
+        }
+    }
+}
+
 /**
  * Render body wireframes.
  *
@@ -703,39 +763,47 @@ export function bodies(world: World, options?: Partial<BodiesOptions>): DebugRen
     const opts: BodiesOptions = { ...createBodiesOptions(), ...options };
     const out = createLineBuffer();
 
-    for (const body of world.bodies.pool) {
-        if ((body as unknown as { _pooled: boolean })._pooled) continue;
-
-        const [r, g, b] = bodyColor(body, opts.colorMode);
-        const [px, py, pz] = body.position;
-        const [qx, qy, qz, qw] = body.quaternion;
-        drawShape(out, body.shape, px, py, pz, qx, qy, qz, qw, r, g, b);
-
-        if (opts.showLinearVelocity && body.motionType !== MotionType.STATIC) {
-            const mp = body.motionProperties;
-            const [vx, vy, vz] = mp.linearVelocity;
-            const mag = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            if (mag > 0.01) {
-                const len = Math.min(mag, 5.0);
-                const inv = 1 / mag;
-                const [cx, cy, cz] = body.centerOfMassPosition;
-                pushLine(out, cx, cy, cz, cx + vx * inv * len, cy + vy * inv * len, cz + vz * inv * len, 1, 1, 0);
-            }
-        }
-
-        if (opts.showAngularVelocity && body.motionType !== MotionType.STATIC) {
-            const mp = body.motionProperties;
-            const [vx, vy, vz] = mp.angularVelocity;
-            const mag = Math.sqrt(vx * vx + vy * vy + vz * vz);
-            if (mag > 0.01) {
-                const len = Math.min(mag * 0.5, 3.0);
-                const inv = 1 / mag;
-                const [cx, cy, cz] = body.centerOfMassPosition;
-                pushLine(out, cx, cy, cz, cx + vx * inv * len, cy + vy * inv * len, cz + vz * inv * len, 1, 0.5, 0);
-            }
-        }
+    for (const b of world.bodies.pool) {
+        if ((b as unknown as { _pooled: boolean })._pooled) continue;
+        const [r, g, bl] = bodyColor(b, opts.colorMode);
+        drawBodyLines(out, b, r, g, bl, opts.showLinearVelocity, opts.showAngularVelocity);
     }
 
+    return finalizeLineBuffer(out);
+}
+
+/**
+ * Render debug wireframe for a single body.
+ *
+ * @example
+ * const { vertices, colors } = debug.body(myBody);
+ * const { vertices, colors } = debug.body(myBody, { color: [1, 0, 0] });
+ */
+export function body(b: RigidBody, options?: Partial<BodyOptions>): DebugRenderResult {
+    const opts: BodyOptions = { ...createBodyOptions(), ...options };
+    const out = createLineBuffer();
+    const [r, g, bl] = opts.color ?? bodyColor(b, opts.colorMode);
+    drawBodyLines(out, b, r, g, bl, opts.showLinearVelocity, opts.showAngularVelocity);
+    return finalizeLineBuffer(out);
+}
+
+/**
+ * Render debug wireframe for a single shape at a given world-space transform.
+ *
+ * @example
+ * const { vertices, colors } = debug.shape(myShape, [0, 0, 0], [0, 0, 0, 1]);
+ * const { vertices, colors } = debug.shape(myShape, pos, quat, { color: [0.2, 1.0, 0.2] });
+ */
+export function shape(
+    s: Shape,
+    position: [number, number, number],
+    quaternion: [number, number, number, number],
+    options?: Partial<ShapeOptions>,
+): DebugRenderResult {
+    const opts: ShapeOptions = { ...createShapeOptions(), ...options };
+    const out = createLineBuffer();
+    const [r, g, b] = opts.color;
+    drawShape(out, s, position[0], position[1], position[2], quaternion[0], quaternion[1], quaternion[2], quaternion[3], r, g, b);
     return finalizeLineBuffer(out);
 }
 
