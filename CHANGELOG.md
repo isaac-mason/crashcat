@@ -2,6 +2,7 @@
 
 ## v0.0.4 (Unreleased)
 
+- feat: defer DOF masking in contact solver to single write-back per constraint
 - feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
 - feat: add `debug.body`, `debug.shape` debug utilities
 
