@@ -2,6 +2,7 @@
 
 ## v0.0.4 (Unreleased)
 
+- fix: use original contact velocity for vertical wall constraints in KCC
 - feat: defer DOF masking in contact solver to single write-back per constraint
 - feat: reduce convex radius if too big for shape
 - feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
