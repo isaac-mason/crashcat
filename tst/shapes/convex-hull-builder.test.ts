@@ -161,4 +161,58 @@ describe('ConvexHullBuilder', () => {
             expect(maxError).toBeLessThan(Math.max(coplanarDistance, cTolerance));
         });
     });
+
+    describe('TestHullEdgeCases', () => {
+        test('hull with 2 faces that are nearly coplanar', () => {
+            const positions: Vec3[] = [
+                [-0.020472288, -0.195635557, 0.308015466],
+                [0.136248738, 0.633286834, 0.135366619],
+                [0.286418647, -0.228475571, 0.308084548],
+                [-0.267285109, 1.024676085, 0.308042824],
+                [0.396568149, -0.971658647, 0.308055162],
+                [0.321081549, -1.024676085, 0.308036327],
+                [0.034643859, -0.404506862, 0.308015764],
+                [0.18922469, -0.252762139, 0.308060408],
+            ];
+
+            const builder = create(positions);
+            const result = initialize(builder, Number.MAX_SAFE_INTEGER, cTolerance);
+            expect(result.result).toBe(Result.Success);
+
+            const { maxError, coplanarDistance } = determineMaxError(builder);
+            expect(maxError).toBeLessThan(Math.max(coplanarDistance, 1.2 * cTolerance));
+        });
+
+        test('nearly coplanar points', () => {
+            const positions: Vec3[] = [
+                [0.917345762, 0.157111734, 1.650970459],
+                [-0.098074198, 0.157116055, 0.664742708],
+                [1.777100325, 0.157112047, 1.238879442],
+                [2.11432457, 0.157112464, 0.780688763],
+                [1.926570415, 0.157114446, 0.240761161],
+                [-1.045998096, 0.157108605, 1.548911095],
+                [-1.820045233, 0.157106474, 1.050360918],
+                [-1.918573976, 0.157108605, 0.039246202],
+                [0.042619467, 0.157113969, -1.405336142],
+                [0.575986624, 0.157114401, -1.370834589],
+                [1.402592659, 0.157115221, -0.834864557],
+                [1.110557318, 0.157113969, -1.336267948],
+                [1.689781666, 0.157115355, -0.308773756],
+                [2.205337524, 0.157113209, -0.281754494],
+                [-1.346967936, 0.157110974, -0.978962541],
+                [-1.346967936, 0.157110974, -0.978962541],
+                [-2.085033417, 0.157106936, -0.506602883],
+                [-0.981224537, 0.157110706, -1.445893764],
+                [-0.481085658, 0.157112658, -1.426232934],
+                [-0.981224537, 0.157110706, -1.445893764],
+            ];
+
+            const builder = create(positions);
+            const result = initialize(builder, Number.MAX_SAFE_INTEGER, cTolerance);
+            expect(result.result).toBe(Result.Success);
+
+            const { maxError, coplanarDistance } = determineMaxError(builder);
+            expect(maxError).toBeLessThan(Math.max(coplanarDistance, 1.2 * cTolerance));
+        });
+    });
 });

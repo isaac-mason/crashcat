@@ -6,6 +6,9 @@ import { assert } from '../../utils/assert';
 // minimum triangle area squared
 const MIN_TRIANGLE_AREA_SQ = 1e-12;
 
+// extra slop used to determine if the hull is coplanar / a point is on a face
+const COPLANAR_SLOP_FACTOR = 6.0;
+
 export enum Result {
     Success = 0,
     MaxVerticesReached = 1,
@@ -178,7 +181,7 @@ export function initialize(
     }
 
     // check if the hull is coplanar
-    if (maxDist * maxDist <= 25.0 * coplanarToleranceSq) {
+    if (maxDist * maxDist <= COPLANAR_SLOP_FACTOR * COPLANAR_SLOP_FACTOR * coplanarToleranceSq) {
         // first project all points in 2D space
         const _base1: Vec3 = [0, 0, 0];
         const _base2: Vec3 = [0, 0, 0];
@@ -592,7 +595,7 @@ export function determineMaxError(builder: ConvexHullBuilder): {
 
             const vMinusCentroid = vec3.subtract([0, 0, 0], v, f.centroid);
             const planeDist = vec3.dot(f.normal, vMinusCentroid) / normalLen;
-            if (planeDist > -coplanarDistance) {
+            if (planeDist > -COPLANAR_SLOP_FACTOR * coplanarDistance) {
                 // check distance to the edges of this face
                 const edgeDistSq = getDistanceToEdgeSq(builder, v, f);
                 if (edgeDistSq < minEdgeDistSq) {
@@ -826,26 +829,41 @@ function getDistanceToEdgeSq(builder: ConvexHullBuilder, inPoint: Vec3, inFace: 
             // it is outside
             allInside = false;
 
-            // calculate closest point on line segment
+            // measure distance to this edge using Jolt's GetClosestPointOnLine approach:
+            // a = p1 - inPoint, b = p2 - inPoint
+            // ab = b - a, v = -a.dot(ab) / ab.lengthSq(), u = 1 - v
+            // closest = u*a + v*b (clamped)
             vec3.subtract(_getDistToEdge_p1MinusPoint, p1, inPoint);
             vec3.subtract(_getDistToEdge_p2MinusPoint, p2, inPoint);
 
-            // compute barycentric coordinate for closest point on line
-            const p1p2 = vec3.dot(_getDistToEdge_p1MinusPoint, _getDistToEdge_p2MinusPoint);
-            const p2p2 = vec3.dot(_getDistToEdge_p2MinusPoint, _getDistToEdge_p2MinusPoint);
-            const p1p1 = vec3.dot(_getDistToEdge_p1MinusPoint, _getDistToEdge_p1MinusPoint);
+            // ab = b - a
+            vec3.subtract(_getDistToEdge_closestPoint, _getDistToEdge_p2MinusPoint, _getDistToEdge_p1MinusPoint);
+            const abLenSq = vec3.squaredLength(_getDistToEdge_closestPoint);
 
-            const denom = p1p1 + p2p2 - 2.0 * p1p2;
-            let t = 0.0;
-
-            if (Math.abs(denom) > 1e-10) {
-                t = (p2p2 - p1p2) / denom;
-                t = Math.max(0.0, Math.min(1.0, t)); // clamp to [0, 1]
+            const FLT_EPSILON = 1.1920929e-7;
+            let distSq: number;
+            if (abLenSq < FLT_EPSILON * FLT_EPSILON) {
+                // degenerate line segment, pick closer endpoint
+                const aLenSq = vec3.squaredLength(_getDistToEdge_p1MinusPoint);
+                const bLenSq = vec3.squaredLength(_getDistToEdge_p2MinusPoint);
+                distSq = Math.min(aLenSq, bLenSq);
+            } else {
+                const v = -vec3.dot(_getDistToEdge_p1MinusPoint, _getDistToEdge_closestPoint) / abLenSq;
+                const u = 1.0 - v;
+                if (v <= 0.0) {
+                    // a is closest
+                    distSq = vec3.squaredLength(_getDistToEdge_p1MinusPoint);
+                } else if (u <= 0.0) {
+                    // b is closest
+                    distSq = vec3.squaredLength(_getDistToEdge_p2MinusPoint);
+                } else {
+                    // closest point on segment: u*a + v*b
+                    _getDistToEdge_closestPoint[0] = u * _getDistToEdge_p1MinusPoint[0] + v * _getDistToEdge_p2MinusPoint[0];
+                    _getDistToEdge_closestPoint[1] = u * _getDistToEdge_p1MinusPoint[1] + v * _getDistToEdge_p2MinusPoint[1];
+                    _getDistToEdge_closestPoint[2] = u * _getDistToEdge_p1MinusPoint[2] + v * _getDistToEdge_p2MinusPoint[2];
+                    distSq = vec3.squaredLength(_getDistToEdge_closestPoint);
+                }
             }
-
-            // closest point = p1 * (1 - t) + p2 * t
-            vec3.lerp(_getDistToEdge_closestPoint, _getDistToEdge_p1MinusPoint, _getDistToEdge_p2MinusPoint, t);
-            const distSq = vec3.squaredLength(_getDistToEdge_closestPoint);
 
             edgeDistSq = Math.min(edgeDistSq, distSq);
         }
