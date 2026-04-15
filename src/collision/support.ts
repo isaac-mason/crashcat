@@ -366,8 +366,6 @@ export function setBoxSupport(
     if (mode === SupportFunctionMode.EXCLUDE_CONVEX_RADIUS) {
         // scale convex radius using minimum scale component
         const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
-        // jolt clamps scaled convex radius to BOX_DEFAULT_CONVEX_RADIUS
-        // TODO: is this intended?
         const scaledConvexRadius = Math.min(convexRadius * minScale, DEFAULT_CONVEX_RADIUS);
 
         // reduce geometry by the convex radius, then report the excluded amount
