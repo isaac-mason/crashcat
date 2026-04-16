@@ -8,6 +8,7 @@
 - feat: reduce convex radius if too big for shape
 - feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
 - feat: add `debug.body`, `debug.shape` debug utilities
+- feat: remove debug assertions from production builds
 
 ## v0.0.3
 
