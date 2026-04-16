@@ -224,8 +224,8 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
             let newIdx = vertexMap.get(originalIdx);
 
             if (newIdx === undefined) {
-                // new point - make relative to center of mass
-                const p = vec3.subtract(vec3.create(), inputPoints[originalIdx], centerOfMass);
+                // store point in original shape space (not relative to center of mass)
+                const p = vec3.clone(inputPoints[originalIdx]);
 
                 // update local bounds
                 box3.expandByPoint(localBounds, localBounds, p);
@@ -254,8 +254,7 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         // plane equation: normal · (x - centroid) = 0  =>  normal · x = normal · centroid
         // standard form: normal · x + constant = 0  =>  constant = -normal · centroid
         const normal = vec3.normalize(vec3.create(), builderFace.normal);
-        const centroidRelative = vec3.subtract(vec3.create(), builderFace.centroid, centerOfMass);
-        const constant = -vec3.dot(normal, centroidRelative);
+        const constant = -vec3.dot(normal, builderFace.centroid);
         planes.push({ normal, constant });
     }
 
@@ -569,10 +568,10 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 }
 
 function getInnerRadius(shape: ConvexHullShape): number {
-    // calculate the inner radius by getting the minimum distance from the origin to the planes of the hull
+    // calculate the inner radius by getting the minimum distance from the shape origin to the planes of the hull
     let innerRadius = Number.MAX_VALUE;
     for (const plane of shape.planes) {
-        // distance from origin (0,0,0) to plane: -constant (since points are relative to COM)
+        // distance from shape origin (0,0,0) to plane
         innerRadius = Math.min(innerRadius, -plane.constant);
     }
     // clamp against zero for numerical stability (flat convex hulls may have round-off issues)

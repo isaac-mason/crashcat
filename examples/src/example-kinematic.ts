@@ -143,11 +143,6 @@ const maxwellConvexHullShape = convexHull.create({
     positions: maxwellMeshPositions,
 });
 
-// offset maxwell mesh to align with convex hull's center of mass
-// (hull vertices are stored relative to COM, but maxwell mesh vertices are not)
-const shapeCOM = maxwellConvexHullShape.centerOfMass;
-maxwellMesh!.position.set(-shapeCOM[0], -shapeCOM[1], -shapeCOM[2]);
-
 // movement parameters
 const kinematicPosition = vec3.fromValues(0, 3, 0);
 const kinematicRotation = quat.create();
