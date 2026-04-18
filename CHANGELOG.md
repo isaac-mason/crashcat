@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## v0.0.4 (Unreleased)
+
+- fix: convex hull shapes no longer recenter geometry around center of mass. points and planes are now stored in the original shape space, fixing common misalignment problems between physics and visual meshes. COM is still computed and stored for dynamics (inertia, integration).
+- fix: KCC characters getting stuck when surrounded by steep slopes due to penetration recovery velocity being included in vertical wall constraints
+- fix: incorrect closest-point-on-edge in convex hull builder, increase coplanar tolerance to fix degenerate hulls
+- feat: defer DOF masking in contact solver to single write-back per constraint
+- feat: reduce convex radius if too big for shape
+- feat: added `debugRenderer.dispose` method to `crashcat/three` debug renderer utility
+- feat: add `debug.body`, `debug.shape` debug utilities
+- feat: remove debug assertions from production builds
+
 ## v0.0.3
 
 - feat: minor refactors in dbvt

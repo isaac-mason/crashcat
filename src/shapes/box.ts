@@ -53,10 +53,15 @@ export type BoxShape = {
 
 /** create a box shape from settings */
 export function create(o: BoxShapeSettings): BoxShape {
+    // auto-clamp convex radius to fit the smallest half extent
+    const requestedConvexRadius = o.convexRadius ?? DEFAULT_CONVEX_RADIUS;
+    const minHalfExtent = Math.min(o.halfExtents[0], o.halfExtents[1], o.halfExtents[2]);
+    const convexRadius = Math.min(requestedConvexRadius, minHalfExtent);
+
     const shape: BoxShape = {
         type: ShapeType.BOX,
         halfExtents: o.halfExtents,
-        convexRadius: o.convexRadius ?? DEFAULT_CONVEX_RADIUS,
+        convexRadius,
         density: o.density ?? DEFAULT_SHAPE_DENSITY,
         materialId: o.materialId ?? -1,
         aabb: box3.create(),
@@ -85,6 +90,14 @@ function computeBoxLocalBounds(out: Box3, halfExtents: Vec3): void {
 
 /** updates a box shape after it's properties have changed */
 export function update(shape: BoxShape): void {
+    // validation: dimensions must be non-negative
+    if (shape.halfExtents[0] < 0 || shape.halfExtents[1] < 0 || shape.halfExtents[2] < 0) {
+        throw new Error('box halfExtents must be >= 0');
+    }
+    if (shape.convexRadius < 0) {
+        throw new Error('box convexRadius must be >= 0');
+    }
+
     computeBoxLocalBounds(shape.aabb, shape.halfExtents);
     shape.volume = computeBoxVolume(shape.halfExtents);
 }

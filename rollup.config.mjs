@@ -3,6 +3,18 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
 import filesize from 'rollup-plugin-filesize';
 
+function stripDebug() {
+    const re = /\bassert\s*\((?:[^()]*|\((?:[^()]*|\([^()]*\))*\))*\)\s*;?/g;
+    return {
+        name: 'strip-debug',
+        transform(code, id) {
+            if (!id.endsWith('.ts') && !id.endsWith('.js')) return null;
+            if (!code.includes('assert(')) return null;
+            return { code: code.replace(re, ''), map: null };
+        },
+    };
+}
+
 export default [
     {
         input: './src/index.ts',
@@ -16,6 +28,7 @@ export default [
             },
         ],
         plugins: [
+            stripDebug(),
             nodeResolve(),
             typescript({
                 tsconfig: path.resolve(import.meta.dirname, './tsconfig.json'),
@@ -36,6 +49,7 @@ export default [
             },
         ],
         plugins: [
+            stripDebug(),
             nodeResolve(),
             typescript({
                 tsconfig: path.resolve(import.meta.dirname, './tsconfig.json'),

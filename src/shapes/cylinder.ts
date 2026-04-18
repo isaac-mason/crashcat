@@ -55,7 +55,9 @@ const CYLINDER_CAP_OCTAGON = [
 
 /** create cylinder shape from settings */
 export function create(o: CylinderShapeSettings): CylinderShape {
-    const convexRadius = o.convexRadius ?? DEFAULT_CONVEX_RADIUS;
+    // auto-clamp convex radius to fit the smallest dimension
+    const requestedConvexRadius = o.convexRadius ?? DEFAULT_CONVEX_RADIUS;
+    const convexRadius = Math.min(requestedConvexRadius, Math.min(o.halfHeight, o.radius));
     const density = o.density ?? DEFAULT_SHAPE_DENSITY;
 
     const shape: CylinderShape = {
@@ -92,15 +94,15 @@ function calculateAABB(out: Box3, halfHeight: number, radius: number): void {
 
 /** update cylinder shape's derived properties */
 export function update(shape: CylinderShape): void {
-    // validation
-    if (shape.halfHeight < shape.convexRadius) {
-        throw new Error('Cylinder halfHeight must be >= convexRadius');
+    // validation: dimensions must be non-negative
+    if (shape.halfHeight < 0) {
+        throw new Error('cylinder halfHeight must be >= 0');
     }
-    if (shape.radius < shape.convexRadius) {
-        throw new Error('Cylinder radius must be >= convexRadius');
+    if (shape.radius < 0) {
+        throw new Error('cylinder radius must be >= 0');
     }
     if (shape.convexRadius < 0) {
-        throw new Error('Cylinder convexRadius must be >= 0');
+        throw new Error('cylinder convexRadius must be >= 0');
     }
 
     // update

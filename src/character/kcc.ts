@@ -1712,8 +1712,10 @@ function determineConstraints(
                     verticalConstraint.toi = 0;
                     verticalConstraint.projectedVelocity = 0;
 
-                    // project contact velocity onto horizontal normal so both planes push at equal rate
-                    const contactVelDotHoriz = vec3.dot(contactVelocity, _determineConstraints_horizontalNormal);
+                    // project original contact velocity onto horizontal normal so both planes push at equal rate.
+                    // we use the original contact velocity (not contactVelocity which includes push-out) because
+                    // penetration recovery velocity can get characters stuck when surrounded by steep slopes.
+                    const contactVelDotHoriz = vec3.dot(contact.linearVelocity, _determineConstraints_horizontalNormal);
                     vec3.scale(verticalConstraint.linearVelocity, _determineConstraints_horizontalNormal, contactVelDotHoriz);
 
                     vec3.copy(verticalConstraint.planeNormal, _determineConstraints_horizontalNormal);

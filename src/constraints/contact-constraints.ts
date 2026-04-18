@@ -11,6 +11,7 @@ import * as manifold from '../manifold/manifold';
 import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
+import * as contactConstraintPart from './constraint-part/contact-constraint-part';
 
 /** state for contact constraint solving, holds all active constraints and manages constraint lifecycle */
 export type ContactConstraints = {
@@ -897,9 +898,19 @@ function createContactConstraint(): ContactConstraint {
     };
 }
 
+const _linearVelocityA: Vec3 = /* @__PURE__ */ vec3.create();
+const _angularVelocityA: Vec3 = /* @__PURE__ */ vec3.create();
+const _linearVelocityB: Vec3 = /* @__PURE__ */ vec3.create();
+const _angularVelocityB: Vec3 = /* @__PURE__ */ vec3.create();
+
 /**
- * Apply warm start impulses from previous frame to give solver a good initial guess.
- * This significantly improves convergence speed (~3x faster).
+ * apply warm start impulses from previous frame to give solver a good initial guess.
+ * significantly improves convergence speed (~3x faster).
+ *
+ * uses cached velocity locals to avoid repeated body property access.
+ * velocities are loaded once per constraint, all contact point warm starts operate on locals,
+ * then velocities are written back with DOF masking applied once.
+ *
  * @param contactConstraints contact constraint state
  * @param warmStartRatio scale factor for warm start impulses (usually 1.0)
  */
@@ -912,27 +923,72 @@ export function warmStartVelocityConstraints(
         const constraint = contactConstraints.pool[i];
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
+        const isDynamicA = bodyA.motionType === MotionType.DYNAMIC;
+        const isDynamicB = bodyB.motionType === MotionType.DYNAMIC;
         const { normal, tangent1, tangent2 } = constraint;
 
-        for (let i = 0; i < constraint.numContactPoints; i++) {
-            const cp = constraint.contactPoints[i];
+        // load dynamic body velocities into locals
+        // warm start only applies impulses to dynamic bodies, so we only need their velocities
+        if (isDynamicA) {
+            const mpA = bodyA.motionProperties;
+            _linearVelocityA[0] = mpA.linearVelocity[0];
+            _linearVelocityA[1] = mpA.linearVelocity[1];
+            _linearVelocityA[2] = mpA.linearVelocity[2];
+            _angularVelocityA[0] = mpA.angularVelocity[0];
+            _angularVelocityA[1] = mpA.angularVelocity[1];
+            _angularVelocityA[2] = mpA.angularVelocity[2];
+        } else {
+            _linearVelocityA[0] = 0;
+            _linearVelocityA[1] = 0;
+            _linearVelocityA[2] = 0;
+            _angularVelocityA[0] = 0;
+            _angularVelocityA[1] = 0;
+            _angularVelocityA[2] = 0;
+        }
+        if (isDynamicB) {
+            const mpB = bodyB.motionProperties;
+            _linearVelocityB[0] = mpB.linearVelocity[0];
+            _linearVelocityB[1] = mpB.linearVelocity[1];
+            _linearVelocityB[2] = mpB.linearVelocity[2];
+            _angularVelocityB[0] = mpB.angularVelocity[0];
+            _angularVelocityB[1] = mpB.angularVelocity[1];
+            _angularVelocityB[2] = mpB.angularVelocity[2];
+        } else {
+            _linearVelocityB[0] = 0;
+            _linearVelocityB[1] = 0;
+            _linearVelocityB[2] = 0;
+            _angularVelocityB[0] = 0;
+            _angularVelocityB[1] = 0;
+            _angularVelocityB[2] = 0;
+        }
+
+        for (let j = 0; j < constraint.numContactPoints; j++) {
+            const cp = constraint.contactPoints[j];
 
             // warm start friction constraints only if active
             if (axisConstraintPart.isActive(cp.tangentConstraint1) || axisConstraintPart.isActive(cp.tangentConstraint2)) {
-                axisConstraintPart.warmStart(
+                contactConstraintPart.warmStart(
                     cp.tangentConstraint1,
-                    bodyA,
-                    bodyB,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    isDynamicA,
+                    isDynamicB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent1,
                     warmStartRatio,
                 );
 
-                axisConstraintPart.warmStart(
+                contactConstraintPart.warmStart(
                     cp.tangentConstraint2,
-                    bodyA,
-                    bodyB,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    isDynamicA,
+                    isDynamicB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent2,
@@ -941,21 +997,52 @@ export function warmStartVelocityConstraints(
             }
 
             // always warm start normal constraint (non-penetration)
-            axisConstraintPart.warmStart(
+            contactConstraintPart.warmStart(
                 cp.normalConstraint,
-                bodyA,
-                bodyB,
+                _linearVelocityA,
+                _angularVelocityA,
+                _linearVelocityB,
+                _angularVelocityB,
+                isDynamicA,
+                isDynamicB,
                 constraint.invMassA,
                 constraint.invMassB,
                 normal,
                 warmStartRatio,
             );
         }
+
+        // write back velocities + DOF masking once
+        if (isDynamicA) {
+            const mpA = bodyA.motionProperties;
+            const allowedTranslationA = mpA.allowedDegreesOfFreedom & 0b111;
+            mpA.linearVelocity[0] = allowedTranslationA & 0b001 ? _linearVelocityA[0] : 0;
+            mpA.linearVelocity[1] = allowedTranslationA & 0b010 ? _linearVelocityA[1] : 0;
+            mpA.linearVelocity[2] = allowedTranslationA & 0b100 ? _linearVelocityA[2] : 0;
+            mpA.angularVelocity[0] = _angularVelocityA[0];
+            mpA.angularVelocity[1] = _angularVelocityA[1];
+            mpA.angularVelocity[2] = _angularVelocityA[2];
+        }
+        if (isDynamicB) {
+            const mpB = bodyB.motionProperties;
+            const allowedTranslationB = mpB.allowedDegreesOfFreedom & 0b111;
+            mpB.linearVelocity[0] = allowedTranslationB & 0b001 ? _linearVelocityB[0] : 0;
+            mpB.linearVelocity[1] = allowedTranslationB & 0b010 ? _linearVelocityB[1] : 0;
+            mpB.linearVelocity[2] = allowedTranslationB & 0b100 ? _linearVelocityB[2] : 0;
+            mpB.angularVelocity[0] = _angularVelocityB[0];
+            mpB.angularVelocity[1] = _angularVelocityB[1];
+            mpB.angularVelocity[2] = _angularVelocityB[2];
+        }
     }
 }
 
 /**
- * Solve velocity constraints for a specific island. Only processes constraints at the given indices.
+ * solve velocity constraints for a specific island. only processes constraints at the given indices.
+ *
+ * uses cached velocity locals to avoid repeated body property access during the solve loop.
+ * for each constraint: velocities are loaded once, all contact point solves operate on locals,
+ * then velocities are written back with DOF masking applied once.
+ *
  * @param contactConstraints contact constraint state
  * @param bodies body array
  * @param constraintIndices indices of constraints to solve (from island)
@@ -986,7 +1073,48 @@ export function solveVelocityConstraintsForIsland(
             continue;
         }
 
+        // "moving" includes kinematic bodies (they have velocity but aren't mutated)
+        const movingA = bodyA.motionType !== MotionType.STATIC;
+        const movingB = bodyB.motionType !== MotionType.STATIC;
+
         const { normal, tangent1, tangent2, friction } = constraint;
+
+        // load body velocities into locals once per constraint
+        // for getTotalLambda we need kinematic velocities too (they contribute to Jv)
+        // but applyLambda only mutates dynamic bodies
+        // so we load all moving bodies' velocities for correct Jv computation
+        if (movingA) {
+            const mpA = bodyA.motionProperties;
+            _linearVelocityA[0] = mpA.linearVelocity[0];
+            _linearVelocityA[1] = mpA.linearVelocity[1];
+            _linearVelocityA[2] = mpA.linearVelocity[2];
+            _angularVelocityA[0] = mpA.angularVelocity[0];
+            _angularVelocityA[1] = mpA.angularVelocity[1];
+            _angularVelocityA[2] = mpA.angularVelocity[2];
+        } else {
+            _linearVelocityA[0] = 0;
+            _linearVelocityA[1] = 0;
+            _linearVelocityA[2] = 0;
+            _angularVelocityA[0] = 0;
+            _angularVelocityA[1] = 0;
+            _angularVelocityA[2] = 0;
+        }
+        if (movingB) {
+            const mpB = bodyB.motionProperties;
+            _linearVelocityB[0] = mpB.linearVelocity[0];
+            _linearVelocityB[1] = mpB.linearVelocity[1];
+            _linearVelocityB[2] = mpB.linearVelocity[2];
+            _angularVelocityB[0] = mpB.angularVelocity[0];
+            _angularVelocityB[1] = mpB.angularVelocity[1];
+            _angularVelocityB[2] = mpB.angularVelocity[2];
+        } else {
+            _linearVelocityB[0] = 0;
+            _linearVelocityB[1] = 0;
+            _linearVelocityB[2] = 0;
+            _angularVelocityB[0] = 0;
+            _angularVelocityB[1] = 0;
+            _angularVelocityB[2] = 0;
+        }
 
         // solve friction constraints for this constraint
         for (let i = 0; i < constraint.numContactPoints; i++) {
@@ -994,8 +1122,26 @@ export function solveVelocityConstraintsForIsland(
 
             // check if either friction constraint is active
             if (axisConstraintPart.isActive(cp.tangentConstraint1) || axisConstraintPart.isActive(cp.tangentConstraint2)) {
-                let lambda1 = axisConstraintPart.getTotalLambda(cp.tangentConstraint1, bodyA, bodyB, tangent1);
-                let lambda2 = axisConstraintPart.getTotalLambda(cp.tangentConstraint2, bodyA, bodyB, tangent2);
+                let lambda1 = contactConstraintPart.getTotalLambda(
+                    cp.tangentConstraint1,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    movingA,
+                    movingB,
+                    tangent1,
+                );
+                let lambda2 = contactConstraintPart.getTotalLambda(
+                    cp.tangentConstraint2,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    movingA,
+                    movingB,
+                    tangent2,
+                );
 
                 // project onto friction cone: ||λ_friction|| ≤ μ × λ_normal
                 const maxFriction = friction * cp.normalConstraint.totalLambda;
@@ -1008,10 +1154,14 @@ export function solveVelocityConstraintsForIsland(
                     lambda2 *= scale;
                 }
 
-                const appliedFriction1 = axisConstraintPart.applyLambda(
+                const appliedFriction1 = contactConstraintPart.applyLambda(
                     cp.tangentConstraint1,
-                    bodyA,
-                    bodyB,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    isDynamicA,
+                    isDynamicB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent1,
@@ -1019,10 +1169,14 @@ export function solveVelocityConstraintsForIsland(
                 );
                 anyImpulseApplied = anyImpulseApplied || appliedFriction1;
 
-                const appliedFriction2 = axisConstraintPart.applyLambda(
+                const appliedFriction2 = contactConstraintPart.applyLambda(
                     cp.tangentConstraint2,
-                    bodyA,
-                    bodyB,
+                    _linearVelocityA,
+                    _angularVelocityA,
+                    _linearVelocityB,
+                    _angularVelocityB,
+                    isDynamicA,
+                    isDynamicB,
                     constraint.invMassA,
                     constraint.invMassB,
                     tangent2,
@@ -1036,21 +1190,54 @@ export function solveVelocityConstraintsForIsland(
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
-            // inlined: equiv to solveVelocityConstraintWithMassOverride with simplified clamp
-            const totalLambda = axisConstraintPart.getTotalLambda(cp.normalConstraint, bodyA, bodyB, normal);
-            // clamp to [0, ∞) → applyLambda
-            // contacts can only push, never pull
-            const clampedLambda = Math.max(0, totalLambda);
-            const appliedNormal = axisConstraintPart.applyLambda(
+            const totalLambda = contactConstraintPart.getTotalLambda(
                 cp.normalConstraint,
-                bodyA,
-                bodyB,
+                _linearVelocityA,
+                _angularVelocityA,
+                _linearVelocityB,
+                _angularVelocityB,
+                movingA,
+                movingB,
+                normal,
+            );
+            // clamp to [0, ∞) — contacts can only push, never pull
+            const clampedLambda = Math.max(0, totalLambda);
+            const appliedNormal = contactConstraintPart.applyLambda(
+                cp.normalConstraint,
+                _linearVelocityA,
+                _angularVelocityA,
+                _linearVelocityB,
+                _angularVelocityB,
+                isDynamicA,
+                isDynamicB,
                 constraint.invMassA,
                 constraint.invMassB,
                 normal,
                 clampedLambda,
             );
             anyImpulseApplied = anyImpulseApplied || appliedNormal;
+        }
+
+        // write back velocities + DOF masking once per constraint
+        if (isDynamicA) {
+            const mpA = bodyA.motionProperties;
+            const allowedTranslationA = mpA.allowedDegreesOfFreedom & 0b111;
+            mpA.linearVelocity[0] = allowedTranslationA & 0b001 ? _linearVelocityA[0] : 0;
+            mpA.linearVelocity[1] = allowedTranslationA & 0b010 ? _linearVelocityA[1] : 0;
+            mpA.linearVelocity[2] = allowedTranslationA & 0b100 ? _linearVelocityA[2] : 0;
+            mpA.angularVelocity[0] = _angularVelocityA[0];
+            mpA.angularVelocity[1] = _angularVelocityA[1];
+            mpA.angularVelocity[2] = _angularVelocityA[2];
+        }
+        if (isDynamicB) {
+            const mpB = bodyB.motionProperties;
+            const allowedTranslationB = mpB.allowedDegreesOfFreedom & 0b111;
+            mpB.linearVelocity[0] = allowedTranslationB & 0b001 ? _linearVelocityB[0] : 0;
+            mpB.linearVelocity[1] = allowedTranslationB & 0b010 ? _linearVelocityB[1] : 0;
+            mpB.linearVelocity[2] = allowedTranslationB & 0b100 ? _linearVelocityB[2] : 0;
+            mpB.angularVelocity[0] = _angularVelocityB[0];
+            mpB.angularVelocity[1] = _angularVelocityB[1];
+            mpB.angularVelocity[2] = _angularVelocityB[2];
         }
     }
 
