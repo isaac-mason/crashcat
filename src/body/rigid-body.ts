@@ -542,7 +542,7 @@ const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = /* @__PURE
  * This derives position from centerOfMassPosition, which is the primary property modified by physics.
  * Formula: position = centerOfMassPosition - rotation × shape.centerOfMass
  */
-export function updatePositionFromCenterOfMass(body: RigidBody): void {
+export function updatePositionFromCenterOfMass(world: World, body: RigidBody): void {
     // get shape center of mass in world space
     const shapeCenterOfMassInWorldSpace = _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace;
     vec3.copy(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
@@ -550,6 +550,12 @@ export function updatePositionFromCenterOfMass(body: RigidBody): void {
 
     // position = centerOfMassPosition - shapeCenterOfMassInWorldSpace
     vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
+
+    // update aabb
+    updateAABB(body);
+    
+    // update body
+    broadphase.updateBody(world.broadphase, body);
 }
 
 const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
@@ -557,9 +563,12 @@ const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
+ *
+ * Uses the |R|*extents method: for an AABB transformed by rotation R and translation p,
+ * center_world = R*center_local + p, extents_world = |R|*extents_local (element-wise abs).
+ * This is ~3x fewer ops than transforming all 8 corners.
  */
-function updateAABB(body: RigidBody): void {
-    // transform shape AABB to world space by transforming all 8 corners
+export function updateAABB(body: RigidBody): void {
     const shapeAABB = body.shape.aabb;
     const minX = shapeAABB[0];
     const minY = shapeAABB[1];
@@ -568,109 +577,46 @@ function updateAABB(body: RigidBody): void {
     const maxY = shapeAABB[4];
     const maxZ = shapeAABB[5];
 
-    // compute rotation matrix once
+    // local center and extents
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const cz = (minZ + maxZ) * 0.5;
+    const ex = (maxX - minX) * 0.5;
+    const ey = (maxY - minY) * 0.5;
+    const ez = (maxZ - minZ) * 0.5;
+
     mat4.fromQuat(_updateBodyAABB_rot, body.quaternion);
     const m = _updateBodyAABB_rot;
     const px = body.position[0];
     const py = body.position[1];
     const pz = body.position[2];
 
-    // corner 0: (min, min, min) - initialize AABB
-    // worldCorner = R * corner + position
-    let wx = m[0] * minX + m[4] * minY + m[8] * minZ + px;
-    let wy = m[1] * minX + m[5] * minY + m[9] * minZ + py;
-    let wz = m[2] * minX + m[6] * minY + m[10] * minZ + pz;
-    let aabbMinX = wx;
-    let aabbMinY = wy;
-    let aabbMinZ = wz;
-    let aabbMaxX = wx;
-    let aabbMaxY = wy;
-    let aabbMaxZ = wz;
+    // world-space center: R * local_center + position
+    const wcx = m[0] * cx + m[4] * cy + m[8] * cz + px;
+    const wcy = m[1] * cx + m[5] * cy + m[9] * cz + py;
+    const wcz = m[2] * cx + m[6] * cy + m[10] * cz + pz;
 
-    // corner 1: (max, min, min)
-    wx = m[0] * maxX + m[4] * minY + m[8] * minZ + px;
-    wy = m[1] * maxX + m[5] * minY + m[9] * minZ + py;
-    wz = m[2] * maxX + m[6] * minY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
+    // world-space extents: |R| * local_extents
+    const a0 = m[0] < 0 ? -m[0] : m[0];
+    const a1 = m[1] < 0 ? -m[1] : m[1];
+    const a2 = m[2] < 0 ? -m[2] : m[2];
+    const a4 = m[4] < 0 ? -m[4] : m[4];
+    const a5 = m[5] < 0 ? -m[5] : m[5];
+    const a6 = m[6] < 0 ? -m[6] : m[6];
+    const a8 = m[8] < 0 ? -m[8] : m[8];
+    const a9 = m[9] < 0 ? -m[9] : m[9];
+    const a10 = m[10] < 0 ? -m[10] : m[10];
 
-    // corner 2: (min, max, min)
-    wx = m[0] * minX + m[4] * maxY + m[8] * minZ + px;
-    wy = m[1] * minX + m[5] * maxY + m[9] * minZ + py;
-    wz = m[2] * minX + m[6] * maxY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
+    const wex = a0 * ex + a4 * ey + a8 * ez;
+    const wey = a1 * ex + a5 * ey + a9 * ez;
+    const wez = a2 * ex + a6 * ey + a10 * ez;
 
-    // corner 3: (max, max, min)
-    wx = m[0] * maxX + m[4] * maxY + m[8] * minZ + px;
-    wy = m[1] * maxX + m[5] * maxY + m[9] * minZ + py;
-    wz = m[2] * maxX + m[6] * maxY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 4: (min, min, max)
-    wx = m[0] * minX + m[4] * minY + m[8] * maxZ + px;
-    wy = m[1] * minX + m[5] * minY + m[9] * maxZ + py;
-    wz = m[2] * minX + m[6] * minY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 5: (max, min, max)
-    wx = m[0] * maxX + m[4] * minY + m[8] * maxZ + px;
-    wy = m[1] * maxX + m[5] * minY + m[9] * maxZ + py;
-    wz = m[2] * maxX + m[6] * minY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 6: (min, max, max)
-    wx = m[0] * minX + m[4] * maxY + m[8] * maxZ + px;
-    wy = m[1] * minX + m[5] * maxY + m[9] * maxZ + py;
-    wz = m[2] * minX + m[6] * maxY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 7: (max, max, max)
-    wx = m[0] * maxX + m[4] * maxY + m[8] * maxZ + px;
-    wy = m[1] * maxX + m[5] * maxY + m[9] * maxZ + py;
-    wz = m[2] * maxX + m[6] * maxY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // write final AABB
-    body.aabb[0] = aabbMinX;
-    body.aabb[1] = aabbMinY;
-    body.aabb[2] = aabbMinZ;
-    body.aabb[3] = aabbMaxX;
-    body.aabb[4] = aabbMaxY;
-    body.aabb[5] = aabbMaxZ;
+    body.aabb[0] = wcx - wex;
+    body.aabb[1] = wcy - wey;
+    body.aabb[2] = wcz - wez;
+    body.aabb[3] = wcx + wex;
+    body.aabb[4] = wcy + wey;
+    body.aabb[5] = wcz + wez;
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
