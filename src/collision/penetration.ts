@@ -78,7 +78,7 @@ export function penetrationDepthStepGJK(
     outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
     outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
 
-    copySimplex(outSimplex, _gjk_closestPoints.simplex);
+    /* @inline */ copySimplex(outSimplex, _gjk_closestPoints.simplex);
 
     if (_gjk_closestPoints.squaredDistance > 0.0) {
         // collision within convex radius - adjust contact points based on convex radii
@@ -223,19 +223,19 @@ export function penetrationDepthStepEPA(
 
     // copy simplex points to support points
     for (let i = 0; i < simplex.size; i++) {
-        const point = simplex.points[i];
+        const off = i * 3;
         const yOut = supportPoints.y.values[i];
         const pOut = supportPoints.p.values[i];
         const qOut = supportPoints.q.values[i];
-        yOut[0] = point.y[0];
-        yOut[1] = point.y[1];
-        yOut[2] = point.y[2];
-        pOut[0] = point.p[0];
-        pOut[1] = point.p[1];
-        pOut[2] = point.p[2];
-        qOut[0] = point.q[0];
-        qOut[1] = point.q[1];
-        qOut[2] = point.q[2];
+        yOut[0] = simplex.y[off];
+        yOut[1] = simplex.y[off + 1];
+        yOut[2] = simplex.y[off + 2];
+        pOut[0] = simplex.p[off];
+        pOut[1] = simplex.p[off + 1];
+        pOut[2] = simplex.p[off + 2];
+        qOut[0] = simplex.q[off];
+        qOut[1] = simplex.q[off + 1];
+        qOut[2] = simplex.q[off + 2];
     }
     supportPoints.y.size = simplex.size;
     supportPoints.p.size = simplex.size;

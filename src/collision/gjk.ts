@@ -28,18 +28,44 @@ function createClosestPointResult(): ClosestPointResult {
     };
 }
 
-const _barycentric_line = /* @__PURE__ */ createBarycentricCoordinatesResult();
-
 export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void {
-    computeBarycentricCoordinates2d(_barycentric_line, a, b, squaredTolerance);
+    // inline calculate barycentric coordinates for line
+    let u: number;
+    let v: number;
 
-    if (_barycentric_line.v <= 0.0) {
+    // ab = b - a
+    const abx = b[0] - a[0];
+    const aby = b[1] - a[1];
+    const abz = b[2] - a[2];
+
+    // denominator = dot(ab, ab)
+    const denominator = abx * abx + aby * aby + abz * abz;
+
+    if (denominator < squaredTolerance) {
+        // degenerate line segment, fallback to points
+        // compare dot(a, a) vs dot(b, b)
+        if (a[0] * a[0] + a[1] * a[1] + a[2] * a[2] < b[0] * b[0] + b[1] * b[1] + b[2] * b[2]) {
+            // A closest
+            u = 1.0;
+            v = 0.0;
+        } else {
+            // B closest
+            u = 0.0;
+            v = 1.0;
+        }
+    } else {
+        // v = -dot(a, ab) / denominator
+        v = -(a[0] * abx + a[1] * aby + a[2] * abz) / denominator;
+        u = 1.0 - v;
+    }
+
+    if (v <= 0.0) {
         // a is closest point
         out.point[0] = a[0];
         out.point[1] = a[1];
         out.point[2] = a[2];
         out.pointSet = 0b0001;
-    } else if (_barycentric_line.u <= 0.0) {
+    } else if (u <= 0.0) {
         // b is closest point
         out.point[0] = b[0];
         out.point[1] = b[1];
@@ -47,9 +73,9 @@ export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: V
         out.pointSet = 0b0010;
     } else {
         // closest point lies on line ab
-        out.point[0] = a[0] * _barycentric_line.u + b[0] * _barycentric_line.v;
-        out.point[1] = a[1] * _barycentric_line.u + b[1] * _barycentric_line.v;
-        out.point[2] = a[2] * _barycentric_line.u + b[2] * _barycentric_line.v;
+        out.point[0] = a[0] * u + b[0] * v;
+        out.point[1] = a[1] * u + b[1] * v;
+        out.point[2] = a[2] * u + b[2] * v;
         out.pointSet = 0b0011;
     }
 }
@@ -308,93 +334,7 @@ export function computeClosestPointOnTriangle(
     out.point[2] = nz * scale;
 }
 
-// helper type for tracking which triangle planes the origin is outside of
-type TrianglePlaneFlags = { x: number; y: number; z: number; w: number };
-
-function isOriginOutsideOfTrianglePlanes(out: TrianglePlaneFlags, a: Vec3, b: Vec3, c: Vec3, d: Vec3, tolerance: number): void {
-    // compute edge vectors
-    const abx = b[0] - a[0];
-    const aby = b[1] - a[1];
-    const abz = b[2] - a[2];
-
-    const acx = c[0] - a[0];
-    const acy = c[1] - a[1];
-    const acz = c[2] - a[2];
-
-    const adx = d[0] - a[0];
-    const ady = d[1] - a[1];
-    const adz = d[2] - a[2];
-
-    const bdx = d[0] - b[0];
-    const bdy = d[1] - b[1];
-    const bdz = d[2] - b[2];
-
-    const bcx = c[0] - b[0];
-    const bcy = c[1] - b[1];
-    const bcz = c[2] - b[2];
-
-    // compute cross products (triangle normals)
-    // ab x ac
-    const abac_x = aby * acz - abz * acy;
-    const abac_y = abz * acx - abx * acz;
-    const abac_z = abx * acy - aby * acx;
-
-    // ac x ad
-    const acad_x = acy * adz - acz * ady;
-    const acad_y = acz * adx - acx * adz;
-    const acad_z = acx * ady - acy * adx;
-
-    // ad x ab
-    const adab_x = ady * abz - adz * aby;
-    const adab_y = adz * abx - adx * abz;
-    const adab_z = adx * aby - ady * abx;
-
-    // bd x bc
-    const bdbc_x = bdy * bcz - bdz * bcy;
-    const bdbc_y = bdz * bcx - bdx * bcz;
-    const bdbc_z = bdx * bcy - bdy * bcx;
-
-    // for each plane get the side on which the origin is
-    const signP_x = a[0] * abac_x + a[1] * abac_y + a[2] * abac_z; // ABC
-    const signP_y = a[0] * acad_x + a[1] * acad_y + a[2] * acad_z; // ACD
-    const signP_z = a[0] * adab_x + a[1] * adab_y + a[2] * adab_z; // ADB
-    const signP_w = b[0] * bdbc_x + b[1] * bdbc_y + b[2] * bdbc_z; // BDC
-
-    // for each plane get the side that is outside (determined by the 4th point)
-    const signD_x = adx * abac_x + ady * abac_y + adz * abac_z; // D
-    const signD_y = abx * acad_x + aby * acad_y + abz * acad_z; // B
-    const signD_z = acx * adab_x + acy * adab_y + acz * adab_z; // C
-    const signD_w = -(abx * bdbc_x + aby * bdbc_y + abz * bdbc_z); // A
-
-    const allPositive = signD_x > 0 && signD_y > 0 && signD_z > 0 && signD_w > 0;
-
-    if (allPositive) {
-        out.x = signP_x >= -tolerance ? 1 : 0;
-        out.y = signP_y >= -tolerance ? 1 : 0;
-        out.z = signP_z >= -tolerance ? 1 : 0;
-        out.w = signP_w >= -tolerance ? 1 : 0;
-        return;
-    }
-
-    const allNegative = signD_x < 0 && signD_y < 0 && signD_z < 0 && signD_w < 0;
-
-    if (allNegative) {
-        out.x = signP_x <= tolerance ? 1 : 0;
-        out.y = signP_y <= tolerance ? 1 : 0;
-        out.z = signP_z <= tolerance ? 1 : 0;
-        out.w = signP_w <= tolerance ? 1 : 0;
-        return;
-    }
-
-    // mixed signs, degenerate tetrahedron
-    out.x = 1;
-    out.y = 1;
-    out.z = 1;
-    out.w = 1;
-}
-
 const _otherResult_tet = /* @__PURE__ */ createClosestPointResult();
-const _originOutOfPlanes: TrianglePlaneFlags = { x: 0, y: 0, z: 0, w: 0 };
 
 export function computeClosestPointOnTetrahedron(
     out: ClosestPointResult,
@@ -416,10 +356,80 @@ export function computeClosestPointOnTetrahedron(
     let bestDistanceSquared = Infinity;
 
     // determine for each of the faces if the origin is outside
-    isOriginOutsideOfTrianglePlanes(_originOutOfPlanes, inA, inB, inC, inD, tolerance);
+    const abx = inB[0] - inA[0];
+    const aby = inB[1] - inA[1];
+    const abz = inB[2] - inA[2];
+
+    const acx = inC[0] - inA[0];
+    const acy = inC[1] - inA[1];
+    const acz = inC[2] - inA[2];
+
+    const adx = inD[0] - inA[0];
+    const ady = inD[1] - inA[1];
+    const adz = inD[2] - inA[2];
+
+    const bdx = inD[0] - inB[0];
+    const bdy = inD[1] - inB[1];
+    const bdz = inD[2] - inB[2];
+
+    const bcx = inC[0] - inB[0];
+    const bcy = inC[1] - inB[1];
+    const bcz = inC[2] - inB[2];
+
+    // triangle normals (cross products)
+    const abac_x = aby * acz - abz * acy;
+    const abac_y = abz * acx - abx * acz;
+    const abac_z = abx * acy - aby * acx;
+
+    const acad_x = acy * adz - acz * ady;
+    const acad_y = acz * adx - acx * adz;
+    const acad_z = acx * ady - acy * adx;
+
+    const adab_x = ady * abz - adz * aby;
+    const adab_y = adz * abx - adx * abz;
+    const adab_z = adx * aby - ady * abx;
+
+    const bdbc_x = bdy * bcz - bdz * bcy;
+    const bdbc_y = bdz * bcx - bdx * bcz;
+    const bdbc_z = bdx * bcy - bdy * bcx;
+
+    // side of the origin for each plane
+    const signP_x = inA[0] * abac_x + inA[1] * abac_y + inA[2] * abac_z; // ABC
+    const signP_y = inA[0] * acad_x + inA[1] * acad_y + inA[2] * acad_z; // ACD
+    const signP_z = inA[0] * adab_x + inA[1] * adab_y + inA[2] * adab_z; // ADB
+    const signP_w = inB[0] * bdbc_x + inB[1] * bdbc_y + inB[2] * bdbc_z; // BDC
+
+    // side that is outside (determined by the 4th point)
+    const signD_x = adx * abac_x + ady * abac_y + adz * abac_z; // D
+    const signD_y = abx * acad_x + aby * acad_y + abz * acad_z; // B
+    const signD_z = acx * adab_x + acy * adab_y + acz * adab_z; // C
+    const signD_w = -(abx * bdbc_x + aby * bdbc_y + abz * bdbc_z); // A
+
+    let originOutABC: number;
+    let originOutACD: number;
+    let originOutADB: number;
+    let originOutBDC: number;
+
+    if (signD_x > 0 && signD_y > 0 && signD_z > 0 && signD_w > 0) {
+        originOutABC = signP_x >= -tolerance ? 1 : 0;
+        originOutACD = signP_y >= -tolerance ? 1 : 0;
+        originOutADB = signP_z >= -tolerance ? 1 : 0;
+        originOutBDC = signP_w >= -tolerance ? 1 : 0;
+    } else if (signD_x < 0 && signD_y < 0 && signD_z < 0 && signD_w < 0) {
+        originOutABC = signP_x <= tolerance ? 1 : 0;
+        originOutACD = signP_y <= tolerance ? 1 : 0;
+        originOutADB = signP_z <= tolerance ? 1 : 0;
+        originOutBDC = signP_w <= tolerance ? 1 : 0;
+    } else {
+        // mixed signs, degenerate tetrahedron — consider every face
+        originOutABC = 1;
+        originOutACD = 1;
+        originOutADB = 1;
+        originOutBDC = 1;
+    }
 
     // if point outside face abc
-    if (_originOutOfPlanes.x) {
+    if (originOutABC) {
         if (mustIncludeD) {
             out.pointSet = 0b0001;
             out.point[0] = inA[0];
@@ -432,7 +442,7 @@ export function computeClosestPointOnTetrahedron(
     }
 
     // face acd
-    if (_originOutOfPlanes.y) {
+    if (originOutACD) {
         computeClosestPointOnTriangle(_otherResult_tet, inA, inC, inD, mustIncludeD, squaredTolerance);
         const distanceSquared =
             _otherResult_tet.point[0] * _otherResult_tet.point[0] +
@@ -448,7 +458,7 @@ export function computeClosestPointOnTetrahedron(
     }
 
     // face adb
-    if (_originOutOfPlanes.z) {
+    if (originOutADB) {
         computeClosestPointOnTriangle(_otherResult_tet, inA, inB, inD, mustIncludeD, squaredTolerance);
         const distanceSquared =
             _otherResult_tet.point[0] * _otherResult_tet.point[0] +
@@ -464,7 +474,7 @@ export function computeClosestPointOnTetrahedron(
     }
 
     // face bdc
-    if (_originOutOfPlanes.w) {
+    if (originOutBDC) {
         _otherResult_tet.pointSet = 0;
         _otherResult_tet.point[0] = 0;
         _otherResult_tet.point[1] = 0;
@@ -518,17 +528,24 @@ function createClosestPointToSimplexResult(): ClosestPointToSimplexResult {
     };
 }
 
+// scratch vec3s used to extract simplex y-points into a Vec3-shaped arg for
+// the closest-point kernels, which still take (a: Vec3, b: Vec3, ...) today.
+const _simplexY0 = /* @__PURE__ */ vec3.create();
+const _simplexY1 = /* @__PURE__ */ vec3.create();
+const _simplexY2 = /* @__PURE__ */ vec3.create();
+const _simplexY3 = /* @__PURE__ */ vec3.create();
+
 function computeClosestPointToSimplex(
     result: ClosestPointToSimplexResult,
     prevSquaredDist: number,
     lastPointPartOfClosest: boolean,
     simplex: Simplex,
 ): boolean {
+    const y = simplex.y;
     switch (simplex.size) {
         case 1: {
             // single point
             _closestPoint.pointSet = 0b0001;
-            const y = simplex.points[0].y;
             const point = _closestPoint.point;
             point[0] = y[0];
             point[1] = y[1];
@@ -538,17 +555,22 @@ function computeClosestPointToSimplex(
 
         case 2: {
             // line segment
-            computeClosestPointOnLine(_closestPoint, simplex.points[0].y, simplex.points[1].y, 1e-10);
+            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
+            computeClosestPointOnLine(_closestPoint, _simplexY0, _simplexY1, 1e-10);
             break;
         }
 
         case 3: {
             // triangle
+            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
+            _simplexY2[0] = y[6]; _simplexY2[1] = y[7]; _simplexY2[2] = y[8];
             computeClosestPointOnTriangle(
                 _closestPoint,
-                simplex.points[0].y,
-                simplex.points[1].y,
-                simplex.points[2].y,
+                _simplexY0,
+                _simplexY1,
+                _simplexY2,
                 lastPointPartOfClosest,
                 1e-10,
             );
@@ -557,12 +579,16 @@ function computeClosestPointToSimplex(
 
         case 4: {
             // tetrahedron
+            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
+            _simplexY2[0] = y[6]; _simplexY2[1] = y[7]; _simplexY2[2] = y[8];
+            _simplexY3[0] = y[9]; _simplexY3[1] = y[10]; _simplexY3[2] = y[11];
             computeClosestPointOnTetrahedron(
                 _closestPoint,
-                simplex.points[0].y,
-                simplex.points[1].y,
-                simplex.points[2].y,
-                simplex.points[3].y,
+                _simplexY0,
+                _simplexY1,
+                _simplexY2,
+                _simplexY3,
                 lastPointPartOfClosest,
                 1e-5,
             );
@@ -713,20 +739,25 @@ export function gjkCastRay(
         }
 
         // add p to set P: P = P U {p}
-        const newPoint = _simplex.points[_simplex.size];
-        newPoint.p[0] = _p[0];
-        newPoint.p[1] = _p[1];
-        newPoint.p[2] = _p[2];
-        _simplex.size++;
+        {
+            const off = _simplex.size * 3;
+            _simplex.p[off] = _p[0];
+            _simplex.p[off + 1] = _p[1];
+            _simplex.p[off + 2] = _p[2];
+            _simplex.size++;
+        }
 
         // calculate Y = {x} - P
-        for (let i = 0; i < _simplex.size; i++) {
-            const point = _simplex.points[i];
-
-            // y = x - p
-            point.y[0] = _x[0] - point.p[0];
-            point.y[1] = _x[1] - point.p[1];
-            point.y[2] = _x[2] - point.p[2];
+        {
+            const end = _simplex.size * 3;
+            const py = _simplex.y;
+            const pp = _simplex.p;
+            for (let i = 0; i < end; i += 3) {
+                // y = x - p
+                py[i] = _x[0] - pp[i];
+                py[i + 1] = _x[1] - pp[i + 1];
+                py[i + 2] = _x[2] - pp[i + 2];
+            }
         }
 
         // determine the new closest point from Y to origin
@@ -749,9 +780,9 @@ export function gjkCastRay(
             // if we fail to converge, we start again with the last point as simplex
             allowRestart = false;
 
-            _simplex.points[0].p[0] = _p[0];
-            _simplex.points[0].p[1] = _p[1];
-            _simplex.points[0].p[2] = _p[2];
+            _simplex.p[0] = _p[0];
+            _simplex.p[1] = _p[1];
+            _simplex.p[2] = _p[2];
             _simplex.size = 1;
 
             // _v = _x - _p
@@ -769,17 +800,20 @@ export function gjkCastRay(
         // note: we're not updating Y as Y will shift with x so we have to calculate it every iteration
         let newSize = 0;
 
-        for (let i = 0; i < _simplex.size; i++) {
-            if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
-                if (newSize !== i) {
-                    // copy point i to position newSize
-                    const pSrc = _simplex.points[i].p;
-                    const pDst = _simplex.points[newSize].p;
-                    pDst[0] = pSrc[0];
-                    pDst[1] = pSrc[1];
-                    pDst[2] = pSrc[2];
+        {
+            const pp = _simplex.p;
+            for (let i = 0; i < _simplex.size; i++) {
+                if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
+                    if (newSize !== i) {
+                        // copy point i to position newSize
+                        const srcOff = i * 3;
+                        const dstOff = newSize * 3;
+                        pp[dstOff] = pp[srcOff];
+                        pp[dstOff + 1] = pp[srcOff + 1];
+                        pp[dstOff + 2] = pp[srcOff + 2];
+                    }
+                    newSize++;
                 }
-                newSize++;
             }
         }
 
@@ -799,21 +833,21 @@ export function gjkCastRay(
 
 const updatePointSetPQ = (simplex: Simplex, inSet: number): void => {
     let newSize = 0;
+    const pp = simplex.p;
+    const qq = simplex.q;
 
     for (let i = 0; i < simplex.size; i++) {
         if ((inSet & (1 << i)) !== 0) {
             if (newSize !== i) {
-                const srcP = simplex.points[i].p;
-                const dstP = simplex.points[newSize].p;
-                dstP[0] = srcP[0];
-                dstP[1] = srcP[1];
-                dstP[2] = srcP[2];
+                const srcOff = i * 3;
+                const dstOff = newSize * 3;
+                pp[dstOff] = pp[srcOff];
+                pp[dstOff + 1] = pp[srcOff + 1];
+                pp[dstOff + 2] = pp[srcOff + 2];
 
-                const srcQ = simplex.points[i].q;
-                const dstQ = simplex.points[newSize].q;
-                dstQ[0] = srcQ[0];
-                dstQ[1] = srcQ[1];
-                dstQ[2] = srcQ[2];
+                qq[dstOff] = qq[srcOff];
+                qq[dstOff + 1] = qq[srcOff + 1];
+                qq[dstOff + 2] = qq[srcOff + 2];
             }
             newSize++;
         }
@@ -1004,25 +1038,30 @@ export function gjkCastShape(
         }
 
         // add p to set P, q to set Q: P = P U {p}, Q = Q U {q}
-        const newPoint = _simplex.points[_simplex.size];
+        {
+            const off = _simplex.size * 3;
+            _simplex.p[off] = _p[0];
+            _simplex.p[off + 1] = _p[1];
+            _simplex.p[off + 2] = _p[2];
 
-        newPoint.p[0] = _p[0];
-        newPoint.p[1] = _p[1];
-        newPoint.p[2] = _p[2];
-
-        newPoint.q[0] = _q[0];
-        newPoint.q[1] = _q[1];
-        newPoint.q[2] = _q[2];
-        _simplex.size++;
+            _simplex.q[off] = _q[0];
+            _simplex.q[off + 1] = _q[1];
+            _simplex.q[off + 2] = _q[2];
+            _simplex.size++;
+        }
 
         // calculate Y = {x} - (Q - P)
-        for (let i = 0; i < _simplex.size; i++) {
-            const point = _simplex.points[i];
-
-            // point.y = _x - point.q + point.p
-            point.y[0] = _x[0] - point.q[0] + point.p[0];
-            point.y[1] = _x[1] - point.q[1] + point.p[1];
-            point.y[2] = _x[2] - point.q[2] + point.p[2];
+        {
+            const end = _simplex.size * 3;
+            const py = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
+            for (let i = 0; i < end; i += 3) {
+                // y = x - q + p
+                py[i] = _x[0] - qq[i] + pp[i];
+                py[i + 1] = _x[1] - qq[i + 1] + pp[i + 1];
+                py[i + 2] = _x[2] - qq[i + 2] + pp[i + 2];
+            }
         }
 
         // determine the new closest point from Y to origin
@@ -1044,15 +1083,14 @@ export function gjkCastShape(
 
             // if we fail to converge, we start again with the last point as simplex
             allowRestart = false;
-            const restartPoint = _simplex.points[0];
 
-            restartPoint.p[0] = _p[0];
-            restartPoint.p[1] = _p[1];
-            restartPoint.p[2] = _p[2];
+            _simplex.p[0] = _p[0];
+            _simplex.p[1] = _p[1];
+            _simplex.p[2] = _p[2];
 
-            restartPoint.q[0] = _q[0];
-            restartPoint.q[1] = _q[1];
-            restartPoint.q[2] = _q[2];
+            _simplex.q[0] = _q[0];
+            _simplex.q[1] = _q[1];
+            _simplex.q[2] = _q[2];
 
             _simplex.size = 1;
 
@@ -1085,13 +1123,16 @@ export function gjkCastShape(
     }
 
     // calculate Y = {x} - (Q - P) again so we can calculate the contact points
-    for (let i = 0; i < _simplex.size; i++) {
-        const point = _simplex.points[i];
-
-        // point.y = _x - point.q + point.p
-        point.y[0] = _x[0] - point.q[0] + point.p[0];
-        point.y[1] = _x[1] - point.q[1] + point.p[1];
-        point.y[2] = _x[2] - point.q[2] + point.p[2];
+    {
+        const end = _simplex.size * 3;
+        const py = _simplex.y;
+        const pp = _simplex.p;
+        const qq = _simplex.q;
+        for (let i = 0; i < end; i += 3) {
+            py[i] = _x[0] - qq[i] + pp[i];
+            py[i + 1] = _x[1] - qq[i + 1] + pp[i + 1];
+            py[i + 2] = _x[2] - qq[i + 2] + pp[i + 2];
+        }
     }
 
     // compute normalized v for separating axis
@@ -1118,68 +1159,72 @@ export function gjkCastShape(
 
     switch (_simplex.size) {
         case 1: {
-            const p0 = _simplex.points[0];
+            const pp = _simplex.p;
+            const qq = _simplex.q;
 
-            // out.pointB = p0.q + _normalizedV * convexRadiusB;
-            out.pointB[0] = p0.q[0] + _normalizedV[0] * convexRadiusB;
-            out.pointB[1] = p0.q[1] + _normalizedV[1] * convexRadiusB;
-            out.pointB[2] = p0.q[2] + _normalizedV[2] * convexRadiusB;
+            // out.pointB = q[0] + _normalizedV * convexRadiusB;
+            out.pointB[0] = qq[0] + _normalizedV[0] * convexRadiusB;
+            out.pointB[1] = qq[1] + _normalizedV[1] * convexRadiusB;
+            out.pointB[2] = qq[2] + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
                 out.pointA[0] = out.pointB[0];
                 out.pointA[1] = out.pointB[1];
                 out.pointA[2] = out.pointB[2];
             } else {
-                // out.pointA = p0.p + _normalizedV * -convexRadiusA;
-                out.pointA[0] = p0.p[0] + _normalizedV[0] * -convexRadiusA;
-                out.pointA[1] = p0.p[1] + _normalizedV[1] * -convexRadiusA;
-                out.pointA[2] = p0.p[2] + _normalizedV[2] * -convexRadiusA;
+                // out.pointA = p[0] + _normalizedV * -convexRadiusA;
+                out.pointA[0] = pp[0] + _normalizedV[0] * -convexRadiusA;
+                out.pointA[1] = pp[1] + _normalizedV[1] * -convexRadiusA;
+                out.pointA[2] = pp[2] + _normalizedV[2] * -convexRadiusA;
             }
             break;
         }
         case 2: {
-            const sp0 = _simplex.points[0];
-            const sp1 = _simplex.points[1];
-            computeBarycentricCoordinates2d(_bary, sp0.y, sp1.y, 1e-10);
+            const yy = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
+            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            computeBarycentricCoordinates2d(_bary, _simplexY0, _simplexY1, 1e-10);
 
-            // out.pointB += sp0.q * _bary.u + sp1.q * _bary.v + _normalizedV * convexRadiusB
-            out.pointB[0] += sp0.q[0] * _bary.u + sp1.q[0] * _bary.v + _normalizedV[0] * convexRadiusB;
-            out.pointB[1] += sp0.q[1] * _bary.u + sp1.q[1] * _bary.v + _normalizedV[1] * convexRadiusB;
-            out.pointB[2] += sp0.q[2] * _bary.u + sp1.q[2] * _bary.v + _normalizedV[2] * convexRadiusB;
+            // out.pointB += q[0] * u + q[1] * v + _normalizedV * convexRadiusB
+            out.pointB[0] += qq[0] * _bary.u + qq[3] * _bary.v + _normalizedV[0] * convexRadiusB;
+            out.pointB[1] += qq[1] * _bary.u + qq[4] * _bary.v + _normalizedV[1] * convexRadiusB;
+            out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
                 out.pointA[0] = out.pointB[0];
                 out.pointA[1] = out.pointB[1];
                 out.pointA[2] = out.pointB[2];
             } else {
-                // out.pointA += sp0.p * _bary.u + sp1.p * _bary.v + _normalizedV * -convexRadiusA
-                out.pointA[0] += sp0.p[0] * _bary.u + sp1.p[0] * _bary.v + _normalizedV[0] * -convexRadiusA;
-                out.pointA[1] += sp0.p[1] * _bary.u + sp1.p[1] * _bary.v + _normalizedV[1] * -convexRadiusA;
-                out.pointA[2] += sp0.p[2] * _bary.u + sp1.p[2] * _bary.v + _normalizedV[2] * -convexRadiusA;
+                out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + _normalizedV[0] * -convexRadiusA;
+                out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + _normalizedV[1] * -convexRadiusA;
+                out.pointA[2] += pp[2] * _bary.u + pp[5] * _bary.v + _normalizedV[2] * -convexRadiusA;
             }
             break;
         }
         case 3:
         case 4: {
-            const sp0 = _simplex.points[0];
-            const sp1 = _simplex.points[1];
-            const sp2 = _simplex.points[2];
-            computeBarycentricCoordinates3d(_bary, sp0.y, sp1.y, sp2.y, 1e-10);
+            const yy = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
+            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            _simplexY2[0] = yy[6]; _simplexY2[1] = yy[7]; _simplexY2[2] = yy[8];
+            computeBarycentricCoordinates3d(_bary, _simplexY0, _simplexY1, _simplexY2, 1e-10);
 
-            // out.pointB += sp0.q * _bary.u + sp1.q * _bary.v + sp2.q * _bary.w + _normalizedV * convexRadiusB
-            out.pointB[0] += sp0.q[0] * _bary.u + sp1.q[0] * _bary.v + sp2.q[0] * _bary.w + _normalizedV[0] * convexRadiusB;
-            out.pointB[1] += sp0.q[1] * _bary.u + sp1.q[1] * _bary.v + sp2.q[1] * _bary.w + _normalizedV[1] * convexRadiusB;
-            out.pointB[2] += sp0.q[2] * _bary.u + sp1.q[2] * _bary.v + sp2.q[2] * _bary.w + _normalizedV[2] * convexRadiusB;
+            out.pointB[0] += qq[0] * _bary.u + qq[3] * _bary.v + qq[6] * _bary.w + _normalizedV[0] * convexRadiusB;
+            out.pointB[1] += qq[1] * _bary.u + qq[4] * _bary.v + qq[7] * _bary.w + _normalizedV[1] * convexRadiusB;
+            out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + qq[8] * _bary.w + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
                 out.pointA[0] = out.pointB[0];
                 out.pointA[1] = out.pointB[1];
                 out.pointA[2] = out.pointB[2];
             } else {
-                // out.pointA += sp0.p * _bary.u + sp1.p * _bary.v + sp2.p * _bary.w + _normalizedV * -convexRadiusA
-                out.pointA[0] += sp0.p[0] * _bary.u + sp1.p[0] * _bary.v + sp2.p[0] * _bary.w + _normalizedV[0] * -convexRadiusA;
-                out.pointA[1] += sp0.p[1] * _bary.u + sp1.p[1] * _bary.v + sp2.p[1] * _bary.w + _normalizedV[1] * -convexRadiusA;
-                out.pointA[2] += sp0.p[2] * _bary.u + sp1.p[2] * _bary.v + sp2.p[2] * _bary.w + _normalizedV[2] * -convexRadiusA;
+                out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + pp[6] * _bary.w + _normalizedV[0] * -convexRadiusA;
+                out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + pp[7] * _bary.w + _normalizedV[1] * -convexRadiusA;
+                out.pointA[2] += pp[2] * _bary.u + pp[5] * _bary.v + pp[8] * _bary.w + _normalizedV[2] * -convexRadiusA;
             }
             break;
         }
@@ -1294,22 +1339,22 @@ export function gjkClosestPoints(
         }
 
         // store the point for later use
-        const y = _simplex.points[_simplex.size].y;
-        y[0] = _w[0];
-        y[1] = _w[1];
-        y[2] = _w[2];
+        {
+            const off = _simplex.size * 3;
+            _simplex.y[off] = _w[0];
+            _simplex.y[off + 1] = _w[1];
+            _simplex.y[off + 2] = _w[2];
 
-        const p = _simplex.points[_simplex.size].p;
-        p[0] = _p[0];
-        p[1] = _p[1];
-        p[2] = _p[2];
+            _simplex.p[off] = _p[0];
+            _simplex.p[off + 1] = _p[1];
+            _simplex.p[off + 2] = _p[2];
 
-        const q = _simplex.points[_simplex.size].q;
-        q[0] = _q[0];
-        q[1] = _q[1];
-        q[2] = _q[2];
+            _simplex.q[off] = _q[0];
+            _simplex.q[off + 1] = _q[1];
+            _simplex.q[off + 2] = _q[2];
 
-        _simplex.size++;
+            _simplex.size++;
+        }
 
         computeClosestPointToSimplex(_closestPointToSimplex, previousSquaredDistance, true, _simplex);
 
@@ -1329,32 +1374,37 @@ export function gjkClosestPoints(
         }
 
         // update the points of the simplex
-        let newSize = 0;
+        {
+            let newSize = 0;
+            const yy = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
 
-        for (let i = 0; i < _simplex.size; i++) {
-            if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
-                if (newSize !== i) {
-                    // copy point i to position newSize
-                    const { y: srcY, p: srcP, q: srcQ } = _simplex.points[i];
-                    const { y: dstY, p: dstP, q: dstQ } = _simplex.points[newSize];
+            for (let i = 0; i < _simplex.size; i++) {
+                if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
+                    if (newSize !== i) {
+                        // copy point i to position newSize
+                        const srcOff = i * 3;
+                        const dstOff = newSize * 3;
 
-                    dstY[0] = srcY[0];
-                    dstY[1] = srcY[1];
-                    dstY[2] = srcY[2];
+                        yy[dstOff] = yy[srcOff];
+                        yy[dstOff + 1] = yy[srcOff + 1];
+                        yy[dstOff + 2] = yy[srcOff + 2];
 
-                    dstP[0] = srcP[0];
-                    dstP[1] = srcP[1];
-                    dstP[2] = srcP[2];
+                        pp[dstOff] = pp[srcOff];
+                        pp[dstOff + 1] = pp[srcOff + 1];
+                        pp[dstOff + 2] = pp[srcOff + 2];
 
-                    dstQ[0] = srcQ[0];
-                    dstQ[1] = srcQ[1];
-                    dstQ[2] = srcQ[2];
+                        qq[dstOff] = qq[srcOff];
+                        qq[dstOff + 1] = qq[srcOff + 1];
+                        qq[dstOff + 2] = qq[srcOff + 2];
+                    }
+                    newSize++;
                 }
-                newSize++;
             }
-        }
 
-        _simplex.size = newSize;
+            _simplex.size = newSize;
+        }
 
         // if v is very close to zero, we consider this a collision
         if (_closestPointToSimplex.squaredDistance <= squaredTolerance) {
@@ -1367,12 +1417,16 @@ export function gjkClosestPoints(
 
         // if v is very small compared to the length of y, we also consider this a collision
         let yMaxLengthSquared = 0;
-        for (let i = 0; i < _simplex.size; i++) {
-            const y = _simplex.points[i].y;
-
-            const squaredLength = y[0] * y[0] + y[1] * y[1] + y[2] * y[2];
-
-            yMaxLengthSquared = Math.max(yMaxLengthSquared, squaredLength);
+        {
+            const yy = _simplex.y;
+            const end = _simplex.size * 3;
+            for (let i = 0; i < end; i += 3) {
+                const yx = yy[i];
+                const yYy = yy[i + 1];
+                const yz = yy[i + 2];
+                const squaredLength = yx * yx + yYy * yYy + yz * yz;
+                yMaxLengthSquared = Math.max(yMaxLengthSquared, squaredLength);
+            }
         }
 
         if (_closestPointToSimplex.squaredDistance <= GJK_TOLERANCE * yMaxLengthSquared) {
@@ -1422,58 +1476,55 @@ export function gjkClosestPoints(
     switch (_simplex.size) {
         case 1: {
             // single point in simplex
-            const { p, q } = _simplex.points[0];
+            const pp = _simplex.p;
+            const qq = _simplex.q;
 
-            out.pointA[0] = p[0];
-            out.pointA[1] = p[1];
-            out.pointA[2] = p[2];
+            out.pointA[0] = pp[0];
+            out.pointA[1] = pp[1];
+            out.pointA[2] = pp[2];
 
-            out.pointB[0] = q[0];
-            out.pointB[1] = q[1];
-            out.pointB[2] = q[2];
+            out.pointB[0] = qq[0];
+            out.pointB[1] = qq[1];
+            out.pointB[2] = qq[2];
             break;
         }
 
         case 2: {
             // line segment in simplex
-            const p0 = _simplex.points[0];
-            const p1 = _simplex.points[1];
-            computeBarycentricCoordinates2d(_bary, p0.y, p1.y, 1e-10);
+            const yy = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
+            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            computeBarycentricCoordinates2d(_bary, _simplexY0, _simplexY1, 1e-10);
 
-            const p0p = p0.p;
-            const p1p = p1.p;
-            out.pointA[0] = p0p[0] * _bary.u + p1p[0] * _bary.v;
-            out.pointA[1] = p0p[1] * _bary.u + p1p[1] * _bary.v;
-            out.pointA[2] = p0p[2] * _bary.u + p1p[2] * _bary.v;
+            out.pointA[0] = pp[0] * _bary.u + pp[3] * _bary.v;
+            out.pointA[1] = pp[1] * _bary.u + pp[4] * _bary.v;
+            out.pointA[2] = pp[2] * _bary.u + pp[5] * _bary.v;
 
-            const p0q = p0.q;
-            const p1q = p1.q;
-            out.pointB[0] = p0q[0] * _bary.u + p1q[0] * _bary.v;
-            out.pointB[1] = p0q[1] * _bary.u + p1q[1] * _bary.v;
-            out.pointB[2] = p0q[2] * _bary.u + p1q[2] * _bary.v;
+            out.pointB[0] = qq[0] * _bary.u + qq[3] * _bary.v;
+            out.pointB[1] = qq[1] * _bary.u + qq[4] * _bary.v;
+            out.pointB[2] = qq[2] * _bary.u + qq[5] * _bary.v;
             break;
         }
 
         case 3: {
             // triangle in simplex
-            const p0 = _simplex.points[0];
-            const p1 = _simplex.points[1];
-            const p2 = _simplex.points[2];
-            computeBarycentricCoordinates3d(_bary, p0.y, p1.y, p2.y, 1e-10);
+            const yy = _simplex.y;
+            const pp = _simplex.p;
+            const qq = _simplex.q;
+            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            _simplexY2[0] = yy[6]; _simplexY2[1] = yy[7]; _simplexY2[2] = yy[8];
+            computeBarycentricCoordinates3d(_bary, _simplexY0, _simplexY1, _simplexY2, 1e-10);
 
-            const p0p = p0.p;
-            const p1p = p1.p;
-            const p2p = p2.p;
-            out.pointA[0] = p0p[0] * _bary.u + p1p[0] * _bary.v + p2p[0] * _bary.w;
-            out.pointA[1] = p0p[1] * _bary.u + p1p[1] * _bary.v + p2p[1] * _bary.w;
-            out.pointA[2] = p0p[2] * _bary.u + p1p[2] * _bary.v + p2p[2] * _bary.w;
+            out.pointA[0] = pp[0] * _bary.u + pp[3] * _bary.v + pp[6] * _bary.w;
+            out.pointA[1] = pp[1] * _bary.u + pp[4] * _bary.v + pp[7] * _bary.w;
+            out.pointA[2] = pp[2] * _bary.u + pp[5] * _bary.v + pp[8] * _bary.w;
 
-            const p0q = p0.q;
-            const p1q = p1.q;
-            const p2q = p2.q;
-            out.pointB[0] = p0q[0] * _bary.u + p1q[0] * _bary.v + p2q[0] * _bary.w;
-            out.pointB[1] = p0q[1] * _bary.u + p1q[1] * _bary.v + p2q[1] * _bary.w;
-            out.pointB[2] = p0q[2] * _bary.u + p1q[2] * _bary.v + p2q[2] * _bary.w;
+            out.pointB[0] = qq[0] * _bary.u + qq[3] * _bary.v + qq[6] * _bary.w;
+            out.pointB[1] = qq[1] * _bary.u + qq[4] * _bary.v + qq[7] * _bary.w;
+            out.pointB[2] = qq[2] * _bary.u + qq[5] * _bary.v + qq[8] * _bary.w;
             break;
         }
 
