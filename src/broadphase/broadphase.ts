@@ -227,16 +227,15 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         dbvt.optimizeIncremental(tree, passes);
     }
 
-    // sort bodies by broadphase layer for cache efficiency
-    const sortedBodies = [...world.bodies.pool].sort((a, b) => {
-        const layerA = layers.objectLayerToBroadphaseLayer[a.objectLayer];
-        const layerB = layers.objectLayerToBroadphaseLayer[b.objectLayer];
-        return layerA - layerB;
-    });
+    // iterate the active body list directly: it is exactly the set of bodies
+    // that should query the broadphase (awake dynamic/kinematic, never pooled).
+    // avoids per-frame allocation + sort over the full body pool.
+    const activeIndices = world.bodies.activeBodyIndices;
+    const activeCount = world.bodies.activeBodyCount;
+    const pool = world.bodies.pool;
 
-    for (const body of sortedBodies) {
-        // skip pooled bodies and bodies that don't query the broadphase
-        if (body._pooled || !shouldQueryBroadphase(body)) continue;
+    for (let i = 0; i < activeCount; i++) {
+        const body = pool[activeIndices[i]];
 
         const activeObjectLayer = body.objectLayer;
         const activeBroadphaseLayer = layers.objectLayerToBroadphaseLayer[activeObjectLayer];

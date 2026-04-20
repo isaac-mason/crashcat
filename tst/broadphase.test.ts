@@ -267,7 +267,7 @@ describe('Broadphase Integration', () => {
             } = createTestWorld();
 
             const body1 = makeBody(world, 0, 0, 0, 1, 1, 1, OBJECT_LAYER_MOVING);
-            const _body2 = makeBody(world, 5, 0, 0, 6, 1, 1, OBJECT_LAYER_MOVING);
+            makeBody(world, 5, 0, 0, 6, 1, 1, OBJECT_LAYER_MOVING);
 
             const layers = world.settings.layers;
 
