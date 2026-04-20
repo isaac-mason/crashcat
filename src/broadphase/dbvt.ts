@@ -64,10 +64,10 @@ function requestNode(bvh: DBVT): number {
         node.parent = -1;
         node.left = -1;
         node.right = -1;
-        box3.empty(node.aabb);
+        /* @inline */ box3.empty(node.aabb);
         node.height = 0;
         node.bodyIndex = -1;
-        box3.empty(node.previousAabb);
+        /* @inline */ box3.empty(node.previousAabb);
     } else {
         nodeIndex = bvh.nodes.length;
         bvh.nodes.push({
@@ -93,10 +93,12 @@ function releaseNode(bvh: DBVT, nodeIndex: number): void {
     bvh.freeNodeIndices.push(nodeIndex);
 }
 
+/** @inline */
 function isLeaf(node: DBVTNode): boolean {
     return node.left === -1 && node.right === -1;
 }
 
+/** @inline */
 function proximity(a: Box3, b: Box3): number {
     const dx = a[0] + a[3] - (b[0] + b[3]);
     const dy = a[1] + a[4] - (b[1] + b[4]);
@@ -104,16 +106,19 @@ function proximity(a: Box3, b: Box3): number {
     return Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
 }
 
+/** @inline */
 function select(o: Box3, a: Box3, b: Box3): number {
     return proximity(o, a) < proximity(o, b) ? 0 : 1;
 }
 
+/** @inline */
 function indexof(dbvt: DBVT, nodeIndex: number): number {
     const node = dbvt.nodes[nodeIndex];
     const parent = dbvt.nodes[node.parent];
     return parent.right === nodeIndex ? 1 : 0;
 }
 
+/** @inline */
 function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
     const leaf = dbvt.nodes[leafIndex];
 
@@ -139,7 +144,7 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
     const newParent = dbvt.nodes[newParentIndex];
 
     newParent.parent = prev;
-    box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
+    /* @inline */ box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
     newParent.height = rootNode.height + 1;
 
     if (prev !== -1) {
@@ -159,10 +164,10 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
         let parentIndex = prev;
         while (parentIndex !== -1) {
             const parentNode = dbvt.nodes[parentIndex];
-            if (!box3.containsBox3(parentNode.aabb, childNode.aabb)) {
+            if (!(/* @inline */ box3.containsBox3(parentNode.aabb, childNode.aabb))) {
                 const leftNode = dbvt.nodes[parentNode.left];
                 const rightNode = dbvt.nodes[parentNode.right];
-                box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
+                /* @inline */ box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
             } else {
                 break;
             }
@@ -204,10 +209,10 @@ const _boundsResult = /* @__PURE__ */ box3.create();
 
 function boundsOfLeaves(dbvt: DBVT, leaves: number[]): Box3 {
     const result = _boundsResult;
-    box3.empty(result);
+    /* @inline */ box3.empty(result);
     for (const leafIndex of leaves) {
         const leaf = dbvt.nodes[leafIndex];
-        box3.union(result, result, leaf.aabb);
+        /* @inline */ box3.union(result, result, leaf.aabb);
     }
     return result;
 }
@@ -225,7 +230,7 @@ function bottomup(dbvt: DBVT, leaves: number[]): void {
             for (let j = i + 1; j < leaves.length; j++) {
                 const leaf0 = dbvt.nodes[leaves[i]];
                 const leaf1 = dbvt.nodes[leaves[j]];
-                box3.union(_mergedAabb, leaf0.aabb, leaf1.aabb);
+                /* @inline */ box3.union(_mergedAabb, leaf0.aabb, leaf1.aabb);
                 const sz = surfaceArea(_mergedAabb);
                 if (sz < minSize) {
                     minSize = sz;
@@ -243,7 +248,7 @@ function bottomup(dbvt: DBVT, leaves: number[]): void {
 
         const parentIndex = requestNode(dbvt);
         const parent = dbvt.nodes[parentIndex];
-        box3.union(parent.aabb, n0.aabb, n1.aabb);
+        /* @inline */ box3.union(parent.aabb, n0.aabb, n1.aabb);
         parent.left = n0Index;
         parent.right = n1Index;
         n0.parent = parentIndex;
@@ -316,7 +321,7 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
 
                 const parentIndex = requestNode(dbvt);
                 const parent = dbvt.nodes[parentIndex];
-                box3.union(parent.aabb, left.aabb, right.aabb);
+                /* @inline */ box3.union(parent.aabb, left.aabb, right.aabb);
                 parent.left = leftIndex;
                 parent.right = rightIndex;
                 left.parent = parentIndex;
@@ -385,9 +390,9 @@ function sort(dbvt: DBVT, nodeIndex: number): number {
 
         // swap volumes
         const tempAabb = box3.create();
-        box3.copy(tempAabb, p.aabb);
-        box3.copy(p.aabb, n.aabb);
-        box3.copy(n.aabb, tempAabb);
+        /* @inline */ box3.copy(tempAabb, p.aabb);
+        /* @inline */ box3.copy(p.aabb, n.aabb);
+        /* @inline */ box3.copy(n.aabb, tempAabb);
 
         return parentIndex;
     }
@@ -422,13 +427,13 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
         let nodeIndex = prevIndex;
         while (nodeIndex !== -1) {
             const node = dbvt.nodes[nodeIndex];
-            box3.copy(_prevAabb, node.aabb);
+            /* @inline */ box3.copy(_prevAabb, node.aabb);
 
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
-            box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
+            /* @inline */ box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
 
-            if (!box3.exactEquals(node.aabb, _prevAabb)) {
+            if (!(/* @inline */ box3.exactEquals(node.aabb, _prevAabb))) {
                 nodeIndex = node.parent;
             } else {
                 break;
@@ -448,17 +453,17 @@ const _bounds = /* @__PURE__ */ box3.create();
 
 export function add(dbvt: DBVT, body: RigidBody): number {
     // expand body bounds by margin
-    box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
+    /* @inline */ box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
 
     // create leaf node
     const leafIndex = requestNode(dbvt);
     const leaf = dbvt.nodes[leafIndex];
-    box3.copy(leaf.aabb, _bounds);
+    /* @inline */ box3.copy(leaf.aabb, _bounds);
     leaf.bodyIndex = body.index;
     leaf.height = 0;
 
     // initialize previous AABB for velocity prediction
-    box3.copy(leaf.previousAabb, body.aabb);
+    /* @inline */ box3.copy(leaf.previousAabb, body.aabb);
 
     // insert into tree
     insertLeaf(dbvt, dbvt.root, leafIndex);
@@ -482,12 +487,12 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     const leaf = dbvt.nodes[leafIndex];
 
     // early exit: if body still fits in the fat AABB, nothing to do
-    if (box3.containsBox3(leaf.aabb, body.aabb)) {
+    if (/* @inline */ box3.containsBox3(leaf.aabb, body.aabb)) {
         return;
     }
 
     // expand body bounds by margin for fat AABB
-    box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
+    /* @inline */ box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
 
     // velocity-based expansion, expands AABB only in the direction of motion to reduce update frequency
     if (dbvt.velocityPrediction > 0) {
@@ -551,13 +556,13 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     }
 
     // update leaf volume
-    box3.copy(leaf.aabb, _bounds);
+    /* @inline */ box3.copy(leaf.aabb, _bounds);
 
     // reinsert from computed root
     insertLeaf(dbvt, rootIndex, leafIndex);
 
     // update previous AABB for next velocity prediction
-    box3.copy(leaf.previousAabb, body.aabb);
+    /* @inline */ box3.copy(leaf.previousAabb, body.aabb);
 }
 
 export function optimizeBottomUp(dbvt: DBVT): void {
@@ -1021,7 +1026,7 @@ export function castAABB(
     const halfY = (bounds[4] - bounds[1]) * 0.5;
     const halfZ = (bounds[5] - bounds[2]) * 0.5;
 
-    const castLen = vec3.length(displacement);
+    const castLen = /* @inline */ vec3.length(displacement);
     const dirX = castLen > 0 ? displacement[0] / castLen : 0;
     const dirY = castLen > 0 ? displacement[1] / castLen : 0;
     const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
@@ -1223,9 +1228,9 @@ export function castAABB(
 /** get the bounds of the entire DBVT */
 export function bounds(out: Box3, dbvt: DBVT): Box3 {
     if (dbvt.root === -1) {
-        return box3.empty(out);
+        return /* @inline */ box3.empty(out);
     }
 
     const rootNode = dbvt.nodes[dbvt.root];
-    return box3.copy(out, rootNode.aabb);
+    return /* @inline */ box3.copy(out, rootNode.aabb);
 }
