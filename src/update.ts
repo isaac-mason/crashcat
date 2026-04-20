@@ -249,11 +249,8 @@ const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
-    const bodiesPool = world.bodies.pool;
-    const activeBodyIndices = world.bodies.activeBodyIndices;
-    const activeBodyCount = world.bodies.activeBodyCount;
-    for (let i = 0; i < activeBodyCount; i++) {
-        const body = bodiesPool[activeBodyIndices[i]];
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
         if (body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
 
         const mp = body.motionProperties;
@@ -336,11 +333,8 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
 
 /** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
 function updateBodyPositions(world: World): void {
-    const bodiesPool = world.bodies.pool;
-    const activeBodyIndices = world.bodies.activeBodyIndices;
-    const activeBodyCount = world.bodies.activeBodyCount;
-    for (let i = 0; i < activeBodyCount; i++) {
-        const body = bodiesPool[activeBodyIndices[i]];
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
         if (body.sleeping) continue;
         rigidBody.updatePositionFromCenterOfMass(world, body);
     }
@@ -921,11 +915,8 @@ const _velocity_displacement = /* @__PURE__ */ vec3.create();
 
 /** integrates velocities into positions (p += v*dt) and angular velocities into orientations */
 function velocityIntegrationUpdate(world: World, timeStep: number): void {
-    const bodiesPool = world.bodies.pool;
-    const activeBodyIndices = world.bodies.activeBodyIndices;
-    const activeBodyCount = world.bodies.activeBodyCount;
-    for (let i = 0; i < activeBodyCount; i++) {
-        const body = bodiesPool[activeBodyIndices[i]];
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
         if (body.sleeping) continue;
 
         const mp = body.motionProperties;
