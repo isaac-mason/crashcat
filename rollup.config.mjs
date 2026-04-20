@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { nodeResolve } from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
+import compilecat from 'compilecat/rollup';
 import filesize from 'rollup-plugin-filesize';
 
 function stripDebug() {
@@ -28,6 +29,7 @@ export default [
             },
         ],
         plugins: [
+            compilecat(),
             stripDebug(),
             nodeResolve(),
             typescript({

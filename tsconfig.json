@@ -25,6 +25,6 @@
       "three/*": ["node_modules/@types/three/*"]
     }
   },
-  "include": ["./src", "./three"],
+  "include": ["./src", "./three", "./tst", "./bench"],
   "exclude": ["./dist"]
 }
