@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.0.5 (Unreleased)
+
+- fix: issues with nested usage of reversedCollideShapeVsShape
+
 ## v0.0.4
 
 - fix: convex hull shapes no longer recenter geometry around center of mass. points and planes are now stored in the original shape space, fixing common misalignment problems between physics and visual meshes. COM is still computed and stored for dynamics (inertia, integration).
