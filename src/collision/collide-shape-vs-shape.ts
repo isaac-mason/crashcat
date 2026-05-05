@@ -272,8 +272,6 @@ function createInvertedCollector() {
     return collector;
 }
 
-const _invertedCollector = /* @__PURE__ */ createInvertedCollector();
-
 /**
  * Wraps a collision function to swap shape A and B arguments.
  * Used when registering bidirectional collision handlers.
@@ -282,6 +280,8 @@ const _invertedCollector = /* @__PURE__ */ createInvertedCollector();
  * @returns A new function that calls fn with A and B swapped
  */
 export function reversedCollideShapeVsShape(fn: CollideShapeVsShapeFn): CollideShapeVsShapeFn {
+    const invertedCollector = createInvertedCollector();
+
     return (
         collector: CollideShapeCollector,
         settings: CollideShapeSettings,
@@ -312,11 +312,11 @@ export function reversedCollideShapeVsShape(fn: CollideShapeVsShapeFn): CollideS
         scaleBY: number,
         scaleBZ: number,
     ) => {
-        _invertedCollector.bodyIdB = collector.bodyIdB;
-        _invertedCollector.base = collector;
+        invertedCollector.bodyIdB = collector.bodyIdB;
+        invertedCollector.base = collector;
 
         const result = fn(
-            _invertedCollector,
+            invertedCollector,
             settings,
             shapeB,
             subShapeIdB,
@@ -346,8 +346,8 @@ export function reversedCollideShapeVsShape(fn: CollideShapeVsShapeFn): CollideS
             scaleAZ,
         );
 
-        _invertedCollector.base = null!;
-        _invertedCollector.bodyIdB = -1;
+        invertedCollector.base = null!;
+        invertedCollector.bodyIdB = -1;
 
         return result;
     };

@@ -490,26 +490,29 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
+ * 
+ * @optimize
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
-    const inertiaRotMat = /* @inline */ mat4.create();
-    const rotation = /* @inline */ mat4.create();
-    const scaled = /* @inline */ mat4.create();
+    const inertiaRotMat = mat4.create();
+    const rotation = mat4.create();
+    const scaled = mat4.create();
 
     // step 1: convert inertia rotation quaternion to matrix
-    /* @inline */ mat4.fromQuat(inertiaRotMat, motionProperties.inertiaRotation);
+    mat4.fromQuat(inertiaRotMat, motionProperties.inertiaRotation);
 
     // step 2: rotation = bodyRotation * inertiaRotMat
-    /* @inline */ mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat);
+    mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat);
 
     // step 3: scale rotation columns by inverse inertia diagonal
-    /* @inline */ mat4.scale(scaled, rotation, motionProperties.invInertiaDiagonal);
+    mat4.scale(scaled, rotation, motionProperties.invInertiaDiagonal);
 
     // step 4: out = scaled * rotation^T
-    /* @inline */ mat4.multiply3x3RightTransposed(out, scaled, rotation);
+    mat4.multiply3x3RightTransposed(out, scaled, rotation);
 
     // step 5: mask out DOFs that are not allowed
     const allowedRotationAxis = (motionProperties.allowedDegreesOfFreedom >> 3) & 0b111;
+
     if (allowedRotationAxis !== 0b111) {
         // create mask for each axis (1.0 if allowed, 0.0 if not)
         const maskX = allowedRotationAxis & 0b001 ? 1.0 : 0.0;
@@ -537,19 +540,19 @@ export function getInverseInertiaForRotation(out: Mat4, motionProperties: Motion
 
 /** Clamps linear velocity to the maximum allowed value */
 export function clampLinearVelocity(motionProperties: MotionProperties): void {
-    const len_sq = /* @inline */ vec3.squaredLength(motionProperties.linearVelocity);
+    const len_sq = vec3.squaredLength(motionProperties.linearVelocity);
     if (len_sq > motionProperties.maxLinearVelocity * motionProperties.maxLinearVelocity) {
-        /* @inline */ vec3.normalize(motionProperties.linearVelocity, motionProperties.linearVelocity);
-        /* @inline */ vec3.scale(motionProperties.linearVelocity, motionProperties.linearVelocity, motionProperties.maxLinearVelocity);
+        vec3.normalize(motionProperties.linearVelocity, motionProperties.linearVelocity);
+        vec3.scale(motionProperties.linearVelocity, motionProperties.linearVelocity, motionProperties.maxLinearVelocity);
     }
 }
 
 /** Clamps angular velocity to the maximum allowed value */
 export function clampAngularVelocity(motionProperties: MotionProperties): void {
-    const len_sq = /* @inline */ vec3.squaredLength(motionProperties.angularVelocity);
+    const len_sq = vec3.squaredLength(motionProperties.angularVelocity);
     if (len_sq > motionProperties.maxAngularVelocity * motionProperties.maxAngularVelocity) {
-        /* @inline */ vec3.normalize(motionProperties.angularVelocity, motionProperties.angularVelocity);
-        /* @inline */ vec3.scale(motionProperties.angularVelocity, motionProperties.angularVelocity, motionProperties.maxAngularVelocity);
+        vec3.normalize(motionProperties.angularVelocity, motionProperties.angularVelocity);
+        vec3.scale(motionProperties.angularVelocity, motionProperties.angularVelocity, motionProperties.maxAngularVelocity);
     }
 }
 
@@ -560,8 +563,8 @@ export function clampAngularVelocity(motionProperties: MotionProperties): void {
  * @param velocity new linear velocity
  */
 export function setLinearVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
-    /* @inline */ vec3.copy(motionProperties.linearVelocity, velocity);
-    /* @inline */ clampLinearVelocity(motionProperties);
+    vec3.copy(motionProperties.linearVelocity, velocity);
+    clampLinearVelocity(motionProperties);
 }
 
 /**
@@ -571,8 +574,8 @@ export function setLinearVelocity(motionProperties: MotionProperties, velocity: 
  * @param velocity new angular velocity
  */
 export function setAngularVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
-    /* @inline */ vec3.copy(motionProperties.angularVelocity, velocity);
-    /* @inline */ clampAngularVelocity(motionProperties);
+    vec3.copy(motionProperties.angularVelocity, velocity);
+    clampAngularVelocity(motionProperties);
 
 }
 
@@ -583,8 +586,8 @@ export function setAngularVelocity(motionProperties: MotionProperties, velocity:
  * @param velocityDelta velocity change to add
  */
 export function addLinearVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    /* @inline */ vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, velocityDelta);
-    /* @inline */ clampLinearVelocity(motionProperties);
+    vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, velocityDelta);
+    clampLinearVelocity(motionProperties);
 }
 
 /**
@@ -593,8 +596,8 @@ export function addLinearVelocity(motionProperties: MotionProperties, velocityDe
  * @param velocityDelta angular velocity change to add
  */
 export function addAngularVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    /* @inline */ vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, velocityDelta);
-    /* @inline */ clampAngularVelocity(motionProperties);
+    vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, velocityDelta);
+    clampAngularVelocity(motionProperties);
 }
 
 /**

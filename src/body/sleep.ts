@@ -16,22 +16,24 @@ const _axis: Vec3 = /* @__PURE__ */ vec3.create();
  * - center of mass
  * - center of mass + largest bounding box axis
  * - center of mass + second largest bounding box axis
+ * 
+ * @optimize
  */
 export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3]): void {
     const com = body.centerOfMassPosition;
 
     // center of mass is the first position
-    /* @inline */ vec3.copy(outPoints[0], com);
+    vec3.copy(outPoints[0], com);
 
     // half-sizes of shape AABB
-    /* @inline */ box3.extents(_extents, body.shape.aabb);
+    box3.extents(_extents, body.shape.aabb);
     const ex = _extents[0];
     const ey = _extents[1];
     const ez = _extents[2];
 
     // rotation matrix from body quaternion (column-major)
     // col0 = rotated X axis [0,1,2], col1 = rotated Y axis [3,4,5], col2 = rotated Z axis [6,7,8]
-    /* @inline */ mat3.fromQuat(_rot, body.quaternion);
+    mat3.fromQuat(_rot, body.quaternion);
 
     // find smallest extent axis — use the two largest for test points
     // pick (col, scale) pairs for point 1 and point 2
@@ -57,13 +59,13 @@ export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3
     _axis[0] = _rot[c1];
     _axis[1] = _rot[c1 + 1];
     _axis[2] = _rot[c1 + 2];
-    /* @inline */ vec3.scaleAndAdd(outPoints[1], com, _axis, s1);
+    vec3.scaleAndAdd(outPoints[1], com, _axis, s1);
 
     // point 2 = com + axis2 * scale2
     _axis[0] = _rot[c2];
     _axis[1] = _rot[c2 + 1];
     _axis[2] = _rot[c2 + 2];
-    /* @inline */ vec3.scaleAndAdd(outPoints[2], com, _axis, s2);
+    vec3.scaleAndAdd(outPoints[2], com, _axis, s2);
 }
 
 /** reset the sleep test spheres to center around the given points with radius 0 */

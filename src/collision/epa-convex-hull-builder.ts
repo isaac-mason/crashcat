@@ -5,6 +5,7 @@ const EPA_MAX_EDGE_LENGTH = 128;
 const EPA_MIN_TRIANGLE_AREA = 1e-10;
 const EPA_BARYCENTRIC_EPSILON = 1e-3;
 
+// edge type is still used for the output edge list from findEdge
 export type Edge = {
     neighbourTriangle: Triangle | null;
     neighbourEdge: number;
@@ -26,44 +27,117 @@ export function copyEdge(dest: Edge, src: Edge): void {
 }
 
 export type Triangle = {
-    edge: [Edge, Edge, Edge];
-    normal: Vec3;
-    centroid: Vec3;
+    // edge 0
+    e0NeighbourTriangle: Triangle | null;
+    e0NeighbourEdge: number;
+    e0StartIndex: number;
+    // edge 1
+    e1NeighbourTriangle: Triangle | null;
+    e1NeighbourEdge: number;
+    e1StartIndex: number;
+    // edge 2
+    e2NeighbourTriangle: Triangle | null;
+    e2NeighbourEdge: number;
+    e2StartIndex: number;
+    // normal (scalar components, no Vec3 heap object)
+    normalX: number;
+    normalY: number;
+    normalZ: number;
+    // centroid (scalar components)
+    centroidX: number;
+    centroidY: number;
+    centroidZ: number;
     closestLengthSq: number;
-    lambda: [number, number];
+    // barycentric coordinates (scalar, no tuple heap object)
+    lambda0: number;
+    lambda1: number;
     lambdaRelativeTo0: boolean;
     closestPointInterior: boolean;
     removed: boolean;
     inQueue: boolean;
-    iteration: number;
     index: number;
+    // linked free-list: index of next free triangle, -1 if none
+    nextFree: number;
 };
 
 export function allocateTriangle(): Triangle {
     return {
-        edge: [createEdge(), createEdge(), createEdge()],
-        normal: vec3.create(),
-        centroid: vec3.create(),
+        e0NeighbourTriangle: null,
+        e0NeighbourEdge: 0,
+        e0StartIndex: 0,
+        e1NeighbourTriangle: null,
+        e1NeighbourEdge: 0,
+        e1StartIndex: 0,
+        e2NeighbourTriangle: null,
+        e2NeighbourEdge: 0,
+        e2StartIndex: 0,
+        normalX: 0,
+        normalY: 0,
+        normalZ: 0,
+        centroidX: 0,
+        centroidY: 0,
+        centroidZ: 0,
         closestLengthSq: Infinity,
-        lambda: [0, 0],
+        lambda0: 0,
+        lambda1: 0,
         lambdaRelativeTo0: false,
         closestPointInterior: false,
         removed: false,
         inQueue: false,
-        iteration: 0,
         index: -1,
+        nextFree: -1,
     };
 }
 
-const _vectorAB = /* @__PURE__ */ vec3.create();
+// helpers to access edge fields by runtime edge index (0, 1, or 2)
+function getNeighbourTriangle(t: Triangle, edge: number): Triangle | null {
+    if (edge === 0) return t.e0NeighbourTriangle;
+    if (edge === 1) return t.e1NeighbourTriangle;
+    return t.e2NeighbourTriangle;
+}
+
+function getNeighbourEdge(t: Triangle, edge: number): number {
+    if (edge === 0) return t.e0NeighbourEdge;
+    if (edge === 1) return t.e1NeighbourEdge;
+    return t.e2NeighbourEdge;
+}
+
+function getStartIndex(t: Triangle, edge: number): number {
+    if (edge === 0) return t.e0StartIndex;
+    if (edge === 1) return t.e1StartIndex;
+    return t.e2StartIndex;
+}
+
+function setNeighbour(t: Triangle, edge: number, neighbour: Triangle | null, neighbourEdge: number): void {
+    if (edge === 0) {
+        t.e0NeighbourTriangle = neighbour;
+        t.e0NeighbourEdge = neighbourEdge;
+    } else if (edge === 1) {
+        t.e1NeighbourTriangle = neighbour;
+        t.e1NeighbourEdge = neighbourEdge;
+    } else {
+        t.e2NeighbourTriangle = neighbour;
+        t.e2NeighbourEdge = neighbourEdge;
+    }
+}
+
+function clearNeighbour(t: Triangle, edge: number): void {
+    if (edge === 0) {
+        t.e0NeighbourTriangle = null;
+    } else if (edge === 1) {
+        t.e1NeighbourTriangle = null;
+    } else {
+        t.e2NeighbourTriangle = null;
+    }
+}
 
 export function triangleIsFacing(triangle: Triangle, position: Vec3): boolean {
     // vectorAB = position - centroid
-    const abx = position[0] - triangle.centroid[0];
-    const aby = position[1] - triangle.centroid[1];
-    const abz = position[2] - triangle.centroid[2];
+    const abx = position[0] - triangle.centroidX;
+    const aby = position[1] - triangle.centroidY;
+    const abz = position[2] - triangle.centroidZ;
     // dot(normal, vectorAB) > 0
-    return triangle.normal[0] * abx + triangle.normal[1] * aby + triangle.normal[2] * abz > 0.0;
+    return triangle.normalX * abx + triangle.normalY * aby + triangle.normalZ * abz > 0.0;
 }
 
 export type Points = {
@@ -133,7 +207,10 @@ export type NewTriangles = Triangle[];
 
 export type EpaConvexHullBuilderState = {
     triangles: Triangle[];
-    freeTriangles: number[];
+    // bump allocator: high watermark for never-used slots
+    triangleHighWatermark: number;
+    // linked free-list head index, -1 if empty
+    triangleFreeHead: number;
 
     queue: Triangle[];
     positions: Vec3[];
@@ -147,7 +224,7 @@ export function init(): EpaConvexHullBuilderState {
         stack.push(createStackEntry());
     }
 
-    // initialize triangle pool
+    // pre-allocate the full triangle pool upfront
     const triangles: Triangle[] = [];
     for (let i = 0; i < EPA_MAX_TRIANGLES; i++) {
         const triangle = allocateTriangle();
@@ -157,7 +234,8 @@ export function init(): EpaConvexHullBuilderState {
 
     return {
         triangles,
-        freeTriangles: [],
+        triangleHighWatermark: 0,
+        triangleFreeHead: -1,
         queue: [],
         positions: [],
         stack,
@@ -166,49 +244,43 @@ export function init(): EpaConvexHullBuilderState {
 }
 
 export function linkTriangle(t1: Triangle, edge1: number, t2: Triangle, edge2: number) {
-    const e1 = t1.edge[edge1];
-    const e2 = t2.edge[edge2];
-
-    // Link up
-    e1.neighbourTriangle = t2;
-    e1.neighbourEdge = edge2;
-    e2.neighbourTriangle = t1;
-    e2.neighbourEdge = edge1;
+    setNeighbour(t1, edge1, t2, edge2);
+    setNeighbour(t2, edge2, t1, edge1);
 }
 
 export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, idx2: number, idx3: number): Triangle | null {
     let triangle: Triangle;
-    let index: number;
-    if (state.freeTriangles.length > 0) {
-        index = state.freeTriangles.pop()!;
-        triangle = state.triangles[index];
+    const freeHead = state.triangleFreeHead;
+    if (freeHead !== -1) {
+        // take from free list
+        triangle = state.triangles[freeHead];
+        state.triangleFreeHead = triangle.nextFree;
     } else {
-        index = state.triangles.length;
+        // take from never-used watermark
+        const index = state.triangleHighWatermark;
         if (index >= EPA_MAX_TRIANGLES) return null;
-        triangle = allocateTriangle();
-        triangle.index = index;
-        state.triangles.push(triangle);
+        state.triangleHighWatermark = index + 1;
+        triangle = state.triangles[index];
     }
 
     // reset defaults
     triangle.closestLengthSq = Infinity;
-    triangle.lambda[0] = 0.0;
-    triangle.lambda[1] = 0.0;
+    triangle.lambda0 = 0.0;
+    triangle.lambda1 = 0.0;
     triangle.lambdaRelativeTo0 = false;
     triangle.closestPointInterior = false;
     triangle.removed = false;
     triangle.inQueue = false;
-    triangle.iteration = 0;
 
     // fill in indexes
-    triangle.edge[0].startIndex = idx1;
-    triangle.edge[1].startIndex = idx2;
-    triangle.edge[2].startIndex = idx3;
+    triangle.e0StartIndex = idx1;
+    triangle.e1StartIndex = idx2;
+    triangle.e2StartIndex = idx3;
 
     // clear links
-    triangle.edge[0].neighbourTriangle = null;
-    triangle.edge[1].neighbourTriangle = null;
-    triangle.edge[2].neighbourTriangle = null;
+    triangle.e0NeighbourTriangle = null;
+    triangle.e1NeighbourTriangle = null;
+    triangle.e2NeighbourTriangle = null;
 
     // get vertex positions
     const positions = state.positions;
@@ -220,9 +292,9 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
     const cx = (y0[0] + y1[0] + y2[0]) / 3.0;
     const cy = (y0[1] + y1[1] + y2[1]) / 3.0;
     const cz = (y0[2] + y1[2] + y2[2]) / 3.0;
-    triangle.centroid[0] = cx;
-    triangle.centroid[1] = cy;
-    triangle.centroid[2] = cz;
+    triangle.centroidX = cx;
+    triangle.centroidY = cy;
+    triangle.centroidZ = cz;
 
     // calculate edges
     // y10 = y1 - y0
@@ -255,9 +327,9 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
         const nx = y10y * y20z - y10z * y20y;
         const ny = y10z * y20x - y10x * y20z;
         const nz = y10x * y20y - y10y * y20x;
-        triangle.normal[0] = nx;
-        triangle.normal[1] = ny;
-        triangle.normal[2] = nz;
+        triangle.normalX = nx;
+        triangle.normalY = ny;
+        triangle.normalZ = nz;
 
         // check if triangle is degenerate (area too small)
         const normalLenSq = nx * nx + ny * ny + nz * nz;
@@ -283,8 +355,8 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
                 const y0DotY20 = y0[0] * y20x + y0[1] * y20y + y0[2] * y20z;
                 const l0 = (y10DotY20 * y0DotY20 - y20DotY20 * y0DotY10) / determinant;
                 const l1 = (y10DotY20 * y0DotY10 - y10DotY10 * y0DotY20) / determinant;
-                triangle.lambda[0] = l0;
-                triangle.lambda[1] = l1;
+                triangle.lambda0 = l0;
+                triangle.lambda1 = l1;
                 triangle.lambdaRelativeTo0 = true;
 
                 // check if closest point lies within triangle interior
@@ -300,9 +372,9 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
         const nx = y10y * y21z - y10z * y21y;
         const ny = y10z * y21x - y10x * y21z;
         const nz = y10x * y21y - y10y * y21x;
-        triangle.normal[0] = nx;
-        triangle.normal[1] = ny;
-        triangle.normal[2] = nz;
+        triangle.normalX = nx;
+        triangle.normalY = ny;
+        triangle.normalZ = nz;
 
         // check if triangle is degenerate (area too small)
         const normalLenSq = nx * nx + ny * ny + nz * nz;
@@ -328,8 +400,8 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
                 const y1DotY21 = y1[0] * y21x + y1[1] * y21y + y1[2] * y21z;
                 const l0 = (y21DotY21 * y1DotY10 - y10DotY21 * y1DotY21) / determinant;
                 const l1 = (y10DotY21 * y1DotY10 - y10DotY10 * y1DotY21) / determinant;
-                triangle.lambda[0] = l0;
-                triangle.lambda[1] = l1;
+                triangle.lambda0 = l0;
+                triangle.lambda1 = l1;
                 triangle.lambdaRelativeTo0 = false;
 
                 // check if closest point lies within triangle interior
@@ -345,11 +417,9 @@ export function createTriangle(state: EpaConvexHullBuilderState, idx1: number, i
 }
 
 export function initialize(state: EpaConvexHullBuilderState, idx1: number, idx2: number, idx3: number) {
-    // release all triangles to free list (clear pool)
-    state.freeTriangles.length = state.triangles.length;
-    for (let i = 0; i < state.triangles.length; i++) {
-        state.freeTriangles[i] = state.triangles.length - 1 - i;
-    }
+    // reset bump allocator — all triangles are freed en masse
+    state.triangleHighWatermark = 0;
+    state.triangleFreeHead = -1;
     state.queue.length = 0;
 
     // create triangles (back to back)
@@ -429,10 +499,13 @@ export function findFacingTriangle(
         const t = state.queue[i];
         if (!t || t.removed) continue;
 
-        vec3.subtract(_vectorAB, position, t.centroid);
-        const dot = vec3.dot(t.normal, _vectorAB);
+        const abx = position[0] - t.centroidX;
+        const aby = position[1] - t.centroidY;
+        const abz = position[2] - t.centroidZ;
+        const dot = t.normalX * abx + t.normalY * aby + t.normalZ * abz;
         if (dot > 0.0) {
-            const distSq = (dot * dot) / vec3.squaredLength(t.normal);
+            const normalLenSq = t.normalX * t.normalX + t.normalY * t.normalY + t.normalZ * t.normalZ;
+            const distSq = (dot * dot) / normalLenSq;
             if (distSq > bestDistSq) {
                 best = t;
                 bestDistSq = distSq;
@@ -445,18 +518,25 @@ export function findFacingTriangle(
 }
 
 export function freeTriangle(state: EpaConvexHullBuilderState, triangle: Triangle): void {
-    state.freeTriangles.push(triangle.index);
+    triangle.nextFree = state.triangleFreeHead;
+    state.triangleFreeHead = triangle.index;
 }
 
 export function unlinkTriangle(state: EpaConvexHullBuilderState, triangle: Triangle): void {
-    // unlink from neighbours
-    for (let i = 0; i < 3; i++) {
-        const edge = triangle.edge[i];
-        if (edge.neighbourTriangle !== null) {
-            const neighbourEdge = edge.neighbourTriangle.edge[edge.neighbourEdge];
-            neighbourEdge.neighbourTriangle = null;
-            edge.neighbourTriangle = null;
-        }
+    // unlink edge 0
+    if (triangle.e0NeighbourTriangle !== null) {
+        clearNeighbour(triangle.e0NeighbourTriangle, triangle.e0NeighbourEdge);
+        triangle.e0NeighbourTriangle = null;
+    }
+    // unlink edge 1
+    if (triangle.e1NeighbourTriangle !== null) {
+        clearNeighbour(triangle.e1NeighbourTriangle, triangle.e1NeighbourEdge);
+        triangle.e1NeighbourTriangle = null;
+    }
+    // unlink edge 2
+    if (triangle.e2NeighbourTriangle !== null) {
+        clearNeighbour(triangle.e2NeighbourTriangle, triangle.e2NeighbourEdge);
+        triangle.e2NeighbourTriangle = null;
     }
 
     // if this triangle is not in the priority queue, we can delete it now
@@ -497,9 +577,14 @@ export function findEdge(state: EpaConvexHullBuilderState, facingTriangle: Trian
                 break;
             }
         } else {
-            // visit neighbour
-            const e = curEntry.triangle!.edge[(curEntry.edge + curEntry.iter) % 3];
-            const n = e.neighbourTriangle;
+            // visit neighbour — compute edge index as (edge + iter) % 3
+            const edgeSum = curEntry.edge + curEntry.iter;
+            const edgeIdx = edgeSum >= 3 ? edgeSum - 3 : edgeSum;
+            const curTriangle = curEntry.triangle!;
+            const n = getNeighbourTriangle(curTriangle, edgeIdx);
+            const nEdge = getNeighbourEdge(curTriangle, edgeIdx);
+            const eStartIndex = getStartIndex(curTriangle, edgeIdx);
+
             if (n !== null && !n.removed) {
                 // check if vertex is on the front side of this triangle
                 if (triangleIsFacing(n, vertex)) {
@@ -510,19 +595,22 @@ export function findEdge(state: EpaConvexHullBuilderState, facingTriangle: Trian
                     curStackPos++;
                     const newEntry = stack[curStackPos];
                     newEntry.triangle = n;
-                    newEntry.edge = e.neighbourEdge;
+                    newEntry.edge = nEdge;
                     newEntry.iter = 0;
                 } else {
                     // detect islands - if edge doesn't connect to previous edge
-                    if (e.startIndex !== nextExpectedStartIdx && nextExpectedStartIdx !== -1) {
+                    if (eStartIndex !== nextExpectedStartIdx && nextExpectedStartIdx !== -1) {
                         return false;
                     }
 
                     // next expected index is the start index of our neighbour's edge
-                    nextExpectedStartIdx = n.edge[e.neighbourEdge].startIndex;
+                    nextExpectedStartIdx = getStartIndex(n, nEdge);
 
-                    // vertex behind, keep edge
-                    copyEdge(outEdges.values[outEdges.size++], e);
+                    // vertex behind, keep edge — copy into output edge list
+                    const outEdge = outEdges.values[outEdges.size++];
+                    outEdge.neighbourTriangle = n;
+                    outEdge.neighbourEdge = nEdge;
+                    outEdge.startIndex = eStartIndex;
                 }
             }
         }
@@ -561,7 +649,7 @@ export function addPoint(
     const edgesValues = edges.values;
 
     for (let i = 0; i < numEdges; i++) {
-        const iNext = (i + 1) % numEdges;
+        const iNext = i + 1 < numEdges ? i + 1 : 0;
         const edge = edgesValues[i];
         const edgeNext = edgesValues[iNext];
 
@@ -580,7 +668,7 @@ export function addPoint(
 
     // link edges in second pass (can't do in first pass because we need all triangles created)
     for (let i = 0; i < numEdges; i++) {
-        const iNext = (i + 1) % numEdges;
+        const iNext = i + 1 < numEdges ? i + 1 : 0;
         const t1 = outTriangles[i];
         const t2 = outTriangles[iNext];
         const edge = edgesValues[i];

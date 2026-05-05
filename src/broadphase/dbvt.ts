@@ -451,19 +451,22 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
 
 const _bounds = /* @__PURE__ */ box3.create();
 
+/* @optimize */
 export function add(dbvt: DBVT, body: RigidBody): number {
+    const bounds = box3.create();
+
     // expand body bounds by margin
-    /* @inline */ box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
+    box3.expandByMargin(bounds, body.aabb, dbvt.expansionMargin);
 
     // create leaf node
     const leafIndex = requestNode(dbvt);
     const leaf = dbvt.nodes[leafIndex];
-    /* @inline */ box3.copy(leaf.aabb, _bounds);
+    box3.copy(leaf.aabb, bounds);
     leaf.bodyIndex = body.index;
     leaf.height = 0;
 
     // initialize previous AABB for velocity prediction
-    /* @inline */ box3.copy(leaf.previousAabb, body.aabb);
+    box3.copy(leaf.previousAabb, body.aabb);
 
     // insert into tree
     insertLeaf(dbvt, dbvt.root, leafIndex);

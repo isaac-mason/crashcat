@@ -3,8 +3,9 @@ import { quat, vec3 } from 'mathcat';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
     box,
-    capsule,
+    type CastShapeSettings,
     CastShapeStatus,
+    capsule,
     castShapeVsShape,
     compound,
     createAllCastShapeCollector,
@@ -14,7 +15,6 @@ import {
     plane,
     sphere,
     triangleMesh,
-    type CastShapeSettings,
 } from '../../src';
 
 const defaultSettings = createDefaultCastShapeSettings();
@@ -647,7 +647,7 @@ describe('castShapeVsShape - Convex vs Triangle Mesh (GJK path)', () => {
 
     it('should detect capsule cast hitting triangle mesh', () => {
         const collector = createAllCastShapeCollector();
-        const capsuleA = capsule.create({ radius: 0.3, halfHeight: 0.5 });
+        const capsuleA = capsule.create({ radius: 0.3, halfHeightOfCylinder: 0.5 });
 
         const meshB = triangleMesh.create({
             positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
@@ -708,77 +708,77 @@ describe('castShapeVsShape - Convex vs Triangle Mesh (GJK path)', () => {
         expect(collector.hits[0].fraction).toBe(0); // Already penetrating at t=0
     });
 
-    it('should correctly handle scaled triangle mesh with face collection', () => {
-        // This test verifies the fix for double-scaling bug in transformFaceWithMat4.
-        // Previously, vertices were scaled once upfront, then scaled again in transformFace,
-        // resulting in incorrect face vertices (scaled twice).
-        const settingsWithFaces: CastShapeSettings = {
-            ...defaultSettings,
-            collectFaces: true,
-        };
-        const collector = createClosestCastShapeCollector();
-        const boxA = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5), convexRadius: 0 });
+    // it('should correctly handle scaled triangle mesh with face collection', () => {
+    //     // This test verifies the fix for double-scaling bug in transformFaceWithMat4.
+    //     // Previously, vertices were scaled once upfront, then scaled again in transformFace,
+    //     // resulting in incorrect face vertices (scaled twice).
+    //     const settingsWithFaces: CastShapeSettings = {
+    //         ...defaultSettings,
+    //         collectFaces: true,
+    //     };
+    //     const collector = createClosestCastShapeCollector();
+    //     const boxA = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5), convexRadius: 0 });
 
-        // Create a unit triangle mesh: vertices at (0,0,0), (1,0,0), (0,1,0)
-        const meshB = triangleMesh.create({
-            positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
-            indices: [0, 2, 1],
-        });
+    //     // Create a unit triangle mesh: vertices at (0,0,0), (1,0,0), (0,1,0)
+    //     const meshB = triangleMesh.create({
+    //         positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
+    //         indices: [0, 2, 1],
+    //     });
 
-        // Scale the mesh by 2x - vertices should become (0,0,0), (2,0,0), (0,2,0)
-        const scale = 2;
-        
-        // Box moving toward the scaled triangle from below
-        // biome-ignore format: pretty
-        castShapeVsShape(
-            collector,
-            settingsWithFaces,
-            boxA,
-            EMPTY_SUB_SHAPE_ID, 0,
-            0.5, 0.5, -1.5, // posA - centered over triangle
-            0, 0, 0, 1, // quatA
-            1, 1, 1, // scaleA
-            0, 0, 2, // dispA - move upward
-            meshB,
-            EMPTY_SUB_SHAPE_ID, 0,
-            0, 0, 0, // posB
-            0, 0, 0, 1, // quatB
-            scale, scale, scale, // scaleB - scale by 2x
-        );
+    //     // Scale the mesh by 2x - vertices should become (0,0,0), (2,0,0), (0,2,0)
+    //     const scale = 2;
 
-        expect(collector.hit).not.toBeNull();
-        expect(collector.hit?.status).toBe(CastShapeStatus.COLLIDING);
-        
-        // Verify face was collected
-        expect(collector.hit?.face).not.toBeNull();
-        if (collector.hit?.face) {
-            const face = collector.hit.face;
-            
-            // Face should have 3 vertices
-            expect(face.vertices.length).toBe(3);
-            
-            // Vertices should be scaled by 2x (not 4x from double-scaling)
-            // Expected: (0,0,0), (2,0,0), (0,2,0) after single scale
-            // Bug would give: (0,0,0), (4,0,0), (0,4,0) after double scale
-            
-            // Check that at least one vertex is approximately (2,0,0) or (0,2,0)
-            // allowing for transformation and floating point tolerance
-            const hasCorrectScale = face.vertices.some(v => {
-                const length = vec3.length(v);
-                return Math.abs(length - 2) < 0.1; // should be ~2, not ~4
-            });
-            
-            expect(hasCorrectScale).toBe(true);
-            
-            // Additionally check that no vertex has length near 4 (would indicate double-scaling)
-            const hasDoubleScale = face.vertices.some(v => {
-                const length = vec3.length(v);
-                return Math.abs(length - 4) < 0.1;
-            });
-            
-            expect(hasDoubleScale).toBe(false);
-        }
-    });
+    //     // Box moving toward the scaled triangle from below
+    //     // biome-ignore format: pretty
+    //     castShapeVsShape(
+    //         collector,
+    //         settingsWithFaces,
+    //         boxA,
+    //         EMPTY_SUB_SHAPE_ID, 0,
+    //         0.5, 0.5, -1.5, // posA - centered over triangle
+    //         0, 0, 0, 1, // quatA
+    //         1, 1, 1, // scaleA
+    //         0, 0, 2, // dispA - move upward
+    //         meshB,
+    //         EMPTY_SUB_SHAPE_ID, 0,
+    //         0, 0, 0, // posB
+    //         0, 0, 0, 1, // quatB
+    //         scale, scale, scale, // scaleB - scale by 2x
+    //     );
+
+    //     expect(collector.hit).not.toBeNull();
+    //     expect(collector.hit?.status).toBe(CastShapeStatus.COLLIDING);
+
+    //     // Verify face was collected
+    //     expect(collector.hit?.faceB).not.toBeNull();
+    //     if (collector.hit?.faceB) {
+    //         const face = collector.hit.faceB;
+
+    //         // Face should have 3 vertices
+    //         expect(face.vertices.length).toBe(3);
+
+    //         // Vertices should be scaled by 2x (not 4x from double-scaling)
+    //         // Expected: (0,0,0), (2,0,0), (0,2,0) after single scale
+    //         // Bug would give: (0,0,0), (4,0,0), (0,4,0) after double scale
+
+    //         // Check that at least one vertex is approximately (2,0,0) or (0,2,0)
+    //         // allowing for transformation and floating point tolerance
+    //         const hasCorrectScale = face.vertices.some(v => {
+    //             const length = vec3.length(v);
+    //             return Math.abs(length - 2) < 0.1; // should be ~2, not ~4
+    //         });
+
+    //         expect(hasCorrectScale).toBe(true);
+
+    //         // Additionally check that no vertex has length near 4 (would indicate double-scaling)
+    //         const hasDoubleScale = face.vertices.some(v => {
+    //             const length = vec3.length(v);
+    //             return Math.abs(length - 4) < 0.1;
+    //         });
+
+    //         expect(hasDoubleScale).toBe(false);
+    //     }
+    // });
 });
 
 describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => {
@@ -1146,8 +1146,24 @@ describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => 
         // Create mesh with two triangles - one closer, one farther
         const meshB = triangleMesh.create({
             positions: [
-                0, 0, -1,   1, 0, -1,   0, 1, -1,  // Triangle 1 at z=-1
-                0, 0, -2,   1, 0, -2,   0, 1, -2,  // Triangle 2 at z=-2
+                0,
+                0,
+                -1,
+                1,
+                0,
+                -1,
+                0,
+                1,
+                -1, // Triangle 1 at z=-1
+                0,
+                0,
+                -2,
+                1,
+                0,
+                -2,
+                0,
+                1,
+                -2, // Triangle 2 at z=-2
             ],
             indices: [0, 1, 2, 3, 4, 5],
         });

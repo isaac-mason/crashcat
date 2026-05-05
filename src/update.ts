@@ -422,13 +422,13 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
             this.world.settings.narrowphase.speculativeContactDistance + this.world.settings.narrowphase.manifoldTolerance;
 
         // normalize hit normal
-        /* @inline */ vec3.normalize(_narrowphase_worldSpaceNormal, hit.penetrationAxis);
+        vec3.normalize(_narrowphase_worldSpaceNormal, hit.penetrationAxis);
 
         // try to find existing manifold with similar normal in active range [0, numManifolds)
         let foundManifold: manifold.ContactManifold | null = null;
         for (let i = 0; i < this.numManifolds; i++) {
             const m = this.manifoldsPool[i];
-            const dot = /* @inline */ vec3.dot(_narrowphase_worldSpaceNormal, m.worldSpaceNormal);
+            const dot = vec3.dot(_narrowphase_worldSpaceNormal, m.worldSpaceNormal);
             if (dot >= normalThreshold) {
                 foundManifold = m;
                 break;
@@ -453,9 +453,9 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
 
                 // replace shallowest manifold with this hit
                 foundManifold = this.manifoldsPool[shallowestIdx];
-                /* @inline */ manifold.resetContactManifold(foundManifold);
-                /* @inline */ vec3.copy(foundManifold.baseOffset, baseOffset);
-                /* @inline */ vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
+                manifold.resetContactManifold(foundManifold);
+                vec3.copy(foundManifold.baseOffset, baseOffset);
+                vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
                 foundManifold.penetrationDepth = hit.penetration;
                 foundManifold.subShapeIdA = hit.subShapeIdA;
                 foundManifold.subShapeIdB = hit.subShapeIdB;
@@ -465,9 +465,9 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 // use next slot in pool (already allocated)
                 foundManifold = this.manifoldsPool[this.numManifolds];
                 this.numManifolds++;
-                /* @inline */ manifold.resetContactManifold(foundManifold);
-                /* @inline */ vec3.copy(foundManifold.baseOffset, baseOffset);
-                /* @inline */ vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
+                manifold.resetContactManifold(foundManifold);
+                vec3.copy(foundManifold.baseOffset, baseOffset);
+                vec3.copy(foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
                 foundManifold.penetrationDepth = hit.penetration;
                 foundManifold.subShapeIdA = hit.subShapeIdA;
                 foundManifold.subShapeIdB = hit.subShapeIdB;
@@ -476,12 +476,12 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
             }
         } else {
             // accumulate normal (will be normalized later before creating constraints)
-            /* @inline */ vec3.add(foundManifold.worldSpaceNormal, foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
+            vec3.add(foundManifold.worldSpaceNormal, foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
         }
 
         // generate contact points for this hit using temp manifold
-        /* @inline */ manifold.resetContactManifold(_narrowphase_tempManifold);
-        /* @inline */ vec3.copy(_narrowphase_tempManifold.baseOffset, baseOffset);
+        manifold.resetContactManifold(_narrowphase_tempManifold);
+        vec3.copy(_narrowphase_tempManifold.baseOffset, baseOffset);
 
         if (hit.faceA.numVertices >= 2 && hit.faceB.numVertices >= 3) {
             // clip polygons to generate contact region
@@ -923,30 +923,30 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
 
         // clamp velocities for dynamic bodies
         if (body.motionType === MotionType.DYNAMIC) {
-            /* @inline */ motionProperties.clampLinearVelocity(mp);
-            /* @inline */motionProperties.clampAngularVelocity(mp);
+            motionProperties.clampLinearVelocity(mp);
+            motionProperties.clampAngularVelocity(mp);
         }
 
         // rotate first, helps avoid artifacts with long thin bodies
         // angular integration: orientation = rotation_quat * orientation
         // convert angular velocity to axis-angle rotation
-        const rotationVector = /* @inline */ vec3.scale(_velocity_rotationVector, mp.angularVelocity, timeStep);
-        const angle = /* @inline */ vec3.length(rotationVector);
+        const rotationVector = vec3.scale(_velocity_rotationVector, mp.angularVelocity, timeStep);
+        const angle = vec3.length(rotationVector);
 
         if (angle > 1e-6) {
             // create rotation quaternion from axis-angle
-            const axis = /* @inline */ vec3.scale(_velocity_axis, rotationVector, 1 / angle);
-            const rotationQuat = /* @inline */ quat.setAxisAngle(_velocity_rotationQuat, axis, angle);
+            const axis = vec3.scale(_velocity_axis, rotationVector, 1 / angle);
+            const rotationQuat = quat.setAxisAngle(_velocity_rotationQuat, axis, angle);
 
             // apply rotation: q' = rotation * q
-            /* @inline */ quat.multiply(body.quaternion, rotationQuat, body.quaternion);
+            quat.multiply(body.quaternion, rotationQuat, body.quaternion);
 
             // normalize to prevent drift
-            /* @inline */ quat.normalize(body.quaternion, body.quaternion);
+            quat.normalize(body.quaternion, body.quaternion);
         }
 
         // calculate linear displacement
-        const displacement = /* @inline */ vec3.scale(_velocity_displacement, mp.linearVelocity, timeStep);
+        const displacement = vec3.scale(_velocity_displacement, mp.linearVelocity, timeStep);
 
         // if the position should be updated (or if it is delayed because of ccd)
         let updatePosition = true;
@@ -958,7 +958,7 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
         if (useCCD) {
             const innerRadius = getShapeInnerRadius(body.shape);
             const threshold = world.settings.ccd.linearCastThreshold * innerRadius;
-            const displacementLenSq = /* @inline */ vec3.squaredLength(displacement);
+            const displacementLenSq = vec3.squaredLength(displacement);
 
             if (displacementLenSq > threshold * threshold) {
                 // acquire CCD body from pool
@@ -971,7 +971,7 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
                 // initialize CCD body
                 ccdBody.bodyIndex = body.index;
                 ccdBody.hitBodyIndex = -1;
-                /* @inline */ vec3.copy(ccdBody.deltaPosition, displacement);
+                vec3.copy(ccdBody.deltaPosition, displacement);
                 ccdBody.fraction = 1.0;
                 ccdBody.fractionPlusSlop = 1.0;
                 ccdBody.linearCastThresholdSq = threshold * threshold;
@@ -990,7 +990,7 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
 
         if (updatePosition) {
             // move the body now (using center of mass)
-            /* @inline */ vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
+            vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
             rigidBody.updatePositionFromCenterOfMass(world, body);
         }
     }
