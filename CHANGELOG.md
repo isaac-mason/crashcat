@@ -3,6 +3,8 @@
 ## v0.0.5 (Unreleased)
 
 - fix: issues with nested usage of reversedCollideShapeVsShape
+- feat: change build setup so d.ts files are compatible with typescript NodeNext module resolution
+- feat: update mathcat from v0.0.11 to v0.0.12
 
 ## v0.0.4
 
