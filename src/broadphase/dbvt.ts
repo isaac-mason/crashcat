@@ -1,6 +1,6 @@
 import { type Box3, box3, raycast3, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from '../body/rigid-body';
-import { rayDistanceToBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import * as bvhStack from '../utils/bvh-stack';
@@ -820,6 +820,7 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
 const _ray = /* @__PURE__ */ raycast3.create();
 const _nodeBounds = /* @__PURE__ */ box3.create(); // scratch for expanded child bounds in castAABB distance sort
 
+/* @optimize */
 export function castRay(
     world: World,
     dbvt: DBVT,
@@ -856,52 +857,16 @@ export function castRay(
         }
 
         // early out: ray x node aabb
-        let tNear = 0
-        let tFar = rayLen;
-        if (Math.abs(dirX) < 1e-10) {
-            if (originX < node.aabb[0] || originX > node.aabb[3]) continue;
-        } else {
-            const inv = 1 / dirX;
-            let tEnter = (node.aabb[0] - originX) * inv;
-            let tExit = (node.aabb[3] - originX) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
-        }
-        if (Math.abs(dirY) < 1e-10) {
-            if (originY < node.aabb[1] || originY > node.aabb[4]) continue;
-        } else {
-            const inv = 1 / dirY;
-            let tEnter = (node.aabb[1] - originY) * inv;
-            let tExit = (node.aabb[4] - originY) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
-        }
-        if (Math.abs(dirZ) < 1e-10) {
-            if (originZ < node.aabb[2] || originZ > node.aabb[5]) continue;
-        } else {
-            const inv = 1 / dirZ;
-            let tEnter = (node.aabb[2] - originZ) * inv;
-            let tExit = (node.aabb[5] - originZ) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
+        if (
+            !rayHitsBox3(
+                originX, originY, originZ,
+                dirX, dirY, dirZ,
+                rayLen,
+                node.aabb[0], node.aabb[1], node.aabb[2],
+                node.aabb[3], node.aabb[4], node.aabb[5],
+            )
+        ) {
+            continue;
         }
 
         // if internal node, push children sorted by distance
@@ -949,52 +914,16 @@ export function castRay(
         }
 
         // early out: ray-aabb test on body bounds
-        let bodyTNear = 0,
-            bodyTFar = rayLen;
-        if (Math.abs(dirX) < 1e-10) {
-            if (originX < body.aabb[0] || originX > body.aabb[3]) continue;
-        } else {
-            const inv = 1 / dirX;
-            let tEnter = (body.aabb[0] - originX) * inv;
-            let tExit = (body.aabb[3] - originX) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
-        }
-        if (Math.abs(dirY) < 1e-10) {
-            if (originY < body.aabb[1] || originY > body.aabb[4]) continue;
-        } else {
-            const inv = 1 / dirY;
-            let tEnter = (body.aabb[1] - originY) * inv;
-            let tExit = (body.aabb[4] - originY) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
-        }
-        if (Math.abs(dirZ) < 1e-10) {
-            if (originZ < body.aabb[2] || originZ > body.aabb[5]) continue;
-        } else {
-            const inv = 1 / dirZ;
-            let tEnter = (body.aabb[2] - originZ) * inv;
-            let tExit = (body.aabb[5] - originZ) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
+        if (
+            !rayHitsBox3(
+                originX, originY, originZ,
+                dirX, dirY, dirZ,
+                rayLen,
+                body.aabb[0], body.aabb[1], body.aabb[2],
+                body.aabb[3], body.aabb[4], body.aabb[5],
+            )
+        ) {
+            continue;
         }
 
         // visit
@@ -1006,6 +935,7 @@ export function castRay(
     }
 }
 
+/* @optimize */
 export function castAABB(
     world: World,
     dbvt: DBVT,
@@ -1029,7 +959,7 @@ export function castAABB(
     const halfY = (bounds[4] - bounds[1]) * 0.5;
     const halfZ = (bounds[5] - bounds[2]) * 0.5;
 
-    const castLen = /* @inline */ vec3.length(displacement);
+    const castLen = vec3.length(displacement);
     const dirX = castLen > 0 ? displacement[0] / castLen : 0;
     const dirY = castLen > 0 ? displacement[1] / castLen : 0;
     const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
@@ -1048,61 +978,17 @@ export function castAABB(
             continue;
         }
 
-        // expand node aabb by the shape's half extents (minkowski sum)
-        const minX = node.aabb[0] - halfX;
-        const minY = node.aabb[1] - halfY;
-        const minZ = node.aabb[2] - halfZ;
-        const maxX = node.aabb[3] + halfX;
-        const maxY = node.aabb[4] + halfY;
-        const maxZ = node.aabb[5] + halfZ;
-
-        // ray-slab test against expanded node aabb
-        let tNear = 0;
-        let tFar = castLen;
-        if (Math.abs(dirX) < 1e-10) {
-            if (originX < minX || originX > maxX) continue;
-        } else {
-            const inv = 1 / dirX;
-            let tEnter = (minX - originX) * inv;
-            let tExit = (maxX - originX) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
-        }
-        if (Math.abs(dirY) < 1e-10) {
-            if (originY < minY || originY > maxY) continue;
-        } else {
-            const inv = 1 / dirY;
-            let tEnter = (minY - originY) * inv;
-            let tExit = (maxY - originY) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
-        }
-        if (Math.abs(dirZ) < 1e-10) {
-            if (originZ < minZ || originZ > maxZ) continue;
-        } else {
-            const inv = 1 / dirZ;
-            let tEnter = (minZ - originZ) * inv;
-            let tExit = (maxZ - originZ) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            tNear = tEnter > tNear ? tEnter : tNear;
-            tFar = tExit < tFar ? tExit : tFar;
-            if (tFar < tNear) continue;
+        // ray-slab test against node aabb expanded by the shape's half extents (minkowski sum)
+        if (
+            !rayHitsBox3(
+                originX, originY, originZ,
+                dirX, dirY, dirZ,
+                castLen,
+                node.aabb[0] - halfX, node.aabb[1] - halfY, node.aabb[2] - halfZ,
+                node.aabb[3] + halfX, node.aabb[4] + halfY, node.aabb[5] + halfZ,
+            )
+        ) {
+            continue;
         }
 
         // if internal node, push children sorted by distance
@@ -1163,61 +1049,17 @@ export function castAABB(
             continue;
         }
 
-        // expand body aabb by the shape's half extents (minkowski sum)
-        const bMinX = body.aabb[0] - halfX,
-            bMinY = body.aabb[1] - halfY,
-            bMinZ = body.aabb[2] - halfZ;
-        const bMaxX = body.aabb[3] + halfX,
-            bMaxY = body.aabb[4] + halfY,
-            bMaxZ = body.aabb[5] + halfZ;
-
-        // ray-slab test against expanded body aabb
-        let bodyTNear = 0;
-        let bodyTFar = castLen;
-        if (Math.abs(dirX) < 1e-10) {
-            if (originX < bMinX || originX > bMaxX) continue;
-        } else {
-            const inv = 1 / dirX;
-            let tEnter = (bMinX - originX) * inv,
-                tExit = (bMaxX - originX) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
-        }
-        if (Math.abs(dirY) < 1e-10) {
-            if (originY < bMinY || originY > bMaxY) continue;
-        } else {
-            const inv = 1 / dirY;
-            let tEnter = (bMinY - originY) * inv;
-            let tExit = (bMaxY - originY) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
-        }
-        if (Math.abs(dirZ) < 1e-10) {
-            if (originZ < bMinZ || originZ > bMaxZ) continue;
-        } else {
-            const inv = 1 / dirZ;
-            let tEnter = (bMinZ - originZ) * inv;
-            let tExit = (bMaxZ - originZ) * inv;
-            if (inv < 0) {
-                const tmp = tEnter;
-                tEnter = tExit;
-                tExit = tmp;
-            }
-            bodyTNear = tEnter > bodyTNear ? tEnter : bodyTNear;
-            bodyTFar = tExit < bodyTFar ? tExit : bodyTFar;
-            if (bodyTFar < bodyTNear) continue;
+        // ray-slab test against body aabb expanded by the shape's half extents (minkowski sum)
+        if (
+            !rayHitsBox3(
+                originX, originY, originZ,
+                dirX, dirY, dirZ,
+                castLen,
+                body.aabb[0] - halfX, body.aabb[1] - halfY, body.aabb[2] - halfZ,
+                body.aabb[3] + halfX, body.aabb[4] + halfY, body.aabb[5] + halfZ,
+            )
+        ) {
+            continue;
         }
 
         visitor.visit(body);

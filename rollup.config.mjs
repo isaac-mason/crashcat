@@ -56,7 +56,7 @@ export default [
             },
         ],
         plugins: [
-            compilecat(),
+            compilecat({ libraryInline: true }),
             stripDebug(),
             nodeResolve(),
             typescript({
