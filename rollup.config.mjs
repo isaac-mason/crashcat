@@ -46,7 +46,7 @@ const addJsExtensionsToDts = () => ({
 export default [
     {
         input: './src/index.ts',
-        external: ['mathcat'],
+        external: [],
         output: [
             {
                 file: 'dist/index.js',
@@ -56,7 +56,7 @@ export default [
             },
         ],
         plugins: [
-            compilecat({ libraryInline: true }),
+            compilecat(),
             stripDebug(),
             nodeResolve(),
             typescript({
@@ -69,7 +69,7 @@ export default [
     },
     {
         input: './three/index.ts',
-        external: ['mathcat', 'crashcat', 'three'],
+        external: ['crashcat', 'three'],
         output: [
             {
                 file: 'dist/three.js',

@@ -434,7 +434,11 @@ const _addContactConstraint_rotA = /* @__PURE__ */ mat4.create();
 const _addContactConstraint_rotB = /* @__PURE__ */ mat4.create();
 const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
 
-/** add a contact constraint from a new manifold */
+/**
+ * add a contact constraint from a new manifold
+ *
+ * @optimize
+ */
 export function addContactConstraint(
     contactConstraints: ContactConstraints,
     contactsState: contacts.Contacts,
@@ -472,14 +476,9 @@ export function addContactConstraint(
     const rotA = mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
     const rotB = mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
 
-    // transform the world space normal to body B's local space and store in contact
-    // use transpose of rotation matrix for inverse rotation (R^-1 = R^T for orthogonal matrices)
-    const normalX = contactManifold.worldSpaceNormal[0];
-    const normalY = contactManifold.worldSpaceNormal[1];
-    const normalZ = contactManifold.worldSpaceNormal[2];
-    contact.contactNormal[0] = rotB[0] * normalX + rotB[1] * normalY + rotB[2] * normalZ;
-    contact.contactNormal[1] = rotB[4] * normalX + rotB[5] * normalY + rotB[6] * normalZ;
-    contact.contactNormal[2] = rotB[8] * normalX + rotB[9] * normalY + rotB[10] * normalZ;
+    // transform the world space normal into body B's local space
+    // (R^-1 = R^T for orthogonal matrices)
+    mat4.multiply3x3TransposedVec(contact.contactNormal, rotB, contactManifold.worldSpaceNormal);
     vec3.normalize(contact.contactNormal, contact.contactNormal);
     contact.numContactPoints = contactManifold.numContactPoints;
 
@@ -529,10 +528,7 @@ export function addContactConstraint(
         );
 
         // normal and tangents
-        // constraint.normal = contactManifold.worldSpaceNormal
-        constraint.normal[0] = contactManifold.worldSpaceNormal[0];
-        constraint.normal[1] = contactManifold.worldSpaceNormal[1];
-        constraint.normal[2] = contactManifold.worldSpaceNormal[2];
+        vec3.copy(constraint.normal, contactManifold.worldSpaceNormal);
 
         // compute orthonormal tangent basis from normal
         const normalX = constraint.normal[0];
@@ -551,10 +547,7 @@ export function addContactConstraint(
             constraint.tangent1[2] = -normalY / tangentLen;
         }
 
-        // cross product: normal × tangent1
-        constraint.tangent2[0] = normalY * constraint.tangent1[2] - normalZ * constraint.tangent1[1];
-        constraint.tangent2[1] = normalZ * constraint.tangent1[0] - normalX * constraint.tangent1[2];
-        constraint.tangent2[2] = normalX * constraint.tangent1[1] - normalY * constraint.tangent1[0];
+        vec3.cross(constraint.tangent2, constraint.normal, constraint.tangent1);
 
         // set material properties from settings (may have been modified by listener)
         constraint.friction = contactSettings.combinedFriction;
@@ -605,44 +598,21 @@ export function addContactConstraint(
 
             // get relative contact points from manifold
             const contactPointIndex = i * 3;
+            const scratchA = _addContactConstraint_relativePointOnA;
+            const scratchB = _addContactConstraint_relativePointOnB;
 
-            const relativePointOnA = _addContactConstraint_relativePointOnA;
-            relativePointOnA[0] = contactManifold.relativeContactPointsOnA[contactPointIndex];
-            relativePointOnA[1] = contactManifold.relativeContactPointsOnA[contactPointIndex + 1];
-            relativePointOnA[2] = contactManifold.relativeContactPointsOnA[contactPointIndex + 2];
+            vec3.fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
+            vec3.fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
 
-            const relativePointOnB = _addContactConstraint_relativePointOnB;
-            relativePointOnB[0] = contactManifold.relativeContactPointsOnB[contactPointIndex];
-            relativePointOnB[1] = contactManifold.relativeContactPointsOnB[contactPointIndex + 1];
-            relativePointOnB[2] = contactManifold.relativeContactPointsOnB[contactPointIndex + 2];
+            vec3.add(cp.positionA, contactManifold.baseOffset, scratchA);
+            vec3.add(cp.positionB, contactManifold.baseOffset, scratchB);
 
-            // cp.positionA = contactManifold.baseOffset + relativePointOnA
-            cp.positionA[0] = contactManifold.baseOffset[0] + relativePointOnA[0];
-            cp.positionA[1] = contactManifold.baseOffset[1] + relativePointOnA[1];
-            cp.positionA[2] = contactManifold.baseOffset[2] + relativePointOnA[2];
-
-            // cp.positionB = contactManifold.baseOffset + relativePointOnB
-            cp.positionB[0] = contactManifold.baseOffset[0] + relativePointOnB[0];
-            cp.positionB[1] = contactManifold.baseOffset[1] + relativePointOnB[1];
-            cp.positionB[2] = contactManifold.baseOffset[2] + relativePointOnB[2];
-
-            // localA = cp.positionA - bodyA.centerOfMassPosition
-            const localAX = cp.positionA[0] - bodyA.centerOfMassPosition[0];
-            const localAY = cp.positionA[1] - bodyA.centerOfMassPosition[1];
-            const localAZ = cp.positionA[2] - bodyA.centerOfMassPosition[2];
-            // cp.localPositionA = rotA^T * localA
-            cp.localPositionA[0] = rotA[0] * localAX + rotA[1] * localAY + rotA[2] * localAZ;
-            cp.localPositionA[1] = rotA[4] * localAX + rotA[5] * localAY + rotA[6] * localAZ;
-            cp.localPositionA[2] = rotA[8] * localAX + rotA[9] * localAY + rotA[10] * localAZ;
-
-            // localB = cp.positionB - bodyB.centerOfMassPosition
-            const localBX = cp.positionB[0] - bodyB.centerOfMassPosition[0];
-            const localBY = cp.positionB[1] - bodyB.centerOfMassPosition[1];
-            const localBZ = cp.positionB[2] - bodyB.centerOfMassPosition[2];
-            // cp.localPositionB = rotB^T * localB
-            cp.localPositionB[0] = rotB[0] * localBX + rotB[1] * localBY + rotB[2] * localBZ;
-            cp.localPositionB[1] = rotB[4] * localBX + rotB[5] * localBY + rotB[6] * localBZ;
-            cp.localPositionB[2] = rotB[8] * localBX + rotB[9] * localBY + rotB[10] * localBZ;
+            // cp.localPosition* = rot*^T * (cp.position* - bodyCOM); reuse the
+            // scratch vec3s now that we're done with the relative points.
+            vec3.subtract(scratchA, cp.positionA, bodyA.centerOfMassPosition);
+            vec3.subtract(scratchB, cp.positionB, bodyB.centerOfMassPosition);
+            mat4.multiply3x3TransposedVec(cp.localPositionA, rotA, scratchA);
+            mat4.multiply3x3TransposedVec(cp.localPositionB, rotB, scratchB);
 
             // check if we have have a close contact point from last update
             // match to cached contact point (first match wins)
@@ -653,19 +623,8 @@ export function addContactConstraint(
                 for (let j = 0; j < existingContact.numContactPoints; j++) {
                     const point = existingContact.contactPoints[j];
 
-                    // both positions within threshold?
-                    // dist1Sq = ||cp.localPositionA - point.position1||^2
-                    const d1x = cp.localPositionA[0] - point.position1[0];
-                    const d1y = cp.localPositionA[1] - point.position1[1];
-                    const d1z = cp.localPositionA[2] - point.position1[2];
-                    const dist1Sq = d1x * d1x + d1y * d1y + d1z * d1z;
-
-                    // dist2Sq = ||cp.localPositionB - point.position2||^2
-                    const d2x = cp.localPositionB[0] - point.position2[0];
-                    const d2y = cp.localPositionB[1] - point.position2[1];
-                    const d2z = cp.localPositionB[2] - point.position2[2];
-                    const dist2Sq = d2x * d2x + d2y * d2y + d2z * d2z;
-
+                    const dist1Sq = vec3.squaredDistance(cp.localPositionA, point.position1);
+                    const dist2Sq = vec3.squaredDistance(cp.localPositionB, point.position2);
                     const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
 
                     if (dist1Sq < threshold && dist2Sq < threshold) {
@@ -694,20 +653,9 @@ export function addContactConstraint(
             const rA = _addContactConstraint_rA;
             const rB = _addContactConstraint_rB;
 
-            // midpoint = (cp.positionA + cp.positionB) * 0.5
-            midpoint[0] = (cp.positionA[0] + cp.positionB[0]) * 0.5;
-            midpoint[1] = (cp.positionA[1] + cp.positionB[1]) * 0.5;
-            midpoint[2] = (cp.positionA[2] + cp.positionB[2]) * 0.5;
-
-            // rA = midpoint - bodyA.centerOfMassPosition
-            rA[0] = midpoint[0] - bodyA.centerOfMassPosition[0];
-            rA[1] = midpoint[1] - bodyA.centerOfMassPosition[1];
-            rA[2] = midpoint[2] - bodyA.centerOfMassPosition[2];
-
-            // rB = midpoint - bodyB.centerOfMassPosition
-            rB[0] = midpoint[0] - bodyB.centerOfMassPosition[0];
-            rB[1] = midpoint[1] - bodyB.centerOfMassPosition[1];
-            rB[2] = midpoint[2] - bodyB.centerOfMassPosition[2];
+            vec3.lerp(midpoint, cp.positionA, cp.positionB, 0.5);
+            vec3.subtract(rA, midpoint, bodyA.centerOfMassPosition);
+            vec3.subtract(rB, midpoint, bodyB.centerOfMassPosition);
 
             // calculate normal velocity bias with restitution and speculative contacts
             const normalVelocityBias = calculateNormalVelocityBias(
@@ -779,14 +727,8 @@ export function addContactConstraint(
 
             // store to contact array for next frame's warm starting
             const cachedPoint = contact.contactPoints[i];
-
-            cachedPoint.position1[0] = cp.localPositionA[0];
-            cachedPoint.position1[1] = cp.localPositionA[1];
-            cachedPoint.position1[2] = cp.localPositionA[2];
-
-            cachedPoint.position2[0] = cp.localPositionB[0];
-            cachedPoint.position2[1] = cp.localPositionB[1];
-            cachedPoint.position2[2] = cp.localPositionB[2];
+            vec3.copy(cachedPoint.position1, cp.localPositionA);
+            vec3.copy(cachedPoint.position2, cp.localPositionB);
 
             // store impulses (will be updated after solving)
             cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
@@ -801,51 +743,21 @@ export function addContactConstraint(
     // store sensor contact points to contact array
     // this ensures proper onContactAdded/onContactPersisted semantics for sensors
     for (let i = 0; i < contactManifold.numContactPoints; i++) {
-        // get relative contact points from manifold
         const contactPointIndex = i * 3;
-
-        const relativePointOnA = _addContactConstraint_relativePointOnA;
-        relativePointOnA[0] = contactManifold.relativeContactPointsOnA[contactPointIndex];
-        relativePointOnA[1] = contactManifold.relativeContactPointsOnA[contactPointIndex + 1];
-        relativePointOnA[2] = contactManifold.relativeContactPointsOnA[contactPointIndex + 2];
-
-        const relativePointOnB = _addContactConstraint_relativePointOnB;
-        relativePointOnB[0] = contactManifold.relativeContactPointsOnB[contactPointIndex];
-        relativePointOnB[1] = contactManifold.relativeContactPointsOnB[contactPointIndex + 1];
-        relativePointOnB[2] = contactManifold.relativeContactPointsOnB[contactPointIndex + 2];
-
-        // worldPosA = contactManifold.baseOffset + relativePointOnA
-        const worldPosAX = contactManifold.baseOffset[0] + relativePointOnA[0];
-        const worldPosAY = contactManifold.baseOffset[1] + relativePointOnA[1];
-        const worldPosAZ = contactManifold.baseOffset[2] + relativePointOnA[2];
-
-        // worldPosB = contactManifold.baseOffset + relativePointOnB
-        const worldPosBX = contactManifold.baseOffset[0] + relativePointOnB[0];
-        const worldPosBY = contactManifold.baseOffset[1] + relativePointOnB[1];
-        const worldPosBZ = contactManifold.baseOffset[2] + relativePointOnB[2];
-
-        // localA = worldPosA - bodyA.centerOfMassPosition
-        const localAX = worldPosAX - bodyA.centerOfMassPosition[0];
-        const localAY = worldPosAY - bodyA.centerOfMassPosition[1];
-        const localAZ = worldPosAZ - bodyA.centerOfMassPosition[2];
-
-        // localB = worldPosB - bodyB.centerOfMassPosition
-        const localBX = worldPosBX - bodyB.centerOfMassPosition[0];
-        const localBY = worldPosBY - bodyB.centerOfMassPosition[1];
-        const localBZ = worldPosBZ - bodyB.centerOfMassPosition[2];
-
-        // store local positions to contact array (rotA^T * localA, rotB^T * localB)
+        const scratchA = _addContactConstraint_relativePointOnA;
+        const scratchB = _addContactConstraint_relativePointOnB;
         const cachedPoint = contact.contactPoints[i];
 
-        // cachedPoint.position1 = rotA^T * localA
-        cachedPoint.position1[0] = rotA[0] * localAX + rotA[1] * localAY + rotA[2] * localAZ;
-        cachedPoint.position1[1] = rotA[4] * localAX + rotA[5] * localAY + rotA[6] * localAZ;
-        cachedPoint.position1[2] = rotA[8] * localAX + rotA[9] * localAY + rotA[10] * localAZ;
-
-        // cachedPoint.position2 = rotB^T * localB
-        cachedPoint.position2[0] = rotB[0] * localBX + rotB[1] * localBY + rotB[2] * localBZ;
-        cachedPoint.position2[1] = rotB[4] * localBX + rotB[5] * localBY + rotB[6] * localBZ;
-        cachedPoint.position2[2] = rotB[8] * localBX + rotB[9] * localBY + rotB[10] * localBZ;
+        // scratch = manifold relative point; then add baseOffset for world; then
+        // subtract COM for body-local; then rot^T * local for cached position.
+        vec3.fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
+        vec3.fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
+        vec3.add(scratchA, contactManifold.baseOffset, scratchA);
+        vec3.add(scratchB, contactManifold.baseOffset, scratchB);
+        vec3.subtract(scratchA, scratchA, bodyA.centerOfMassPosition);
+        vec3.subtract(scratchB, scratchB, bodyB.centerOfMassPosition);
+        mat4.multiply3x3TransposedVec(cachedPoint.position1, rotA, scratchA);
+        mat4.multiply3x3TransposedVec(cachedPoint.position2, rotB, scratchB);
 
         // reset impulses (sensors don't apply forces)
         cachedPoint.normalLambda = 0;
@@ -898,10 +810,10 @@ function createContactConstraint(): ContactConstraint {
     };
 }
 
-const _linearVelocityA: Vec3 = /* @__PURE__ */ vec3.create();
-const _angularVelocityA: Vec3 = /* @__PURE__ */ vec3.create();
-const _linearVelocityB: Vec3 = /* @__PURE__ */ vec3.create();
-const _angularVelocityB: Vec3 = /* @__PURE__ */ vec3.create();
+const _linearVelocityA: Vec3 = [0, 0, 0];
+const _angularVelocityA: Vec3 = [0, 0, 0];
+const _linearVelocityB: Vec3 = [0, 0, 0];
+const _angularVelocityB: Vec3 = [0, 0, 0];
 
 /**
  * apply warm start impulses from previous frame to give solver a good initial guess.
@@ -913,6 +825,8 @@ const _angularVelocityB: Vec3 = /* @__PURE__ */ vec3.create();
  *
  * @param contactConstraints contact constraint state
  * @param warmStartRatio scale factor for warm start impulses (usually 1.0)
+ *
+ * @optimize
  */
 export function warmStartVelocityConstraints(
     contactConstraints: ContactConstraints,
@@ -1047,6 +961,8 @@ export function warmStartVelocityConstraints(
  * @param bodies body array
  * @param constraintIndices indices of constraints to solve (from island)
  * @returns true if any impulse was applied (not yet converged)
+ *
+ * @optimize
  */
 export function solveVelocityConstraintsForIsland(
     contactConstraints: ContactConstraints,
@@ -1057,6 +973,11 @@ export function solveVelocityConstraintsForIsland(
     // CRITICAL ORDER: Friction first, then normal (non-penetration is more important so solved last)
 
     let anyImpulseApplied = false;
+
+    const _linearVelocityA: Vec3 = [0, 0, 0];
+    const _angularVelocityA: Vec3 = [0, 0, 0];
+    const _linearVelocityB: Vec3 = [0, 0, 0];
+    const _angularVelocityB: Vec3 = [0, 0, 0];
 
     for (const constraintIndex of constraintIndices) {
         const constraint = contactConstraints.pool[constraintIndex];
@@ -1286,6 +1207,8 @@ const _solvePos_rotB = /* @__PURE__ */ mat4.create();
  * @param baumgarteFactor position correction factor 0-1
  * @param maxPenetrationDistance maximum distance to correct in a single iteration
  * @returns true if any impulses were applied
+ *
+ * @optimize
  */
 export function solvePositionConstraintsForIsland(
     contactConstraints: ContactConstraints,

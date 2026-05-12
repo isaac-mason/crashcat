@@ -1,4 +1,5 @@
 packages:
+  - 'bench'
   - 'docs'
   - 'examples'
   - 'website'

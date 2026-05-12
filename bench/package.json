@@ -1,0 +1,18 @@
+{
+    "name": "bench",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "bench": "labs cube-heap.bench.ts pyramid.bench.ts",
+        "perf:profile": "node profile.mjs"
+    },
+    "dependencies": {
+        "crashcat": "workspace:^"
+    },
+    "devDependencies": {
+        "@pmndrs/labs": "^0.6.0",
+        "@types/node": "^22.0.0",
+        "tsx": "^4.21.0",
+        "typescript": "^5.9.2"
+    }
+}

@@ -9,10 +9,12 @@ if (!scenario) {
     process.exit(2);
 }
 
-const mod = await import(`./scenarios/${scenario}.ts`);
+const mod = await import(`./${scenario}.bench.ts`);
 if (typeof mod.runForProfiling !== 'function') {
     console.error(`scenario ${scenario} does not export runForProfiling()`);
     process.exit(2);
 }
 
 mod.runForProfiling();
+
+export {};

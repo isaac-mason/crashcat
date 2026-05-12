@@ -43,7 +43,6 @@
         "test:v8": "vitest --config vitest.v8.config.ts",
         "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
         "typecheck-docs": "tsc --project docs/tsconfig.json --noEmit",
-        "perf:profile": "node bench/profile.mjs",
         "docs": "(cd docs && node ./build.js)",
         "typedoc": "typedoc --tsconfig ./tsconfig.json --name \"crashcat docs\" --out ./dist-typedoc ./src/index.ts ./three/index.ts"
     },
@@ -52,7 +51,6 @@
         "mathcat": "0.0.12"
     },
     "peerDependencies": {
-        "mathcat": "0.0.12",
         "three": ">=0.182.0"
     },
     "peerDependenciesMeta": {
@@ -62,7 +60,6 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^2.2.0",
-        "@pmndrs/labs": "^0.6.0",
         "@rollup/plugin-node-resolve": "^16.0.1",
         "@rollup/plugin-typescript": "^12.1.4",
         "@types/three": "0.183.0",
@@ -71,7 +68,6 @@
         "rollup-plugin-copy": "^3.5.0",
         "rollup-plugin-filesize": "^10.0.0",
         "tslib": "^2.8.1",
-        "tsx": "^4.21.0",
         "typedoc": "^0.28.16",
         "typescript": "^5.9.2",
         "vitest": "^3.2.4"
