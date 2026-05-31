@@ -451,7 +451,6 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
 
 const _bounds = /* @__PURE__ */ box3.create();
 
-/* @optimize */
 export function add(dbvt: DBVT, body: RigidBody): number {
     const bounds = box3.create();
 
@@ -820,7 +819,6 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
 const _ray = /* @__PURE__ */ raycast3.create();
 const _nodeBounds = /* @__PURE__ */ box3.create(); // scratch for expanded child bounds in castAABB distance sort
 
-/* @optimize */
 export function castRay(
     world: World,
     dbvt: DBVT,
@@ -935,7 +933,6 @@ export function castRay(
     }
 }
 
-/* @optimize */
 export function castAABB(
     world: World,
     dbvt: DBVT,

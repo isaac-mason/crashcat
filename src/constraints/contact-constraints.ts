@@ -436,8 +436,6 @@ const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSetti
 
 /**
  * add a contact constraint from a new manifold
- *
- * @optimize
  */
 export function addContactConstraint(
     contactConstraints: ContactConstraints,

@@ -1,8 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { nodeResolve } from '@rollup/plugin-node-resolve';
 import typescript from '@rollup/plugin-typescript';
-import compilecat from 'compilecat/rollup';
+import compilecat from 'compilecat/rolldown';
 import filesize from 'rollup-plugin-filesize';
 
 function stripDebug() {
@@ -46,7 +45,7 @@ const addJsExtensionsToDts = () => ({
 export default [
     {
         input: './src/index.ts',
-        external: [],
+        external: ['mathcat'],
         output: [
             {
                 file: 'dist/index.js',
@@ -56,9 +55,8 @@ export default [
             },
         ],
         plugins: [
-            compilecat(),
+            compilecat({ debug: true }),
             stripDebug(),
-            nodeResolve(),
             typescript({
                 tsconfig: path.resolve(import.meta.dirname, './tsconfig.json'),
                 emitDeclarationOnly: true,
@@ -69,7 +67,7 @@ export default [
     },
     {
         input: './three/index.ts',
-        external: ['crashcat', 'three'],
+        external: ['mathcat', 'crashcat', 'three'],
         output: [
             {
                 file: 'dist/three.js',
@@ -80,7 +78,6 @@ export default [
         ],
         plugins: [
             stripDebug(),
-            nodeResolve(),
             typescript({
                 tsconfig: path.resolve(import.meta.dirname, './tsconfig.json'),
                 emitDeclarationOnly: true,

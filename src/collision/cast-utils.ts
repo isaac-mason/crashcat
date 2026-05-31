@@ -111,7 +111,6 @@ export function rayDistanceToBox3(
  * an exit-on-miss slab test. compilecat's BLOCK inliner rewrites the early
  * returns into labeled-break exits at each call site.
  */
-/* @inline */
 export function rayHitsBox3(
     originX: number,
     originY: number,

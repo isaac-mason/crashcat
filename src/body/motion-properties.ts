@@ -480,6 +480,10 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
     );
 }
 
+const _inertiaRotMat = mat4.create();
+const _rotation = mat4.create();
+const _scaled = mat4.create();
+
 /**
  * Computes the world-space inverse inertia matrix for a given body rotation.
  *
@@ -494,21 +498,17 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
  * @optimize
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
-    const inertiaRotMat = mat4.create();
-    const rotation = mat4.create();
-    const scaled = mat4.create();
-
     // step 1: convert inertia rotation quaternion to matrix
-    mat4.fromQuat(inertiaRotMat, motionProperties.inertiaRotation);
+    mat4.fromQuat(_inertiaRotMat, motionProperties.inertiaRotation);
 
     // step 2: rotation = bodyRotation * inertiaRotMat
-    mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat);
+    mat4.multiply3x3(_rotation, bodyRotation, _inertiaRotMat);
 
     // step 3: scale rotation columns by inverse inertia diagonal
-    mat4.scale(scaled, rotation, motionProperties.invInertiaDiagonal);
+    mat4.scale(_scaled, _rotation, motionProperties.invInertiaDiagonal);
 
     // step 4: out = scaled * rotation^T
-    mat4.multiply3x3RightTransposed(out, scaled, rotation);
+    mat4.multiply3x3RightTransposed(out, _scaled, _rotation);
 
     // step 5: mask out DOFs that are not allowed
     const allowedRotationAxis = (motionProperties.allowedDegreesOfFreedom >> 3) & 0b111;
