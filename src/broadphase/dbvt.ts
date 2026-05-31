@@ -64,10 +64,10 @@ function requestNode(bvh: DBVT): number {
         node.parent = -1;
         node.left = -1;
         node.right = -1;
-        /* @inline */ box3.empty(node.aabb);
+        box3.empty(node.aabb);
         node.height = 0;
         node.bodyIndex = -1;
-        /* @inline */ box3.empty(node.previousAabb);
+        box3.empty(node.previousAabb);
     } else {
         nodeIndex = bvh.nodes.length;
         bvh.nodes.push({
@@ -93,12 +93,10 @@ function releaseNode(bvh: DBVT, nodeIndex: number): void {
     bvh.freeNodeIndices.push(nodeIndex);
 }
 
-/** @inline */
 function isLeaf(node: DBVTNode): boolean {
     return node.left === -1 && node.right === -1;
 }
 
-/** @inline */
 function proximity(a: Box3, b: Box3): number {
     const dx = a[0] + a[3] - (b[0] + b[3]);
     const dy = a[1] + a[4] - (b[1] + b[4]);
@@ -106,19 +104,17 @@ function proximity(a: Box3, b: Box3): number {
     return Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
 }
 
-/** @inline */
 function select(o: Box3, a: Box3, b: Box3): number {
     return proximity(o, a) < proximity(o, b) ? 0 : 1;
 }
 
-/** @inline */
 function indexof(dbvt: DBVT, nodeIndex: number): number {
     const node = dbvt.nodes[nodeIndex];
     const parent = dbvt.nodes[node.parent];
     return parent.right === nodeIndex ? 1 : 0;
 }
 
-/** @inline */
+/** @optimize */
 function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
     const leaf = dbvt.nodes[leafIndex];
 
@@ -144,7 +140,7 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
     const newParent = dbvt.nodes[newParentIndex];
 
     newParent.parent = prev;
-    /* @inline */ box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
+    box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
     newParent.height = rootNode.height + 1;
 
     if (prev !== -1) {
@@ -164,10 +160,10 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
         let parentIndex = prev;
         while (parentIndex !== -1) {
             const parentNode = dbvt.nodes[parentIndex];
-            if (!(/* @inline */ box3.containsBox3(parentNode.aabb, childNode.aabb))) {
+            if (!(box3.containsBox3(parentNode.aabb, childNode.aabb))) {
                 const leftNode = dbvt.nodes[parentNode.left];
                 const rightNode = dbvt.nodes[parentNode.right];
-                /* @inline */ box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
+                box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
             } else {
                 break;
             }
@@ -207,12 +203,13 @@ function surfaceArea(aabb: Box3): number {
 
 const _boundsResult = /* @__PURE__ */ box3.create();
 
+/* @optimize */
 function boundsOfLeaves(dbvt: DBVT, leaves: number[]): Box3 {
     const result = _boundsResult;
-    /* @inline */ box3.empty(result);
+    box3.empty(result);
     for (const leafIndex of leaves) {
         const leaf = dbvt.nodes[leafIndex];
-        /* @inline */ box3.union(result, result, leaf.aabb);
+        box3.union(result, result, leaf.aabb);
     }
     return result;
 }
@@ -230,7 +227,7 @@ function bottomup(dbvt: DBVT, leaves: number[]): void {
             for (let j = i + 1; j < leaves.length; j++) {
                 const leaf0 = dbvt.nodes[leaves[i]];
                 const leaf1 = dbvt.nodes[leaves[j]];
-                /* @inline */ box3.union(_mergedAabb, leaf0.aabb, leaf1.aabb);
+                box3.union(_mergedAabb, leaf0.aabb, leaf1.aabb);
                 const sz = surfaceArea(_mergedAabb);
                 if (sz < minSize) {
                     minSize = sz;
@@ -248,7 +245,7 @@ function bottomup(dbvt: DBVT, leaves: number[]): void {
 
         const parentIndex = requestNode(dbvt);
         const parent = dbvt.nodes[parentIndex];
-        /* @inline */ box3.union(parent.aabb, n0.aabb, n1.aabb);
+        box3.union(parent.aabb, n0.aabb, n1.aabb);
         parent.left = n0Index;
         parent.right = n1Index;
         n0.parent = parentIndex;
@@ -321,7 +318,7 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
 
                 const parentIndex = requestNode(dbvt);
                 const parent = dbvt.nodes[parentIndex];
-                /* @inline */ box3.union(parent.aabb, left.aabb, right.aabb);
+                box3.union(parent.aabb, left.aabb, right.aabb);
                 parent.left = leftIndex;
                 parent.right = rightIndex;
                 left.parent = parentIndex;
@@ -344,6 +341,7 @@ function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
     }
 }
 
+/* @optimize */
 function sort(dbvt: DBVT, nodeIndex: number): number {
     const n = dbvt.nodes[nodeIndex];
     const parentIndex = n.parent;
@@ -390,9 +388,9 @@ function sort(dbvt: DBVT, nodeIndex: number): number {
 
         // swap volumes
         const tempAabb = box3.create();
-        /* @inline */ box3.copy(tempAabb, p.aabb);
-        /* @inline */ box3.copy(p.aabb, n.aabb);
-        /* @inline */ box3.copy(n.aabb, tempAabb);
+        box3.copy(tempAabb, p.aabb);
+        box3.copy(p.aabb, n.aabb);
+        box3.copy(n.aabb, tempAabb);
 
         return parentIndex;
     }
@@ -400,6 +398,7 @@ function sort(dbvt: DBVT, nodeIndex: number): number {
     return nodeIndex;
 }
 
+/* @optimize */
 function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     if (leafIndex === dbvt.root) {
         dbvt.root = -1;
@@ -427,13 +426,13 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
         let nodeIndex = prevIndex;
         while (nodeIndex !== -1) {
             const node = dbvt.nodes[nodeIndex];
-            /* @inline */ box3.copy(_prevAabb, node.aabb);
+            box3.copy(_prevAabb, node.aabb);
 
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
-            /* @inline */ box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
+            box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
 
-            if (!(/* @inline */ box3.exactEquals(node.aabb, _prevAabb))) {
+            if (!(box3.exactEquals(node.aabb, _prevAabb))) {
                 nodeIndex = node.parent;
             } else {
                 break;
@@ -482,6 +481,7 @@ export function remove(dbvt: DBVT, body: RigidBody): void {
     body.dbvtNode = -1;
 }
 
+/* @optimize */
 export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     const leafIndex = body.dbvtNode;
     if (leafIndex === -1) return;
@@ -489,12 +489,12 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     const leaf = dbvt.nodes[leafIndex];
 
     // early exit: if body still fits in the fat AABB, nothing to do
-    if (/* @inline */ box3.containsBox3(leaf.aabb, body.aabb)) {
+    if (box3.containsBox3(leaf.aabb, body.aabb)) {
         return;
     }
 
     // expand body bounds by margin for fat AABB
-    /* @inline */ box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
+    box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
 
     // velocity-based expansion, expands AABB only in the direction of motion to reduce update frequency
     if (dbvt.velocityPrediction > 0) {
@@ -558,13 +558,13 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
     }
 
     // update leaf volume
-    /* @inline */ box3.copy(leaf.aabb, _bounds);
+    box3.copy(leaf.aabb, _bounds);
 
     // reinsert from computed root
     insertLeaf(dbvt, rootIndex, leafIndex);
 
     // update previous AABB for next velocity prediction
-    /* @inline */ box3.copy(leaf.previousAabb, body.aabb);
+    box3.copy(leaf.previousAabb, body.aabb);
 }
 
 export function optimizeBottomUp(dbvt: DBVT): void {
@@ -1070,9 +1070,9 @@ export function castAABB(
 /** get the bounds of the entire DBVT */
 export function bounds(out: Box3, dbvt: DBVT): Box3 {
     if (dbvt.root === -1) {
-        return /* @inline */ box3.empty(out);
+        return box3.empty(out);
     }
 
     const rootNode = dbvt.nodes[dbvt.root];
-    return /* @inline */ box3.copy(out, rootNode.aabb);
+    return box3.copy(out, rootNode.aabb);
 }

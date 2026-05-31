@@ -605,10 +605,12 @@ export function addAngularVelocity(motionProperties: MotionProperties, velocityD
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
+ * 
+ * @optimize
  */
 export function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
-    /* @inline */ vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
-    /* @inline */ applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
+    vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
+    applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 }
 
 /**
@@ -616,12 +618,11 @@ export function addLinearVelocityStep(motionProperties: MotionProperties, linear
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
+ * 
+ * @optimize
  */
 export function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
-    // linearVelocity -= linearVelocityChange
-    motionProperties.linearVelocity[0] -= linearVelocityChange[0];
-    motionProperties.linearVelocity[1] -= linearVelocityChange[1];
-    motionProperties.linearVelocity[2] -= linearVelocityChange[2];
+    vec3.sub(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
     applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 }
 
@@ -629,18 +630,22 @@ export function subLinearVelocityStep(motionProperties: MotionProperties, linear
  * Add an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
+ * 
+ * @optimize
  */
 export function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
-    /* @inline */ vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
+    vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
 }
 
 /**
  * Subtract an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
+ * 
+ * @optimize
  */
 export function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
-    /* @inline */ vec3.sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
+    vec3.sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
 }
 
 /**
@@ -649,6 +654,8 @@ export function subAngularVelocityStep(motionProperties: MotionProperties, angul
  *
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
+ * 
+ * @optimize
  */
 export function scaleToMass(motionProperties: MotionProperties, newMass: number): void {
     assert(motionProperties.invMass > 0, 'Body must have finite mass to scale');
@@ -656,7 +663,7 @@ export function scaleToMass(motionProperties: MotionProperties, newMass: number)
 
     const newInvMass = 1.0 / newMass;
     // scale inverse inertia diagonal: I^-1 *= (newInvMass / oldInvMass)
-    /* @inline */ vec3.scale(motionProperties.invInertiaDiagonal, motionProperties.invInertiaDiagonal, newInvMass / motionProperties.invMass);
+    vec3.scale(motionProperties.invInertiaDiagonal, motionProperties.invInertiaDiagonal, newInvMass / motionProperties.invMass);
     motionProperties.invMass = newInvMass;
 }
 

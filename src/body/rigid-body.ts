@@ -558,65 +558,16 @@ export function updatePositionFromCenterOfMass(world: World, body: RigidBody): v
     broadphase.updateBody(world.broadphase, body);
 }
 
-const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
-
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
  *
- * Uses the |R|*extents method: for an AABB transformed by rotation R and translation p,
- * center_world = R*center_local + p, extents_world = |R|*extents_local (element-wise abs).
- * This is ~3x fewer ops than transforming all 8 corners.
+ * @optimize
  */
 export function updateAABB(body: RigidBody): void {
-    const shapeAABB = body.shape.aabb;
-    const minX = shapeAABB[0];
-    const minY = shapeAABB[1];
-    const minZ = shapeAABB[2];
-    const maxX = shapeAABB[3];
-    const maxY = shapeAABB[4];
-    const maxZ = shapeAABB[5];
-
-    // local center and extents
-    const cx = (minX + maxX) * 0.5;
-    const cy = (minY + maxY) * 0.5;
-    const cz = (minZ + maxZ) * 0.5;
-    const ex = (maxX - minX) * 0.5;
-    const ey = (maxY - minY) * 0.5;
-    const ez = (maxZ - minZ) * 0.5;
-
-    mat4.fromQuat(_updateBodyAABB_rot, body.quaternion);
-    const m = _updateBodyAABB_rot;
-    const px = body.position[0];
-    const py = body.position[1];
-    const pz = body.position[2];
-
-    // world-space center: R * local_center + position
-    const wcx = m[0] * cx + m[4] * cy + m[8] * cz + px;
-    const wcy = m[1] * cx + m[5] * cy + m[9] * cz + py;
-    const wcz = m[2] * cx + m[6] * cy + m[10] * cz + pz;
-
-    // world-space extents: |R| * local_extents
-    const a0 = m[0] < 0 ? -m[0] : m[0];
-    const a1 = m[1] < 0 ? -m[1] : m[1];
-    const a2 = m[2] < 0 ? -m[2] : m[2];
-    const a4 = m[4] < 0 ? -m[4] : m[4];
-    const a5 = m[5] < 0 ? -m[5] : m[5];
-    const a6 = m[6] < 0 ? -m[6] : m[6];
-    const a8 = m[8] < 0 ? -m[8] : m[8];
-    const a9 = m[9] < 0 ? -m[9] : m[9];
-    const a10 = m[10] < 0 ? -m[10] : m[10];
-
-    const wex = a0 * ex + a4 * ey + a8 * ez;
-    const wey = a1 * ex + a5 * ey + a9 * ez;
-    const wez = a2 * ex + a6 * ey + a10 * ez;
-
-    body.aabb[0] = wcx - wex;
-    body.aabb[1] = wcy - wey;
-    body.aabb[2] = wcz - wez;
-    body.aabb[3] = wcx + wex;
-    body.aabb[4] = wcy + wey;
-    body.aabb[5] = wcz + wez;
+    const m: Mat4 = /* @sroa */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    mat4.fromRotationTranslation(m, body.quaternion, body.position);
+    box3.transformMat4(body.aabb, body.shape.aabb, m);
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
