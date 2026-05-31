@@ -40,7 +40,6 @@
         "format": "biome format --write src/. tst/.",
         "lint": "biome lint --write src/. tst/.",
         "test": "vitest ./tst",
-        "test:v8": "vitest --config vitest.v8.config.ts",
         "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
         "typecheck-docs": "tsc --project docs/tsconfig.json --noEmit",
         "docs": "(cd docs && node ./build.js)",
