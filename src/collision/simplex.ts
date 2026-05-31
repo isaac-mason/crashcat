@@ -1,50 +1,47 @@
-import type { Vec3 } from 'mathcat';
-import { vec3 } from 'mathcat';
-
-/** point in a simplex */
-export type SimplexPoint = {
-    /** minkowski difference (P - Q) */
-    y: Vec3;
-    /** support point on shape A */
-    p: Vec3;
-    /** support point on shape B */
-    q: Vec3;
-};
-
-/** simplex used in GJK/EPA algorithms */
+/**
+ * Simplex used in GJK/EPA algorithms.
+ *
+ * Storage is three flat `number[12]` arrays — `y`, `p`, `q` — with point `i`
+ * living at offsets `i*3 .. i*3+2` in each. This keeps the gjk inner loop's
+ * y-read sweep contiguous (one cache line) and avoided the nested-object
+ * pointer chase that a `points[i].y[k]` layout pays on every access.
+ *
+ * Invariant: `y[i]`, `p[i]`, `q[i]` at the same base offset describe the same
+ * logical support pair — `y = p - q`.
+ */
 export type Simplex = {
-    /** points in the simplex */
-    points: [SimplexPoint, SimplexPoint, SimplexPoint, SimplexPoint];
-    /** current number of points in the simplex */
+    /** minkowski difference (P - Q) per point, flat xyz, length 12 */
+    y: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    /** support point on shape A per point, flat xyz, length 12 */
+    p: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    /** support point on shape B per point, flat xyz, length 12 */
+    q: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    /** current number of points in the simplex (0..4) */
     size: number;
 };
 
 /** creates a new simplex */
 export const createSimplex = (): Simplex => ({
-    points: [
-        { y: vec3.create(), p: vec3.create(), q: vec3.create() },
-        { y: vec3.create(), p: vec3.create(), q: vec3.create() },
-        { y: vec3.create(), p: vec3.create(), q: vec3.create() },
-        { y: vec3.create(), p: vec3.create(), q: vec3.create() },
-    ],
+    y: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    p: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    q: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     size: 0,
 });
 
 /** copies a simplex */
 export const copySimplex = (out: Simplex, input: Simplex): Simplex => {
     out.size = input.size;
-    for (let i = 0; i < input.size; i++) {
-        const src = input.points[i];
-        const dst = out.points[i];
-        dst.y[0] = src.y[0];
-        dst.y[1] = src.y[1];
-        dst.y[2] = src.y[2];
-        dst.p[0] = src.p[0];
-        dst.p[1] = src.p[1];
-        dst.p[2] = src.p[2];
-        dst.q[0] = src.q[0];
-        dst.q[1] = src.q[1];
-        dst.q[2] = src.q[2];
+    const end = input.size * 3;
+    const srcY = input.y;
+    const srcP = input.p;
+    const srcQ = input.q;
+    const dstY = out.y;
+    const dstP = out.p;
+    const dstQ = out.q;
+    for (let i = 0; i < end; i++) {
+        dstY[i] = srcY[i];
+        dstP[i] = srcP[i];
+        dstQ[i] = srcQ[i];
     }
     return out;
 };

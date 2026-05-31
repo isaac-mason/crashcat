@@ -1,10 +1,16 @@
 import { type Box3, box3, mat4, type Quat, quat, raycast3, triangle3, type Vec3, vec3 } from 'mathcat';
-import { CastRayStatus, createCastRayHit, createDefaultCastRaySettings } from 'src/collision/cast-ray-vs-shape';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
 import * as activeEdges from '../collision/active-edges';
-import type { CastRayCollector, CastRayHit, CastRaySettings } from '../collision/cast-ray-vs-shape';
+import {
+    type CastRayCollector,
+    type CastRayHit,
+    type CastRaySettings,
+    CastRayStatus,
+    createCastRayHit,
+    createDefaultCastRaySettings,
+} from '../collision/cast-ray-vs-shape';
 import {
     type CastShapeCollector,
     type CastShapeSettings,

@@ -74,8 +74,7 @@ export * from './constraints/combine-material';
 export type { ContactManifold } from './manifold';
 export { getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB } from './manifold/manifold';
 
-export type { ContactSettings } from './constraints/contact-constraints';
-export * as contactConstraints from './constraints/contact-constraints';
+export type { ContactSettings, WorldContactPoint, ContactConstraint, ContactConstraints } from './constraints/contact-constraints';
 
 export * as constraints from './constraints/constraints';
 export type { 

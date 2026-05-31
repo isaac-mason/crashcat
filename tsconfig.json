@@ -17,14 +17,9 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "skipLibCheck": true,
-    "baseUrl": "./",
     "rootDir": "./",
     "allowSyntheticDefaultImports": true,
-    "paths": {
-      "three": ["node_modules/@types/three"],
-      "three/*": ["node_modules/@types/three/*"]
-    }
   },
-  "include": ["./src", "./three", "./tst", "./bench"],
-  "exclude": ["./dist"]
+  "include": ["./src", "./three", "./tst"],
+  "exclude": ["./dist", "./bench"]
 }

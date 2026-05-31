@@ -103,3 +103,79 @@ export function rayDistanceToBox3(
 
     return tMin >= 0 ? tMin / length : Infinity;
 }
+
+/**
+ * Ray-AABB slab test. Returns true iff the ray segment intersects the box.
+ *
+ * Authored in early-return form — clearer to read and the natural shape for
+ * an exit-on-miss slab test. compilecat's BLOCK inliner rewrites the early
+ * returns into labeled-break exits at each call site.
+ */
+export function rayHitsBox3(
+    originX: number,
+    originY: number,
+    originZ: number,
+    dirX: number,
+    dirY: number,
+    dirZ: number,
+    length: number,
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+): boolean {
+    let tNear = 0;
+    let tFar = length;
+
+    if (Math.abs(dirX) < 1e-10) {
+        if (originX < minX || originX > maxX) return false;
+    } else {
+        const invX = 1 / dirX;
+        let tEnterX = (minX - originX) * invX;
+        let tExitX = (maxX - originX) * invX;
+        if (invX < 0) {
+            const tmp = tEnterX;
+            tEnterX = tExitX;
+            tExitX = tmp;
+        }
+        if (tEnterX > tNear) tNear = tEnterX;
+        if (tExitX < tFar) tFar = tExitX;
+        if (tFar < tNear) return false;
+    }
+
+    if (Math.abs(dirY) < 1e-10) {
+        if (originY < minY || originY > maxY) return false;
+    } else {
+        const invY = 1 / dirY;
+        let tEnterY = (minY - originY) * invY;
+        let tExitY = (maxY - originY) * invY;
+        if (invY < 0) {
+            const tmp = tEnterY;
+            tEnterY = tExitY;
+            tExitY = tmp;
+        }
+        if (tEnterY > tNear) tNear = tEnterY;
+        if (tExitY < tFar) tFar = tExitY;
+        if (tFar < tNear) return false;
+    }
+
+    if (Math.abs(dirZ) < 1e-10) {
+        if (originZ < minZ || originZ > maxZ) return false;
+    } else {
+        const invZ = 1 / dirZ;
+        let tEnterZ = (minZ - originZ) * invZ;
+        let tExitZ = (maxZ - originZ) * invZ;
+        if (invZ < 0) {
+            const tmp = tEnterZ;
+            tEnterZ = tExitZ;
+            tExitZ = tmp;
+        }
+        if (tEnterZ > tNear) tNear = tEnterZ;
+        if (tExitZ < tFar) tFar = tExitZ;
+        if (tFar < tNear) return false;
+    }
+
+    return true;
+}

@@ -1,6 +1,7 @@
 node_modules
 dist
-dist-typedoc
+dist-*
 llm
 tmp
 AGENTS.md
+.labs

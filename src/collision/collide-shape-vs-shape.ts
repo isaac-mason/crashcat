@@ -272,7 +272,6 @@ function createInvertedCollector() {
     return collector;
 }
 
-
 /**
  * Wraps a collision function to swap shape A and B arguments.
  * Used when registering bidirectional collision handlers.

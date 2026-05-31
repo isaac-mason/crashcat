@@ -237,13 +237,11 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         for (const island of world.islands.islands) {
             islands.checkIslandSleep(island, world, timeStep);
         }
+
     }
 
     /* clear all forces */
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
-        rigidBody.clearForces(body);
-    }
+    resetForces(world);
 }
 
 const _acceleration_rotation = /* @__PURE__ */ mat4.create();
@@ -251,8 +249,9 @@ const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
 
         const mp = body.motionProperties;
 
@@ -334,12 +333,10 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
 
 /** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
 function updateBodyPositions(world: World): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) {
-            continue;
-        }
-        rigidBody.updatePositionFromCenterOfMass(body);
-        rigidBody.setTransform(world, body, body.position, body.quaternion, false);
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.sleeping) continue;
+        rigidBody.updatePositionFromCenterOfMass(world, body);
     }
 }
 
@@ -918,8 +915,9 @@ const _velocity_displacement = /* @__PURE__ */ vec3.create();
 
 /** integrates velocities into positions (p += v*dt) and angular velocities into orientations */
 function velocityIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.sleeping) continue;
 
         const mp = body.motionProperties;
 
@@ -993,8 +991,7 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
         if (updatePosition) {
             // move the body now (using center of mass)
             vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
-            rigidBody.updatePositionFromCenterOfMass(body);
-            rigidBody.setTransform(world, body, body.position, body.quaternion, false);
+            rigidBody.updatePositionFromCenterOfMass(world, body);
         }
     }
 }
@@ -1702,5 +1699,16 @@ function resolveCCDContacts(world: World): void {
         if (bodyB.sleeping) {
             rigidBody.wake(world, bodyB);
         }
+    }
+}
+
+function resetForces(world: World): void {
+    const pool = world.bodies.pool;
+    const activeIndices = world.bodies.activeBodyIndices;
+    const activeCount = world.bodies.activeBodyCount;
+    for (let i = 0; i < activeCount; i++) {
+        const body = pool[activeIndices[i]];
+        if (body.sleeping) continue;
+        rigidBody.clearForces(body);
     }
 }

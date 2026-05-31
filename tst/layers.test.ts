@@ -195,11 +195,11 @@ describe('Layers', () => {
 		const bp1 = layers.addBroadphaseLayer(layerConfig);
 		expect(layerConfig.broadphasePairs.length).toBe(4); // 2x2 = 4
 
-		const _obj0 = layers.addObjectLayer(layerConfig, bp0);
+		layers.addObjectLayer(layerConfig, bp0);
 		expect(layerConfig.objectLayerPairs.length).toBe(1); // 1x1 = 1
 		expect(layerConfig.objectVsBroadphase.length).toBe(2); // 1x2 = 2
 
-		const _obj1 = layers.addObjectLayer(layerConfig, bp1);
+		layers.addObjectLayer(layerConfig, bp1);
 		expect(layerConfig.objectLayerPairs.length).toBe(4); // 2x2 = 4
 		expect(layerConfig.objectVsBroadphase.length).toBe(4); // 2x2 = 4
 	});

@@ -243,9 +243,6 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
     // build body islands, calculate island index for all active bodies
     let numIslands = 0;
 
-    // first island always starts at 0
-    const islandStarts: number[] = [0];
-
     for (let i = 0; i < numActiveBodies; i++) {
         const linkTo = state.bodyLinks[i];
 
@@ -253,24 +250,12 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
             // links to another body, take island index from other body
             // (must have been filled in already since we loop from low to high)
             assert(linkTo < i, 'Body links should point to lower indices');
-            const islandIndex = state.bodyIslands[linkTo];
-            state.bodyIslands[i] = islandIndex;
-
-            // increment the start of the next island
-            islandStarts[islandIndex + 1] = (islandStarts[islandIndex + 1] || 0) + 1;
+            state.bodyIslands[i] = state.bodyIslands[linkTo];
         } else {
             // does not link to other body, this is the start of a new island
             state.bodyIslands[i] = numIslands;
             numIslands++;
-
-            // set the start of the next island to 1
-            islandStarts[numIslands] = 1;
         }
-    }
-
-    // make the start array absolute (so far we only counted)
-    for (let island = 1; island < numIslands; island++) {
-        islandStarts[island] += islandStarts[island - 1];
     }
 
     // build islands array
@@ -286,12 +271,10 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
         });
     }
 
-    // group bodies by island using the active body list
+    // group bodies by island using the active body list.
+    // bodies in activeBodyIndices are guaranteed non-pooled (active bodies never include pooled slots)
     for (let activeIndex = 0; activeIndex < numActiveBodies; activeIndex++) {
-        const bodyIndex = bodies.activeBodyIndices[activeIndex];
-        const body = bodies.pool[bodyIndex];
-        if (!body || body._pooled) continue;
-
+        const body = bodies.pool[bodies.activeBodyIndices[activeIndex]];
         const islandIndex = state.bodyIslands[activeIndex];
         assert(islandIndex >= 0 && islandIndex < numIslands, 'Invalid island index');
 
@@ -342,35 +325,38 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
     }
 
     // calculate solver iterations for each island
-    for (const island of islands) {
+    for (let islandI = 0; islandI < islands.length; islandI++) {
+        const island = islands[islandI];
         let numVelocitySteps = 0;
         let numPositionSteps = 0;
         let applyDefaultVelocity = false;
         let applyDefaultPosition = false;
 
         // check all bodies in island
-        for (const activeIndex of island.bodyIndices) {
-            const bodyIndex = bodies.activeBodyIndices[activeIndex];
-            const body = bodies.pool[bodyIndex];
-            if (!body || body.motionType !== MotionType.DYNAMIC) continue;
+        const bodyIndices = island.bodyIndices;
+        for (let bi = 0; bi < bodyIndices.length; bi++) {
+            const activeIndex = bodyIndices[bi];
+            const body = bodies.pool[bodies.activeBodyIndices[activeIndex]];
+            if (body.motionType !== MotionType.DYNAMIC) continue;
 
             const mp = body.motionProperties;
-            numVelocitySteps = Math.max(numVelocitySteps, mp.numVelocityStepsOverride);
-            applyDefaultVelocity ||= mp.numVelocityStepsOverride === 0;
-
-            numPositionSteps = Math.max(numPositionSteps, mp.numPositionStepsOverride);
-            applyDefaultPosition ||= mp.numPositionStepsOverride === 0;
+            const vOverride = mp.numVelocityStepsOverride;
+            const pOverride = mp.numPositionStepsOverride;
+            if (vOverride > numVelocitySteps) numVelocitySteps = vOverride;
+            if (vOverride === 0) applyDefaultVelocity = true;
+            if (pOverride > numPositionSteps) numPositionSteps = pOverride;
+            if (pOverride === 0) applyDefaultPosition = true;
         }
 
         // check all constraints in island
-        for (const constraintId of island.constraintIds) {
-            constraints.getConstraintIterationOverrides(_finalize_constraintOverrides, constraintsState, constraintId);
-
-            numVelocitySteps = Math.max(numVelocitySteps, _finalize_constraintOverrides.velocity);
-            applyDefaultVelocity ||= _finalize_constraintOverrides.velocity === 0;
-
-            numPositionSteps = Math.max(numPositionSteps, _finalize_constraintOverrides.position);
-            applyDefaultPosition ||= _finalize_constraintOverrides.position === 0;
+        for (let ci = 0; ci < island.constraintIds.length; ci++) {
+            constraints.getConstraintIterationOverrides(_finalize_constraintOverrides, constraintsState, island.constraintIds[ci]);
+            const vOv = _finalize_constraintOverrides.velocity;
+            const pOv = _finalize_constraintOverrides.position;
+            if (vOv > numVelocitySteps) numVelocitySteps = vOv;
+            if (vOv === 0) applyDefaultVelocity = true;
+            if (pOv > numPositionSteps) numPositionSteps = pOv;
+            if (pOv === 0) applyDefaultPosition = true;
         }
 
         // apply defaults if any body or constraint uses 0
@@ -394,28 +380,27 @@ export function checkIslandSleep(island: Island, world: World, deltaTime: number
         return;
     }
 
-    const bodies = world.bodies;
     const timeBeforeSleep = world.settings.sleeping.timeBeforeSleep;
     const maxMovement = world.settings.sleeping.pointVelocitySleepThreshold * timeBeforeSleep;
 
     let allCanSleep = true;
 
     // check each body in island (sleeping bodies are excluded from islands during init)
-    for (const activeIndex of island.bodyIndices) {
-        const bodyIndex = bodies.activeBodyIndices[activeIndex];
-        const body = bodies.pool[bodyIndex];
-        if (!body || body.motionType !== MotionType.DYNAMIC) continue;
+    const bodyIndices = island.bodyIndices;
+    for (let i = 0; i < bodyIndices.length; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
+        if (body.motionType !== MotionType.DYNAMIC) continue;
 
-        const canSleep = updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep);
-        allCanSleep = allCanSleep && canSleep;
+        if (!updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep)) {
+            allCanSleep = false;
+        }
     }
 
     // if all bodies can sleep, deactivate the island
     if (allCanSleep) {
-        for (const activeIndex of island.bodyIndices) {
-            const bodyIndex = bodies.activeBodyIndices[activeIndex];
-            const body = bodies.pool[bodyIndex];
-            if (body && body.motionType === MotionType.DYNAMIC) {
+        for (let i = 0; i < bodyIndices.length; i++) {
+            const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
+            if (body.motionType === MotionType.DYNAMIC) {
                 sleep(world, body);
             }
         }

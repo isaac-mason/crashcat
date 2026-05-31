@@ -362,9 +362,10 @@ function visualizeSimplex(state: ExampleState, simplex: Simplex) {
     const quaternion = new THREE.Quaternion();
     const scale = new THREE.Vector3(1, 1, 1);
 
+    const y = simplex.y;
     for (let i = 0; i < simplex.size; i++) {
-        const y = simplex.points[i].y;
-        matrix.compose(position.set(y[0], y[1], y[2]), quaternion, scale);
+        const off = i * 3;
+        matrix.compose(position.set(y[off], y[off + 1], y[off + 2]), quaternion, scale);
         state.simplexPoints.setMatrixAt(i, matrix);
     }
     state.simplexPoints.count = simplex.size;
@@ -372,35 +373,30 @@ function visualizeSimplex(state: ExampleState, simplex: Simplex) {
 
     // Draw lines for simplex edges
     if (simplex.size === 2) {
-        const y0 = simplex.points[0].y;
-        const y1 = simplex.points[1].y;
         const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(y0[0], y0[1], y0[2]),
-            new THREE.Vector3(y1[0], y1[1], y1[2]),
+            new THREE.Vector3(y[0], y[1], y[2]),
+            new THREE.Vector3(y[3], y[4], y[5]),
         ]);
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
         const line = new THREE.Line(lineGeometry, lineMaterial);
         scene.add(line);
         state.simplexLines.push(line);
     } else if (simplex.size === 3) {
-        const y0 = simplex.points[0].y;
-        const y1 = simplex.points[1].y;
-        const y2 = simplex.points[2].y;
         const lineGeometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(y0[0], y0[1], y0[2]),
-            new THREE.Vector3(y1[0], y1[1], y1[2]),
-            new THREE.Vector3(y2[0], y2[1], y2[2]),
-            new THREE.Vector3(y0[0], y0[1], y0[2]),
+            new THREE.Vector3(y[0], y[1], y[2]),
+            new THREE.Vector3(y[3], y[4], y[5]),
+            new THREE.Vector3(y[6], y[7], y[8]),
+            new THREE.Vector3(y[0], y[1], y[2]),
         ]);
         const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
         const line = new THREE.Line(lineGeometry, lineMaterial);
         scene.add(line);
         state.simplexLines.push(line);
     } else if (simplex.size === 4) {
-        const y0 = simplex.points[0].y;
-        const y1 = simplex.points[1].y;
-        const y2 = simplex.points[2].y;
-        const y3 = simplex.points[3].y;
+        const y0: [number, number, number] = [y[0], y[1], y[2]];
+        const y1: [number, number, number] = [y[3], y[4], y[5]];
+        const y2: [number, number, number] = [y[6], y[7], y[8]];
+        const y3: [number, number, number] = [y[9], y[10], y[11]];
         const edges = [
             [y0, y1],
             [y0, y2],

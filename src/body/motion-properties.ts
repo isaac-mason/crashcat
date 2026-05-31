@@ -1,5 +1,5 @@
 import type { Mat3, Mat4, Quat, Vec3 } from 'mathcat';
-import { mat3, quat, vec3 } from 'mathcat';
+import { mat3, mat4, quat, vec3 } from 'mathcat';
 import { assert } from '../utils/assert';
 import { DOF_ALL } from './dof';
 import type { MassProperties } from './mass-properties';
@@ -480,6 +480,10 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
     );
 }
 
+const _inertiaRotMat = mat4.create();
+const _rotation = mat4.create();
+const _scaled = mat4.create();
+
 /**
  * Computes the world-space inverse inertia matrix for a given body rotation.
  *
@@ -490,111 +494,25 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
+ * 
+ * @optimize
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
-    // step 1: inline mat4.fromQuat(inertiaRotation) -> inertiaRotMat4
-    const q = motionProperties.inertiaRotation;
-    const qx = q[0];
-    const qy = q[1];
-    const qz = q[2];
-    const qw = q[3];
-    const qx2 = qx + qx;
-    const qy2 = qy + qy;
-    const qz2 = qz + qz;
-    const qxx = qx * qx2;
-    const qyx = qy * qx2;
-    const qyy = qy * qy2;
-    const qzx = qz * qx2;
-    const qzy = qz * qy2;
-    const qzz = qz * qz2;
-    const qwx = qw * qx2;
-    const qwy = qw * qy2;
-    const qwz = qw * qz2;
+    // step 1: convert inertia rotation quaternion to matrix
+    mat4.fromQuat(_inertiaRotMat, motionProperties.inertiaRotation);
 
-    // inertiaRotMat4 (3x3 part):
-    // column 0: [1 - qyy - qzz, qyx + qwz, qzx - qwy]
-    // column 1: [qyx - qwz, 1 - qxx - qzz, qzy + qwx]
-    // column 2: [qzx + qwy, qzy - qwx, 1 - qxx - qyy]
-    const i00 = 1 - qyy - qzz;
-    const i01 = qyx + qwz;
-    const i02 = qzx - qwy;
-    const i10 = qyx - qwz;
-    const i11 = 1 - qxx - qzz;
-    const i12 = qzy + qwx;
-    const i20 = qzx + qwy;
-    const i21 = qzy - qwx;
-    const i22 = 1 - qxx - qyy;
+    // step 2: rotation = bodyRotation * inertiaRotMat
+    mat4.multiply3x3(_rotation, bodyRotation, _inertiaRotMat);
 
-    // step 2: inline mat4.multiply3x3(rotation, bodyRotation, inertiaRotMat4)
-    // extract bodyRotation 3x3
-    const b00 = bodyRotation[0];
-    const b01 = bodyRotation[1];
-    const b02 = bodyRotation[2];
-    const b10 = bodyRotation[4];
-    const b11 = bodyRotation[5];
-    const b12 = bodyRotation[6];
-    const b20 = bodyRotation[8];
-    const b21 = bodyRotation[9];
-    const b22 = bodyRotation[10];
+    // step 3: scale rotation columns by inverse inertia diagonal
+    mat4.scale(_scaled, _rotation, motionProperties.invInertiaDiagonal);
 
-    // rotation = bodyRotation * inertiaRotMat4
-    // column j of result = bodyRotation * (column j of inertiaRotMat4)
-    // column 0 of result = bodyRotation * [i00, i01, i02]
-    const r00 = b00 * i00 + b10 * i01 + b20 * i02;
-    const r01 = b01 * i00 + b11 * i01 + b21 * i02;
-    const r02 = b02 * i00 + b12 * i01 + b22 * i02;
-    // column 1 of result = bodyRotation * [i10, i11, i12]
-    const r10 = b00 * i10 + b10 * i11 + b20 * i12;
-    const r11 = b01 * i10 + b11 * i11 + b21 * i12;
-    const r12 = b02 * i10 + b12 * i11 + b22 * i12;
-    // column 2 of result = bodyRotation * [i20, i21, i22]
-    const r20 = b00 * i20 + b10 * i21 + b20 * i22;
-    const r21 = b01 * i20 + b11 * i21 + b21 * i22;
-    const r22 = b02 * i20 + b12 * i21 + b22 * i22;
-
-    // step 3: scale rotation columns by invInertiaDiagonal
-    const d0 = motionProperties.invInertiaDiagonal[0];
-    const d1 = motionProperties.invInertiaDiagonal[1];
-    const d2 = motionProperties.invInertiaDiagonal[2];
-
-    const s00 = d0 * r00;
-    const s01 = d0 * r01;
-    const s02 = d0 * r02;
-    const s10 = d1 * r10;
-    const s11 = d1 * r11;
-    const s12 = d1 * r12;
-    const s20 = d2 * r20;
-    const s21 = d2 * r21;
-    const s22 = d2 * r22;
-
-    // step 4: inline mat4.multiply3x3RightTransposed(out, rotation, rotationScaled)
-    // result = rotation * rotationScaled^T
-    // column 0 of result (multiply rotation by transposed column 0 of scaled, which is row 0)
-    out[0] = s00 * r00 + s10 * r10 + s20 * r20;
-    out[1] = s00 * r01 + s10 * r11 + s20 * r21;
-    out[2] = s00 * r02 + s10 * r12 + s20 * r22;
-    out[3] = 0;
-
-    // column 1 of result (multiply rotation by transposed column 1 of scaled, which is row 1)
-    out[4] = s01 * r00 + s11 * r10 + s21 * r20;
-    out[5] = s01 * r01 + s11 * r11 + s21 * r21;
-    out[6] = s01 * r02 + s11 * r12 + s21 * r22;
-    out[7] = 0;
-
-    // column 2 of result (multiply rotation by transposed column 2 of scaled, which is row 2)
-    out[8] = s02 * r00 + s12 * r10 + s22 * r20;
-    out[9] = s02 * r01 + s12 * r11 + s22 * r21;
-    out[10] = s02 * r02 + s12 * r12 + s22 * r22;
-    out[11] = 0;
-
-    // column 3
-    out[12] = 0;
-    out[13] = 0;
-    out[14] = 0;
-    out[15] = 1;
+    // step 4: out = scaled * rotation^T
+    mat4.multiply3x3RightTransposed(out, _scaled, _rotation);
 
     // step 5: mask out DOFs that are not allowed
     const allowedRotationAxis = (motionProperties.allowedDegreesOfFreedom >> 3) & 0b111;
+
     if (allowedRotationAxis !== 0b111) {
         // create mask for each axis (1.0 if allowed, 0.0 if not)
         const maskX = allowedRotationAxis & 0b001 ? 1.0 : 0.0;
@@ -645,10 +563,7 @@ export function clampAngularVelocity(motionProperties: MotionProperties): void {
  * @param velocity new linear velocity
  */
 export function setLinearVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
-    // vec3.copy(motionProperties.linearVelocity, velocity);
-    motionProperties.linearVelocity[0] = velocity[0];
-    motionProperties.linearVelocity[1] = velocity[1];
-    motionProperties.linearVelocity[2] = velocity[2];
+    vec3.copy(motionProperties.linearVelocity, velocity);
     clampLinearVelocity(motionProperties);
 }
 
@@ -659,10 +574,9 @@ export function setLinearVelocity(motionProperties: MotionProperties, velocity: 
  * @param velocity new angular velocity
  */
 export function setAngularVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
-    motionProperties.angularVelocity[0] = velocity[0];
-    motionProperties.angularVelocity[1] = velocity[1];
-    motionProperties.angularVelocity[2] = velocity[2];
+    vec3.copy(motionProperties.angularVelocity, velocity);
     clampAngularVelocity(motionProperties);
+
 }
 
 /**
@@ -672,10 +586,7 @@ export function setAngularVelocity(motionProperties: MotionProperties, velocity:
  * @param velocityDelta velocity change to add
  */
 export function addLinearVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    // linearVelocity += velocityDelta
-    motionProperties.linearVelocity[0] += velocityDelta[0];
-    motionProperties.linearVelocity[1] += velocityDelta[1];
-    motionProperties.linearVelocity[2] += velocityDelta[2];
+    vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, velocityDelta);
     clampLinearVelocity(motionProperties);
 }
 
@@ -685,10 +596,7 @@ export function addLinearVelocity(motionProperties: MotionProperties, velocityDe
  * @param velocityDelta angular velocity change to add
  */
 export function addAngularVelocity(motionProperties: MotionProperties, velocityDelta: Vec3): void {
-    // angularVelocity += velocityDelta
-    motionProperties.angularVelocity[0] += velocityDelta[0];
-    motionProperties.angularVelocity[1] += velocityDelta[1];
-    motionProperties.angularVelocity[2] += velocityDelta[2];
+    vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, velocityDelta);
     clampAngularVelocity(motionProperties);
 }
 
@@ -697,6 +605,8 @@ export function addAngularVelocity(motionProperties: MotionProperties, velocityD
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
+ * 
+ * @optimize
  */
 export function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
     vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
@@ -708,12 +618,11 @@ export function addLinearVelocityStep(motionProperties: MotionProperties, linear
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
+ * 
+ * @optimize
  */
 export function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
-    // linearVelocity -= linearVelocityChange
-    motionProperties.linearVelocity[0] -= linearVelocityChange[0];
-    motionProperties.linearVelocity[1] -= linearVelocityChange[1];
-    motionProperties.linearVelocity[2] -= linearVelocityChange[2];
+    vec3.sub(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
     applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 }
 
@@ -721,24 +630,22 @@ export function subLinearVelocityStep(motionProperties: MotionProperties, linear
  * Add an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
+ * 
+ * @optimize
  */
 export function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
-    // vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
-    motionProperties.angularVelocity[0] += angularVelocityChange[0];
-    motionProperties.angularVelocity[1] += angularVelocityChange[1];
-    motionProperties.angularVelocity[2] += angularVelocityChange[2];
+    vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
 }
 
 /**
  * Subtract an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
+ * 
+ * @optimize
  */
 export function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
-    // vec3.sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
-    motionProperties.angularVelocity[0] -= angularVelocityChange[0];
-    motionProperties.angularVelocity[1] -= angularVelocityChange[1];
-    motionProperties.angularVelocity[2] -= angularVelocityChange[2];
+    vec3.sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
 }
 
 /**
@@ -747,6 +654,8 @@ export function subAngularVelocityStep(motionProperties: MotionProperties, angul
  *
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
+ * 
+ * @optimize
  */
 export function scaleToMass(motionProperties: MotionProperties, newMass: number): void {
     assert(motionProperties.invMass > 0, 'Body must have finite mass to scale');
