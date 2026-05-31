@@ -35,6 +35,21 @@ export type Contact = {
     numContactPoints: number;
     /** contact points (max 4 for stable manifold) */
     contactPoints: CachedContactPoint[];
+    /**
+     * Accumulated friction impulse along tangent1 for the entire manifold
+     * (previous frame, used for warm starting).
+     */
+    frictionLambda1: number;
+    /**
+     * Accumulated friction impulse along tangent2 for the entire manifold
+     * (previous frame, used for warm starting).
+     */
+    frictionLambda2: number;
+    /**
+     * Accumulated angular friction impulse around the contact normal for the entire
+     * manifold (previous frame, used for warm starting).
+     */
+    angularFrictionLambda: number;
     /** flags bitfield (@see CachedManifoldFlags) */
     flags: number;
     /** whether this contact was processed this frame (for stale contact cleanup) */
@@ -43,7 +58,7 @@ export type Contact = {
     edges: [ContactEdge, ContactEdge];
 };
 
-/** cached contact point with impulse history for warm starting */
+/** cached contact point with non-penetration impulse history for warm starting */
 export type CachedContactPoint = {
     /** contact position in body A's local center of mass space */
     position1: Vec3;
@@ -51,10 +66,6 @@ export type CachedContactPoint = {
     position2: Vec3;
     /** accumulated normal impulse from previous frame */
     normalLambda: number;
-    /** accumulated friction impulse (tangent 1) from previous frame */
-    frictionLambda1: number;
-    /** accumulated friction impulse (tangent 2) from previous frame */
-    frictionLambda2: number;
 };
 
 /** contact edge in the intrusive doubly-linked list, each contact has two edges (one per body) */
@@ -116,8 +127,6 @@ function createCachedContactPoint(): CachedContactPoint {
         position1: vec3.create(),
         position2: vec3.create(),
         normalLambda: 0,
-        frictionLambda1: 0,
-        frictionLambda2: 0,
     };
 }
 
@@ -139,6 +148,9 @@ function createEmptyContact(): Contact {
             createCachedContactPoint(),
             createCachedContactPoint(),
         ],
+        frictionLambda1: 0,
+        frictionLambda2: 0,
+        angularFrictionLambda: 0,
         flags: CachedManifoldFlags.None,
         processedThisFrame: false,
         edges: [
@@ -168,14 +180,15 @@ function setContact(
     contact.numContactPoints = 0;
     contact.flags = CachedManifoldFlags.None;
     contact.processedThisFrame = false;
+    contact.frictionLambda1 = 0;
+    contact.frictionLambda2 = 0;
+    contact.angularFrictionLambda = 0;
 
     // reset contact points
     for (const point of contact.contactPoints) {
         vec3.zero(point.position1);
         vec3.zero(point.position2);
         point.normalLambda = 0;
-        point.frictionLambda1 = 0;
-        point.frictionLambda2 = 0;
     }
 }
 

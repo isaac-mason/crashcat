@@ -869,8 +869,9 @@ export function contactConstraints(world: World, _options?: Partial<ContactConst
 
             const hasImpulse =
                 cp.normalConstraint.totalLambda !== 0 ||
-                cp.tangentConstraint1.totalLambda !== 0 ||
-                cp.tangentConstraint2.totalLambda !== 0;
+                constraint.frictionConstraint1.totalLambda !== 0 ||
+                constraint.frictionConstraint2.totalLambda !== 0 ||
+                constraint.angularFrictionConstraint.totalLambda !== 0;
 
             // point A — cyan (bright if active)
             const ar = hasImpulse ? 0 : 0;

@@ -1929,8 +1929,9 @@ function updateContactConstraints(state: State, world: World): void {
             // check if any lambda from previous frame was transferred
             const hasImpulse =
                 contactPoint.normalConstraint.totalLambda !== 0 ||
-                contactPoint.tangentConstraint1.totalLambda !== 0 ||
-                contactPoint.tangentConstraint2.totalLambda !== 0;
+                constraint.frictionConstraint1.totalLambda !== 0 ||
+                constraint.frictionConstraint2.totalLambda !== 0 ||
+                constraint.angularFrictionConstraint.totalLambda !== 0;
 
             const radius = hasImpulse ? CONSTRAINT_POINT_RADIUS_ACTIVE : CONSTRAINT_POINT_RADIUS_INACTIVE;
             const colorA = hasImpulse ? constraintManifoldPointColorAActive : constraintManifoldPointColorA;
