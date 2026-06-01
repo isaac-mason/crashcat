@@ -28,58 +28,34 @@ function createClosestPointResult(): ClosestPointResult {
     };
 }
 
+const _lineBary = /* @__PURE__ */ createBarycentricCoordinatesResult();
+
+/**
+ * @optimize
+ */
 export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void {
-    // inline calculate barycentric coordinates for line
-    let u: number;
-    let v: number;
-
-    // ab = b - a
-    const abx = b[0] - a[0];
-    const aby = b[1] - a[1];
-    const abz = b[2] - a[2];
-
-    // denominator = dot(ab, ab)
-    const denominator = abx * abx + aby * aby + abz * abz;
-
-    if (denominator < squaredTolerance) {
-        // degenerate line segment, fallback to points
-        // compare dot(a, a) vs dot(b, b)
-        if (a[0] * a[0] + a[1] * a[1] + a[2] * a[2] < b[0] * b[0] + b[1] * b[1] + b[2] * b[2]) {
-            // A closest
-            u = 1.0;
-            v = 0.0;
-        } else {
-            // B closest
-            u = 0.0;
-            v = 1.0;
-        }
-    } else {
-        // v = -dot(a, ab) / denominator
-        v = -(a[0] * abx + a[1] * aby + a[2] * abz) / denominator;
-        u = 1.0 - v;
-    }
+    computeBarycentricCoordinates2d(_lineBary, a, b, squaredTolerance);
+    const u = _lineBary.u;
+    const v = _lineBary.v;
 
     if (v <= 0.0) {
         // a is closest point
-        out.point[0] = a[0];
-        out.point[1] = a[1];
-        out.point[2] = a[2];
+        vec3.copy(out.point, a);
         out.pointSet = 0b0001;
     } else if (u <= 0.0) {
         // b is closest point
-        out.point[0] = b[0];
-        out.point[1] = b[1];
-        out.point[2] = b[2];
+        vec3.copy(out.point, b);
         out.pointSet = 0b0010;
     } else {
-        // closest point lies on line ab
-        out.point[0] = a[0] * u + b[0] * v;
-        out.point[1] = a[1] * u + b[1] * v;
-        out.point[2] = a[2] * u + b[2] * v;
+        // closest point lies on line ab: out = a * u + b * v == lerp(a, b, v)
+        vec3.lerp(out.point, a, b, v);
         out.pointSet = 0b0011;
     }
 }
 
+/**
+ * @optimize
+ */
 export function computeClosestPointOnTriangle(
     out: ClosestPointResult,
     inA: Vec3,
@@ -336,6 +312,9 @@ export function computeClosestPointOnTriangle(
 
 const _otherResult_tet = /* @__PURE__ */ createClosestPointResult();
 
+/**
+ * @optimize
+ */
 export function computeClosestPointOnTetrahedron(
     out: ClosestPointResult,
     inA: Vec3,
@@ -528,13 +507,103 @@ function createClosestPointToSimplexResult(): ClosestPointToSimplexResult {
     };
 }
 
-// scratch vec3s used to extract simplex y-points into a Vec3-shaped arg for
+// scratch vec3s used to extract simplex y/p/q points into a Vec3-shaped arg for
 // the closest-point kernels, which still take (a: Vec3, b: Vec3, ...) today.
 const _simplexY0 = /* @__PURE__ */ vec3.create();
 const _simplexY1 = /* @__PURE__ */ vec3.create();
 const _simplexY2 = /* @__PURE__ */ vec3.create();
 const _simplexY3 = /* @__PURE__ */ vec3.create();
 
+/**
+ * Recompute simplex.y from y = x - p (ray cast variant).
+ *
+ * @optimize
+ */
+function recomputeSimplexYFromP(simplex: Simplex, x: Vec3): void {
+    const end = simplex.size * 3;
+    const py = simplex.y;
+    const pp = simplex.p;
+    for (let i = 0; i < end; i += 3) {
+        py[i] = x[0] - pp[i];
+        py[i + 1] = x[1] - pp[i + 1];
+        py[i + 2] = x[2] - pp[i + 2];
+    }
+}
+
+/**
+ * Recompute simplex.y from y = x - (q - p) (shape cast variant).
+ *
+ * @optimize
+ */
+function recomputeSimplexYFromPQ(simplex: Simplex, x: Vec3): void {
+    const end = simplex.size * 3;
+    const py = simplex.y;
+    const pp = simplex.p;
+    const qq = simplex.q;
+    for (let i = 0; i < end; i += 3) {
+        py[i] = x[0] - qq[i] + pp[i];
+        py[i + 1] = x[1] - qq[i + 1] + pp[i + 1];
+        py[i + 2] = x[2] - qq[i + 2] + pp[i + 2];
+    }
+}
+
+/**
+ * Compact simplex.p down to the subset selected by inSet (bit i selects point i).
+ *
+ * @optimize
+ */
+function updatePointSetP(simplex: Simplex, inSet: number): void {
+    let newSize = 0;
+    const pp = simplex.p;
+    for (let i = 0; i < simplex.size; i++) {
+        if ((inSet & (1 << i)) !== 0) {
+            if (newSize !== i) {
+                const srcOff = i * 3;
+                const dstOff = newSize * 3;
+                pp[dstOff] = pp[srcOff];
+                pp[dstOff + 1] = pp[srcOff + 1];
+                pp[dstOff + 2] = pp[srcOff + 2];
+            }
+            newSize++;
+        }
+    }
+    simplex.size = newSize;
+}
+
+/**
+ * Compact simplex.y, simplex.p, simplex.q down to the subset selected by inSet.
+ *
+ * @optimize
+ */
+function updatePointSetYPQ(simplex: Simplex, inSet: number): void {
+    let newSize = 0;
+    const yy = simplex.y;
+    const pp = simplex.p;
+    const qq = simplex.q;
+    for (let i = 0; i < simplex.size; i++) {
+        if ((inSet & (1 << i)) !== 0) {
+            if (newSize !== i) {
+                const srcOff = i * 3;
+                const dstOff = newSize * 3;
+                yy[dstOff] = yy[srcOff];
+                yy[dstOff + 1] = yy[srcOff + 1];
+                yy[dstOff + 2] = yy[srcOff + 2];
+                pp[dstOff] = pp[srcOff];
+                pp[dstOff + 1] = pp[srcOff + 1];
+                pp[dstOff + 2] = pp[srcOff + 2];
+                qq[dstOff] = qq[srcOff];
+                qq[dstOff + 1] = qq[srcOff + 1];
+                qq[dstOff + 2] = qq[srcOff + 2];
+            }
+            newSize++;
+        }
+    }
+    simplex.size = newSize;
+}
+
+/**
+ * @optimize
+ */
 function computeClosestPointToSimplex(
     result: ClosestPointToSimplexResult,
     prevSquaredDist: number,
@@ -645,6 +714,8 @@ export function createGjkCastRayResult(): GjkCastRayResult {
  * @param tolerance convergence tolerance
  * @param support support function for the shape
  * @param maxLambda maximum lambda to check (default 1.0). Result lambda will not exceed this.
+ *
+ * @optimize
  */
 export function gjkCastRay(
     out: GjkCastRayResult,
@@ -656,25 +727,16 @@ export function gjkCastRay(
 ): void {
     const squaredTolerance = tolerance * tolerance;
 
-    // reset state
     _simplex.size = 0;
 
     let lambda = 0.0;
 
-    _x[0] = rayOrigin[0];
-    _x[1] = rayOrigin[1];
-    _x[2] = rayOrigin[2];
+    vec3.copy(_x, rayOrigin);
 
     // v = x - support(0)
-    _directionA[0] = 0;
-    _directionA[1] = 0;
-    _directionA[2] = 0;
+    vec3.set(_directionA, 0, 0, 0);
     support.getSupport(_directionA, _p);
-
-    // _v = _x - _p
-    _v[0] = _x[0] - _p[0];
-    _v[1] = _x[1] - _p[1];
-    _v[2] = _x[2] - _p[2];
+    vec3.subtract(_v, _x, _p);
 
     let v_len_sq = Number.MAX_VALUE;
     let allowRestart = false;
@@ -686,18 +748,13 @@ export function gjkCastRay(
         // get new support point
         support.getSupport(_v, _p);
 
-        // _w = _x - _p
-        _w[0] = _x[0] - _p[0];
-        _w[1] = _x[1] - _p[1];
-        _w[2] = _x[2] - _p[2];
+        vec3.subtract(_w, _x, _p);
 
-        // const vDotW = vec3.dot(_v, _w);
-        const vDotW = _v[0] * _w[0] + _v[1] * _w[1] + _v[2] * _w[2];
+        const vDotW = vec3.dot(_v, _w);
 
         if (vDotW > 0.0) {
             // if ray and normal are in the same direction, we've passed A and there's no collision
-            // const vDotR = vec3.dot(_v, rayDirection);
-            const vDotR = _v[0] * rayDirection[0] + _v[1] * rayDirection[1] + _v[2] * rayDirection[2];
+            const vDotR = vec3.dot(_v, rayDirection);
 
             // instead of checking >= 0, check with epsilon as we don't want the division below to overflow to infinity as it can cause a float exception
             if (vDotR >= -1.0e-18) {
@@ -724,10 +781,7 @@ export function gjkCastRay(
             }
 
             // update x to new closest point on the ray
-            // vec3.scaleAndAdd(_x, rayOrigin, rayDirection, lambda);
-            _x[0] = rayOrigin[0] + rayDirection[0] * lambda;
-            _x[1] = rayOrigin[1] + rayDirection[1] * lambda;
-            _x[2] = rayOrigin[2] + rayDirection[2] * lambda;
+            vec3.scaleAndAdd(_x, rayOrigin, rayDirection, lambda);
 
             // we've shifted x, so reset v_len_sq so that it is not used as early out for GetClosest
             v_len_sq = Number.MAX_VALUE;
@@ -748,26 +802,13 @@ export function gjkCastRay(
         }
 
         // calculate Y = {x} - P
-        {
-            const end = _simplex.size * 3;
-            const py = _simplex.y;
-            const pp = _simplex.p;
-            for (let i = 0; i < end; i += 3) {
-                // y = x - p
-                py[i] = _x[0] - pp[i];
-                py[i + 1] = _x[1] - pp[i + 1];
-                py[i + 2] = _x[2] - pp[i + 2];
-            }
-        }
+        recomputeSimplexYFromP(_simplex, _x);
 
         // determine the new closest point from Y to origin
         const found = computeClosestPointToSimplex(_closestPointToSimplex, v_len_sq, false, _simplex);
         if (found) {
             v_len_sq = _closestPointToSimplex.squaredDistance;
-
-            _v[0] = _closestPointToSimplex.point[0];
-            _v[1] = _closestPointToSimplex.point[1];
-            _v[2] = _closestPointToSimplex.point[2];
+            vec3.copy(_v, _closestPointToSimplex.point);
         }
 
         if (!found) {
@@ -785,10 +826,7 @@ export function gjkCastRay(
             _simplex.p[2] = _p[2];
             _simplex.size = 1;
 
-            // _v = _x - _p
-            _v[0] = _x[0] - _p[0];
-            _v[1] = _x[1] - _p[1];
-            _v[2] = _x[2] - _p[2];
+            vec3.subtract(_v, _x, _p);
             v_len_sq = Number.MAX_VALUE;
             continue;
         } else if (_closestPointToSimplex.pointSet === 0xf) {
@@ -798,26 +836,7 @@ export function gjkCastRay(
 
         // update the points P to form the new simplex
         // note: we're not updating Y as Y will shift with x so we have to calculate it every iteration
-        let newSize = 0;
-
-        {
-            const pp = _simplex.p;
-            for (let i = 0; i < _simplex.size; i++) {
-                if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
-                    if (newSize !== i) {
-                        // copy point i to position newSize
-                        const srcOff = i * 3;
-                        const dstOff = newSize * 3;
-                        pp[dstOff] = pp[srcOff];
-                        pp[dstOff + 1] = pp[srcOff + 1];
-                        pp[dstOff + 2] = pp[srcOff + 2];
-                    }
-                    newSize++;
-                }
-            }
-        }
-
-        _simplex.size = newSize;
+        updatePointSetP(_simplex, _closestPointToSimplex.pointSet);
 
         // check if x is close enough to A
         if (v_len_sq <= squaredTolerance) {
@@ -890,6 +909,8 @@ export function createGjkCastShapeResult(): GjkCastShapeResult {
  * @param convexRadiusA convex radius of shape A
  * @param convexRadiusB convex radius of shape B
  * @param maxLambda the max fraction along the sweep
+ *
+ * @optimize
  */
 export function gjkCastShape(
     out: GjkCastShapeResult,
@@ -909,44 +930,29 @@ export function gjkCastShape(
     // wrap shapeA with transform
     setTransformedSupport(_transformedSupportA, transformAtoB, shapeASupport);
 
-    // reset state
     _simplex.size = 0;
 
     let lambda = 0.0;
 
     // since A is already transformed we can start the cast from zero
-    _x[0] = 0;
-    _x[1] = 0;
-    _x[2] = 0;
+    vec3.set(_x, 0, 0, 0);
 
     // v = -support_B + support_A (Minkowski difference B - A in the space of A)
-    _directionB[0] = 0;
-    _directionB[1] = 0;
-    _directionB[2] = 0;
+    vec3.set(_directionB, 0, 0, 0);
     shapeBSupport.getSupport(_directionB, _q);
+    vec3.negate(_q, _q);
 
-    _q[0] = -_q[0];
-    _q[1] = -_q[1];
-    _q[2] = -_q[2];
-
-    _directionA[0] = 0;
-    _directionA[1] = 0;
-    _directionA[2] = 0;
+    vec3.set(_directionA, 0, 0, 0);
     _transformedSupportA.getSupport(_directionA, _p);
 
-    // _v = _q - _p
-    _v[0] = _q[0] - _p[0];
-    _v[1] = _q[1] - _p[1];
-    _v[2] = _q[2] - _p[2];
+    vec3.subtract(_v, _q, _p);
 
     let vLenSq = Number.MAX_VALUE;
     let allowRestart = false;
 
     // keeps track of separating axis of the previous iteration.
     // initialized at zero as we don't know if our first v is actually a separating axis.
-    _prevV[0] = 0;
-    _prevV[1] = 0;
-    _prevV[2] = 0;
+    vec3.set(_prevV, 0, 0, 0);
 
     let iterations = 0;
     while (iterations < GJK_MAX_ITERATIONS) {
@@ -955,25 +961,14 @@ export function gjkCastShape(
         // calculate the minkowski difference B - A
         // A is moving, so we need to add the back side of B to the front side of A
         // keep the support points on A and B separate so that in the end we can calculate a contact point
-        _directionA[0] = -_v[0];
-        _directionA[1] = -_v[1];
-        _directionA[2] = -_v[2];
+        vec3.negate(_directionA, _v);
         _transformedSupportA.getSupport(_directionA, _p);
 
-        _directionB[0] = _v[0];
-        _directionB[1] = _v[1];
-        _directionB[2] = _v[2];
+        vec3.copy(_directionB, _v);
         shapeBSupport.getSupport(_directionB, _q);
 
-        // vec3.subtract(_pq, _q, _p);
-        _pq[0] = _q[0] - _p[0];
-        _pq[1] = _q[1] - _p[1];
-        _pq[2] = _q[2] - _p[2];
-
-        // vec3.subtract(_w, _x, _pq);
-        _w[0] = _x[0] - _pq[0];
-        _w[1] = _x[1] - _pq[1];
-        _w[2] = _x[2] - _pq[2];
+        vec3.subtract(_pq, _q, _p);
+        vec3.subtract(_w, _x, _pq);
 
         // difference from article to this code:
         //
@@ -984,17 +979,11 @@ export function gjkCastShape(
         // to q we have to add: convexRadiusB * v / |v|
         // this means that to w we have to add: -(convexRadiusA + convexRadiusB) * v / |v|
         // so to v . w we have to add: v . (-(convexRadiusA + convexRadiusB) * v / |v|) = -(convexRadiusA + convexRadiusB) * |v|
-        // const vDotW = vec3.dot(_v, _w) - sumConvexRadius * vec3.length(_v);
-        const vDotW =
-            _v[0] * _w[0] +
-            _v[1] * _w[1] +
-            _v[2] * _w[2] -
-            sumConvexRadius * Math.sqrt(_v[0] * _v[0] + _v[1] * _v[1] + _v[2] * _v[2]);
+        const vDotW = vec3.dot(_v, _w) - sumConvexRadius * Math.sqrt(vec3.squaredLength(_v));
 
         if (vDotW > 0.0) {
             // if ray and normal are in the same direction, we've passed A and there's no collision
-            // const vDotR = vec3.dot(_v, displacement);
-            const vDotR = _v[0] * displacement[0] + _v[1] * displacement[1] + _v[2] * displacement[2];
+            const vDotR = vec3.dot(_v, displacement);
 
             // instead of checking >= 0, check with epsilon as we don't want the division below to overflow to infinity as it can cause a float exception
             if (vDotR >= -1.0e-18) {
@@ -1019,10 +1008,7 @@ export function gjkCastShape(
             }
 
             // update x to new closest point on the ray
-            // _x = displacement * lambda;
-            _x[0] = displacement[0] * lambda;
-            _x[1] = displacement[1] * lambda;
-            _x[2] = displacement[2] * lambda;
+            vec3.scale(_x, displacement, lambda);
 
             // we've shifted x, so reset v_len_sq so that it is not used as early out when GetClosest returns false
             vLenSq = Number.MAX_VALUE;
@@ -1051,28 +1037,14 @@ export function gjkCastShape(
         }
 
         // calculate Y = {x} - (Q - P)
-        {
-            const end = _simplex.size * 3;
-            const py = _simplex.y;
-            const pp = _simplex.p;
-            const qq = _simplex.q;
-            for (let i = 0; i < end; i += 3) {
-                // y = x - q + p
-                py[i] = _x[0] - qq[i] + pp[i];
-                py[i + 1] = _x[1] - qq[i + 1] + pp[i + 1];
-                py[i + 2] = _x[2] - qq[i + 2] + pp[i + 2];
-            }
-        }
+        recomputeSimplexYFromPQ(_simplex, _x);
 
         // determine the new closest point from Y to origin
         const found = computeClosestPointToSimplex(_closestPointToSimplex, vLenSq, false, _simplex);
 
         if (found) {
             vLenSq = _closestPointToSimplex.squaredDistance;
-
-            _v[0] = _closestPointToSimplex.point[0];
-            _v[1] = _closestPointToSimplex.point[1];
-            _v[2] = _closestPointToSimplex.point[2];
+            vec3.copy(_v, _closestPointToSimplex.point);
         }
 
         if (!found) {
@@ -1094,10 +1066,7 @@ export function gjkCastShape(
 
             _simplex.size = 1;
 
-            // _v = _x - _q
-            _v[0] = _x[0] - _q[0];
-            _v[1] = _x[1] - _q[1];
-            _v[2] = _x[2] - _q[2];
+            vec3.subtract(_v, _x, _q);
 
             vLenSq = Number.MAX_VALUE;
 
@@ -1117,45 +1086,23 @@ export function gjkCastShape(
         }
 
         // store our v to return as separating axis
-        _prevV[0] = _v[0];
-        _prevV[1] = _v[1];
-        _prevV[2] = _v[2];
+        vec3.copy(_prevV, _v);
     }
 
     // calculate Y = {x} - (Q - P) again so we can calculate the contact points
-    {
-        const end = _simplex.size * 3;
-        const py = _simplex.y;
-        const pp = _simplex.p;
-        const qq = _simplex.q;
-        for (let i = 0; i < end; i += 3) {
-            py[i] = _x[0] - qq[i] + pp[i];
-            py[i + 1] = _x[1] - qq[i + 1] + pp[i + 1];
-            py[i + 2] = _x[2] - qq[i + 2] + pp[i + 2];
-        }
-    }
+    recomputeSimplexYFromPQ(_simplex, _x);
 
     // compute normalized v for separating axis
-    const vLen = Math.sqrt(_v[0] * _v[0] + _v[1] * _v[1] + _v[2] * _v[2]);
+    const vLen = Math.sqrt(vec3.squaredLength(_v));
     if (vLen > 0) {
-        const invVLen = 1 / vLen;
-        _normalizedV[0] = _v[0] * invVLen;
-        _normalizedV[1] = _v[1] * invVLen;
-        _normalizedV[2] = _v[2] * invVLen;
+        vec3.scale(_normalizedV, _v, 1 / vLen);
     } else {
-        _normalizedV[0] = 0;
-        _normalizedV[1] = 0;
-        _normalizedV[2] = 0;
+        vec3.set(_normalizedV, 0, 0, 0);
     }
 
     // compute contact points from simplex
-    out.pointA[0] = 0;
-    out.pointA[1] = 0;
-    out.pointA[2] = 0;
-
-    out.pointB[0] = 0;
-    out.pointB[1] = 0;
-    out.pointB[2] = 0;
+    vec3.set(out.pointA, 0, 0, 0);
+    vec3.set(out.pointB, 0, 0, 0);
 
     switch (_simplex.size) {
         case 1: {
@@ -1168,9 +1115,7 @@ export function gjkCastShape(
             out.pointB[2] = qq[2] + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
-                out.pointA[0] = out.pointB[0];
-                out.pointA[1] = out.pointB[1];
-                out.pointA[2] = out.pointB[2];
+                vec3.copy(out.pointA, out.pointB);
             } else {
                 // out.pointA = p[0] + _normalizedV * -convexRadiusA;
                 out.pointA[0] = pp[0] + _normalizedV[0] * -convexRadiusA;
@@ -1193,9 +1138,7 @@ export function gjkCastShape(
             out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
-                out.pointA[0] = out.pointB[0];
-                out.pointA[1] = out.pointB[1];
-                out.pointA[2] = out.pointB[2];
+                vec3.copy(out.pointA, out.pointB);
             } else {
                 out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + _normalizedV[0] * -convexRadiusA;
                 out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + _normalizedV[1] * -convexRadiusA;
@@ -1218,9 +1161,7 @@ export function gjkCastShape(
             out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + qq[8] * _bary.w + _normalizedV[2] * convexRadiusB;
 
             if (lambda > 0.0) {
-                out.pointA[0] = out.pointB[0];
-                out.pointA[1] = out.pointB[1];
-                out.pointA[2] = out.pointB[2];
+                vec3.copy(out.pointA, out.pointB);
             } else {
                 out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + pp[6] * _bary.w + _normalizedV[0] * -convexRadiusA;
                 out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + pp[7] * _bary.w + _normalizedV[1] * -convexRadiusA;
@@ -1237,15 +1178,9 @@ export function gjkCastShape(
     // use current v if we have convex radius, otherwise use previous v as approximation
     // (when there's no convex radius, the current v might be inaccurate due to numerical rounding)
     if (sumConvexRadius > 0.0) {
-        // out.separatingAxis = - _v
-        out.separatingAxis[0] = -_v[0];
-        out.separatingAxis[1] = -_v[1];
-        out.separatingAxis[2] = -_v[2];
+        vec3.negate(out.separatingAxis, _v);
     } else {
-        // out.separatingAxis = - _prevV
-        out.separatingAxis[0] = -_prevV[0];
-        out.separatingAxis[1] = -_prevV[1];
-        out.separatingAxis[2] = -_prevV[2];
+        vec3.negate(out.separatingAxis, _prevV);
     }
 }
 
@@ -1281,6 +1216,8 @@ export function createGjkClosestPoints(): GjkClosestPoints {
  * @param direction initial guess for the separating axis
  * @param maxDistanceSquared maximum squared distance between A and B before objects are considered infinitely far away.
  *                           If exceeded, out.squaredDistance will be set to Number.MAX_VALUE
+ *
+ * @optimize
  */
 export function gjkClosestPoints(
     out: GjkClosestPoints,
@@ -1292,15 +1229,11 @@ export function gjkClosestPoints(
 ): void {
     const squaredTolerance = tolerance * tolerance;
 
-    // reset state
     _simplex.size = 0;
 
     // length^2 of v
-    _closestPointToSimplex.point[0] = direction[0];
-    _closestPointToSimplex.point[1] = direction[1];
-    _closestPointToSimplex.point[2] = direction[2];
-    _closestPointToSimplex.squaredDistance =
-        direction[0] * direction[0] + direction[1] * direction[1] + direction[2] * direction[2];
+    vec3.copy(_closestPointToSimplex.point, direction);
+    _closestPointToSimplex.squaredDistance = vec3.squaredLength(direction);
     _closestPointToSimplex.pointSet = 0;
     _closestPointToSimplex.closestPointFound = true;
     // previous length^2 of v
@@ -1309,52 +1242,39 @@ export function gjkClosestPoints(
     let iterations = 0;
     while (iterations++ < GJK_MAX_ITERATIONS) {
         // get support points for shape A and B in the direction of v
-        _directionA[0] = _closestPointToSimplex.point[0];
-        _directionA[1] = _closestPointToSimplex.point[1];
-        _directionA[2] = _closestPointToSimplex.point[2];
-        _directionB[0] = -_closestPointToSimplex.point[0];
-        _directionB[1] = -_closestPointToSimplex.point[1];
-        _directionB[2] = -_closestPointToSimplex.point[2];
+        vec3.copy(_directionA, _closestPointToSimplex.point);
+        vec3.negate(_directionB, _closestPointToSimplex.point);
 
         supportA.getSupport(_directionA, _p);
         supportB.getSupport(_directionB, _q);
 
         // get support point of the minkowski sum A - B of v
-        _w[0] = _p[0] - _q[0];
-        _w[1] = _p[1] - _q[1];
-        _w[2] = _p[2] - _q[2];
+        vec3.subtract(_w, _p, _q);
 
-        const dot =
-            _closestPointToSimplex.point[0] * _w[0] +
-            _closestPointToSimplex.point[1] * _w[1] +
-            _closestPointToSimplex.point[2] * _w[2];
+        const dot = vec3.dot(_closestPointToSimplex.point, _w);
 
         // test if we have a separation of more than inMaxDistSq, in which case we terminate early
         if (dot < 0.0 && dot * dot > _closestPointToSimplex.squaredDistance * maxDistanceSquared) {
             out.squaredDistance = Number.MAX_VALUE;
-            out.penetrationAxis[0] = _closestPointToSimplex.point[0];
-            out.penetrationAxis[1] = _closestPointToSimplex.point[1];
-            out.penetrationAxis[2] = _closestPointToSimplex.point[2];
+            vec3.copy(out.penetrationAxis, _closestPointToSimplex.point);
             return;
         }
 
         // store the point for later use
-        {
-            const off = _simplex.size * 3;
-            _simplex.y[off] = _w[0];
-            _simplex.y[off + 1] = _w[1];
-            _simplex.y[off + 2] = _w[2];
+        const off = _simplex.size * 3;
+        _simplex.y[off] = _w[0];
+        _simplex.y[off + 1] = _w[1];
+        _simplex.y[off + 2] = _w[2];
 
-            _simplex.p[off] = _p[0];
-            _simplex.p[off + 1] = _p[1];
-            _simplex.p[off + 2] = _p[2];
+        _simplex.p[off] = _p[0];
+        _simplex.p[off + 1] = _p[1];
+        _simplex.p[off + 2] = _p[2];
 
-            _simplex.q[off] = _q[0];
-            _simplex.q[off + 1] = _q[1];
-            _simplex.q[off + 2] = _q[2];
+        _simplex.q[off] = _q[0];
+        _simplex.q[off + 1] = _q[1];
+        _simplex.q[off + 2] = _q[2];
 
-            _simplex.size++;
-        }
+        _simplex.size++;
 
         computeClosestPointToSimplex(_closestPointToSimplex, previousSquaredDistance, true, _simplex);
 
@@ -1366,51 +1286,17 @@ export function gjkClosestPoints(
 
         // if there are 4 points, the origin is inside the tetrahedron and we're done
         if (_closestPointToSimplex.pointSet === 0xf) {
-            _closestPointToSimplex.point[0] = 0;
-            _closestPointToSimplex.point[1] = 0;
-            _closestPointToSimplex.point[2] = 0;
+            vec3.set(_closestPointToSimplex.point, 0, 0, 0);
             _closestPointToSimplex.squaredDistance = 0.0;
             break;
         }
 
         // update the points of the simplex
-        {
-            let newSize = 0;
-            const yy = _simplex.y;
-            const pp = _simplex.p;
-            const qq = _simplex.q;
-
-            for (let i = 0; i < _simplex.size; i++) {
-                if ((_closestPointToSimplex.pointSet & (1 << i)) !== 0) {
-                    if (newSize !== i) {
-                        // copy point i to position newSize
-                        const srcOff = i * 3;
-                        const dstOff = newSize * 3;
-
-                        yy[dstOff] = yy[srcOff];
-                        yy[dstOff + 1] = yy[srcOff + 1];
-                        yy[dstOff + 2] = yy[srcOff + 2];
-
-                        pp[dstOff] = pp[srcOff];
-                        pp[dstOff + 1] = pp[srcOff + 1];
-                        pp[dstOff + 2] = pp[srcOff + 2];
-
-                        qq[dstOff] = qq[srcOff];
-                        qq[dstOff + 1] = qq[srcOff + 1];
-                        qq[dstOff + 2] = qq[srcOff + 2];
-                    }
-                    newSize++;
-                }
-            }
-
-            _simplex.size = newSize;
-        }
+        updatePointSetYPQ(_simplex, _closestPointToSimplex.pointSet);
 
         // if v is very close to zero, we consider this a collision
         if (_closestPointToSimplex.squaredDistance <= squaredTolerance) {
-            _closestPointToSimplex.point[0] = 0;
-            _closestPointToSimplex.point[1] = 0;
-            _closestPointToSimplex.point[2] = 0;
+            vec3.set(_closestPointToSimplex.point, 0, 0, 0);
             _closestPointToSimplex.squaredDistance = 0.0;
             break;
         }
@@ -1430,18 +1316,14 @@ export function gjkClosestPoints(
         }
 
         if (_closestPointToSimplex.squaredDistance <= GJK_TOLERANCE * yMaxLengthSquared) {
-            _closestPointToSimplex.point[0] = 0;
-            _closestPointToSimplex.point[1] = 0;
-            _closestPointToSimplex.point[2] = 0;
+            vec3.set(_closestPointToSimplex.point, 0, 0, 0);
             _closestPointToSimplex.squaredDistance = 0.0;
             break;
         }
 
         // the next separation axis to test is the negative of the closest point of the Minkowski sum to the origin
         // note: this must be done before terminating as converged since the separating axis is -v
-        _closestPointToSimplex.point[0] = -_closestPointToSimplex.point[0];
-        _closestPointToSimplex.point[1] = -_closestPointToSimplex.point[1];
-        _closestPointToSimplex.point[2] = -_closestPointToSimplex.point[2];
+        vec3.negate(_closestPointToSimplex.point, _closestPointToSimplex.point);
 
         // if the squared length of v is not changing enough, we've converged and there is no collision
         if (previousSquaredDistance - _closestPointToSimplex.squaredDistance <= GJK_TOLERANCE * previousSquaredDistance) {
@@ -1453,13 +1335,8 @@ export function gjkClosestPoints(
     }
 
     // extract the closest points
-    out.pointA[0] = 0;
-    out.pointA[1] = 0;
-    out.pointA[2] = 0;
-
-    out.pointB[0] = 0;
-    out.pointB[1] = 0;
-    out.pointB[2] = 0;
+    vec3.set(out.pointA, 0, 0, 0);
+    vec3.set(out.pointB, 0, 0, 0);
 
     copySimplex(out.simplex, _simplex);
 
@@ -1467,9 +1344,7 @@ export function gjkClosestPoints(
     // return a large distance to indicate separation
     if (_simplex.size === 0) {
         out.squaredDistance = Number.MAX_VALUE;
-        out.penetrationAxis[0] = 0;
-        out.penetrationAxis[1] = 0;
-        out.penetrationAxis[2] = 0;
+        vec3.set(out.penetrationAxis, 0, 0, 0);
         return;
     }
 
@@ -1536,8 +1411,6 @@ export function gjkClosestPoints(
     }
 
     // store the separating axis / penetration axis
-    out.penetrationAxis[0] = _closestPointToSimplex.point[0];
-    out.penetrationAxis[1] = _closestPointToSimplex.point[1];
-    out.penetrationAxis[2] = _closestPointToSimplex.point[2];
+    vec3.copy(out.penetrationAxis, _closestPointToSimplex.point);
     out.squaredDistance = _closestPointToSimplex.squaredDistance;
 }

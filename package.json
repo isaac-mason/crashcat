@@ -36,7 +36,9 @@
         "README.md"
     ],
     "scripts": {
-        "build": "rm -rf ./dist && rolldown --config rolldown.config.mjs",
+        "build": "rm -rf ./dist && run-p build:bundle build:dts",
+        "build:bundle": "rolldown --config rolldown.config.mjs",
+        "build:dts": "tsc -p tsconfig.build.json && node scripts/add-js-extensions-dts.mjs",
         "format": "biome format --write src/. tst/.",
         "lint": "biome lint --write src/. tst/.",
         "test": "vitest ./tst",
@@ -59,9 +61,9 @@
     },
     "devDependencies": {
         "@biomejs/biome": "^2.2.0",
-        "@rollup/plugin-typescript": "^12.1.4",
         "@types/three": "0.183.0",
         "compilecat": "link:/Users/isaacmason/Development/compilecat",
+        "npm-run-all2": "^9.0.1",
         "rolldown": "^1.0.2",
         "rollup-plugin-copy": "^3.5.0",
         "rollup-plugin-filesize": "^10.0.0",
