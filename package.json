@@ -62,7 +62,7 @@
     "devDependencies": {
         "@biomejs/biome": "^2.2.0",
         "@types/three": "0.183.0",
-        "compilecat": "link:/Users/isaacmason/Development/compilecat",
+        "compilecat": "github:isaac-mason/compilecat",
         "npm-run-all2": "^9.0.1",
         "rolldown": "^1.0.2",
         "rollup-plugin-copy": "^3.5.0",
