@@ -71,7 +71,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         // ensure that bodyA has the higher motion type (i.e. dynamic trumps kinematic), this ensures that we do the collision detection in the space of a moving body,
         // which avoids accuracy problems when testing a very large static object against a small dynamic object
         // ensure that bodyA id < bodyB id when motion types are the same.
-        if (bodyA.motionType > bodyB.motionType || (bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id)) {
+        if (bodyA.motionType < bodyB.motionType || (bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id)) {
             const temp = bodyA;
             bodyA = bodyB;
             bodyB = temp;
@@ -239,6 +239,9 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         }
 
     }
+
+    /* flip cached manifold buffers: this step's writes become next step's reads (jolt: mCacheWriteIdx ^= 1) */
+    contacts.flipManifoldCache(world.contacts);
 
     /* clear all forces */
     resetForces(world);
@@ -1329,7 +1332,7 @@ function onCCDContactAdded(
     if (existingContact) {
         // contact persisted from previous frame
         // mark it as CCD contact to prevent warm-starting with stale impulses
-        existingContact.flags |= contacts.CachedManifoldFlags.CCDContact;
+        contacts.getWriteManifold(existingContact, world.contacts).flags |= contacts.CachedManifoldFlags.CCDContact;
         existingContact.processedThisFrame = true;
 
         listener.onContactPersisted?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
@@ -1342,7 +1345,7 @@ function onCCDContactAdded(
             swappedManifold.subShapeIdA,
             swappedManifold.subShapeIdB,
         );
-        contact.flags = contacts.CachedManifoldFlags.CCDContact;
+        contacts.getWriteManifold(contact, world.contacts).flags = contacts.CachedManifoldFlags.CCDContact;
         contact.processedThisFrame = true;
 
         listener.onContactAdded?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);

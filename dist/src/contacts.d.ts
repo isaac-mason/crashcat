@@ -8,6 +8,49 @@ export type Contacts = {
     contacts: Contact[];
     /** free list of available contact indices (indices to reuse) */
     contactsFreeIndices: number[];
+    /**
+     * Index of the manifold buffer that holds the PREVIOUS step's cached data
+     * (read side this step). Equivalent to Jolt's mReadCache pointer.
+     *
+     * Flip once per step (after solver + storeAppliedImpulses) so that this
+     * step's writes become next step's reads. The other buffer (1 - readIdx)
+     * is the WRITE side this step (Jolt's mWriteCache).
+     */
+    readIdx: 0 | 1;
+};
+/**
+ * Cached manifold data — the per-step state we read from last frame and write
+ * to this frame. Equivalent to Jolt's CachedManifold.
+ *
+ * Each Contact double-buffers this (see Contact.manifolds) so reads from the
+ * previous step don't alias writes to the current step. This matters for
+ * warm-start lambda matching, which compares new contact-point local positions
+ * against the previous step's positions.
+ */
+export type CachedManifold = {
+    /** contact normal in body B's local space */
+    contactNormal: Vec3;
+    /** number of contact points (0-4) */
+    numContactPoints: number;
+    /** contact points (max 4 for stable manifold) */
+    contactPoints: CachedContactPoint[];
+    /**
+     * Accumulated friction impulse along tangent1 for the entire manifold
+     * (used for warm starting next step).
+     */
+    frictionLambda1: number;
+    /**
+     * Accumulated friction impulse along tangent2 for the entire manifold
+     * (used for warm starting next step).
+     */
+    frictionLambda2: number;
+    /**
+     * Accumulated angular friction impulse around the contact normal for the
+     * entire manifold (used for warm starting next step).
+     */
+    angularFrictionLambda: number;
+    /** flags bitfield (@see CachedManifoldFlags) */
+    flags: number;
 };
 /** contact between two shapes */
 export type Contact = {
@@ -25,33 +68,16 @@ export type Contact = {
     subShapeIdA: number;
     /** sub-shape B ID */
     subShapeIdB: number;
-    /** contact normal in body B's local space */
-    contactNormal: Vec3;
-    /** number of contact points (0-4) */
-    numContactPoints: number;
-    /** contact points (max 4 for stable manifold) */
-    contactPoints: CachedContactPoint[];
-    /**
-     * Accumulated friction impulse along tangent1 for the entire manifold
-     * (previous frame, used for warm starting).
-     */
-    frictionLambda1: number;
-    /**
-     * Accumulated friction impulse along tangent2 for the entire manifold
-     * (previous frame, used for warm starting).
-     */
-    frictionLambda2: number;
-    /**
-     * Accumulated angular friction impulse around the contact normal for the entire
-     * manifold (previous frame, used for warm starting).
-     */
-    angularFrictionLambda: number;
-    /** flags bitfield (@see CachedManifoldFlags) */
-    flags: number;
     /** whether this contact was processed this frame (for stale contact cleanup) */
     processedThisFrame: boolean;
     /** two edges for intrusive doubly-linked list: edges[0] = edge in bodyA's contact list, edges[1] = edge in bodyB's contact list */
     edges: [ContactEdge, ContactEdge];
+    /**
+     * Double-buffered cached manifold (Jolt: mReadCache / mWriteCache).
+     * Use getReadManifold / getWriteManifold to access via the Contacts.readIdx
+     * flip — never index directly.
+     */
+    manifolds: [CachedManifold, CachedManifold];
 };
 /** cached contact point with non-penetration impulse history for warm starting */
 export type CachedContactPoint = {
@@ -84,6 +110,15 @@ export declare enum CachedManifoldFlags {
 }
 /** creates empty contacts state */
 export declare function init(): Contacts;
+/** the manifold buffer that holds last step's cached data (read side). */
+export declare function getReadManifold(contact: Contact, contactsState: Contacts): CachedManifold;
+/** the manifold buffer being populated this step (write side). */
+export declare function getWriteManifold(contact: Contact, contactsState: Contacts): CachedManifold;
+/**
+ * Swap read/write manifold buffers — call once per step after solving and
+ * storeAppliedImpulses, so this step's writes become next step's reads.
+ */
+export declare function flipManifoldCache(contactsState: Contacts): void;
 /**
  * Pack a contact ID and edge index into a single integer key.
  * Layout: [contactId: 31 bits][edgeIndex: 1 bit]

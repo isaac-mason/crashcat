@@ -612,15 +612,20 @@ export function addContactConstraint(
     // mark contact as processed this frame (for stale contact cleanup)
     contact.processedThisFrame = true;
 
+    // double-buffered cache: read prev step's data from `prev`, write this step's data to `curr`
+    // jolt: prev = mReadCache->Find(...), curr = mWriteCache->Create(...)
+    const prev = contacts.getReadManifold(contact, contactsState);
+    const curr = contacts.getWriteManifold(contact, contactsState);
+
     // compute rotation matrices for both bodies (used for inverse rotation via transpose and inverse inertia)
     const rotA = mat4.fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
     const rotB = mat4.fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
 
     // transform the world space normal into body B's local space
     // (R^-1 = R^T for orthogonal matrices)
-    mat4.multiply3x3TransposedVec(contact.contactNormal, rotB, contactManifold.worldSpaceNormal);
-    vec3.normalize(contact.contactNormal, contact.contactNormal);
-    contact.numContactPoints = contactManifold.numContactPoints;
+    mat4.multiply3x3TransposedVec(curr.contactNormal, rotB, contactManifold.worldSpaceNormal);
+    vec3.normalize(curr.contactNormal, curr.contactNormal);
+    curr.numContactPoints = contactManifold.numContactPoints;
 
     // prepare contact settings that will be passed to Listener
     const contactSettings = setContactSettings(
@@ -632,7 +637,7 @@ export function addContactConstraint(
 
     // call contact listener, which can modify ContactSettings to customize contact behavior
     if (existingContact) {
-        contact.flags |= contacts.CachedManifoldFlags.ContactPersisted;
+        curr.flags |= contacts.CachedManifoldFlags.ContactPersisted;
         contactListener?.onContactPersisted?.(bodyA, bodyB, contactManifold, contactSettings);
     } else {
         contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
@@ -761,8 +766,8 @@ export function addContactConstraint(
             let lambdaSet = false;
 
             if (existingContact) {
-                for (let j = 0; j < existingContact.numContactPoints; j++) {
-                    const point = existingContact.contactPoints[j];
+                for (let j = 0; j < prev.numContactPoints; j++) {
+                    const point = prev.contactPoints[j];
 
                     const dist1Sq = vec3.squaredDistance(cp.localPositionA, point.position1);
                     const dist2Sq = vec3.squaredDistance(cp.localPositionB, point.position2);
@@ -821,8 +826,8 @@ export function addContactConstraint(
                 normalVelocityBias,
             );
 
-            // store to contact array for next frame's warm starting
-            const cachedPoint = contact.contactPoints[i];
+            // store to write-side cache for next frame's warm starting
+            const cachedPoint = curr.contactPoints[i];
             vec3.copy(cachedPoint.position1, cp.localPositionA);
             vec3.copy(cachedPoint.position2, cp.localPositionB);
 
@@ -834,9 +839,9 @@ export function addContactConstraint(
         // average "friction point", with previous-frame lambdas transferred wholesale.
         if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
             if (existingContact) {
-                constraint.frictionConstraint1.totalLambda = existingContact.frictionLambda1;
-                constraint.frictionConstraint2.totalLambda = existingContact.frictionLambda2;
-                constraint.angularFrictionConstraint.totalLambda = existingContact.angularFrictionLambda;
+                constraint.frictionConstraint1.totalLambda = prev.frictionLambda1;
+                constraint.frictionConstraint2.totalLambda = prev.frictionLambda2;
+                constraint.angularFrictionConstraint.totalLambda = prev.angularFrictionLambda;
             } else {
                 constraint.frictionConstraint1.totalLambda = 0;
                 constraint.frictionConstraint2.totalLambda = 0;
@@ -851,31 +856,31 @@ export function addContactConstraint(
                 contactSettings,
             );
 
-            // write the transferred (and possibly cleared) friction λs back to the cache
+            // write the transferred (and possibly cleared) friction λs back to the write-side cache
             // so they're a no-op if the constraint never runs (e.g. fully kinematic pair).
-            contact.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-            contact.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-            contact.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+            curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+            curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+            curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
         } else {
             axisConstraintPart.deactivate(constraint.frictionConstraint1);
             axisConstraintPart.deactivate(constraint.frictionConstraint2);
             angularFrictionConstraintPart.deactivate(constraint.angularFrictionConstraint);
-            contact.frictionLambda1 = 0;
-            contact.frictionLambda2 = 0;
-            contact.angularFrictionLambda = 0;
+            curr.frictionLambda1 = 0;
+            curr.frictionLambda2 = 0;
+            curr.angularFrictionLambda = 0;
         }
 
         return true;
     }
 
     // if no dynamic bodies, or is a sensor, we skip creating the contact constraint
-    // store sensor contact points to contact array
+    // store sensor contact points to the write-side cache
     // this ensures proper onContactAdded/onContactPersisted semantics for sensors
     for (let i = 0; i < contactManifold.numContactPoints; i++) {
         const contactPointIndex = i * 3;
         const scratchA = _addContactConstraint_relativePointOnA;
         const scratchB = _addContactConstraint_relativePointOnB;
-        const cachedPoint = contact.contactPoints[i];
+        const cachedPoint = curr.contactPoints[i];
 
         // scratch = manifold relative point; then add baseOffset for world; then
         // subtract COM for body-local; then rot^T * local for cached position.
@@ -893,9 +898,9 @@ export function addContactConstraint(
     }
 
     // sensors don't run friction either
-    contact.frictionLambda1 = 0;
-    contact.frictionLambda2 = 0;
-    contact.angularFrictionLambda = 0;
+    curr.frictionLambda1 = 0;
+    curr.frictionLambda2 = 0;
+    curr.angularFrictionLambda = 0;
 
     // no contact constraint created for sensors
     return false;
@@ -1355,16 +1360,17 @@ export function storeAppliedImpulses(contactConstraints: ContactConstraints, con
     for (let i = 0; i < contactConstraints.count; i++) {
         const constraint = contactConstraints.pool[i];
         const contact = contactsState.contacts[constraint.contactIndex];
+        const curr = contacts.getWriteManifold(contact, contactsState);
 
         // per-point non-penetration impulse
         for (let j = 0; j < constraint.numContactPoints; j++) {
-            contact.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
+            curr.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
         }
 
         // manifold-level friction impulses
-        contact.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-        contact.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-        contact.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+        curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+        curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+        curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
     }
 }
 

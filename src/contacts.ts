@@ -11,6 +11,50 @@ export type Contacts = {
     contacts: Contact[];
     /** free list of available contact indices (indices to reuse) */
     contactsFreeIndices: number[];
+    /**
+     * Index of the manifold buffer that holds the PREVIOUS step's cached data
+     * (read side this step). Equivalent to Jolt's mReadCache pointer.
+     *
+     * Flip once per step (after solver + storeAppliedImpulses) so that this
+     * step's writes become next step's reads. The other buffer (1 - readIdx)
+     * is the WRITE side this step (Jolt's mWriteCache).
+     */
+    readIdx: 0 | 1;
+};
+
+/**
+ * Cached manifold data — the per-step state we read from last frame and write
+ * to this frame. Equivalent to Jolt's CachedManifold.
+ *
+ * Each Contact double-buffers this (see Contact.manifolds) so reads from the
+ * previous step don't alias writes to the current step. This matters for
+ * warm-start lambda matching, which compares new contact-point local positions
+ * against the previous step's positions.
+ */
+export type CachedManifold = {
+    /** contact normal in body B's local space */
+    contactNormal: Vec3;
+    /** number of contact points (0-4) */
+    numContactPoints: number;
+    /** contact points (max 4 for stable manifold) */
+    contactPoints: CachedContactPoint[];
+    /**
+     * Accumulated friction impulse along tangent1 for the entire manifold
+     * (used for warm starting next step).
+     */
+    frictionLambda1: number;
+    /**
+     * Accumulated friction impulse along tangent2 for the entire manifold
+     * (used for warm starting next step).
+     */
+    frictionLambda2: number;
+    /**
+     * Accumulated angular friction impulse around the contact normal for the
+     * entire manifold (used for warm starting next step).
+     */
+    angularFrictionLambda: number;
+    /** flags bitfield (@see CachedManifoldFlags) */
+    flags: number;
 };
 
 /** contact between two shapes */
@@ -29,33 +73,16 @@ export type Contact = {
     subShapeIdA: number;
     /** sub-shape B ID */
     subShapeIdB: number;
-    /** contact normal in body B's local space */
-    contactNormal: Vec3;
-    /** number of contact points (0-4) */
-    numContactPoints: number;
-    /** contact points (max 4 for stable manifold) */
-    contactPoints: CachedContactPoint[];
-    /**
-     * Accumulated friction impulse along tangent1 for the entire manifold
-     * (previous frame, used for warm starting).
-     */
-    frictionLambda1: number;
-    /**
-     * Accumulated friction impulse along tangent2 for the entire manifold
-     * (previous frame, used for warm starting).
-     */
-    frictionLambda2: number;
-    /**
-     * Accumulated angular friction impulse around the contact normal for the entire
-     * manifold (previous frame, used for warm starting).
-     */
-    angularFrictionLambda: number;
-    /** flags bitfield (@see CachedManifoldFlags) */
-    flags: number;
     /** whether this contact was processed this frame (for stale contact cleanup) */
     processedThisFrame: boolean;
     /** two edges for intrusive doubly-linked list: edges[0] = edge in bodyA's contact list, edges[1] = edge in bodyB's contact list */
     edges: [ContactEdge, ContactEdge];
+    /**
+     * Double-buffered cached manifold (Jolt: mReadCache / mWriteCache).
+     * Use getReadManifold / getWriteManifold to access via the Contacts.readIdx
+     * flip — never index directly.
+     */
+    manifolds: [CachedManifold, CachedManifold];
 };
 
 /** cached contact point with non-penetration impulse history for warm starting */
@@ -96,7 +123,26 @@ export function init(): Contacts {
     return {
         contacts: [],
         contactsFreeIndices: [],
+        readIdx: 0,
     };
+}
+
+/** the manifold buffer that holds last step's cached data (read side). */
+export function getReadManifold(contact: Contact, contactsState: Contacts): CachedManifold {
+    return contact.manifolds[contactsState.readIdx];
+}
+
+/** the manifold buffer being populated this step (write side). */
+export function getWriteManifold(contact: Contact, contactsState: Contacts): CachedManifold {
+    return contact.manifolds[1 - contactsState.readIdx];
+}
+
+/**
+ * Swap read/write manifold buffers — call once per step after solving and
+ * storeAppliedImpulses, so this step's writes become next step's reads.
+ */
+export function flipManifoldCache(contactsState: Contacts): void {
+    contactsState.readIdx = (1 - contactsState.readIdx) as 0 | 1;
 }
 
 /**
@@ -130,16 +176,9 @@ function createCachedContactPoint(): CachedContactPoint {
     };
 }
 
-/** create an empty contact (used for initialization and pooling) */
-function createEmptyContact(): Contact {
+/** create an empty cached manifold */
+function createEmptyCachedManifold(): CachedManifold {
     return {
-        contactIndex: -1,
-        bodyIdA: -1,
-        bodyIndexA: -1,
-        bodyIdB: -1,
-        bodyIndexB: -1,
-        subShapeIdA: EMPTY_SUB_SHAPE_ID,
-        subShapeIdB: EMPTY_SUB_SHAPE_ID,
         contactNormal: vec3.create(),
         numContactPoints: 0,
         contactPoints: [
@@ -152,11 +191,40 @@ function createEmptyContact(): Contact {
         frictionLambda2: 0,
         angularFrictionLambda: 0,
         flags: CachedManifoldFlags.None,
+    };
+}
+
+/** reset a cached manifold to default empty values */
+function resetCachedManifold(m: CachedManifold): void {
+    vec3.zero(m.contactNormal);
+    m.numContactPoints = 0;
+    m.frictionLambda1 = 0;
+    m.frictionLambda2 = 0;
+    m.angularFrictionLambda = 0;
+    m.flags = CachedManifoldFlags.None;
+    for (const point of m.contactPoints) {
+        vec3.zero(point.position1);
+        vec3.zero(point.position2);
+        point.normalLambda = 0;
+    }
+}
+
+/** create an empty contact (used for initialization and pooling) */
+function createEmptyContact(): Contact {
+    return {
+        contactIndex: -1,
+        bodyIdA: -1,
+        bodyIndexA: -1,
+        bodyIdB: -1,
+        bodyIndexB: -1,
+        subShapeIdA: EMPTY_SUB_SHAPE_ID,
+        subShapeIdB: EMPTY_SUB_SHAPE_ID,
         processedThisFrame: false,
         edges: [
             { bodyIndex: -1, prevKey: INVALID_CONTACT_KEY, nextKey: INVALID_CONTACT_KEY },
             { bodyIndex: -1, prevKey: INVALID_CONTACT_KEY, nextKey: INVALID_CONTACT_KEY },
         ],
+        manifolds: [createEmptyCachedManifold(), createEmptyCachedManifold()],
     };
 }
 
@@ -176,20 +244,11 @@ function setContact(
     contact.bodyIndexB = bodyB.index;
     contact.subShapeIdA = subShapeIdA;
     contact.subShapeIdB = subShapeIdB;
-    vec3.zero(contact.contactNormal);
-    contact.numContactPoints = 0;
-    contact.flags = CachedManifoldFlags.None;
     contact.processedThisFrame = false;
-    contact.frictionLambda1 = 0;
-    contact.frictionLambda2 = 0;
-    contact.angularFrictionLambda = 0;
 
-    // reset contact points
-    for (const point of contact.contactPoints) {
-        vec3.zero(point.position1);
-        vec3.zero(point.position2);
-        point.normalLambda = 0;
-    }
+    // reset both manifold buffers — neither holds valid prior data for a fresh contact
+    resetCachedManifold(contact.manifolds[0]);
+    resetCachedManifold(contact.manifolds[1]);
 }
 
 /**

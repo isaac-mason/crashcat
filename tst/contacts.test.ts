@@ -93,7 +93,8 @@ describe('Contacts: Create and Destroy', () => {
         expect(contact.bodyIdB).toBe(bodyB.id);
         expect(contact.subShapeIdA).toBe(0);
         expect(contact.subShapeIdB).toBe(0);
-        expect(contact.numContactPoints).toBe(0);
+        expect(contacts.getReadManifold(contact, contactsState).numContactPoints).toBe(0);
+        expect(contacts.getWriteManifold(contact, contactsState).numContactPoints).toBe(0);
         expect(contactsState.contacts).toHaveLength(1);
         expect(getActiveContactCount(contactsState)).toBe(1);
 

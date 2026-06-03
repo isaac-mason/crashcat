@@ -26178,11 +26178,20 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	findContact: () => {
 		return findContact;
 	},
+	flipManifoldCache: () => {
+		return flipManifoldCache;
+	},
 	getContactKeyEdge: () => {
 		return getContactKeyEdge;
 	},
 	getContactKeyId: () => {
 		return getContactKeyId;
+	},
+	getReadManifold: () => {
+		return getReadManifold;
+	},
+	getWriteManifold: () => {
+		return getWriteManifold;
 	},
 	hasContactsBetweenBodies: () => {
 		return hasContactsBetweenBodies;
@@ -26212,8 +26221,24 @@ let CachedManifoldFlags = /* @__PURE__ */ function(CachedManifoldFlags) {
 function init$4() {
 	return {
 		contacts: [],
-		contactsFreeIndices: []
+		contactsFreeIndices: [],
+		readIdx: 0
 	};
+}
+/** the manifold buffer that holds last step's cached data (read side). */
+function getReadManifold(contact, contactsState) {
+	return contact.manifolds[contactsState.readIdx];
+}
+/** the manifold buffer being populated this step (write side). */
+function getWriteManifold(contact, contactsState) {
+	return contact.manifolds[1 - contactsState.readIdx];
+}
+/**
+* Swap read/write manifold buffers — call once per step after solving and
+* storeAppliedImpulses, so this step's writes become next step's reads.
+*/
+function flipManifoldCache(contactsState) {
+	contactsState.readIdx = 1 - contactsState.readIdx;
 }
 /**
 * Pack a contact ID and edge index into a single integer key.
@@ -26242,16 +26267,9 @@ function createCachedContactPoint() {
 		normalLambda: 0
 	};
 }
-/** create an empty contact (used for initialization and pooling) */
-function createEmptyContact() {
+/** create an empty cached manifold */
+function createEmptyCachedManifold() {
 	return {
-		contactIndex: -1,
-		bodyIdA: -1,
-		bodyIndexA: -1,
-		bodyIdB: -1,
-		bodyIndexB: -1,
-		subShapeIdA: EMPTY_SUB_SHAPE_ID,
-		subShapeIdB: EMPTY_SUB_SHAPE_ID,
 		contactNormal: create$49(),
 		numContactPoints: 0,
 		contactPoints: [
@@ -26263,7 +26281,33 @@ function createEmptyContact() {
 		frictionLambda1: 0,
 		frictionLambda2: 0,
 		angularFrictionLambda: 0,
-		flags: 0,
+		flags: 0
+	};
+}
+/** reset a cached manifold to default empty values */
+function resetCachedManifold(m) {
+	zero$1(m.contactNormal);
+	m.numContactPoints = 0;
+	m.frictionLambda1 = 0;
+	m.frictionLambda2 = 0;
+	m.angularFrictionLambda = 0;
+	m.flags = 0;
+	for (const point of m.contactPoints) {
+		zero$1(point.position1);
+		zero$1(point.position2);
+		point.normalLambda = 0;
+	}
+}
+/** create an empty contact (used for initialization and pooling) */
+function createEmptyContact() {
+	return {
+		contactIndex: -1,
+		bodyIdA: -1,
+		bodyIndexA: -1,
+		bodyIdB: -1,
+		bodyIndexB: -1,
+		subShapeIdA: EMPTY_SUB_SHAPE_ID,
+		subShapeIdB: EMPTY_SUB_SHAPE_ID,
 		processedThisFrame: false,
 		edges: [{
 			bodyIndex: -1,
@@ -26273,7 +26317,8 @@ function createEmptyContact() {
 			bodyIndex: -1,
 			prevKey: -1,
 			nextKey: -1
-		}]
+		}],
+		manifolds: [createEmptyCachedManifold(), createEmptyCachedManifold()]
 	};
 }
 /** set a contact to initial state with new body/subshape IDs */
@@ -26285,18 +26330,9 @@ function setContact(contact, contactId, bodyA, bodyB, subShapeIdA, subShapeIdB) 
 	contact.bodyIndexB = bodyB.index;
 	contact.subShapeIdA = subShapeIdA;
 	contact.subShapeIdB = subShapeIdB;
-	zero$1(contact.contactNormal);
-	contact.numContactPoints = 0;
-	contact.flags = 0;
 	contact.processedThisFrame = false;
-	contact.frictionLambda1 = 0;
-	contact.frictionLambda2 = 0;
-	contact.angularFrictionLambda = 0;
-	for (const point of contact.contactPoints) {
-		zero$1(point.position1);
-		zero$1(point.position2);
-		point.normalLambda = 0;
-	}
+	resetCachedManifold(contact.manifolds[0]);
+	resetCachedManifold(contact.manifolds[1]);
 }
 /**
 * Unlink a contact from a body's contact list.
@@ -28510,14 +28546,16 @@ function addContactConstraint(contactConstraints, contactsState, bodyA, bodyB, c
 	const existingContact = findContact(contactsState, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
 	const contact = existingContact ?? createContact(contactsState, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
 	contact.processedThisFrame = true;
+	const prev = getReadManifold(contact, contactsState);
+	const curr = getWriteManifold(contact, contactsState);
 	const rotA = fromQuat$1(_addContactConstraint_rotA, bodyA.quaternion);
 	const rotB = fromQuat$1(_addContactConstraint_rotB, bodyB.quaternion);
-	multiply3x3TransposedVec(contact.contactNormal, rotB, contactManifold.worldSpaceNormal);
-	normalize$2(contact.contactNormal, contact.contactNormal);
-	contact.numContactPoints = contactManifold.numContactPoints;
+	multiply3x3TransposedVec(curr.contactNormal, rotB, contactManifold.worldSpaceNormal);
+	normalize$2(curr.contactNormal, curr.contactNormal);
+	curr.numContactPoints = contactManifold.numContactPoints;
 	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
 	if (existingContact) {
-		contact.flags |= 1;
+		curr.flags |= 1;
 		contactListener?.onContactPersisted?.(bodyA, bodyB, contactManifold, contactSettings);
 	} else contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
 	if (!contactSettings.isSensor && (bodyA.motionType === 2 && bodyA.motionProperties.invMass !== 0 || bodyB.motionType === 2 && bodyB.motionProperties.invMass !== 0)) {
@@ -28580,8 +28618,8 @@ function addContactConstraint(contactConstraints, contactsState, bodyA, bodyB, c
 			multiply3x3TransposedVec(cp.localPositionA, rotA, scratchA);
 			multiply3x3TransposedVec(cp.localPositionB, rotB, scratchB);
 			let lambdaSet = false;
-			if (existingContact) for (let j = 0; j < existingContact.numContactPoints; j++) {
-				const point = existingContact.contactPoints[j];
+			if (existingContact) for (let j = 0; j < prev.numContactPoints; j++) {
+				const point = prev.contactPoints[j];
 				const dist1Sq = squaredDistance(cp.localPositionA, point.position1);
 				const dist2Sq = squaredDistance(cp.localPositionB, point.position2);
 				const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
@@ -28601,32 +28639,32 @@ function addContactConstraint(contactConstraints, contactsState, bodyA, bodyB, c
 			subtract$1(rB, midpoint, bodyB.centerOfMassPosition);
 			const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, cp.positionA, cp.positionB, smoothedNormal, _addContactConstraint_rA, _addContactConstraint_rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
 			calculateConstraintProperties$5(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaA, constraint.invInertiaB, _addContactConstraint_rA, _addContactConstraint_rB, smoothedNormal, normalVelocityBias);
-			const cachedPoint = contact.contactPoints[i];
+			const cachedPoint = curr.contactPoints[i];
 			copy$9(cachedPoint.position1, cp.localPositionA);
 			copy$9(cachedPoint.position2, cp.localPositionB);
 			cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
 		}
 		if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
 			if (existingContact) {
-				constraint.frictionConstraint1.totalLambda = existingContact.frictionLambda1;
-				constraint.frictionConstraint2.totalLambda = existingContact.frictionLambda2;
-				constraint.angularFrictionConstraint.totalLambda = existingContact.angularFrictionLambda;
+				constraint.frictionConstraint1.totalLambda = prev.frictionLambda1;
+				constraint.frictionConstraint2.totalLambda = prev.frictionLambda2;
+				constraint.angularFrictionConstraint.totalLambda = prev.angularFrictionLambda;
 			} else {
 				constraint.frictionConstraint1.totalLambda = 0;
 				constraint.frictionConstraint2.totalLambda = 0;
 				constraint.angularFrictionConstraint.totalLambda = 0;
 			}
 			calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
-			contact.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-			contact.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-			contact.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+			curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+			curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+			curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
 		} else {
 			deactivate$5(constraint.frictionConstraint1);
 			deactivate$5(constraint.frictionConstraint2);
 			deactivate(constraint.angularFrictionConstraint);
-			contact.frictionLambda1 = 0;
-			contact.frictionLambda2 = 0;
-			contact.angularFrictionLambda = 0;
+			curr.frictionLambda1 = 0;
+			curr.frictionLambda2 = 0;
+			curr.angularFrictionLambda = 0;
 		}
 		return true;
 	}
@@ -28634,7 +28672,7 @@ function addContactConstraint(contactConstraints, contactsState, bodyA, bodyB, c
 		const contactPointIndex = i * 3;
 		const scratchA = _addContactConstraint_relativePointOnA;
 		const scratchB = _addContactConstraint_relativePointOnB;
-		const cachedPoint = contact.contactPoints[i];
+		const cachedPoint = curr.contactPoints[i];
 		fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
 		fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
 		add$3(scratchA, contactManifold.baseOffset, scratchA);
@@ -28645,9 +28683,9 @@ function addContactConstraint(contactConstraints, contactsState, bodyA, bodyB, c
 		multiply3x3TransposedVec(cachedPoint.position2, rotB, scratchB);
 		cachedPoint.normalLambda = 0;
 	}
-	contact.frictionLambda1 = 0;
-	contact.frictionLambda2 = 0;
-	contact.angularFrictionLambda = 0;
+	curr.frictionLambda1 = 0;
+	curr.frictionLambda2 = 0;
+	curr.angularFrictionLambda = 0;
 	return false;
 }
 function createWorldContactPoint() {
@@ -29169,10 +29207,11 @@ function storeAppliedImpulses(contactConstraints, contactsState) {
 	for (let i = 0; i < contactConstraints.count; i++) {
 		const constraint = contactConstraints.pool[i];
 		const contact = contactsState.contacts[constraint.contactIndex];
-		for (let j = 0; j < constraint.numContactPoints; j++) contact.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
-		contact.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-		contact.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-		contact.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+		const curr = getWriteManifold(contact, contactsState);
+		for (let j = 0; j < constraint.numContactPoints; j++) curr.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
+		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
 	}
 }
 const _solvePos_worldRa = /* @__PURE__ */ create$49();
@@ -29941,7 +29980,7 @@ function updateWorld(world, listener, timeStep) {
 		const bodyIndexB = pairs.pool[i * 2 + 1];
 		let bodyA = world.bodies.pool[bodyIndexA];
 		let bodyB = world.bodies.pool[bodyIndexB];
-		if (bodyA.motionType > bodyB.motionType || bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id) {
+		if (bodyA.motionType < bodyB.motionType || bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id) {
 			const temp = bodyA;
 			bodyA = bodyB;
 			bodyB = temp;
@@ -29995,6 +30034,7 @@ function updateWorld(world, listener, timeStep) {
 		updateBodyPositions(world);
 		for (const island of world.islands.islands) checkIslandSleep(island, world, timeStep);
 	}
+	flipManifoldCache(world.contacts);
 	resetForces(world);
 }
 const _acceleration_rotation = /* @__PURE__ */ create$47();
@@ -30536,12 +30576,12 @@ function onCCDContactAdded(world, listener, bodyA, bodyB, contactManifold, conta
 	}
 	const existingContact = findContact(world.contacts, orderedBodyA, orderedBodyB, swappedManifold.subShapeIdA, swappedManifold.subShapeIdB);
 	if (existingContact) {
-		existingContact.flags |= 2;
+		getWriteManifold(existingContact, world.contacts).flags |= 2;
 		existingContact.processedThisFrame = true;
 		listener.onContactPersisted?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
 	} else {
 		const contact = createContact(world.contacts, orderedBodyA, orderedBodyB, swappedManifold.subShapeIdA, swappedManifold.subShapeIdB);
-		contact.flags = 2;
+		getWriteManifold(contact, world.contacts).flags = 2;
 		contact.processedThisFrame = true;
 		listener.onContactAdded?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
 	}
