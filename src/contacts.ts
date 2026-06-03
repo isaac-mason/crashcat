@@ -13,38 +13,40 @@ export type Contacts = {
     contactsFreeIndices: number[];
     /**
      * Index of the manifold buffer that holds the PREVIOUS step's cached data
-     * (read side this step). Equivalent to Jolt's mReadCache pointer.
+     * (read side this step).
      *
      * Flip once per step (after solver + storeAppliedImpulses) so that this
      * step's writes become next step's reads. The other buffer (1 - readIdx)
-     * is the WRITE side this step (Jolt's mWriteCache).
+     * is the WRITE side this step.
      */
     readIdx: 0 | 1;
     /**
      * Per-body-pair cache of last frame's relative pose (body B's COM and
      * orientation expressed in body A's local frame). Used to decide whether
      * the narrowphase can be skipped this frame and last frame's manifolds
-     * reused verbatim. Equivalent to Jolt's CachedBodyPair map.
+     * reused verbatim.
      *
      * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
      */
-    bodyPairCache: Map<number, BodyPairCacheEntry>;
+    cachedBodyPairs: Map<number, CachedBodyPair>;
 };
 
 /**
  * Per-body-pair cache entry — last frame's relative pose between two bodies.
- * Equivalent to Jolt's CachedBodyPair { mDeltaPosition, mDeltaRotation }.
+ *
+ * Per-sub-shape-pair manifolds live on the persistent `Contact` records;
+ * we walk a body's contact edge list to find them at cache-hit time.
  */
-export type BodyPairCacheEntry = {
+export type CachedBodyPair = {
     /** body B's COM position relative to body A, expressed in body A's local frame */
     deltaPosition: Vec3;
-    /** body B's orientation relative to body A (inv_rA * rB) */
+    /** body B's orientation relative to body A, i.e. `inv(rA) * rB` */
     deltaRotation: Quat;
 };
 
 /**
  * Cached manifold data — the per-step state we read from last frame and write
- * to this frame. Equivalent to Jolt's CachedManifold.
+ * to this frame.
  *
  * Each Contact double-buffers this (see Contact.manifolds) so reads from the
  * previous step don't alias writes to the current step. This matters for
@@ -98,7 +100,7 @@ export type Contact = {
     /** two edges for intrusive doubly-linked list: edges[0] = edge in bodyA's contact list, edges[1] = edge in bodyB's contact list */
     edges: [ContactEdge, ContactEdge];
     /**
-     * Double-buffered cached manifold (Jolt: mReadCache / mWriteCache).
+     * Double-buffered cached manifold (read / write side per step).
      * Use getReadManifold / getWriteManifold to access via the Contacts.readIdx
      * flip — never index directly.
      */
@@ -144,12 +146,12 @@ export function init(): Contacts {
         contacts: [],
         contactsFreeIndices: [],
         readIdx: 0,
-        bodyPairCache: new Map(),
+        cachedBodyPairs: new Map(),
     };
 }
 
 /**
- * Pack a pair of body IDs into a single number key for the body-pair cache.
+ * Pack a pair of body IDs into a single number key for the cached-body-pair map.
  * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
  * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
  */
@@ -157,8 +159,8 @@ export function bodyPairKey(idA: number, idB: number): number {
     return idA < idB ? idA * 0x1_0000_0000 + idB : idB * 0x1_0000_0000 + idA;
 }
 
-/** create a fresh body-pair cache entry with zeroed deltas */
-function createBodyPairCacheEntry(): BodyPairCacheEntry {
+/** create a fresh CachedBodyPair with zeroed deltas */
+function createCachedBodyPair(): CachedBodyPair {
     return {
         deltaPosition: vec3.create(),
         deltaRotation: quat.create(),
@@ -166,17 +168,10 @@ function createBodyPairCacheEntry(): BodyPairCacheEntry {
 }
 
 /**
- * Look up an existing body-pair cache entry, or null if none.
+ * Write the current relative pose into the cached-body-pair map, creating the
+ * entry if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
  */
-export function findBodyPairCache(contactsState: Contacts, idA: number, idB: number): BodyPairCacheEntry | null {
-    return contactsState.bodyPairCache.get(bodyPairKey(idA, idB)) ?? null;
-}
-
-/**
- * Write the current relative pose into the body-pair cache, creating the entry
- * if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
- */
-export function updateBodyPairCache(
+export function setCachedBodyPair(
     contactsState: Contacts,
     idA: number,
     idB: number,
@@ -184,18 +179,18 @@ export function updateBodyPairCache(
     deltaRotation: Quat,
 ): void {
     const key = bodyPairKey(idA, idB);
-    let entry = contactsState.bodyPairCache.get(key);
+    let entry = contactsState.cachedBodyPairs.get(key);
     if (!entry) {
-        entry = createBodyPairCacheEntry();
-        contactsState.bodyPairCache.set(key, entry);
+        entry = createCachedBodyPair();
+        contactsState.cachedBodyPairs.set(key, entry);
     }
     vec3.copy(entry.deltaPosition, deltaPosition);
     quat.copy(entry.deltaRotation, deltaRotation);
 }
 
-/** drop the body-pair cache entry for the given pair, if any. */
-export function destroyBodyPairCache(contactsState: Contacts, idA: number, idB: number): void {
-    contactsState.bodyPairCache.delete(bodyPairKey(idA, idB));
+/** drop the cached-body-pair entry for the given pair, if any. */
+export function removeCachedBodyPair(contactsState: Contacts, idA: number, idB: number): void {
+    contactsState.cachedBodyPairs.delete(bodyPairKey(idA, idB));
 }
 
 /** the manifold buffer that holds last step's cached data (read side). */
@@ -469,10 +464,10 @@ export function destroyContact(
     contact.contactIndex = -1;
     contacts.contactsFreeIndices.push(contactId);
 
-    // if this was the last contact between the pair, drop the body-pair cache
+    // if this was the last contact between the pair, drop the cached-body-pair
     // entry so a future broadphase pair re-enters narrowphase from a clean state.
     if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) {
-        destroyBodyPairCache(contacts, pairIdA, pairIdB);
+        removeCachedBodyPair(contacts, pairIdA, pairIdB);
     }
 }
 

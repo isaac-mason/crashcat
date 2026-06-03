@@ -79,34 +79,34 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             bodyB = temp;
         }
 
-        // body-pair contact cache (jolt: PhysicsSettings::mUseBodyPairContactCache).
-        // if neither body has moved enough relative to the other since last frame,
-        // and the pair has existing contacts, reuse last frame's manifolds verbatim
-        // — skipping GJK/EPA entirely kills the per-frame penetration-axis jitter
-        // that perturbs friction tangents in tall stacks.
-        let cacheHit = false;
+        // body-pair contact cache: if neither body has moved enough relative to
+        // the other since last frame, and the pair has existing contacts, reuse
+        // last frame's manifolds verbatim — skipping GJK/EPA entirely kills the
+        // per-frame penetration-axis jitter that perturbs friction tangents in
+        // tall stacks.
+        let pairHandled = false;
         let currDeltaPos: Vec3 | null = null;
         let currDeltaRot: Quat | null = null;
         if (useBodyPairCache) {
             currDeltaPos = _bodyPairCache_deltaPos;
             currDeltaRot = _bodyPairCache_deltaRot;
             computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
-            cacheHit = tryBodyPairCacheHit(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
+            pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
         }
 
         // perform narrowphase collision detection, creates contact constraints (on cache miss only)
-        const anyConstraintsCreated = cacheHit ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
+        const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
 
-        // refresh the body-pair cache ONLY on cache miss (when narrowphase actually ran).
-        // critical: jolt's cache stores the relative pose AT THE TIME OF THE LAST FRESH
-        // narrowphase computation, not the current pose. on hit, jolt memcpys the OLD
-        // delta forward so the threshold check on the next frame measures total drift
-        // since the last real narrowphase pass — not since the last frame. updating
-        // every frame would let the cache slide indefinitely at any sub-threshold
-        // velocity, accumulating arbitrary contact-point staleness and amplifying
-        // wobble in tall stacks.
-        if (useBodyPairCache && !cacheHit && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) {
-            contacts.updateBodyPairCache(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
+        // refresh the cached-body-pair entry ONLY on cache miss (when narrowphase
+        // actually ran). the cache stores the relative pose AT THE TIME OF THE
+        // LAST FRESH narrowphase computation, not the current pose — on hit the
+        // OLD delta is carried forward so next frame's threshold check measures
+        // total drift since the last real narrowphase pass, not since the last
+        // frame. updating every frame would let the cache slide indefinitely at
+        // any sub-threshold velocity, accumulating arbitrary contact-point
+        // staleness and amplifying wobble in tall stacks.
+        if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) {
+            contacts.setCachedBodyPair(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
         }
 
         // if a contact constraint was created, wake up sleeping dynamic bodies
@@ -120,9 +120,9 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         }
 
         // destroy stale contacts (unprocessed = sub-shapes no longer colliding).
-        // skip this on cache hit: every contact was reprocessed by tryBodyPairCacheHit
+        // skip this on cache hit: every contact was reprocessed by getContactsFromCache
         // and is therefore marked processed, so the scan would no-op anyway.
-        if (!cacheHit) {
+        if (!pairHandled) {
             contacts.destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
         }
     }
@@ -273,7 +273,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
 
     }
 
-    /* flip cached manifold buffers: this step's writes become next step's reads (jolt: mCacheWriteIdx ^= 1) */
+    /* flip cached manifold buffers: this step's writes become next step's reads */
     contacts.flipManifoldCache(world.contacts);
 
     /* clear all forces */
@@ -759,7 +759,7 @@ const _narrowphase_collideSettings = /* @__PURE__ */ createDefaultCollideShapeSe
 const _narrowphase_worldSpaceNormal = /* @__PURE__ */ vec3.create();
 const _narrowphase_tempManifold = /* @__PURE__ */ manifold.createContactManifold();
 
-// scratch state for body-pair cache reuse — see computeBodyPairDelta / tryBodyPairCacheHit
+// scratch state for body-pair cache reuse — see computeBodyPairDelta / getContactsFromCache
 const _bodyPairCache_invRA = /* @__PURE__ */ quat.create();
 const _bodyPairCache_deltaPos = /* @__PURE__ */ vec3.create();
 const _bodyPairCache_deltaRot = /* @__PURE__ */ quat.create();
@@ -776,8 +776,6 @@ const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ manifold.createCont
  * Compute the relative pose of body B in body A's local frame.
  * Writes into `outDeltaPos` (B's COM relative to A's COM, rotated into A's frame)
  * and `outDeltaRot` (relative orientation, inv(rA) * rB).
- *
- * Mirrors Jolt's calculation in PhysicsSystem.cpp:1029 / ContactConstraintManager.cpp:1116.
  */
 function computeBodyPairDelta(outDeltaPos: Vec3, outDeltaRot: Quat, bodyA: RigidBody, bodyB: RigidBody): void {
     quat.invert(_bodyPairCache_invRA, bodyA.quaternion);
@@ -792,8 +790,7 @@ function computeBodyPairDelta(outDeltaPos: Vec3, outDeltaRot: Quat, bodyA: Rigid
 
 /**
  * Reconstruct a ContactManifold from a contact's read-side CachedManifold and
- * the current body transforms. Equivalent to the manifold-building block of
- * Jolt's TemplatedGetContactsFromCache (ContactConstraintManager.cpp:887-909).
+ * the current body transforms.
  *
  * Preconditions: physA.id <= physB.id (matches contact's stored ordering).
  * Lambdas will transfer perfectly through addContactConstraint because the
@@ -815,7 +812,7 @@ function reconstructManifoldFromCache(
     mat4.multiply3x3Vec(out.worldSpaceNormal, rotB, cached.contactNormal);
     vec3.normalize(out.worldSpaceNormal, out.worldSpaceNormal);
 
-    // baseOffset = physA.com (matches Jolt: transform_body1.GetTranslation())
+    // baseOffset = physA.com
     vec3.copy(out.baseOffset, physA.centerOfMassPosition);
 
     // (bodyB.com - bodyA.com) — used to offset body-B contact points to be
@@ -860,17 +857,15 @@ function reconstructManifoldFromCache(
 /**
  * Try to satisfy a body pair from the cached manifold instead of running narrowphase.
  *
- * Returns true if the cache was used (and constraints have been added for every
- * existing contact between the pair). Returns false on cache miss, in which case
- * the caller must fall through to the regular narrowphase path.
+ * Returns true if the pair was handled by the cache — i.e. constraints have been
+ * added for every existing contact between the pair and the caller should NOT run
+ * narrowphase. Returns false on cache miss.
  *
  * `currDeltaPos` and `currDeltaRot` are the current-frame relative pose values
- * (already computed via computeBodyPairDelta) — caller passes them in so they can
- * be reused to update the cache after this call regardless of hit/miss.
- *
- * Mirrors Jolt's GetContactsFromCache (ContactConstraintManager.cpp:1001).
+ * (already computed via computeBodyPairDelta) — the caller passes them in so they
+ * can be reused to update the cache after this call regardless of hit/miss.
  */
-function tryBodyPairCacheHit(
+function getContactsFromCache(
     world: World,
     physA: RigidBody,
     physB: RigidBody,
@@ -879,8 +874,8 @@ function tryBodyPairCacheHit(
     currDeltaPos: Vec3,
     currDeltaRot: Quat,
 ): boolean {
-    const cached = contacts.findBodyPairCache(world.contacts, physA.id, physB.id);
-    if (cached === null) return false;
+    const cached = world.contacts.cachedBodyPairs.get(contacts.bodyPairKey(physA.id, physB.id));
+    if (cached === undefined) return false;
 
     // |currDeltaPos - cachedDeltaPos|² <= threshold
     vec3.sub(_bodyPairCache_diff, currDeltaPos, cached.deltaPosition);

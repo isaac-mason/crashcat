@@ -26189,9 +26189,6 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	destroyBodyContacts: () => {
 		return destroyBodyContacts;
 	},
-	destroyBodyPairCache: () => {
-		return destroyBodyPairCache;
-	},
 	destroyContact: () => {
 		return destroyContact;
 	},
@@ -26200,9 +26197,6 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	},
 	destroyUnprocessedContacts: () => {
 		return destroyUnprocessedContacts;
-	},
-	findBodyPairCache: () => {
-		return findBodyPairCache;
 	},
 	findContact: () => {
 		return findContact;
@@ -26234,8 +26228,11 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	packContactKey: () => {
 		return packContactKey;
 	},
-	updateBodyPairCache: () => {
-		return updateBodyPairCache;
+	removeCachedBodyPair: () => {
+		return removeCachedBodyPair;
+	},
+	setCachedBodyPair: () => {
+		return setCachedBodyPair;
 	}
 });
 /** invalid contact key constant - used to mark end of linked list */
@@ -26255,47 +26252,41 @@ function init$4() {
 		contacts: [],
 		contactsFreeIndices: [],
 		readIdx: 0,
-		bodyPairCache: /* @__PURE__ */ new Map()
+		cachedBodyPairs: /* @__PURE__ */ new Map()
 	};
 }
 /**
-* Pack a pair of body IDs into a single number key for the body-pair cache.
+* Pack a pair of body IDs into a single number key for the cached-body-pair map.
 * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
 * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
 */
 function bodyPairKey(idA, idB) {
 	return idA < idB ? idA * 4294967296 + idB : idB * 4294967296 + idA;
 }
-/** create a fresh body-pair cache entry with zeroed deltas */
-function createBodyPairCacheEntry() {
+/** create a fresh CachedBodyPair with zeroed deltas */
+function createCachedBodyPair() {
 	return {
 		deltaPosition: create$49(),
 		deltaRotation: create$45()
 	};
 }
 /**
-* Look up an existing body-pair cache entry, or null if none.
+* Write the current relative pose into the cached-body-pair map, creating the
+* entry if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
 */
-function findBodyPairCache(contactsState, idA, idB) {
-	return contactsState.bodyPairCache.get(bodyPairKey(idA, idB)) ?? null;
-}
-/**
-* Write the current relative pose into the body-pair cache, creating the entry
-* if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
-*/
-function updateBodyPairCache(contactsState, idA, idB, deltaPosition, deltaRotation) {
+function setCachedBodyPair(contactsState, idA, idB, deltaPosition, deltaRotation) {
 	const key = bodyPairKey(idA, idB);
-	let entry = contactsState.bodyPairCache.get(key);
+	let entry = contactsState.cachedBodyPairs.get(key);
 	if (!entry) {
-		entry = createBodyPairCacheEntry();
-		contactsState.bodyPairCache.set(key, entry);
+		entry = createCachedBodyPair();
+		contactsState.cachedBodyPairs.set(key, entry);
 	}
 	copy$9(entry.deltaPosition, deltaPosition);
 	copy$8(entry.deltaRotation, deltaRotation);
 }
-/** drop the body-pair cache entry for the given pair, if any. */
-function destroyBodyPairCache(contactsState, idA, idB) {
-	contactsState.bodyPairCache.delete(bodyPairKey(idA, idB));
+/** drop the cached-body-pair entry for the given pair, if any. */
+function removeCachedBodyPair(contactsState, idA, idB) {
+	contactsState.cachedBodyPairs.delete(bodyPairKey(idA, idB));
 }
 /** the manifold buffer that holds last step's cached data (read side). */
 function getReadManifold(contact, contactsState) {
@@ -26507,7 +26498,7 @@ function destroyContact(contacts, bodyA, bodyB, contact, listener) {
 	const contactId = contact.contactIndex;
 	contact.contactIndex = -1;
 	contacts.contactsFreeIndices.push(contactId);
-	if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) destroyBodyPairCache(contacts, pairIdA, pairIdB);
+	if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) removeCachedBodyPair(contacts, pairIdA, pairIdB);
 }
 /**
 * Cheap variant of hasContactsBetweenBodies that doesn't need RigidBody refs —
@@ -30073,22 +30064,22 @@ function updateWorld(world, listener, timeStep) {
 			bodyA = bodyB;
 			bodyB = temp;
 		}
-		let cacheHit = false;
+		let pairHandled = false;
 		let currDeltaPos = null;
 		let currDeltaRot = null;
 		if (useBodyPairCache) {
 			currDeltaPos = _bodyPairCache_deltaPos;
 			currDeltaRot = _bodyPairCache_deltaRot;
 			computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
-			cacheHit = tryBodyPairCacheHit(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
+			pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
 		}
-		const anyConstraintsCreated = cacheHit ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
-		if (useBodyPairCache && !cacheHit && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) updateBodyPairCache(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
+		const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
+		if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) setCachedBodyPair(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
 		if (anyConstraintsCreated) {
 			if (bodyA.motionType === 2 && bodyA.sleeping) wake(world, bodyA);
 			if (bodyB.motionType === 2 && bodyB.sleeping) wake(world, bodyB);
 		}
-		if (!cacheHit) destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
+		if (!pairHandled) destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
 	}
 	destroyUnprocessedContacts(world.contacts, world.bodies, listener);
 	if (timeStep > 0) {
@@ -30418,8 +30409,6 @@ const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ createContactManifo
 * Compute the relative pose of body B in body A's local frame.
 * Writes into `outDeltaPos` (B's COM relative to A's COM, rotated into A's frame)
 * and `outDeltaRot` (relative orientation, inv(rA) * rB).
-*
-* Mirrors Jolt's calculation in PhysicsSystem.cpp:1029 / ContactConstraintManager.cpp:1116.
 */
 function computeBodyPairDelta(outDeltaPos, outDeltaRot, bodyA, bodyB) {
 	invert$1(_bodyPairCache_invRA, bodyA.quaternion);
@@ -30429,8 +30418,7 @@ function computeBodyPairDelta(outDeltaPos, outDeltaRot, bodyA, bodyB) {
 }
 /**
 * Reconstruct a ContactManifold from a contact's read-side CachedManifold and
-* the current body transforms. Equivalent to the manifold-building block of
-* Jolt's TemplatedGetContactsFromCache (ContactConstraintManager.cpp:887-909).
+* the current body transforms.
 *
 * Preconditions: physA.id <= physB.id (matches contact's stored ordering).
 * Lambdas will transfer perfectly through addContactConstraint because the
@@ -30469,19 +30457,17 @@ function reconstructManifoldFromCache(out, contact, physA, physB, cached) {
 /**
 * Try to satisfy a body pair from the cached manifold instead of running narrowphase.
 *
-* Returns true if the cache was used (and constraints have been added for every
-* existing contact between the pair). Returns false on cache miss, in which case
-* the caller must fall through to the regular narrowphase path.
+* Returns true if the pair was handled by the cache — i.e. constraints have been
+* added for every existing contact between the pair and the caller should NOT run
+* narrowphase. Returns false on cache miss.
 *
 * `currDeltaPos` and `currDeltaRot` are the current-frame relative pose values
-* (already computed via computeBodyPairDelta) — caller passes them in so they can
-* be reused to update the cache after this call regardless of hit/miss.
-*
-* Mirrors Jolt's GetContactsFromCache (ContactConstraintManager.cpp:1001).
+* (already computed via computeBodyPairDelta) — the caller passes them in so they
+* can be reused to update the cache after this call regardless of hit/miss.
 */
-function tryBodyPairCacheHit(world, physA, physB, listener, deltaTime, currDeltaPos, currDeltaRot) {
-	const cached = findBodyPairCache(world.contacts, physA.id, physB.id);
-	if (cached === null) return false;
+function getContactsFromCache(world, physA, physB, listener, deltaTime, currDeltaPos, currDeltaRot) {
+	const cached = world.contacts.cachedBodyPairs.get(bodyPairKey(physA.id, physB.id));
+	if (cached === void 0) return false;
 	subtract$1(_bodyPairCache_diff, currDeltaPos, cached.deltaPosition);
 	if (squaredLength(_bodyPairCache_diff) > world.settings.narrowphase.bodyPairCacheMaxDeltaPositionSq || Math.abs(dot$1(currDeltaRot, cached.deltaRotation)) < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) return false;
 	let contactKey = (physA.contactCount <= physB.contactCount ? physA : physB).headContactKey;
