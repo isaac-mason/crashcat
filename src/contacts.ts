@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body';
 import type { Bodies } from './body/bodies';
 import { getBodyIdIndex } from './body/body-id';
@@ -20,6 +20,26 @@ export type Contacts = {
      * is the WRITE side this step (Jolt's mWriteCache).
      */
     readIdx: 0 | 1;
+    /**
+     * Per-body-pair cache of last frame's relative pose (body B's COM and
+     * orientation expressed in body A's local frame). Used to decide whether
+     * the narrowphase can be skipped this frame and last frame's manifolds
+     * reused verbatim. Equivalent to Jolt's CachedBodyPair map.
+     *
+     * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
+     */
+    bodyPairCache: Map<number, BodyPairCacheEntry>;
+};
+
+/**
+ * Per-body-pair cache entry — last frame's relative pose between two bodies.
+ * Equivalent to Jolt's CachedBodyPair { mDeltaPosition, mDeltaRotation }.
+ */
+export type BodyPairCacheEntry = {
+    /** body B's COM position relative to body A, expressed in body A's local frame */
+    deltaPosition: Vec3;
+    /** body B's orientation relative to body A (inv_rA * rB) */
+    deltaRotation: Quat;
 };
 
 /**
@@ -124,7 +144,58 @@ export function init(): Contacts {
         contacts: [],
         contactsFreeIndices: [],
         readIdx: 0,
+        bodyPairCache: new Map(),
     };
+}
+
+/**
+ * Pack a pair of body IDs into a single number key for the body-pair cache.
+ * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
+ * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
+ */
+export function bodyPairKey(idA: number, idB: number): number {
+    return idA < idB ? idA * 0x1_0000_0000 + idB : idB * 0x1_0000_0000 + idA;
+}
+
+/** create a fresh body-pair cache entry with zeroed deltas */
+function createBodyPairCacheEntry(): BodyPairCacheEntry {
+    return {
+        deltaPosition: vec3.create(),
+        deltaRotation: quat.create(),
+    };
+}
+
+/**
+ * Look up an existing body-pair cache entry, or null if none.
+ */
+export function findBodyPairCache(contactsState: Contacts, idA: number, idB: number): BodyPairCacheEntry | null {
+    return contactsState.bodyPairCache.get(bodyPairKey(idA, idB)) ?? null;
+}
+
+/**
+ * Write the current relative pose into the body-pair cache, creating the entry
+ * if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
+ */
+export function updateBodyPairCache(
+    contactsState: Contacts,
+    idA: number,
+    idB: number,
+    deltaPosition: Vec3,
+    deltaRotation: Quat,
+): void {
+    const key = bodyPairKey(idA, idB);
+    let entry = contactsState.bodyPairCache.get(key);
+    if (!entry) {
+        entry = createBodyPairCacheEntry();
+        contactsState.bodyPairCache.set(key, entry);
+    }
+    vec3.copy(entry.deltaPosition, deltaPosition);
+    quat.copy(entry.deltaRotation, deltaRotation);
+}
+
+/** drop the body-pair cache entry for the given pair, if any. */
+export function destroyBodyPairCache(contactsState: Contacts, idA: number, idB: number): void {
+    contactsState.bodyPairCache.delete(bodyPairKey(idA, idB));
 }
 
 /** the manifold buffer that holds last step's cached data (read side). */
@@ -389,10 +460,38 @@ export function destroyContact(
     // unlink from edge 1's body list
     unlinkContactFromBody(contacts, edgeBBody, contact, 1);
 
+    // save IDs before clearing contact (used for cache cleanup below)
+    const pairIdA = contact.bodyIdA;
+    const pairIdB = contact.bodyIdB;
+
     // save contact ID before marking as free
     const contactId = contact.contactIndex;
     contact.contactIndex = -1;
     contacts.contactsFreeIndices.push(contactId);
+
+    // if this was the last contact between the pair, drop the body-pair cache
+    // entry so a future broadphase pair re-enters narrowphase from a clean state.
+    if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) {
+        destroyBodyPairCache(contacts, pairIdA, pairIdB);
+    }
+}
+
+/**
+ * Cheap variant of hasContactsBetweenBodies that doesn't need RigidBody refs —
+ * scans the contact pool by id. Used during destroyContact after the contact
+ * is unlinked, when the caller might already hold stale RigidBody pointers.
+ */
+function hasContactsBetweenBodyIds(contacts: Contacts, idA: number, idB: number): boolean {
+    for (const c of contacts.contacts) {
+        if (c.contactIndex === -1) continue;
+        if (
+            (c.bodyIdA === idA && c.bodyIdB === idB) ||
+            (c.bodyIdA === idB && c.bodyIdB === idA)
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

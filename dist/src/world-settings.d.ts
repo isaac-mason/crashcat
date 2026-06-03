@@ -87,6 +87,31 @@ export type WorldSettings = {
          * @default cos(5°) ≈ 0.996
          */
         normalCosMaxDeltaRotation: number;
+        /**
+         * If true, the narrowphase can be skipped entirely for a body pair when
+         * neither body has moved enough relative to the other since last frame.
+         * Reuses last frame's contact manifolds verbatim — eliminates GJK/EPA
+         * jitter on the penetration axis, which significantly improves stacking
+         * stability. Mirrors Jolt's PhysicsSettings::mUseBodyPairContactCache.
+         * @default true
+         */
+        useBodyPairContactCache: boolean;
+        /**
+         * Max change in the relative translation between two bodies (body B's
+         * COM in body A's local frame) before the cached manifold is considered
+         * stale and narrowphase runs again. Stored as the squared distance.
+         * Unit: meters²
+         * @default 1e-6 (1mm)
+         */
+        bodyPairCacheMaxDeltaPositionSq: number;
+        /**
+         * Max change in the relative orientation between two bodies before the
+         * cached manifold is considered stale. Stored as cos(maxAngle/2) so it
+         * compares directly against the absolute quaternion dot of last frame's
+         * and this frame's relative rotations.
+         * @default cos(1°) ≈ 0.99985
+         */
+        bodyPairCacheCosMaxDeltaRotationDiv2: number;
     };
     /** Solver options */
     solver: {

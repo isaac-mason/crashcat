@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Quat, type Vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body.js';
 import type { Bodies } from './body/bodies.js';
 import type { Listener } from './listener.js';
@@ -17,6 +17,25 @@ export type Contacts = {
      * is the WRITE side this step (Jolt's mWriteCache).
      */
     readIdx: 0 | 1;
+    /**
+     * Per-body-pair cache of last frame's relative pose (body B's COM and
+     * orientation expressed in body A's local frame). Used to decide whether
+     * the narrowphase can be skipped this frame and last frame's manifolds
+     * reused verbatim. Equivalent to Jolt's CachedBodyPair map.
+     *
+     * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
+     */
+    bodyPairCache: Map<number, BodyPairCacheEntry>;
+};
+/**
+ * Per-body-pair cache entry — last frame's relative pose between two bodies.
+ * Equivalent to Jolt's CachedBodyPair { mDeltaPosition, mDeltaRotation }.
+ */
+export type BodyPairCacheEntry = {
+    /** body B's COM position relative to body A, expressed in body A's local frame */
+    deltaPosition: Vec3;
+    /** body B's orientation relative to body A (inv_rA * rB) */
+    deltaRotation: Quat;
 };
 /**
  * Cached manifold data — the per-step state we read from last frame and write
@@ -110,6 +129,23 @@ export declare enum CachedManifoldFlags {
 }
 /** creates empty contacts state */
 export declare function init(): Contacts;
+/**
+ * Pack a pair of body IDs into a single number key for the body-pair cache.
+ * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
+ * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
+ */
+export declare function bodyPairKey(idA: number, idB: number): number;
+/**
+ * Look up an existing body-pair cache entry, or null if none.
+ */
+export declare function findBodyPairCache(contactsState: Contacts, idA: number, idB: number): BodyPairCacheEntry | null;
+/**
+ * Write the current relative pose into the body-pair cache, creating the entry
+ * if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
+ */
+export declare function updateBodyPairCache(contactsState: Contacts, idA: number, idB: number, deltaPosition: Vec3, deltaRotation: Quat): void;
+/** drop the body-pair cache entry for the given pair, if any. */
+export declare function destroyBodyPairCache(contactsState: Contacts, idA: number, idB: number): void;
 /** the manifold buffer that holds last step's cached data (read side). */
 export declare function getReadManifold(contact: Contact, contactsState: Contacts): CachedManifold;
 /** the manifold buffer being populated this step (write side). */

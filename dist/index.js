@@ -1196,7 +1196,7 @@ function transpose$1(out, a) {
 * @param a the source matrix
 * @returns out, or null if source matrix is not invertible
 */
-function invert$1(out, a) {
+function invert$2(out, a) {
 	const a00 = a[0];
 	const a01 = a[1];
 	const a02 = a[2];
@@ -2172,6 +2172,26 @@ function multiply(out, a, b) {
 	out[1] = ay * bw + aw * by + az * bx - ax * bz;
 	out[2] = az * bw + aw * bz + ax * by - ay * bx;
 	out[3] = aw * bw - ax * bx - ay * by - az * bz;
+	return out;
+}
+/**
+* Calculates the inverse of a quat
+*
+* @param out the receiving quaternion
+* @param a quat to calculate inverse of
+* @returns out
+*/
+function invert$1(out, a) {
+	const a0 = a[0];
+	const a1 = a[1];
+	const a2 = a[2];
+	const a3 = a[3];
+	const dot = a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3;
+	const invDot = dot ? 1 / dot : 0;
+	out[0] = -a0 * invDot;
+	out[1] = -a1 * invDot;
+	out[2] = -a2 * invDot;
+	out[3] = a3 * invDot;
 	return out;
 }
 /**
@@ -16419,7 +16439,7 @@ function castConvexVsConvex(collector, settings, shapeA, subShapeIdA, _subShapeI
 	conjugate(_castConvex_inverseQuaternionB, _castConvex_quatB);
 	const transformA = fromRotationTranslation(_castConvex_AtoB, _castConvex_quatA, _castConvex_posA);
 	const targetTransform = fromRotationTranslation(_castConvex_BtoWorld, _castConvex_quatB, _castConvex_posB);
-	invert$1(_castConvex_invBtoWorld, targetTransform);
+	invert$2(_castConvex_invBtoWorld, targetTransform);
 	multiply$1(_castConvex_AtoB, _castConvex_invBtoWorld, transformA);
 	transformQuat(_castConvex_displacementInB, _castConvex_displacementA, _castConvex_inverseQuaternionB);
 	castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shapeB, subShapeIdB, _castConvex_AtoB, _castConvex_scaleA, _castConvex_displacementInB, _castConvex_scaleB, targetTransform);
@@ -19989,7 +20009,7 @@ function collideConvexVsPlane(collector, settings, shapeA, subShapeIdA, _subShap
 	fromRotationTranslation(_collideConvexVsPlane_planeToWorld, _collideConvexVsPlane_quatB, _collideConvexVsPlane_posB);
 	fromRotationTranslation(_collideConvexVsPlane_convexToWorld, _collideConvexVsPlane_quatA, _collideConvexVsPlane_posA);
 	copy$7(_collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_convexToWorld);
-	invert$1(_collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_invConvexToWorld);
+	invert$2(_collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_invConvexToWorld);
 	multiply$1(_collideConvexVsPlane_combinedTransform, _collideConvexVsPlane_invConvexToWorld, _collideConvexVsPlane_planeToWorld);
 	transformPlane(_collideConvexVsPlane_localPlane, _collideConvexVsPlane_scaledPlane, _collideConvexVsPlane_combinedTransform);
 	const normal = _collideConvexVsPlane_localPlane.normal;
@@ -23502,7 +23522,7 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	set$8(_castConvexVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 	const transformA = fromRotationTranslationScale(_castConvexVsTriangleMesh_AtoWorld, _castConvexVsTriangleMesh_quatA, _castConvexVsTriangleMesh_posA, _castConvexVsTriangleMesh_scaleA);
 	const targetTransform = fromRotationTranslation(_castConvexVsTriangleMesh_BtoWorld, _castConvexVsTriangleMesh_quatB, _castConvexVsTriangleMesh_posB);
-	invert$1(_castConvexVsTriangleMesh_invBtoWorld, targetTransform);
+	invert$2(_castConvexVsTriangleMesh_invBtoWorld, targetTransform);
 	const castTransform = multiply$1(_castConvexVsTriangleMesh_AtoB, _castConvexVsTriangleMesh_invBtoWorld, transformA);
 	multiply3x3Vec(_castConvexVsTriangleMesh_displacementInB, _castConvexVsTriangleMesh_invBtoWorld, _castConvexVsTriangleMesh_displacementA);
 	transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, castTransform);
@@ -26157,6 +26177,9 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	INVALID_CONTACT_KEY: () => {
 		return -1;
 	},
+	bodyPairKey: () => {
+		return bodyPairKey;
+	},
 	createContact: () => {
 		return createContact;
 	},
@@ -26166,6 +26189,9 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	destroyBodyContacts: () => {
 		return destroyBodyContacts;
 	},
+	destroyBodyPairCache: () => {
+		return destroyBodyPairCache;
+	},
 	destroyContact: () => {
 		return destroyContact;
 	},
@@ -26174,6 +26200,9 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	},
 	destroyUnprocessedContacts: () => {
 		return destroyUnprocessedContacts;
+	},
+	findBodyPairCache: () => {
+		return findBodyPairCache;
 	},
 	findContact: () => {
 		return findContact;
@@ -26204,6 +26233,9 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	},
 	packContactKey: () => {
 		return packContactKey;
+	},
+	updateBodyPairCache: () => {
+		return updateBodyPairCache;
 	}
 });
 /** invalid contact key constant - used to mark end of linked list */
@@ -26222,8 +26254,48 @@ function init$4() {
 	return {
 		contacts: [],
 		contactsFreeIndices: [],
-		readIdx: 0
+		readIdx: 0,
+		bodyPairCache: /* @__PURE__ */ new Map()
 	};
+}
+/**
+* Pack a pair of body IDs into a single number key for the body-pair cache.
+* Always orders ids ascending so (a, b) and (b, a) hash to the same key.
+* Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
+*/
+function bodyPairKey(idA, idB) {
+	return idA < idB ? idA * 4294967296 + idB : idB * 4294967296 + idA;
+}
+/** create a fresh body-pair cache entry with zeroed deltas */
+function createBodyPairCacheEntry() {
+	return {
+		deltaPosition: create$49(),
+		deltaRotation: create$45()
+	};
+}
+/**
+* Look up an existing body-pair cache entry, or null if none.
+*/
+function findBodyPairCache(contactsState, idA, idB) {
+	return contactsState.bodyPairCache.get(bodyPairKey(idA, idB)) ?? null;
+}
+/**
+* Write the current relative pose into the body-pair cache, creating the entry
+* if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
+*/
+function updateBodyPairCache(contactsState, idA, idB, deltaPosition, deltaRotation) {
+	const key = bodyPairKey(idA, idB);
+	let entry = contactsState.bodyPairCache.get(key);
+	if (!entry) {
+		entry = createBodyPairCacheEntry();
+		contactsState.bodyPairCache.set(key, entry);
+	}
+	copy$9(entry.deltaPosition, deltaPosition);
+	copy$8(entry.deltaRotation, deltaRotation);
+}
+/** drop the body-pair cache entry for the given pair, if any. */
+function destroyBodyPairCache(contactsState, idA, idB) {
+	contactsState.bodyPairCache.delete(bodyPairKey(idA, idB));
 }
 /** the manifold buffer that holds last step's cached data (read side). */
 function getReadManifold(contact, contactsState) {
@@ -26430,9 +26502,24 @@ function destroyContact(contacts, bodyA, bodyB, contact, listener) {
 	const edgeBBody = bodyA.id === contact.bodyIdA ? bodyB : bodyA;
 	unlinkContactFromBody(contacts, edgeABody, contact, 0);
 	unlinkContactFromBody(contacts, edgeBBody, contact, 1);
+	const pairIdA = contact.bodyIdA;
+	const pairIdB = contact.bodyIdB;
 	const contactId = contact.contactIndex;
 	contact.contactIndex = -1;
 	contacts.contactsFreeIndices.push(contactId);
+	if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) destroyBodyPairCache(contacts, pairIdA, pairIdB);
+}
+/**
+* Cheap variant of hasContactsBetweenBodies that doesn't need RigidBody refs —
+* scans the contact pool by id. Used during destroyContact after the contact
+* is unlinked, when the caller might already hold stale RigidBody pointers.
+*/
+function hasContactsBetweenBodyIds(contacts, idA, idB) {
+	for (const c of contacts.contacts) {
+		if (c.contactIndex === -1) continue;
+		if (c.bodyIdA === idA && c.bodyIdB === idB || c.bodyIdA === idB && c.bodyIdB === idA) return true;
+	}
+	return false;
 }
 /**
 * Check if any contacts exist between two bodies.
@@ -29975,6 +30062,7 @@ function updateWorld(world, listener, timeStep) {
 	accelerationIntegrationUpdate(world, timeStep);
 	findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
 	const pairs = world.broadphase.pairs;
+	const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
 	for (let i = 0; i < pairs.n; i++) {
 		const bodyIndexA = pairs.pool[i * 2];
 		const bodyIndexB = pairs.pool[i * 2 + 1];
@@ -29985,11 +30073,22 @@ function updateWorld(world, listener, timeStep) {
 			bodyA = bodyB;
 			bodyB = temp;
 		}
-		if (narrowphase(world, bodyA, bodyB, listener, timeStep)) {
+		let cacheHit = false;
+		let currDeltaPos = null;
+		let currDeltaRot = null;
+		if (useBodyPairCache) {
+			currDeltaPos = _bodyPairCache_deltaPos;
+			currDeltaRot = _bodyPairCache_deltaRot;
+			computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
+			cacheHit = tryBodyPairCacheHit(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
+		}
+		const anyConstraintsCreated = cacheHit ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
+		if (useBodyPairCache && !cacheHit && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) updateBodyPairCache(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
+		if (anyConstraintsCreated) {
 			if (bodyA.motionType === 2 && bodyA.sleeping) wake(world, bodyA);
 			if (bodyB.motionType === 2 && bodyB.sleeping) wake(world, bodyB);
 		}
-		destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
+		if (!cacheHit) destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
 	}
 	destroyUnprocessedContacts(world.contacts, world.bodies, listener);
 	if (timeStep > 0) {
@@ -30304,6 +30403,106 @@ const narrowphaseWithoutReductionCollector = {
 const _narrowphase_collideSettings = /* @__PURE__ */ createDefaultCollideShapeSettings();
 const _narrowphase_worldSpaceNormal = /* @__PURE__ */ create$49();
 const _narrowphase_tempManifold = /* @__PURE__ */ createContactManifold();
+const _bodyPairCache_invRA = /* @__PURE__ */ create$45();
+const _bodyPairCache_deltaPos = /* @__PURE__ */ create$49();
+const _bodyPairCache_deltaRot = /* @__PURE__ */ create$45();
+const _bodyPairCache_diff = /* @__PURE__ */ create$49();
+const _bodyPairCache_rotA = /* @__PURE__ */ create$47();
+const _bodyPairCache_rotB = /* @__PURE__ */ create$47();
+const _bodyPairCache_relA = /* @__PURE__ */ create$49();
+const _bodyPairCache_relB = /* @__PURE__ */ create$49();
+const _bodyPairCache_comDelta = /* @__PURE__ */ create$49();
+const _bodyPairCache_diffAB = /* @__PURE__ */ create$49();
+const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ createContactManifold();
+/**
+* Compute the relative pose of body B in body A's local frame.
+* Writes into `outDeltaPos` (B's COM relative to A's COM, rotated into A's frame)
+* and `outDeltaRot` (relative orientation, inv(rA) * rB).
+*
+* Mirrors Jolt's calculation in PhysicsSystem.cpp:1029 / ContactConstraintManager.cpp:1116.
+*/
+function computeBodyPairDelta(outDeltaPos, outDeltaRot, bodyA, bodyB) {
+	invert$1(_bodyPairCache_invRA, bodyA.quaternion);
+	subtract$1(outDeltaPos, bodyB.centerOfMassPosition, bodyA.centerOfMassPosition);
+	transformQuat(outDeltaPos, outDeltaPos, _bodyPairCache_invRA);
+	multiply(outDeltaRot, _bodyPairCache_invRA, bodyB.quaternion);
+}
+/**
+* Reconstruct a ContactManifold from a contact's read-side CachedManifold and
+* the current body transforms. Equivalent to the manifold-building block of
+* Jolt's TemplatedGetContactsFromCache (ContactConstraintManager.cpp:887-909).
+*
+* Preconditions: physA.id <= physB.id (matches contact's stored ordering).
+* Lambdas will transfer perfectly through addContactConstraint because the
+* reconstructed local positions evaluate back to the cached position1/position2.
+*/
+function reconstructManifoldFromCache(out, contact, physA, physB, cached) {
+	resetContactManifold(out);
+	const rotA = fromQuat$1(_bodyPairCache_rotA, physA.quaternion);
+	const rotB = fromQuat$1(_bodyPairCache_rotB, physB.quaternion);
+	multiply3x3Vec(out.worldSpaceNormal, rotB, cached.contactNormal);
+	normalize$2(out.worldSpaceNormal, out.worldSpaceNormal);
+	copy$9(out.baseOffset, physA.centerOfMassPosition);
+	subtract$1(_bodyPairCache_comDelta, physB.centerOfMassPosition, physA.centerOfMassPosition);
+	let maxPenetration = -Number.MAX_VALUE;
+	for (let i = 0; i < cached.numContactPoints; i++) {
+		const cp = cached.contactPoints[i];
+		multiply3x3Vec(_bodyPairCache_relA, rotA, cp.position1);
+		multiply3x3Vec(_bodyPairCache_relB, rotB, cp.position2);
+		add$3(_bodyPairCache_relB, _bodyPairCache_relB, _bodyPairCache_comDelta);
+		const o = i * 3;
+		out.relativeContactPointsOnA[o] = _bodyPairCache_relA[0];
+		out.relativeContactPointsOnA[o + 1] = _bodyPairCache_relA[1];
+		out.relativeContactPointsOnA[o + 2] = _bodyPairCache_relA[2];
+		out.relativeContactPointsOnB[o] = _bodyPairCache_relB[0];
+		out.relativeContactPointsOnB[o + 1] = _bodyPairCache_relB[1];
+		out.relativeContactPointsOnB[o + 2] = _bodyPairCache_relB[2];
+		subtract$1(_bodyPairCache_diffAB, _bodyPairCache_relA, _bodyPairCache_relB);
+		const d = dot$2(_bodyPairCache_diffAB, out.worldSpaceNormal);
+		if (d > maxPenetration) maxPenetration = d;
+	}
+	out.numContactPoints = cached.numContactPoints;
+	out.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
+	out.subShapeIdA = contact.subShapeIdA;
+	out.subShapeIdB = contact.subShapeIdB;
+}
+/**
+* Try to satisfy a body pair from the cached manifold instead of running narrowphase.
+*
+* Returns true if the cache was used (and constraints have been added for every
+* existing contact between the pair). Returns false on cache miss, in which case
+* the caller must fall through to the regular narrowphase path.
+*
+* `currDeltaPos` and `currDeltaRot` are the current-frame relative pose values
+* (already computed via computeBodyPairDelta) — caller passes them in so they can
+* be reused to update the cache after this call regardless of hit/miss.
+*
+* Mirrors Jolt's GetContactsFromCache (ContactConstraintManager.cpp:1001).
+*/
+function tryBodyPairCacheHit(world, physA, physB, listener, deltaTime, currDeltaPos, currDeltaRot) {
+	const cached = findBodyPairCache(world.contacts, physA.id, physB.id);
+	if (cached === null) return false;
+	subtract$1(_bodyPairCache_diff, currDeltaPos, cached.deltaPosition);
+	if (squaredLength(_bodyPairCache_diff) > world.settings.narrowphase.bodyPairCacheMaxDeltaPositionSq || Math.abs(dot$1(currDeltaRot, cached.deltaRotation)) < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) return false;
+	let contactKey = (physA.contactCount <= physB.contactCount ? physA : physB).headContactKey;
+	while (contactKey !== -1) {
+		const contactId = getContactKeyId(contactKey);
+		const edgeIndex = getContactKeyEdge(contactKey);
+		const contact = world.contacts.contacts[contactId];
+		const nextKey = contact.edges[edgeIndex].nextKey;
+		if (contact.bodyIdA === physA.id && contact.bodyIdB === physB.id || contact.bodyIdA === physB.id && contact.bodyIdB === physA.id) {
+			const cachedManifold = getReadManifold(contact, world.contacts);
+			if (cachedManifold.numContactPoints > 0) {
+				const orderedA = world.bodies.pool[contact.bodyIndexA];
+				const orderedB = world.bodies.pool[contact.bodyIndexB];
+				reconstructManifoldFromCache(_bodyPairCache_reconstructedManifold, contact, orderedA, orderedB, cachedManifold);
+				addContactConstraint(world.contactConstraints, world.contacts, orderedA, orderedB, _bodyPairCache_reconstructedManifold, world.settings, listener, deltaTime);
+			}
+		}
+		contactKey = nextKey;
+	}
+	return true;
+}
 /**
 * performs narrowphase collision detection for a body pair, returns whether any constraints were created
 *
@@ -30818,7 +31017,10 @@ const createWorldSettings = () => {
 			manifoldTolerance: .001,
 			collideWithBackfaces: false,
 			useManifoldReduction: true,
-			normalCosMaxDeltaRotation: Math.cos(5 * Math.PI / 180)
+			normalCosMaxDeltaRotation: Math.cos(5 * Math.PI / 180),
+			useBodyPairContactCache: true,
+			bodyPairCacheMaxDeltaPositionSq: 1e-6,
+			bodyPairCacheCosMaxDeltaRotationDiv2: Math.cos(Math.PI / 180)
 		},
 		solver: {
 			minVelocityForRestitution: 1,
