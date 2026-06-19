@@ -1010,13 +1010,14 @@ addScene('Box Stack', () => {
         position: [0, -0.5, 0],
     });
 
-    // Stack of 5 boxes with gaps
+    // Stack of N boxes with gaps
+    const N = 5;
     const gap = 0;
     const boxHeight = 2.0;
     const spacing = boxHeight + gap;
     const startHeight = boxHeight / 2 + 0.5;
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < N; i++) {
         rigidBody.create(world, {
             shape: boxShape,
             objectLayer: OBJECT_LAYER_MOVING,

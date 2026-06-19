@@ -63,6 +63,7 @@
         "@biomejs/biome": "^2.2.0",
         "@types/three": "0.183.0",
         "compilecat": "github:isaac-mason/compilecat",
+        "magic-string": "^0.30.21",
         "npm-run-all2": "^9.0.1",
         "rolldown": "^1.0.2",
         "rollup-plugin-copy": "^3.5.0",
