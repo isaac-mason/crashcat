@@ -32080,9 +32080,14 @@ function perpendicularAxes(nx, ny, nz) {
 		vz
 	];
 }
-/** Transform local Vec3 into world space given a body position + quaternion. */
-function transformPoint(out, local, pos, q) {
-	transformQuat(_transformScratch, local, q);
+/**
+* Transform a local Vec3 into world space: world = pos + q * (scale ⊙ local).
+* Scale is applied in the shape's local space (before rotation), matching the
+* semantics of a ScaledShape decorator.
+*/
+function transformPoint(out, local, scale, pos, q) {
+	multiply$2(_transformScratch, local, scale);
+	transformQuat(_transformScratch, _transformScratch, q);
 	add$3(out, _transformScratch, pos);
 }
 /** Rotate local direction by quaternion into world space (no translation). */
@@ -32093,16 +32098,21 @@ function transformDir(out, local, q) {
 * Recursively emit wireframe lines for a shape and all its children,
 * accumulating the local→world transform as we descend.
 */
-function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
+function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, sx, sy, sz, r, g, b) {
 	const q = [
 		qx,
 		qy,
 		qz,
 		qw
 	];
+	const scale = [
+		sx,
+		sy,
+		sz
+	];
 	switch (shape.type) {
 		case 0: {
-			const rad = shape.radius;
+			const rad = shape.radius * sx;
 			const [ux1, uy1, uz1, vx1, vy1, vz1] = perpendicularAxes(1, 0, 0);
 			const [ux2, uy2, uz2, vx2, vy2, vz2] = perpendicularAxes(0, 1, 0);
 			const [ux3, uy3, uz3, vx3, vy3, vz3] = perpendicularAxes(0, 0, 1);
@@ -32166,7 +32176,7 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 					lz
 				];
 				const out = create$49();
-				transformPoint(out, v, [
+				transformPoint(out, v, scale, [
 					px,
 					py,
 					pz
@@ -32190,8 +32200,8 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 			break;
 		}
 		case 2: {
-			const rad = shape.radius;
-			const hh = shape.halfHeightOfCylinder;
+			const rad = shape.radius * sx;
+			const hh = shape.halfHeightOfCylinder * sx;
 			const localY = [
 				0,
 				1,
@@ -32254,8 +32264,8 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 			break;
 		}
 		case 9: {
-			const rad = shape.radius;
-			const hh = shape.halfHeight;
+			const rad = shape.radius * sx;
+			const hh = shape.halfHeight * sy;
 			const localY = [
 				0,
 				1,
@@ -32300,10 +32310,37 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 			const [ux, uy, uz, vx, vy, vz] = perpendicularAxes(nx, ny, nz);
 			const ox = nx * dist, oy = ny * dist, oz = nz * dist;
 			const steps = 5;
+			const pos = [
+				px,
+				py,
+				pz
+			];
+			const wa = create$49();
+			const wb = create$49();
 			for (let i = -5; i <= steps; i++) {
 				const t = i / steps * size;
-				pushLine(out, ox + ux * t - vx * size, oy + uy * t - vy * size, oz + uz * t - vz * size, ox + ux * t + vx * size, oy + uy * t + vy * size, oz + uz * t + vz * size, r, g, b);
-				pushLine(out, ox + vx * t - ux * size, oy + vy * t - uy * size, oz + vz * t - uz * size, ox + vx * t + ux * size, oy + vy * t + uy * size, oz + vz * t + uz * size, r, g, b);
+				transformPoint(wa, [
+					ox + ux * t - vx * size,
+					oy + uy * t - vy * size,
+					oz + uz * t - vz * size
+				], scale, pos, q);
+				transformPoint(wb, [
+					ox + ux * t + vx * size,
+					oy + uy * t + vy * size,
+					oz + uz * t + vz * size
+				], scale, pos, q);
+				pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
+				transformPoint(wa, [
+					ox + vx * t - ux * size,
+					oy + vy * t - uy * size,
+					oz + vz * t - uz * size
+				], scale, pos, q);
+				transformPoint(wb, [
+					ox + vx * t + ux * size,
+					oy + vy * t + uy * size,
+					oz + vz * t + uz * size
+				], scale, pos, q);
+				pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
 			}
 			break;
 		}
@@ -32317,12 +32354,12 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 					const pb = shape.points[ib].position;
 					const wa = create$49();
 					const wb = create$49();
-					transformPoint(wa, pa, [
+					transformPoint(wa, pa, scale, [
 						px,
 						py,
 						pz
 					], q);
-					transformPoint(wb, pb, [
+					transformPoint(wb, pb, scale, [
 						px,
 						py,
 						pz
@@ -32355,17 +32392,17 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 					posArr[ic * 3 + 2]
 				];
 				const wa = create$49(), wb = create$49(), wc2 = create$49();
-				transformPoint(wa, pa, [
+				transformPoint(wa, pa, scale, [
 					px,
 					py,
 					pz
 				], q);
-				transformPoint(wb, pb, [
+				transformPoint(wb, pb, scale, [
 					px,
 					py,
 					pz
 				], q);
-				transformPoint(wc2, pc, [
+				transformPoint(wc2, pc, scale, [
 					px,
 					py,
 					pz
@@ -32400,9 +32437,10 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 					ly,
 					lz
 				];
+				multiply$2(localPos, localPos, scale);
 				const rotatedPos = create$49();
 				transformQuat(rotatedPos, localPos, parentQ);
-				drawShape(out, child.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], r, g, b);
+				drawShape(out, child.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], sx, sy, sz, r, g, b);
 			}
 			break;
 		case 6: {
@@ -32427,16 +32465,17 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, r, g, b) {
 				ly,
 				lz
 			];
+			multiply$2(localPos, localPos, scale);
 			const rotatedPos = create$49();
 			transformQuat(rotatedPos, localPos, parentQ);
-			drawShape(out, shape.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], r, g, b);
+			drawShape(out, shape.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], sx, sy, sz, r, g, b);
 			break;
 		}
 		case 7:
-			drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, r, g, b);
+			drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, sx * shape.scale[0], sy * shape.scale[1], sz * shape.scale[2], r, g, b);
 			break;
 		case 10:
-			drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, r, g, b);
+			drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, sx, sy, sz, r, g, b);
 			break;
 	}
 }
@@ -32510,7 +32549,7 @@ function drawSwingConeLimits(out, center, twistAxis, planeAxis, normalAxis, plan
 function drawBodyLines(out, b, r, g, bl, showLinearVelocity, showAngularVelocity) {
 	const [px, py, pz] = b.position;
 	const [qx, qy, qz, qw] = b.quaternion;
-	drawShape(out, b.shape, px, py, pz, qx, qy, qz, qw, r, g, bl);
+	drawShape(out, b.shape, px, py, pz, qx, qy, qz, qw, 1, 1, 1, r, g, bl);
 	if (showLinearVelocity && b.motionType !== 0) {
 		const [vx, vy, vz] = b.motionProperties.linearVelocity;
 		const mag = Math.sqrt(vx * vx + vy * vy + vz * vz);
@@ -32582,7 +32621,7 @@ function shape(s, position, quaternion, options) {
 	};
 	const out = createLineBuffer();
 	const [r, g, b] = opts.color;
-	drawShape(out, s, position[0], position[1], position[2], quaternion[0], quaternion[1], quaternion[2], quaternion[3], r, g, b);
+	drawShape(out, s, position[0], position[1], position[2], quaternion[0], quaternion[1], quaternion[2], quaternion[3], 1, 1, 1, r, g, b);
 	return finalizeLineBuffer(out);
 }
 /**

@@ -243,9 +243,14 @@ function perpendicularAxes(nx: number, ny: number, nz: number): [number, number,
     return [ux, uy, uz, vx, vy, vz];
 }
 
-/** Transform local Vec3 into world space given a body position + quaternion. */
-function transformPoint(out: Vec3, local: Vec3, pos: Vec3, q: Quat): void {
-    vec3.transformQuat(_transformScratch, local, q);
+/**
+ * Transform a local Vec3 into world space: world = pos + q * (scale ⊙ local).
+ * Scale is applied in the shape's local space (before rotation), matching the
+ * semantics of a ScaledShape decorator.
+ */
+function transformPoint(out: Vec3, local: Vec3, scale: Vec3, pos: Vec3, q: Quat): void {
+    vec3.multiply(_transformScratch, local, scale);
+    vec3.transformQuat(_transformScratch, _transformScratch, q);
     vec3.add(out, _transformScratch, pos);
 }
 
@@ -269,15 +274,21 @@ function drawShape(
     qy: number,
     qz: number,
     qw: number,
+    // accumulated local-space scale of this node (from enclosing ScaledShapes)
+    sx: number,
+    sy: number,
+    sz: number,
     r: number,
     g: number,
     b: number,
 ): void {
     const q: Quat = [qx, qy, qz, qw];
+    const scale: Vec3 = [sx, sy, sz];
 
     switch (shape.type) {
         case ShapeType.SPHERE: {
-            const rad = shape.radius;
+            // sphere only supports uniform scaling
+            const rad = shape.radius * sx;
             const [ux1, uy1, uz1, vx1, vy1, vz1] = perpendicularAxes(1, 0, 0);
             const [ux2, uy2, uz2, vx2, vy2, vz2] = perpendicularAxes(0, 1, 0);
             const [ux3, uy3, uz3, vx3, vy3, vz3] = perpendicularAxes(0, 0, 1);
@@ -308,7 +319,7 @@ function drawShape(
             const wc = corners.map(([lx, ly, lz]) => {
                 const v: Vec3 = [lx, ly, lz];
                 const out = vec3.create();
-                transformPoint(out, v, [px, py, pz], q);
+                transformPoint(out, v, scale, [px, py, pz], q);
                 return out as [number, number, number];
             });
             const edges = [
@@ -332,8 +343,9 @@ function drawShape(
         }
 
         case ShapeType.CAPSULE: {
-            const rad = shape.radius;
-            const hh = shape.halfHeightOfCylinder;
+            // capsule only supports uniform scaling
+            const rad = shape.radius * sx;
+            const hh = shape.halfHeightOfCylinder * sx;
             const localY: Vec3 = [0, 1, 0];
             const axisOut = vec3.create();
             transformDir(axisOut, localY, q);
@@ -406,8 +418,9 @@ function drawShape(
         }
 
         case ShapeType.CYLINDER: {
-            const rad = shape.radius;
-            const hh = shape.halfHeight;
+            // cylinder scales radius by x/z (uniform) and half-height by y
+            const rad = shape.radius * sx;
+            const hh = shape.halfHeight * sy;
             const localY: Vec3 = [0, 1, 0];
             const axisOut = vec3.create();
             transformDir(axisOut, localY, q);
@@ -446,7 +459,8 @@ function drawShape(
         }
 
         case ShapeType.PLANE: {
-            // infinite plane: draw a grid scaled by halfExtent
+            // infinite plane: draw a grid (sized by halfExtent) in the plane's local
+            // frame, then transform every point into world space by the node transform.
             const [nx, ny, nz] = shape.plane.normal;
             const dist = -shape.plane.constant;
             const size = shape.halfExtent;
@@ -455,34 +469,19 @@ function drawShape(
                 oy = ny * dist,
                 oz = nz * dist;
             const steps = 5;
+            const pos: Vec3 = [px, py, pz];
+            const wa = vec3.create();
+            const wb = vec3.create();
             for (let i = -steps; i <= steps; i++) {
                 const t = (i / steps) * size;
                 // lines along U direction
-                pushLine(
-                    out,
-                    ox + ux * t - vx * size,
-                    oy + uy * t - vy * size,
-                    oz + uz * t - vz * size,
-                    ox + ux * t + vx * size,
-                    oy + uy * t + vy * size,
-                    oz + uz * t + vz * size,
-                    r,
-                    g,
-                    b,
-                );
+                transformPoint(wa, [ox + ux * t - vx * size, oy + uy * t - vy * size, oz + uz * t - vz * size], scale, pos, q);
+                transformPoint(wb, [ox + ux * t + vx * size, oy + uy * t + vy * size, oz + uz * t + vz * size], scale, pos, q);
+                pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
                 // lines along V direction
-                pushLine(
-                    out,
-                    ox + vx * t - ux * size,
-                    oy + vy * t - uy * size,
-                    oz + vz * t - uz * size,
-                    ox + vx * t + ux * size,
-                    oy + vy * t + uy * size,
-                    oz + vz * t + uz * size,
-                    r,
-                    g,
-                    b,
-                );
+                transformPoint(wa, [ox + vx * t - ux * size, oy + vy * t - uy * size, oz + vz * t - uz * size], scale, pos, q);
+                transformPoint(wb, [ox + vx * t + ux * size, oy + vy * t + uy * size, oz + vz * t + uz * size], scale, pos, q);
+                pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
             }
             break;
         }
@@ -498,8 +497,8 @@ function drawShape(
                     const pb = shape.points[ib].position;
                     const wa = vec3.create();
                     const wb = vec3.create();
-                    transformPoint(wa, pa, [px, py, pz], q);
-                    transformPoint(wb, pb, [px, py, pz], q);
+                    transformPoint(wa, pa, scale, [px, py, pz], q);
+                    transformPoint(wb, pb, scale, [px, py, pz], q);
                     pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
                 }
             }
@@ -519,9 +518,9 @@ function drawShape(
                 const wa = vec3.create(),
                     wb = vec3.create(),
                     wc2 = vec3.create();
-                transformPoint(wa, pa, [px, py, pz], q);
-                transformPoint(wb, pb, [px, py, pz], q);
-                transformPoint(wc2, pc, [px, py, pz], q);
+                transformPoint(wa, pa, scale, [px, py, pz], q);
+                transformPoint(wb, pb, scale, [px, py, pz], q);
+                transformPoint(wc2, pc, scale, [px, py, pz], q);
                 pushLine(out, wa[0], wa[1], wa[2], wb[0], wb[1], wb[2], r, g, b);
                 pushLine(out, wb[0], wb[1], wb[2], wc2[0], wc2[1], wc2[2], r, g, b);
                 pushLine(out, wc2[0], wc2[1], wc2[2], wa[0], wa[1], wa[2], r, g, b);
@@ -539,8 +538,9 @@ function drawShape(
                 const childLocalQ: Quat = [cqx, cqy, cqz, cqw];
                 const combined = quat.create();
                 quat.multiply(combined, parentQ, childLocalQ);
-                // rotate child local position by parent quat, add to parent world pos
+                // scale child local position by parent scale, rotate by parent quat, add to parent world pos
                 const localPos: Vec3 = [lx, ly, lz];
+                vec3.multiply(localPos, localPos, scale);
                 const rotatedPos = vec3.create();
                 vec3.transformQuat(rotatedPos, localPos, parentQ);
                 drawShape(
@@ -553,6 +553,9 @@ function drawShape(
                     combined[1],
                     combined[2],
                     combined[3],
+                    sx,
+                    sy,
+                    sz,
                     r,
                     g,
                     b,
@@ -568,6 +571,7 @@ function drawShape(
             const combined = quat.create();
             quat.multiply(combined, parentQ, childLocalQ);
             const localPos: Vec3 = [lx, ly, lz];
+            vec3.multiply(localPos, localPos, scale);
             const rotatedPos = vec3.create();
             vec3.transformQuat(rotatedPos, localPos, parentQ);
             drawShape(
@@ -580,6 +584,9 @@ function drawShape(
                 combined[1],
                 combined[2],
                 combined[3],
+                sx,
+                sy,
+                sz,
                 r,
                 g,
                 b,
@@ -588,16 +595,31 @@ function drawShape(
         }
 
         case ShapeType.SCALED:
-            // SCALED doesn't have its own shape type exposed cleanly to draw,
-            // so just recurse and the leaf shape will apply scale from the vertex data.
-            // For primitive shapes the scale is baked into the half-extents/radius of the inner shape,
-            // so we pass it through unchanged. For mesh shapes, vertex positions are pre-scaled.
-            drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, r, g, b);
+            // accumulate this node's scale into the local-space scale, then recurse.
+            // leaf shapes apply the scale to their geometry; the inner shape's own
+            // data is never pre-scaled, so the scale must be threaded through here.
+            drawShape(
+                out,
+                shape.shape,
+                px,
+                py,
+                pz,
+                qx,
+                qy,
+                qz,
+                qw,
+                sx * shape.scale[0],
+                sy * shape.scale[1],
+                sz * shape.scale[2],
+                r,
+                g,
+                b,
+            );
             break;
 
         case ShapeType.OFFSET_CENTER_OF_MASS:
             // offset only affects COM, not geometry position
-            drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, r, g, b);
+            drawShape(out, shape.shape, px, py, pz, qx, qy, qz, qw, sx, sy, sz, r, g, b);
             break;
 
         // EMPTY: nothing
@@ -726,7 +748,7 @@ function drawBodyLines(
 ): void {
     const [px, py, pz] = b.position;
     const [qx, qy, qz, qw] = b.quaternion;
-    drawShape(out, b.shape, px, py, pz, qx, qy, qz, qw, r, g, bl);
+    drawShape(out, b.shape, px, py, pz, qx, qy, qz, qw, 1, 1, 1, r, g, bl);
 
     if (showLinearVelocity && b.motionType !== MotionType.STATIC) {
         const mp = b.motionProperties;
@@ -803,7 +825,23 @@ export function shape(
     const opts: ShapeOptions = { ...createShapeOptions(), ...options };
     const out = createLineBuffer();
     const [r, g, b] = opts.color;
-    drawShape(out, s, position[0], position[1], position[2], quaternion[0], quaternion[1], quaternion[2], quaternion[3], r, g, b);
+    drawShape(
+        out,
+        s,
+        position[0],
+        position[1],
+        position[2],
+        quaternion[0],
+        quaternion[1],
+        quaternion[2],
+        quaternion[3],
+        1,
+        1,
+        1,
+        r,
+        g,
+        b,
+    );
     return finalizeLineBuffer(out);
 }
 

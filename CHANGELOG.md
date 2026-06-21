@@ -8,6 +8,7 @@
 - feat: double-buffered cached contact manifolds — warm-start λ matching now reads the previous step's data instead of aliasing this step's writes, matching Jolt's mReadCache/mWriteCache split
 - fix: stack stability — corrected inverted motion-type swap in narrowphase so collision detection runs in the dynamic body's local space, matching Jolt; tall box stacks now settle instead of rocking indefinitely
 - feat: body-pair contact cache — skip GJK/EPA when bodies stay within 1mm/1° of last fresh narrowphase pose, reconstructing the manifold from cached body-local data; eliminates penetration-axis jitter and significantly improves stacking stability (matches Jolt's `mUseBodyPairContactCache`)
+- fix: debug.* drawing for scaled and plane shapes
 
 ## v0.0.4
 
