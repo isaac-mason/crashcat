@@ -11645,28 +11645,28 @@ function gjkCastRay(out, rayOrigin, rayDirection, tolerance, support, maxLambda 
 					originOutBDC = 1;
 				}
 				if (originOutABC) {
-					const acx = _simplexY2[0] - _simplexY0[0];
-					const acy = _simplexY2[1] - _simplexY0[1];
-					const acz = _simplexY2[2] - _simplexY0[2];
-					const bcx = _simplexY2[0] - _simplexY1[0];
-					const bcy = _simplexY2[1] - _simplexY1[1];
-					const bcz = _simplexY2[2] - _simplexY1[2];
-					const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
+					const acx$1 = _simplexY2[0] - _simplexY0[0];
+					const acy$1 = _simplexY2[1] - _simplexY0[1];
+					const acz$1 = _simplexY2[2] - _simplexY0[2];
+					const bcx$1 = _simplexY2[0] - _simplexY1[0];
+					const bcy$1 = _simplexY2[1] - _simplexY1[1];
+					const bcz$1 = _simplexY2[2] - _simplexY1[2];
+					const swapAC = bcx$1 * bcx$1 + bcy$1 * bcy$1 + bcz$1 * bcz$1 < acx$1 * acx$1 + acy$1 * acy$1 + acz$1 * acz$1;
 					const ax = swapAC ? _simplexY2[0] : _simplexY0[0];
 					const ay = swapAC ? _simplexY2[1] : _simplexY0[1];
 					const az = swapAC ? _simplexY2[2] : _simplexY0[2];
 					const cx = swapAC ? _simplexY0[0] : _simplexY2[0];
 					const cy = swapAC ? _simplexY0[1] : _simplexY2[1];
 					const cz = swapAC ? _simplexY0[2] : _simplexY2[2];
-					const abx = _simplexY1[0] - ax;
-					const aby = _simplexY1[1] - ay;
-					const abz = _simplexY1[2] - az;
+					const abx$1 = _simplexY1[0] - ax;
+					const aby$1 = _simplexY1[1] - ay;
+					const abz$1 = _simplexY1[2] - az;
 					const ac_x = cx - ax;
 					const ac_y = cy - ay;
 					const ac_z = cz - az;
-					const nx = aby * ac_z - abz * ac_y;
-					const ny = abz * ac_x - abx * ac_z;
-					const nz = abx * ac_y - aby * ac_x;
+					const nx = aby$1 * ac_z - abz$1 * ac_y;
+					const ny = abz$1 * ac_x - abx$1 * ac_z;
+					const nz = abx$1 * ac_y - aby$1 * ac_x;
 					const normalLengthSquared = nx * nx + ny * ny + nz * nz;
 					if (normalLengthSquared < 1e-10) {
 						let closestSet = 4;
@@ -11750,7 +11750,7 @@ function gjkCastRay(out, rayOrigin, rayDirection, tolerance, support, maxLambda 
 						const apx = -ax;
 						const apy = -ay;
 						const apz = -az;
-						const d1 = abx * apx + aby * apy + abz * apz;
+						const d1 = abx$1 * apx + aby$1 * apy + abz$1 * apz;
 						const d2 = ac_x * apx + ac_y * apy + ac_z * apz;
 						if (d1 <= 0 && d2 <= 0) {
 							_closestPoint.pointSet = swapAC ? 4 : 1;
@@ -11761,7 +11761,7 @@ function gjkCastRay(out, rayOrigin, rayDirection, tolerance, support, maxLambda 
 							const bpx = -_simplexY1[0];
 							const bpy = -_simplexY1[1];
 							const bpz = -_simplexY1[2];
-							const d3 = abx * bpx + aby * bpy + abz * bpz;
+							const d3 = abx$1 * bpx + aby$1 * bpy + abz$1 * bpz;
 							const d4 = ac_x * bpx + ac_y * bpy + ac_z * bpz;
 							if (d3 >= 0 && d4 <= d3) {
 								_closestPoint.pointSet = 2;
@@ -11771,14 +11771,14 @@ function gjkCastRay(out, rayOrigin, rayDirection, tolerance, support, maxLambda 
 							} else if (d1 * d4 <= d3 * d2 && d1 >= 0 && d3 <= 0) {
 								const v = d1 / (d1 - d3);
 								_closestPoint.pointSet = swapAC ? 6 : 3;
-								_closestPoint.point[0] = ax + abx * v;
-								_closestPoint.point[1] = ay + aby * v;
-								_closestPoint.point[2] = az + abz * v;
+								_closestPoint.point[0] = ax + abx$1 * v;
+								_closestPoint.point[1] = ay + aby$1 * v;
+								_closestPoint.point[2] = az + abz$1 * v;
 							} else {
 								const cpx = -cx;
 								const cpy = -cy;
 								const cpz = -cz;
-								const d5 = abx * cpx + aby * cpy + abz * cpz;
+								const d5 = abx$1 * cpx + aby$1 * cpy + abz$1 * cpz;
 								const d6 = ac_x * cpx + ac_y * cpy + ac_z * cpz;
 								if (d6 >= 0 && d5 <= d6) {
 									_closestPoint.pointSet = swapAC ? 1 : 4;
@@ -12528,12 +12528,10 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 		_w[0] = _x[0] - _pq[0];
 		_w[1] = _x[1] - _pq[1];
 		_w[2] = _x[2] - _pq[2];
-		let _squaredLength__result_3000019;
 		const x = _v[0];
 		const y = _v[1];
 		const z = _v[2];
-		_squaredLength__result_3000019 = x * x + y * y + z * z;
-		const vDotW = _v[0] * _w[0] + _v[1] * _w[1] + _v[2] * _w[2] - sumConvexRadius * Math.sqrt(_squaredLength__result_3000019);
+		const vDotW = _v[0] * _w[0] + _v[1] * _w[1] + _v[2] * _w[2] - sumConvexRadius * Math.sqrt(x * x + y * y + z * z);
 		if (vDotW > 0) {
 			const vDotR = _v[0] * displacement[0] + _v[1] * displacement[1] + _v[2] * displacement[2];
 			if (vDotR >= -1e-18) {
@@ -12892,28 +12890,28 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 					originOutBDC = 1;
 				}
 				if (originOutABC) {
-					const acx = _simplexY2[0] - _simplexY0[0];
-					const acy = _simplexY2[1] - _simplexY0[1];
-					const acz = _simplexY2[2] - _simplexY0[2];
-					const bcx = _simplexY2[0] - _simplexY1[0];
-					const bcy = _simplexY2[1] - _simplexY1[1];
-					const bcz = _simplexY2[2] - _simplexY1[2];
-					const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
+					const acx$1 = _simplexY2[0] - _simplexY0[0];
+					const acy$1 = _simplexY2[1] - _simplexY0[1];
+					const acz$1 = _simplexY2[2] - _simplexY0[2];
+					const bcx$1 = _simplexY2[0] - _simplexY1[0];
+					const bcy$1 = _simplexY2[1] - _simplexY1[1];
+					const bcz$1 = _simplexY2[2] - _simplexY1[2];
+					const swapAC = bcx$1 * bcx$1 + bcy$1 * bcy$1 + bcz$1 * bcz$1 < acx$1 * acx$1 + acy$1 * acy$1 + acz$1 * acz$1;
 					const ax = swapAC ? _simplexY2[0] : _simplexY0[0];
 					const ay = swapAC ? _simplexY2[1] : _simplexY0[1];
 					const az = swapAC ? _simplexY2[2] : _simplexY0[2];
 					const cx = swapAC ? _simplexY0[0] : _simplexY2[0];
 					const cy = swapAC ? _simplexY0[1] : _simplexY2[1];
 					const cz = swapAC ? _simplexY0[2] : _simplexY2[2];
-					const abx = _simplexY1[0] - ax;
-					const aby = _simplexY1[1] - ay;
-					const abz = _simplexY1[2] - az;
+					const abx$1 = _simplexY1[0] - ax;
+					const aby$1 = _simplexY1[1] - ay;
+					const abz$1 = _simplexY1[2] - az;
 					const ac_x = cx - ax;
 					const ac_y = cy - ay;
 					const ac_z = cz - az;
-					const nx = aby * ac_z - abz * ac_y;
-					const ny = abz * ac_x - abx * ac_z;
-					const nz = abx * ac_y - aby * ac_x;
+					const nx = aby$1 * ac_z - abz$1 * ac_y;
+					const ny = abz$1 * ac_x - abx$1 * ac_z;
+					const nz = abx$1 * ac_y - aby$1 * ac_x;
 					const normalLengthSquared = nx * nx + ny * ny + nz * nz;
 					if (normalLengthSquared < 1e-10) {
 						let closestSet = 4;
@@ -12997,7 +12995,7 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 						const apx = -ax;
 						const apy = -ay;
 						const apz = -az;
-						const d1 = abx * apx + aby * apy + abz * apz;
+						const d1 = abx$1 * apx + aby$1 * apy + abz$1 * apz;
 						const d2 = ac_x * apx + ac_y * apy + ac_z * apz;
 						if (d1 <= 0 && d2 <= 0) {
 							_closestPoint.pointSet = swapAC ? 4 : 1;
@@ -13008,7 +13006,7 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 							const bpx = -_simplexY1[0];
 							const bpy = -_simplexY1[1];
 							const bpz = -_simplexY1[2];
-							const d3 = abx * bpx + aby * bpy + abz * bpz;
+							const d3 = abx$1 * bpx + aby$1 * bpy + abz$1 * bpz;
 							const d4 = ac_x * bpx + ac_y * bpy + ac_z * bpz;
 							if (d3 >= 0 && d4 <= d3) {
 								_closestPoint.pointSet = 2;
@@ -13018,14 +13016,14 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 							} else if (d1 * d4 <= d3 * d2 && d1 >= 0 && d3 <= 0) {
 								const v = d1 / (d1 - d3);
 								_closestPoint.pointSet = swapAC ? 6 : 3;
-								_closestPoint.point[0] = ax + abx * v;
-								_closestPoint.point[1] = ay + aby * v;
-								_closestPoint.point[2] = az + abz * v;
+								_closestPoint.point[0] = ax + abx$1 * v;
+								_closestPoint.point[1] = ay + aby$1 * v;
+								_closestPoint.point[2] = az + abz$1 * v;
 							} else {
 								const cpx = -cx;
 								const cpy = -cy;
 								const cpz = -cz;
-								const d5 = abx * cpx + aby * cpy + abz * cpz;
+								const d5 = abx$1 * cpx + aby$1 * cpy + abz$1 * cpz;
 								const d6 = ac_x * cpx + ac_y * cpy + ac_z * cpz;
 								if (d6 >= 0 && d5 <= d6) {
 									_closestPoint.pointSet = swapAC ? 1 : 4;
@@ -13712,11 +13710,11 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 	out__3000038[2] = 0;
 	switch (_simplex.size) {
 		case 1: {
-			const pp = _simplex.p;
-			const qq = _simplex.q;
-			out.pointB[0] = qq[0] + _normalizedV[0] * convexRadiusB;
-			out.pointB[1] = qq[1] + _normalizedV[1] * convexRadiusB;
-			out.pointB[2] = qq[2] + _normalizedV[2] * convexRadiusB;
+			const pp$2 = _simplex.p;
+			const qq$2 = _simplex.q;
+			out.pointB[0] = qq$2[0] + _normalizedV[0] * convexRadiusB;
+			out.pointB[1] = qq$2[1] + _normalizedV[1] * convexRadiusB;
+			out.pointB[2] = qq$2[2] + _normalizedV[2] * convexRadiusB;
 			if (lambda > 0) {
 				let out__3000023 = out.pointA;
 				let a = out.pointB;
@@ -13724,16 +13722,16 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 				out__3000023[1] = a[1];
 				out__3000023[2] = a[2];
 			} else {
-				out.pointA[0] = pp[0] + _normalizedV[0] * -convexRadiusA;
-				out.pointA[1] = pp[1] + _normalizedV[1] * -convexRadiusA;
-				out.pointA[2] = pp[2] + _normalizedV[2] * -convexRadiusA;
+				out.pointA[0] = pp$2[0] + _normalizedV[0] * -convexRadiusA;
+				out.pointA[1] = pp$2[1] + _normalizedV[1] * -convexRadiusA;
+				out.pointA[2] = pp$2[2] + _normalizedV[2] * -convexRadiusA;
 			}
 			break;
 		}
 		case 2: {
 			const yy = _simplex.y;
-			const pp = _simplex.p;
-			const qq = _simplex.q;
+			const pp$3 = _simplex.p;
+			const qq$3 = _simplex.q;
 			_simplexY0[0] = yy[0];
 			_simplexY0[1] = yy[1];
 			_simplexY0[2] = yy[2];
@@ -13758,9 +13756,9 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 				_bary.u = 1 - _bary.v;
 				_bary.isValid = true;
 			}
-			out.pointB[0] += qq[0] * _bary.u + qq[3] * _bary.v + _normalizedV[0] * convexRadiusB;
-			out.pointB[1] += qq[1] * _bary.u + qq[4] * _bary.v + _normalizedV[1] * convexRadiusB;
-			out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + _normalizedV[2] * convexRadiusB;
+			out.pointB[0] += qq$3[0] * _bary.u + qq$3[3] * _bary.v + _normalizedV[0] * convexRadiusB;
+			out.pointB[1] += qq$3[1] * _bary.u + qq$3[4] * _bary.v + _normalizedV[1] * convexRadiusB;
+			out.pointB[2] += qq$3[2] * _bary.u + qq$3[5] * _bary.v + _normalizedV[2] * convexRadiusB;
 			if (lambda > 0) {
 				let out__3000024 = out.pointA;
 				let a = out.pointB;
@@ -13768,17 +13766,17 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 				out__3000024[1] = a[1];
 				out__3000024[2] = a[2];
 			} else {
-				out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + _normalizedV[0] * -convexRadiusA;
-				out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + _normalizedV[1] * -convexRadiusA;
-				out.pointA[2] += pp[2] * _bary.u + pp[5] * _bary.v + _normalizedV[2] * -convexRadiusA;
+				out.pointA[0] += pp$3[0] * _bary.u + pp$3[3] * _bary.v + _normalizedV[0] * -convexRadiusA;
+				out.pointA[1] += pp$3[1] * _bary.u + pp$3[4] * _bary.v + _normalizedV[1] * -convexRadiusA;
+				out.pointA[2] += pp$3[2] * _bary.u + pp$3[5] * _bary.v + _normalizedV[2] * -convexRadiusA;
 			}
 			break;
 		}
 		case 3:
 		case 4: {
 			const yy = _simplex.y;
-			const pp = _simplex.p;
-			const qq = _simplex.q;
+			const pp$4 = _simplex.p;
+			const qq$4 = _simplex.q;
 			_simplexY0[0] = yy[0];
 			_simplexY0[1] = yy[1];
 			_simplexY0[2] = yy[2];
@@ -13789,9 +13787,9 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 			_simplexY2[1] = yy[7];
 			_simplexY2[2] = yy[8];
 			computeBarycentricCoordinates3d(_bary, _simplexY0, _simplexY1, _simplexY2, 1e-10);
-			out.pointB[0] += qq[0] * _bary.u + qq[3] * _bary.v + qq[6] * _bary.w + _normalizedV[0] * convexRadiusB;
-			out.pointB[1] += qq[1] * _bary.u + qq[4] * _bary.v + qq[7] * _bary.w + _normalizedV[1] * convexRadiusB;
-			out.pointB[2] += qq[2] * _bary.u + qq[5] * _bary.v + qq[8] * _bary.w + _normalizedV[2] * convexRadiusB;
+			out.pointB[0] += qq$4[0] * _bary.u + qq$4[3] * _bary.v + qq$4[6] * _bary.w + _normalizedV[0] * convexRadiusB;
+			out.pointB[1] += qq$4[1] * _bary.u + qq$4[4] * _bary.v + qq$4[7] * _bary.w + _normalizedV[1] * convexRadiusB;
+			out.pointB[2] += qq$4[2] * _bary.u + qq$4[5] * _bary.v + qq$4[8] * _bary.w + _normalizedV[2] * convexRadiusB;
 			if (lambda > 0) {
 				let out__3000026 = out.pointA;
 				let a = out.pointB;
@@ -13799,9 +13797,9 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 				out__3000026[1] = a[1];
 				out__3000026[2] = a[2];
 			} else {
-				out.pointA[0] += pp[0] * _bary.u + pp[3] * _bary.v + pp[6] * _bary.w + _normalizedV[0] * -convexRadiusA;
-				out.pointA[1] += pp[1] * _bary.u + pp[4] * _bary.v + pp[7] * _bary.w + _normalizedV[1] * -convexRadiusA;
-				out.pointA[2] += pp[2] * _bary.u + pp[5] * _bary.v + pp[8] * _bary.w + _normalizedV[2] * -convexRadiusA;
+				out.pointA[0] += pp$4[0] * _bary.u + pp$4[3] * _bary.v + pp$4[6] * _bary.w + _normalizedV[0] * -convexRadiusA;
+				out.pointA[1] += pp$4[1] * _bary.u + pp$4[4] * _bary.v + pp$4[7] * _bary.w + _normalizedV[1] * -convexRadiusA;
+				out.pointA[2] += pp$4[2] * _bary.u + pp$4[5] * _bary.v + pp$4[8] * _bary.w + _normalizedV[2] * -convexRadiusA;
 			}
 			break;
 		}
@@ -13878,10 +13876,10 @@ function gjkClosestPoints(out, supportA, supportB, tolerance, direction, maxDist
 		if (dot < 0 && dot * dot > _closestPointToSimplex.squaredDistance * maxDistanceSquared) {
 			out.squaredDistance = Number.MAX_VALUE;
 			let out__3000039 = out.penetrationAxis;
-			let a = _closestPointToSimplex.point;
-			out__3000039[0] = a[0];
-			out__3000039[1] = a[1];
-			out__3000039[2] = a[2];
+			let a$2 = _closestPointToSimplex.point;
+			out__3000039[0] = a$2[0];
+			out__3000039[1] = a$2[1];
+			out__3000039[2] = a$2[2];
 			return;
 		}
 		const off = _simplex.size * 3;
@@ -14658,10 +14656,10 @@ function gjkClosestPoints(out, supportA, supportB, tolerance, direction, maxDist
 			break;
 		}
 		if (_closestPointToSimplex.pointSet === 15) {
-			let out = _closestPointToSimplex.point;
-			out[0] = 0;
-			out[1] = 0;
-			out[2] = 0;
+			let out$2 = _closestPointToSimplex.point;
+			out$2[0] = 0;
+			out$2[1] = 0;
+			out$2[2] = 0;
 			_closestPointToSimplex.squaredDistance = 0;
 			break;
 		}
@@ -14688,10 +14686,10 @@ function gjkClosestPoints(out, supportA, supportB, tolerance, direction, maxDist
 		}
 		_simplex.size = newSize;
 		if (_closestPointToSimplex.squaredDistance <= squaredTolerance) {
-			let out = _closestPointToSimplex.point;
-			out[0] = 0;
-			out[1] = 0;
-			out[2] = 0;
+			let out$3 = _closestPointToSimplex.point;
+			out$3[0] = 0;
+			out$3[1] = 0;
+			out$3[2] = 0;
 			_closestPointToSimplex.squaredDistance = 0;
 			break;
 		}
@@ -14705,18 +14703,18 @@ function gjkClosestPoints(out, supportA, supportB, tolerance, direction, maxDist
 			yMaxLengthSquared = Math.max(yMaxLengthSquared, yx * yx + yYy * yYy + yz * yz);
 		}
 		if (_closestPointToSimplex.squaredDistance <= 1e-5 * yMaxLengthSquared) {
-			let out = _closestPointToSimplex.point;
-			out[0] = 0;
-			out[1] = 0;
-			out[2] = 0;
+			let out$4 = _closestPointToSimplex.point;
+			out$4[0] = 0;
+			out$4[1] = 0;
+			out$4[2] = 0;
 			_closestPointToSimplex.squaredDistance = 0;
 			break;
 		}
-		let out = _closestPointToSimplex.point;
-		let a$2 = _closestPointToSimplex.point;
-		out[0] = -a$2[0];
-		out[1] = -a$2[1];
-		out[2] = -a$2[2];
+		let out$5 = _closestPointToSimplex.point;
+		let a$3 = _closestPointToSimplex.point;
+		out$5[0] = -a$3[0];
+		out$5[1] = -a$3[1];
+		out$5[2] = -a$3[2];
 		if (previousSquaredDistance - _closestPointToSimplex.squaredDistance <= 1e-5 * previousSquaredDistance) break;
 		previousSquaredDistance = _closestPointToSimplex.squaredDistance;
 	}
@@ -24464,12 +24462,6 @@ function releaseNode(bvh, nodeIndex) {
 function isLeaf(node) {
 	return node.left === -1 && node.right === -1;
 }
-function proximity(a, b) {
-	const dx = a[0] + a[3] - (b[0] + b[3]);
-	const dy = a[1] + a[4] - (b[1] + b[4]);
-	const dz = a[2] + a[5] - (b[2] + b[5]);
-	return Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-}
 function insertLeaf(dbvt, rootIndex, leafIndex) {
 	const leaf = dbvt.nodes[leafIndex];
 	if (dbvt.root === -1) {
@@ -24481,12 +24473,18 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 		while (rootNode.left !== -1 || rootNode.right !== -1) {
 			const leftNode = dbvt.nodes[rootNode.left];
 			const rightNode = dbvt.nodes[rootNode.right];
-			let _select__result_1000000;
-			let o = leaf.aabb;
-			let a = leftNode.aabb;
-			let b = rightNode.aabb;
-			_select__result_1000000 = proximity(o, a) < proximity(o, b) ? 0 : 1;
-			root = _select__result_1000000 === 0 ? rootNode.left : rootNode.right;
+			const _inl_arg_0 = leaf.aabb;
+			let _proximity__result_1000000;
+			let b = leftNode.aabb;
+			const dx = _inl_arg_0[0] + _inl_arg_0[3] - (b[0] + b[3]);
+			const dy = _inl_arg_0[1] + _inl_arg_0[4] - (b[1] + b[4]);
+			const dz = _inl_arg_0[2] + _inl_arg_0[5] - (b[2] + b[5]);
+			_proximity__result_1000000 = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+			let b$1 = rightNode.aabb;
+			const dx$1 = _inl_arg_0[0] + _inl_arg_0[3] - (b$1[0] + b$1[3]);
+			const dy$1 = _inl_arg_0[1] + _inl_arg_0[4] - (b$1[1] + b$1[4]);
+			const dz$1 = _inl_arg_0[2] + _inl_arg_0[5] - (b$1[2] + b$1[5]);
+			root = (_proximity__result_1000000 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? 0 : 1) === 0 ? rootNode.left : rootNode.right;
 			rootNode = dbvt.nodes[root];
 		}
 		const prev = rootNode.parent;
@@ -24529,10 +24527,8 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 		newParent.height = rootNode.height + 1;
 		if (prev !== -1) {
 			const prevNode = dbvt.nodes[prev];
-			let _indexof__result_1000001;
 			const node = dbvt.nodes[root];
-			_indexof__result_1000001 = dbvt.nodes[node.parent].right === root ? 1 : 0;
-			if (_indexof__result_1000001 === 0) prevNode.left = newParentIndex;
+			if ((dbvt.nodes[node.parent].right === root ? 1 : 0) === 0) prevNode.left = newParentIndex;
 			else prevNode.right = newParentIndex;
 			newParent.left = root;
 			rootNode.parent = newParentIndex;
@@ -24545,15 +24541,15 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 				if (!(childNode.aabb[0] >= parentNode.aabb[0] && childNode.aabb[3] <= parentNode.aabb[3] && childNode.aabb[1] >= parentNode.aabb[1] && childNode.aabb[4] <= parentNode.aabb[4] && childNode.aabb[2] >= parentNode.aabb[2] && childNode.aabb[5] <= parentNode.aabb[5])) {
 					const leftNode = dbvt.nodes[parentNode.left];
 					const rightNode = dbvt.nodes[parentNode.right];
-					let out = parentNode.aabb;
-					let boxA = leftNode.aabb;
-					let boxB = rightNode.aabb;
-					out[0] = Math.min(boxA[0], boxB[0]);
-					out[1] = Math.min(boxA[1], boxB[1]);
-					out[2] = Math.min(boxA[2], boxB[2]);
-					out[3] = Math.max(boxA[3], boxB[3]);
-					out[4] = Math.max(boxA[4], boxB[4]);
-					out[5] = Math.max(boxA[5], boxB[5]);
+					let out$1 = parentNode.aabb;
+					let boxA$1 = leftNode.aabb;
+					let boxB$1 = rightNode.aabb;
+					out$1[0] = Math.min(boxA$1[0], boxB$1[0]);
+					out$1[1] = Math.min(boxA$1[1], boxB$1[1]);
+					out$1[2] = Math.min(boxA$1[2], boxB$1[2]);
+					out$1[3] = Math.max(boxA$1[3], boxB$1[3]);
+					out$1[4] = Math.max(boxA$1[4], boxB$1[4]);
+					out$1[5] = Math.max(boxA$1[5], boxB$1[5]);
 				} else break;
 				childNode = parentNode;
 				parentIndex = parentNode.parent;
@@ -24708,19 +24704,15 @@ function sort(dbvt, nodeIndex) {
 	if (parentIndex === -1) return nodeIndex;
 	const p = dbvt.nodes[parentIndex];
 	if (parentIndex > nodeIndex) {
-		let _indexof__result_3000001;
 		const node = dbvt.nodes[nodeIndex];
-		_indexof__result_3000001 = dbvt.nodes[node.parent].right === nodeIndex ? 1 : 0;
-		const i = _indexof__result_3000001;
+		const i = dbvt.nodes[node.parent].right === nodeIndex ? 1 : 0;
 		const siblingIndex = i === 0 ? p.right : p.left;
 		const s = dbvt.nodes[siblingIndex];
 		const grandparentIndex = p.parent;
 		if (grandparentIndex !== -1) {
 			const q = dbvt.nodes[grandparentIndex];
-			let _indexof__result_3000000;
-			const node = dbvt.nodes[parentIndex];
-			_indexof__result_3000000 = dbvt.nodes[node.parent].right === parentIndex ? 1 : 0;
-			if (_indexof__result_3000000 === 0) q.left = nodeIndex;
+			const node$1 = dbvt.nodes[parentIndex];
+			if ((dbvt.nodes[node$1.parent].right === parentIndex ? 1 : 0) === 0) q.left = nodeIndex;
 			else q.right = nodeIndex;
 		} else dbvt.root = nodeIndex;
 		s.parent = nodeIndex;
@@ -24784,10 +24776,8 @@ function removeLeaf(dbvt, leafIndex) {
 	const sibling = dbvt.nodes[siblingIndex];
 	if (prevIndex !== -1) {
 		const prev = dbvt.nodes[prevIndex];
-		let _indexof__result_4000000;
 		const node = dbvt.nodes[parentIndex];
-		_indexof__result_4000000 = dbvt.nodes[node.parent].right === parentIndex ? 1 : 0;
-		if (_indexof__result_4000000 === 0) prev.left = siblingIndex;
+		if ((dbvt.nodes[node.parent].right === parentIndex ? 1 : 0) === 0) prev.left = siblingIndex;
 		else prev.right = siblingIndex;
 		sibling.parent = prevIndex;
 		const node$1 = dbvt.nodes[parentIndex];
@@ -24898,10 +24888,8 @@ function update$1(dbvt, body, lookahead) {
 				const sibling = dbvt.nodes[siblingIndex];
 				if (prevIndex !== -1) {
 					const prev = dbvt.nodes[prevIndex];
-					let _indexof__result_4000000;
 					const node = dbvt.nodes[parentIndex];
-					_indexof__result_4000000 = dbvt.nodes[node.parent].right === parentIndex ? 1 : 0;
-					if (_indexof__result_4000000 === 0) prev.left = siblingIndex;
+					if ((dbvt.nodes[node.parent].right === parentIndex ? 1 : 0) === 0) prev.left = siblingIndex;
 					else prev.right = siblingIndex;
 					sibling.parent = prevIndex;
 					const node$1 = dbvt.nodes[parentIndex];
@@ -24913,13 +24901,13 @@ function update$1(dbvt, body, lookahead) {
 					let nodeIndex = prevIndex;
 					while (nodeIndex !== -1) {
 						const node = dbvt.nodes[nodeIndex];
-						let box = node.aabb;
-						_prevAabb[0] = box[0];
-						_prevAabb[1] = box[1];
-						_prevAabb[2] = box[2];
-						_prevAabb[3] = box[3];
-						_prevAabb[4] = box[4];
-						_prevAabb[5] = box[5];
+						let box$1 = node.aabb;
+						_prevAabb[0] = box$1[0];
+						_prevAabb[1] = box$1[1];
+						_prevAabb[2] = box$1[2];
+						_prevAabb[3] = box$1[3];
+						_prevAabb[4] = box$1[4];
+						_prevAabb[5] = box$1[5];
 						const leftNode = dbvt.nodes[node.left];
 						const rightNode = dbvt.nodes[node.right];
 						let out = node.aabb;
@@ -24958,22 +24946,28 @@ function update$1(dbvt, body, lookahead) {
 			out[3] = _bounds[3];
 			out[4] = _bounds[4];
 			out[5] = _bounds[5];
-			const leaf = dbvt.nodes[leafIndex];
+			const leaf$1 = dbvt.nodes[leafIndex];
 			if (dbvt.root === -1) {
 				dbvt.root = leafIndex;
-				leaf.parent = -1;
+				leaf$1.parent = -1;
 			} else {
 				let root = rootIndex;
 				let rootNode = dbvt.nodes[root];
 				while (rootNode.left !== -1 || rootNode.right !== -1) {
 					const leftNode = dbvt.nodes[rootNode.left];
 					const rightNode = dbvt.nodes[rootNode.right];
-					let _select__result_1000000;
-					let o = leaf.aabb;
-					let a = leftNode.aabb;
-					let b = rightNode.aabb;
-					_select__result_1000000 = proximity(o, a) < proximity(o, b) ? 0 : 1;
-					root = _select__result_1000000 === 0 ? rootNode.left : rootNode.right;
+					const _inl_arg_0 = leaf$1.aabb;
+					let _proximity__result_1000000;
+					let b = leftNode.aabb;
+					const dx = _inl_arg_0[0] + _inl_arg_0[3] - (b[0] + b[3]);
+					const dy = _inl_arg_0[1] + _inl_arg_0[4] - (b[1] + b[4]);
+					const dz = _inl_arg_0[2] + _inl_arg_0[5] - (b[2] + b[5]);
+					_proximity__result_1000000 = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+					let b$1 = rightNode.aabb;
+					const dx$1 = _inl_arg_0[0] + _inl_arg_0[3] - (b$1[0] + b$1[3]);
+					const dy$1 = _inl_arg_0[1] + _inl_arg_0[4] - (b$1[1] + b$1[4]);
+					const dz$1 = _inl_arg_0[2] + _inl_arg_0[5] - (b$1[2] + b$1[5]);
+					root = (_proximity__result_1000000 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? 0 : 1) === 0 ? rootNode.left : rootNode.right;
 					rootNode = dbvt.nodes[root];
 				}
 				const prev = rootNode.parent;
@@ -25004,27 +24998,25 @@ function update$1(dbvt, body, lookahead) {
 				const newParentIndex = nodeIndex;
 				const newParent = dbvt.nodes[newParentIndex];
 				newParent.parent = prev;
-				let out = newParent.aabb;
-				let boxA = leaf.aabb;
+				let out$1 = newParent.aabb;
+				let boxA = leaf$1.aabb;
 				let boxB = rootNode.aabb;
-				out[0] = Math.min(boxA[0], boxB[0]);
-				out[1] = Math.min(boxA[1], boxB[1]);
-				out[2] = Math.min(boxA[2], boxB[2]);
-				out[3] = Math.max(boxA[3], boxB[3]);
-				out[4] = Math.max(boxA[4], boxB[4]);
-				out[5] = Math.max(boxA[5], boxB[5]);
+				out$1[0] = Math.min(boxA[0], boxB[0]);
+				out$1[1] = Math.min(boxA[1], boxB[1]);
+				out$1[2] = Math.min(boxA[2], boxB[2]);
+				out$1[3] = Math.max(boxA[3], boxB[3]);
+				out$1[4] = Math.max(boxA[4], boxB[4]);
+				out$1[5] = Math.max(boxA[5], boxB[5]);
 				newParent.height = rootNode.height + 1;
 				if (prev !== -1) {
 					const prevNode = dbvt.nodes[prev];
-					let _indexof__result_1000001;
 					const node = dbvt.nodes[root];
-					_indexof__result_1000001 = dbvt.nodes[node.parent].right === root ? 1 : 0;
-					if (_indexof__result_1000001 === 0) prevNode.left = newParentIndex;
+					if ((dbvt.nodes[node.parent].right === root ? 1 : 0) === 0) prevNode.left = newParentIndex;
 					else prevNode.right = newParentIndex;
 					newParent.left = root;
 					rootNode.parent = newParentIndex;
 					newParent.right = leafIndex;
-					leaf.parent = newParentIndex;
+					leaf$1.parent = newParentIndex;
 					let childNode = newParent;
 					let parentIndex = prev;
 					while (parentIndex !== -1) {
@@ -25032,15 +25024,15 @@ function update$1(dbvt, body, lookahead) {
 						if (!(childNode.aabb[0] >= parentNode.aabb[0] && childNode.aabb[3] <= parentNode.aabb[3] && childNode.aabb[1] >= parentNode.aabb[1] && childNode.aabb[4] <= parentNode.aabb[4] && childNode.aabb[2] >= parentNode.aabb[2] && childNode.aabb[5] <= parentNode.aabb[5])) {
 							const leftNode = dbvt.nodes[parentNode.left];
 							const rightNode = dbvt.nodes[parentNode.right];
-							let out = parentNode.aabb;
-							let boxA = leftNode.aabb;
-							let boxB = rightNode.aabb;
-							out[0] = Math.min(boxA[0], boxB[0]);
-							out[1] = Math.min(boxA[1], boxB[1]);
-							out[2] = Math.min(boxA[2], boxB[2]);
-							out[3] = Math.max(boxA[3], boxB[3]);
-							out[4] = Math.max(boxA[4], boxB[4]);
-							out[5] = Math.max(boxA[5], boxB[5]);
+							let out$2 = parentNode.aabb;
+							let boxA$1 = leftNode.aabb;
+							let boxB$1 = rightNode.aabb;
+							out$2[0] = Math.min(boxA$1[0], boxB$1[0]);
+							out$2[1] = Math.min(boxA$1[1], boxB$1[1]);
+							out$2[2] = Math.min(boxA$1[2], boxB$1[2]);
+							out$2[3] = Math.max(boxA$1[3], boxB$1[3]);
+							out$2[4] = Math.max(boxA$1[4], boxB$1[4]);
+							out$2[5] = Math.max(boxA$1[5], boxB$1[5]);
 						} else break;
 						childNode = parentNode;
 						parentIndex = parentNode.parent;
@@ -25049,18 +25041,18 @@ function update$1(dbvt, body, lookahead) {
 					newParent.left = root;
 					rootNode.parent = newParentIndex;
 					newParent.right = leafIndex;
-					leaf.parent = newParentIndex;
+					leaf$1.parent = newParentIndex;
 					dbvt.root = newParentIndex;
 				}
 			}
-			let out$1 = leaf.previousAabb;
-			let box$1 = body.aabb;
-			out$1[0] = box$1[0];
-			out$1[1] = box$1[1];
-			out$1[2] = box$1[2];
-			out$1[3] = box$1[3];
-			out$1[4] = box$1[4];
-			out$1[5] = box$1[5];
+			let out$3 = leaf$1.previousAabb;
+			let box$2 = body.aabb;
+			out$3[0] = box$2[0];
+			out$3[1] = box$2[1];
+			out$3[2] = box$2[2];
+			out$3[3] = box$2[3];
+			out$3[4] = box$2[4];
+			out$3[5] = box$2[5];
 		}
 	}
 }
@@ -28360,14 +28352,12 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				anyImpulseApplied = anyImpulseApplied || _applyLambda__result_7;
 			}
 			if (isActive(constraint.angularFrictionConstraint)) {
-				let _getTotalLambda__result_8;
 				let part = constraint.angularFrictionConstraint;
 				let jv = 0;
 				if (movingA) jv += normal[0] * _angularVelocityA_0 + normal[1] * _angularVelocityA_1 + normal[2] * _angularVelocityA_2;
 				if (movingB) jv -= normal[0] * _angularVelocityB_0 + normal[1] * _angularVelocityB_1 + normal[2] * _angularVelocityB_2;
 				const lambda = part.effectiveMass * (jv - part.bias);
-				_getTotalLambda__result_8 = part.totalLambda + lambda;
-				const unclamped = _getTotalLambda__result_8;
+				const unclamped = part.totalLambda + lambda;
 				const maxAngularFriction = friction * sumDistanceWeightedNormalLambda;
 				const clamped = Math.max(-maxAngularFriction, Math.min(maxAngularFriction, unclamped));
 				let _applyLambda__result_9;
@@ -28392,7 +28382,6 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 			}
 			for (let i = 0; i < constraint.numContactPoints; i++) {
 				const cp = constraint.contactPoints[i];
-				let _getTotalLambda__result_10;
 				let part = cp.normalConstraint;
 				let jv;
 				if (movingA && movingB) {
@@ -28406,8 +28395,8 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				if (movingA) jv += part.r1PlusUxAxis[0] * _angularVelocityA_0 + part.r1PlusUxAxis[1] * _angularVelocityA_1 + part.r1PlusUxAxis[2] * _angularVelocityA_2;
 				if (movingB) jv -= part.r2xAxis[0] * _angularVelocityB_0 + part.r2xAxis[1] * _angularVelocityB_1 + part.r2xAxis[2] * _angularVelocityB_2;
 				const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
-				_getTotalLambda__result_10 = part.totalLambda + lambda;
-				const clampedLambda = Math.max(0, _getTotalLambda__result_10);
+				const totalLambda = part.totalLambda + lambda;
+				const clampedLambda = Math.max(0, totalLambda);
 				let _applyLambda__result_11;
 				let part$5 = cp.normalConstraint;
 				let invMassA = constraint.invMassA;
@@ -28581,22 +28570,22 @@ function solvePositionConstraintsForIsland(contactConstraints, bodies, constrain
 				for (let i = 0; i < constraint.numContactPoints; i++) {
 					const cp = constraint.contactPoints[i];
 					let vec = cp.localPositionA;
-					const x = vec[0];
-					const y = vec[1];
-					const z = vec[2];
-					_solvePos_worldRa[0] = _solvePos_rotA[0] * x + _solvePos_rotA[4] * y + _solvePos_rotA[8] * z;
-					_solvePos_worldRa[1] = _solvePos_rotA[1] * x + _solvePos_rotA[5] * y + _solvePos_rotA[9] * z;
-					_solvePos_worldRa[2] = _solvePos_rotA[2] * x + _solvePos_rotA[6] * y + _solvePos_rotA[10] * z;
+					const x$2 = vec[0];
+					const y$2 = vec[1];
+					const z$2 = vec[2];
+					_solvePos_worldRa[0] = _solvePos_rotA[0] * x$2 + _solvePos_rotA[4] * y$2 + _solvePos_rotA[8] * z$2;
+					_solvePos_worldRa[1] = _solvePos_rotA[1] * x$2 + _solvePos_rotA[5] * y$2 + _solvePos_rotA[9] * z$2;
+					_solvePos_worldRa[2] = _solvePos_rotA[2] * x$2 + _solvePos_rotA[6] * y$2 + _solvePos_rotA[10] * z$2;
 					const pointAX = bodyA.centerOfMassPosition[0] + _solvePos_worldRa[0];
 					const pointAY = bodyA.centerOfMassPosition[1] + _solvePos_worldRa[1];
 					const pointAZ = bodyA.centerOfMassPosition[2] + _solvePos_worldRa[2];
 					let vec$1 = cp.localPositionB;
-					const x$2 = vec$1[0];
-					const y$2 = vec$1[1];
-					const z$2 = vec$1[2];
-					_solvePos_worldRb[0] = _solvePos_rotB[0] * x$2 + _solvePos_rotB[4] * y$2 + _solvePos_rotB[8] * z$2;
-					_solvePos_worldRb[1] = _solvePos_rotB[1] * x$2 + _solvePos_rotB[5] * y$2 + _solvePos_rotB[9] * z$2;
-					_solvePos_worldRb[2] = _solvePos_rotB[2] * x$2 + _solvePos_rotB[6] * y$2 + _solvePos_rotB[10] * z$2;
+					const x$3 = vec$1[0];
+					const y$3 = vec$1[1];
+					const z$3 = vec$1[2];
+					_solvePos_worldRb[0] = _solvePos_rotB[0] * x$3 + _solvePos_rotB[4] * y$3 + _solvePos_rotB[8] * z$3;
+					_solvePos_worldRb[1] = _solvePos_rotB[1] * x$3 + _solvePos_rotB[5] * y$3 + _solvePos_rotB[9] * z$3;
+					_solvePos_worldRb[2] = _solvePos_rotB[2] * x$3 + _solvePos_rotB[6] * y$3 + _solvePos_rotB[10] * z$3;
 					const pointBX = bodyB.centerOfMassPosition[0] + _solvePos_worldRb[0];
 					const pointBY = bodyB.centerOfMassPosition[1] + _solvePos_worldRb[1];
 					const pointBZ = bodyB.centerOfMassPosition[2] + _solvePos_worldRb[2];

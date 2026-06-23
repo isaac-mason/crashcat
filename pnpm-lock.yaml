@@ -22,8 +22,8 @@ importers:
         specifier: 0.183.0
         version: 0.183.0
       compilecat:
-        specifier: github:isaac-mason/compilecat
-        version: github.com/isaac-mason/compilecat/93f60c5dd8b459fbeb34cbd9efd611d93c9c94c4(@babel/parser@7.29.7)(@babel/traverse@7.29.7)(@babel/types@7.29.7)(rollup@4.46.2)
+        specifier: ^0.0.3
+        version: 0.0.3(rollup@4.46.2)
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21
@@ -126,84 +126,9 @@ importers:
 
 packages:
 
-  /@babel/code-frame@7.29.7:
-    resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/helper-validator-identifier': 7.29.7
-      js-tokens: 4.0.0
-      picocolors: 1.1.1
-    dev: true
-
-  /@babel/generator@7.29.7:
-    resolution: {integrity: sha512-DkXD5OJQaAQIdZ1bt3UZdEnHAn9Imd3IVBdX03UFe+ony9Ojw5pzr9YVKGDY1jt+Gcn/FnGkNf8r+Vj5NOJWtQ==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
-      '@jridgewell/gen-mapping': 0.3.13
-      '@jridgewell/trace-mapping': 0.3.30
-      jsesc: 3.1.0
-    dev: true
-
-  /@babel/helper-globals@7.29.7:
-    resolution: {integrity: sha512-3nQVUAtvkKH9zahfWgw96Jc/uFOmjACE1kQz82E2lqWmHBgjzbNlsC22nuQTfahmWeQtTq5nQ/4Nnd2A1wj4zA==}
-    engines: {node: '>=6.9.0'}
-    dev: true
-
-  /@babel/helper-string-parser@7.29.7:
-    resolution: {integrity: sha512-Pb5ijPrZ89GDH8223L4UP8i6QApWxs04RbPQJTeWDV0/keR2E36MeKnyr6LYmUUvqRRI+Iv87SuF1W6ErINzYw==}
-    engines: {node: '>=6.9.0'}
-    dev: true
-
-  /@babel/helper-validator-identifier@7.29.7:
-    resolution: {integrity: sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg==}
-    engines: {node: '>=6.9.0'}
-    dev: true
-
-  /@babel/parser@7.29.7:
-    resolution: {integrity: sha512-hnORnjP/1P/zFEndoeX+n+t1RwWRJiJpM/jO7FW32Kn9r5+sJB2JWOdYo4L6k78j15eCwY3Gm/7364B1EMwtNg==}
-    engines: {node: '>=6.0.0'}
-    hasBin: true
-    dependencies:
-      '@babel/types': 7.29.7
-    dev: true
-
   /@babel/runtime@7.28.3:
     resolution: {integrity: sha512-9uIQ10o0WGdpP6GDhXcdOJPJuDgFtIDtN/9+ArJQ2NAfAmiuhTQdzkaTGR33v43GYS2UrSA0eX2pPPHoFVvpxA==}
     engines: {node: '>=6.9.0'}
-    dev: true
-
-  /@babel/template@7.29.7:
-    resolution: {integrity: sha512-puq+Gf35oI24FeN11LkoUQFqv9uwNeWpxXZi/Ji3rRIoKAzKnxRaZ+Gkj0vKS9ZCiTESfng1N9LyOyXvo+m+Gg==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/code-frame': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
-    dev: true
-
-  /@babel/traverse@7.29.7:
-    resolution: {integrity: sha512-EhlfNQtZ+NK22w5BM61ciuiq1m58ed33Wr1Xan//ZRTy6hgjnwyCffRYwzsGXdASJSUJ1guZILsErh1eQcl+zw==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/code-frame': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/helper-globals': 7.29.7
-      '@babel/parser': 7.29.7
-      '@babel/template': 7.29.7
-      '@babel/types': 7.29.7
-      debug: 4.4.1
-    transitivePeerDependencies:
-      - supports-color
-    dev: true
-
-  /@babel/types@7.29.7:
-    resolution: {integrity: sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/helper-string-parser': 7.29.7
-      '@babel/helper-validator-identifier': 7.29.7
     dev: true
 
   /@biomejs/biome@2.2.0:
@@ -309,6 +234,63 @@ packages:
       sisteransi: 1.0.5
     dev: true
 
+  /@compilecat/core-darwin-arm64@0.0.3:
+    resolution: {integrity: sha512-9/dC3pPMc9KkVVvSUl97zdHNkln0qHWz0YIYTQhmYxa/5c2mV0ZWhcBVkTSFoSVAgrf2vXXtXBq2wD/rvTUdWA==}
+    cpu: [arm64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@compilecat/core-darwin-x64@0.0.3:
+    resolution: {integrity: sha512-ue7Ehtx76T5ChesOlXZCnWh3aLG/X9DMuusVVlzcMO4BP9XHowG0dRTCUmohLfjTIo2oIvAUTTUpJ2MTf4iG7A==}
+    cpu: [x64]
+    os: [darwin]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@compilecat/core-linux-arm64-gnu@0.0.3:
+    resolution: {integrity: sha512-kjaO5RhNpmaxzPtRcb1Kf1HlzKMahpUZcHqK1T5h6tqa9NGm+ayfUaf5ljimQL7q7t4fO5UwQbenO32vYao2Eg==}
+    cpu: [arm64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@compilecat/core-linux-x64-gnu@0.0.3:
+    resolution: {integrity: sha512-Yb24IVFQLlNNLmgxKLXd+4iLhfIpQV95P7/S6hriAp/viR5N+apRQ61Aoiap6erO+l80NObqqElkrbWLwLW50A==}
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@compilecat/core-wasm32-wasi@0.0.3:
+    resolution: {integrity: sha512-uUuYU8nMEpB7/WJCXioq9STTFfnUejmHJVAOkinSZgtd8ABJ5HQDUxOLjd4kH/bBXT1KTkMNof5H/cX32sIbhA==}
+    engines: {node: '>=14.0.0'}
+    requiresBuild: true
+    dependencies:
+      '@emnapi/core': 1.11.1
+      '@emnapi/runtime': 1.11.1
+      '@napi-rs/wasm-runtime': 1.1.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)
+    dev: true
+    optional: true
+
+  /@compilecat/core-win32-x64-msvc@0.0.3:
+    resolution: {integrity: sha512-vcK75buFWEs9B8F0QYP8EIdzEjzGLd02vP636hbqEa+XoMs04cPoFsawv3TusPPnlIwcRxC+52HHEOpbwGzoOQ==}
+    cpu: [x64]
+    os: [win32]
+    requiresBuild: true
+    dev: true
+    optional: true
+
+  /@compilecat/wasm@0.0.3:
+    resolution: {integrity: sha512-5t4kxP8+BXMxzxMfa/LbryMTc1h90zoCyiyE0pHfUz8SAXrxUbiHb9+HWfRQvPtqZ1Y39GEKoGDIjGxV5Yo2wg==}
+    requiresBuild: true
+    dev: true
+    optional: true
+
   /@dimforge/rapier3d-compat@0.12.0:
     resolution: {integrity: sha512-uekIGetywIgopfD97oDL5PfeezkFpNhwlzlaEYNOA0N6ghdsOvh/HYjSMek5Q2O1PYvRSDFcqFVJl4r4ZBwOow==}
     dev: true
@@ -322,6 +304,15 @@ packages:
     dev: true
     optional: true
 
+  /@emnapi/core@1.11.1:
+    resolution: {integrity: sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ==}
+    requiresBuild: true
+    dependencies:
+      '@emnapi/wasi-threads': 1.2.2
+      tslib: 2.8.1
+    dev: true
+    optional: true
+
   /@emnapi/runtime@1.10.0:
     resolution: {integrity: sha512-ewvYlk86xUoGI0zQRNq/mC+16R1QeDlKQy21Ki3oSYXNgLb45GV1P6A0M+/s6nyCuNDqe5VpaY84BzXGwVbwFA==}
     requiresBuild: true
@@ -330,8 +321,24 @@ packages:
     dev: true
     optional: true
 
+  /@emnapi/runtime@1.11.1:
+    resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
+    requiresBuild: true
+    dependencies:
+      tslib: 2.8.1
+    dev: true
+    optional: true
+
   /@emnapi/wasi-threads@1.2.1:
     resolution: {integrity: sha512-uTII7OYF+/Mes/MrcIOYp5yOtSMLBWSIoLPpcgwipoiKbli6k322tcoFsxoIIxPDqW01SQGAgko4EzZi2BNv2w==}
+    requiresBuild: true
+    dependencies:
+      tslib: 2.8.1
+    dev: true
+    optional: true
+
+  /@emnapi/wasi-threads@1.2.2:
+    resolution: {integrity: sha512-c95qOXkHdydNKhscBTebqEC1CVAZpyqOfVfBzQ1qgzyl3gfeldUjIggDbIZgDKsHLgnsM+igH7TJ/eAasaVuMA==}
     requiresBuild: true
     dependencies:
       tslib: 2.8.1
@@ -874,8 +881,8 @@ packages:
       '@jridgewell/sourcemap-codec': 1.5.5
     dev: true
 
-  /@napi-rs/wasm-runtime@1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0):
-    resolution: {integrity: sha512-3NQNNgA1YSlJb/kMH1ildASP9HW7/7kYnRI2szWJaofaS1hWmbGI4H+d3+22aGzXXN9IJ+n+GiFVcGipJP18ow==}
+  /@napi-rs/wasm-runtime@1.1.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0):
+    resolution: {integrity: sha512-AWPoBRJ9tsnVhor4sjO7rkni+7p+2IAEFj6cx06UgP10jkQHqay/36uRV/bFkgrh18D9vb4cr8Q0Pthskgzy+Q==}
     requiresBuild: true
     peerDependencies:
       '@emnapi/core': ^1.7.1
@@ -883,6 +890,19 @@ packages:
     dependencies:
       '@emnapi/core': 1.10.0
       '@emnapi/runtime': 1.10.0
+      '@tybys/wasm-util': 0.10.2
+    dev: true
+    optional: true
+
+  /@napi-rs/wasm-runtime@1.1.5(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1):
+    resolution: {integrity: sha512-AWPoBRJ9tsnVhor4sjO7rkni+7p+2IAEFj6cx06UgP10jkQHqay/36uRV/bFkgrh18D9vb4cr8Q0Pthskgzy+Q==}
+    requiresBuild: true
+    peerDependencies:
+      '@emnapi/core': ^1.7.1
+      '@emnapi/runtime': ^1.7.1
+    dependencies:
+      '@emnapi/core': 1.11.1
+      '@emnapi/runtime': 1.11.1
       '@tybys/wasm-util': 0.10.2
     dev: true
     optional: true
@@ -1119,7 +1139,7 @@ packages:
     dependencies:
       '@emnapi/core': 1.10.0
       '@emnapi/runtime': 1.10.0
-      '@napi-rs/wasm-runtime': 1.1.4(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+      '@napi-rs/wasm-runtime': 1.1.5(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
     dev: true
     optional: true
 
@@ -1801,6 +1821,22 @@ packages:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
     dev: true
 
+  /compilecat@0.0.3(rollup@4.46.2):
+    resolution: {integrity: sha512-EEbme48j+8NMS/7u66EmJw3nzOWdAHEa2mP25FNc1S98TNPoPpT9TmMUdAZX7j5LeheINIjwQWF8CeaYiQEJ4g==}
+    peerDependencies:
+      rollup: ^4.0.0
+    dependencies:
+      rollup: 4.46.2
+    optionalDependencies:
+      '@compilecat/core-darwin-arm64': 0.0.3
+      '@compilecat/core-darwin-x64': 0.0.3
+      '@compilecat/core-linux-arm64-gnu': 0.0.3
+      '@compilecat/core-linux-x64-gnu': 0.0.3
+      '@compilecat/core-wasm32-wasi': 0.0.3
+      '@compilecat/core-win32-x64-msvc': 0.0.3
+      '@compilecat/wasm': 0.0.3
+    dev: true
+
   /concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
     dev: true
@@ -2338,18 +2374,8 @@ packages:
       '@pkgjs/parseargs': 0.11.0
     dev: true
 
-  /js-tokens@4.0.0:
-    resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
-    dev: true
-
   /js-tokens@9.0.1:
     resolution: {integrity: sha512-mxa9E9ITFOt0ban3j6L5MpjwegGz6lBQmM1IJkWeBZGcMxto50+eWdjC/52xDbS2vy0k7vIMK0Fe2wfL9OQSpQ==}
-    dev: true
-
-  /jsesc@3.1.0:
-    resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
-    engines: {node: '>=6'}
-    hasBin: true
     dev: true
 
   /json-parse-even-better-errors@3.0.2:
@@ -3710,21 +3736,4 @@ packages:
     resolution: {integrity: sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==}
     engines: {node: '>= 14.6'}
     hasBin: true
-    dev: true
-
-  github.com/isaac-mason/compilecat/93f60c5dd8b459fbeb34cbd9efd611d93c9c94c4(@babel/parser@7.29.7)(@babel/traverse@7.29.7)(@babel/types@7.29.7)(rollup@4.46.2):
-    resolution: {tarball: https://codeload.github.com/isaac-mason/compilecat/tar.gz/93f60c5dd8b459fbeb34cbd9efd611d93c9c94c4}
-    id: github.com/isaac-mason/compilecat/93f60c5dd8b459fbeb34cbd9efd611d93c9c94c4
-    name: compilecat
-    version: 0.0.0
-    peerDependencies:
-      '@babel/parser': ^7.26.3
-      '@babel/traverse': ^7.26.4
-      '@babel/types': ^7.26.3
-      rollup: ^4.0.0
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@babel/traverse': 7.29.7
-      '@babel/types': 7.29.7
-      rollup: 4.46.2
     dev: true
