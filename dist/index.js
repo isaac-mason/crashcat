@@ -29495,10 +29495,8 @@ const ccdCastShapeCollector = {
 	timeStep: 0,
 	bodyIdB: -1,
 	earlyOutFraction: Number.MAX_VALUE,
-	hasHit: false,
 	hit: createCastShapeHit(),
 	setup(ccdBody, bodyA, bodyB, timeStep) {
-		this.hasHit = false;
 		this.ccdBody = ccdBody;
 		this.bodyA = bodyA;
 		this.bodyB = bodyB;
@@ -29507,7 +29505,6 @@ const ccdCastShapeCollector = {
 		this.earlyOutFraction = ccdBody.fractionPlusSlop;
 	},
 	reset() {
-		this.hasHit = false;
 		this.earlyOutFraction = Number.MAX_VALUE;
 		this.ccdBody = null;
 		this.bodyA = null;
@@ -29536,7 +29533,6 @@ const ccdCastShapeCollector = {
 		settings.combinedFriction = combineMaterial(this.bodyA.friction, this.bodyB.friction, this.bodyA.frictionCombineMode, this.bodyB.frictionCombineMode);
 		settings.combinedRestitution = combineMaterial(this.bodyA.restitution, this.bodyB.restitution, this.bodyA.restitutionCombineMode, this.bodyB.restitutionCombineMode);
 		settings.isSensor = false;
-		this.hasHit = true;
 		this.earlyOutFraction = fractionPlusSlop;
 	},
 	addMiss() {},
@@ -29659,7 +29655,7 @@ function findCCDContacts(world, timeStep, listener) {
 		ccdBodyVisitor.setup(world, ccdBody, bodyA, timeStep);
 		setFromBody(bodyFilter, world.settings.layers, bodyA);
 		castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
-		if (ccdBody.hitBodyIndex !== -1 && ccdCastShapeCollector.hasHit) {
+		if (ccdBody.fractionPlusSlop < 1) {
 			const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
 			const hit = ccdCastShapeCollector.hit;
 			const contactManifold = _findCCDContacts_contactManifold;

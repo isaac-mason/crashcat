@@ -9,6 +9,7 @@
 - fix: stack stability — corrected inverted motion-type swap in narrowphase so collision detection runs in the dynamic body's local space, matching Jolt; tall box stacks now settle instead of rocking indefinitely
 - feat: body-pair contact cache — skip GJK/EPA when bodies stay within 1mm/1° of last fresh narrowphase pose, reconstructing the manifold from cached body-local data; eliminates penetration-axis jitter and significantly improves stacking stability (matches Jolt's `mUseBodyPairContactCache`)
 - fix: debug.* drawing for scaled and plane shapes
+- fix: CCD (LINEAR_CAST) contacts now fire the contact listener on the step of impact; previously `onContactAdded`/`onContactPersisted` were never called for continuous collisions, so contacts only surfaced a step later via the discrete narrowphase (and not at all when a body rebounded clear). Gate now matches Jolt's `mFractionPlusSlop < 1`
 
 ## v0.0.4
 

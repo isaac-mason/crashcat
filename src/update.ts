@@ -1241,7 +1241,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
     bodyA: RigidBody;
     bodyB: RigidBody;
     timeStep: number;
-    hasHit: boolean;
     hit: CastShapeHit;
     setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void;
     reset(): void;
@@ -1255,11 +1254,9 @@ const ccdCastShapeCollector: CastShapeCollector & {
     // result state
     bodyIdB: -1,
     earlyOutFraction: Number.MAX_VALUE,
-    hasHit: false,
     hit: createCastShapeHit(),
 
     setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void {
-        this.hasHit = false;
         this.ccdBody = ccdBody;
         this.bodyA = bodyA;
         this.bodyB = bodyB;
@@ -1269,7 +1266,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
     },
 
     reset(): void {
-        this.hasHit = false;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.ccdBody = null! as ccd.CCDBody;
         this.bodyA = null! as RigidBody;
@@ -1337,7 +1333,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
         settings.isSensor = false; // CCD doesn't support sensors
         // mass/inertia scales default to 1.0 (already initialized)
 
-        this.hasHit = true;
         this.earlyOutFraction = fractionPlusSlop;
     },
 
@@ -1599,7 +1594,7 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
         broadphase.castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
 
         // create contact manifold if there was a hit
-        if (ccdBody.hitBodyIndex !== -1 && ccdCastShapeCollector.hasHit) {
+        if (ccdBody.fractionPlusSlop < 1.0) {
             const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
             const hit = ccdCastShapeCollector.hit;
 
