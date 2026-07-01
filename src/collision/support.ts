@@ -1,13 +1,11 @@
 import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
-import { type Shape, type ShapeDef, type ShapeType, shapeDefs } from '../shapes/shapes';
-import type { Face } from '../utils/face';
+import type { BoxShape } from '../shapes/box';
+import type { CapsuleShape } from '../shapes/capsule';
+import type { ConvexHullShape } from '../shapes/convex-hull';
+import type { CylinderShape } from '../shapes/cylinder';
+import type { SphereShape } from '../shapes/sphere';
 
 export const DEFAULT_CONVEX_RADIUS = 0.05;
-
-export type ShapeSupportPool = {
-    shapes: Partial<Record<ShapeType, unknown>>;
-    dispose: () => void;
-};
 
 export enum SupportFunctionMode {
     INCLUDE_CONVEX_RADIUS,
@@ -15,369 +13,697 @@ export enum SupportFunctionMode {
     DEFAULT,
 }
 
+const EMPTY_VERTICES: number[] = [];
+
+/**
+ * Monomorphic support evaluation.
+ *
+ * A single {@link Support} struct (one hidden class) is filled once per collision pair, then
+ * {@link getSupport} — a single, monomorphic function — is called many times per pair by GJK/EPA.
+ * The per-shape polymorphism lives entirely in the fill (cold, once per pair); the hot path is one
+ * function with a `switch` on `kind`.
+ *
+ * Radius contract:
+ *  - `convexRadius` is the *reported* radius. `getSupport` never adds it; the collision driver
+ *    reads it and passes it to `gjkClosestPoints`/EPA for the shrunk-core-plus-radius distance math.
+ *  - `addRadius` is an extra radius added along the (local) direction by `getSupport` itself (the EPA
+ *    speculative-separation / cast convex radius). 0 on the GJK path.
+ *  - "mode" (include vs exclude convex radius) is baked into the params by the fill: exclude uses the
+ *    shrunk core + reports `convexRadius`; include uses the full/rounded core + `convexRadius = 0`.
+ */
+
+export enum SupportKind {
+    BOX,
+    SPHERE,
+    CAPSULE,
+    CYLINDER,
+    HULL,
+    TRIANGLE,
+    POINT,
+}
+
 export type Support = {
+    /** which sub-object holds this support's parameters; selects the branch taken in {@link getSupport} */
+    kind: SupportKind;
+
+    /** reported convex radius — read by the driver, never added by getSupport (0 in include mode) */
     convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
 
-/* shape support pool - pre-allocated support objects for hot paths */
+    /** extra radius added along the local direction by getSupport (EPA separation / cast radius) */
+    addRadius: number;
 
-const allSupportPools = /* @__PURE__ */ new Set<ShapeSupportPool>();
+    /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
+    hasTransform: boolean;
+    transform: Mat4;
 
-/** creates a new shape support pool */
-export function createShapeSupportPool(): ShapeSupportPool {
-    function dispose() {
-        allSupportPools.delete(pool);
-    }
+    /** axis-aligned box: support is the corner picked by the sign of the direction on each axis (±halfExtents) */
+    box: { halfExtents: Vec3 };
 
-    const pool: ShapeSupportPool = { shapes: {}, dispose };
+    /**
+     * sphere as a single radius. 0 → the core is the origin (exclude mode: a sphere is pure convex radius);
+     * r → the rounded surface point `r·dir̂` (include mode).
+     */
+    sphere: { radius: number };
 
-    for (const def of Object.values(shapeDefs)) {
-        const shapePool = def.createSupportPool();
-        pool.shapes[def.type] = shapePool;
-    }
+    /**
+     * capsule as a segment of half-length `halfHeight` along local Y, optionally rounded by `radius`.
+     * radius 0 → the bare segment endpoint (exclude); r → segment endpoint + `r·dir̂` (include).
+     */
+    capsule: { halfHeight: number; radius: number };
 
-    allSupportPools.add(pool);
+    /**
+     * cylinder: `radius` is the radial extent in the local XZ plane, `halfHeight` the axial extent along
+     * local Y. support = the radial extreme (`radius·dir̂ₓ_z`) combined with the near/far axial cap.
+     */
+    cylinder: { radius: number; halfHeight: number };
 
-    return pool;
-}
-
-export function allocateShapeSupportPools(def: ShapeDef<any>): void {
-    for (const pool of allSupportPools) {
-        // create a separate support pool instance for each existing support pool
-        const shapePool = def.createSupportPool();
-        if (shapePool !== undefined) {
-            pool.shapes[def.type] = shapePool;
-        }
-    }
-}
-
-/* shape + mode + scale -> support function */
-
-export function getShapeSupportFunction(pool: ShapeSupportPool, shape: Shape, mode: SupportFunctionMode, scale: Vec3): Support {
-    const shapeDef = shapeDefs[shape.type];
-
-    // pool entry may not exist for non-convex shapes
-    const shapePool = pool.shapes[shape.type];
-    const support = shapeDef.getSupportFunction(shapePool, shape, mode, scale) as Support;
-
-    // if (support === undefined) {
-    //     throw new Error(`Support function not implemented for shape type ${shape?.type}`);
-    // }
-
-    return support;
-}
-
-/* non-shape-specific support utilities for gjk/epa */
-
-/* triangle support - for triangle vs convex shape collisions with gjk */
-
-export type TriangleSupport = {
-    a: Vec3;
-    b: Vec3;
-    c: Vec3;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function triangleGetSupport(this: TriangleSupport, direction: Vec3, out: Vec3): void {
-    const {
-        a: [ax, ay, az],
-        b: [bx, by, bz],
-        c: [cx, cy, cz],
-    } = this;
-    const [dx, dy, dz] = direction;
-
-    // project vertices on direction
-    const d1 = ax * dx + ay * dy + az * dz;
-    const d2 = bx * dx + by * dy + bz * dz;
-    const d3 = cx * dx + cy * dy + cz * dz;
-
-    // return vertex with biggest projection
-    if (d1 > d2) {
-        if (d1 > d3) {
-            out[0] = ax;
-            out[1] = ay;
-            out[2] = az;
-        } else {
-            out[0] = cx;
-            out[1] = cy;
-            out[2] = cz;
-        }
-    } else {
-        if (d2 > d3) {
-            out[0] = bx;
-            out[1] = by;
-            out[2] = bz;
-        } else {
-            out[0] = cx;
-            out[1] = cy;
-            out[2] = cz;
-        }
-    }
-}
-
-export function createTriangleSupport(): TriangleSupport {
-    return {
-        a: vec3.create(),
-        b: vec3.create(),
-        c: vec3.create(),
-        convexRadius: 0,
-        getSupport: triangleGetSupport,
+    /** convex vertex set — support is the vertex with the greatest dot product against the direction */
+    hull: {
+        /** flat `[x,y,z,...]` vertices scanned by getSupport; read-only borrow valid for the current pair */
+        vertices: number[];
+        /** number of vertices in `vertices` (it may be longer than `vertexCount * 3`) */
+        vertexCount: number;
+        /** owned grow-once buffer that `vertices` points at for shrunk / scaled hull vertices */
+        scratch: number[];
     };
-}
 
-export function setTriangleSupport(out: TriangleSupport, a: Vec3, b: Vec3, c: Vec3): void {
-    out.a[0] = a[0];
-    out.a[1] = a[1];
-    out.a[2] = a[2];
+    /** triangle (mesh face) — support is whichever of the three vertices has the greatest dot with the direction */
+    triangle: { a: Vec3; b: Vec3; c: Vec3 };
 
-    out.b[0] = b[0];
-    out.b[1] = b[1];
-    out.b[2] = b[2];
-
-    out.c[0] = c[0];
-    out.c[1] = c[1];
-    out.c[2] = c[2];
-}
-
-/* point - lets us do point vs convex shape collisions with gjk */
-
-export type PointSupport = {
-    point: Vec3;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
+    /** single point — the support is always this point, regardless of direction */
+    point: { position: Vec3 };
 };
 
-function pointGetSupport(this: PointSupport, _direction: Vec3, out: Vec3): void {
-    vec3.copy(out, this.point);
-}
-
-export function createPointSupport(): PointSupport {
+/**
+ * Allocate a reusable {@link Support}. A driver holds a small fixed number of these (e.g. one per
+ * operand slot) and refills them per pair via the fill functions. The sub-objects, transform, and
+ * scratch buffer are pre-allocated so filling never allocates.
+ */
+export function createSupport(): Support {
     return {
-        point: vec3.create(),
+        kind: SupportKind.SPHERE,
         convexRadius: 0,
-        getSupport: pointGetSupport,
-    };
-}
-
-export function setPointSupport(out: PointSupport, point: Vec3): void {
-    vec3.copy(out.point, point);
-}
-
-/* polygon support */
-
-export type PolygonSupport = {
-    vertices: number[]; // flat array [x1, y1, z1, x2, y2, z2, ...]
-    numVertices: number;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function polygonGetSupport(this: PolygonSupport, direction: Vec3, out: Vec3): void {
-    // find vertex with maximum dot product in the given direction
-
-    // initialize with first vertex
-    if (this.numVertices === 0) {
-        out[0] = 0;
-        out[1] = 0;
-        out[2] = 0;
-        return;
-    }
-
-    let bestDot = this.vertices[0] * direction[0] + this.vertices[1] * direction[1] + this.vertices[2] * direction[2];
-    let bestIndex = 0;
-
-    // check remaining vertices
-    for (let i = 1; i < this.numVertices; i++) {
-        const vx = this.vertices[i * 3];
-        const vy = this.vertices[i * 3 + 1];
-        const vz = this.vertices[i * 3 + 2];
-        const dot = vx * direction[0] + vy * direction[1] + vz * direction[2];
-
-        if (dot > bestDot) {
-            bestDot = dot;
-            bestIndex = i;
-        }
-    }
-
-    out[0] = this.vertices[bestIndex * 3];
-    out[1] = this.vertices[bestIndex * 3 + 1];
-    out[2] = this.vertices[bestIndex * 3 + 2];
-}
-
-export function createPolygonSupport(): PolygonSupport {
-    return {
-        vertices: [],
-        numVertices: 0,
-        convexRadius: 0,
-        getSupport: polygonGetSupport,
-    };
-}
-
-export function setPolygonSupport(out: PolygonSupport, face: Face): void {
-    out.vertices = face.vertices;
-    out.numVertices = face.numVertices;
-    out.convexRadius = 0; // face geometry doesn't include convex radius
-}
-
-/* transformed support - applies a position + rotation to an inner support function */
-
-const _transformedSupport_localDirection = /* @__PURE__ */ vec3.create();
-
-export type TransformedSupport = {
-    convexRadius: number;
-    support: Support | null;
-    transform: Mat4; // rotation + translation matrix
-    getSupport(direction: Vec3, out: Vec3): void;
-    innerSupport: Support | null;
-};
-
-function transformedGetSupport(this: TransformedSupport, direction: Vec3, out: Vec3): void {
-    const { support: inner, transform: m } = this;
-
-    // transform direction to local space using transposed 3x3 (inverse rotation)
-    // mat4.multiply3x3TransposedVec inlined for performance
-    const dx = direction[0];
-    const dy = direction[1];
-    const dz = direction[2];
-
-    _transformedSupport_localDirection[0] = m[0] * dx + m[1] * dy + m[2] * dz;
-    _transformedSupport_localDirection[1] = m[4] * dx + m[5] * dy + m[6] * dz;
-    _transformedSupport_localDirection[2] = m[8] * dx + m[9] * dy + m[10] * dz;
-
-    // get support point in local space
-    inner!.getSupport(_transformedSupport_localDirection, out);
-
-    // transform support point to world space: rotation + translation
-    // mat4.multiply3x3Vec + translation inlined for performance
-    const sx = out[0];
-    const sy = out[1];
-    const sz = out[2];
-
-    out[0] = m[0] * sx + m[4] * sy + m[8] * sz + m[12];
-    out[1] = m[1] * sx + m[5] * sy + m[9] * sz + m[13];
-    out[2] = m[2] * sx + m[6] * sy + m[10] * sz + m[14];
-}
-
-export function createTransformedSupport(): TransformedSupport {
-    return {
-        convexRadius: 0,
-        support: null,
+        addRadius: 0,
+        hasTransform: false,
         transform: mat4.create(),
-        getSupport: transformedGetSupport,
-        innerSupport: null,
+        box: { halfExtents: vec3.create() },
+        sphere: { radius: 0 },
+        capsule: { halfHeight: 0, radius: 0 },
+        cylinder: { radius: 0, halfHeight: 0 },
+        hull: { vertices: EMPTY_VERTICES, vertexCount: 0, scratch: [] },
+        triangle: { a: vec3.create(), b: vec3.create(), c: vec3.create() },
+        point: { position: vec3.create() },
     };
 }
 
-export function setTransformedSupport(out: TransformedSupport, transform: Mat4, innerSupport: Support): void {
-    out.support = innerSupport;
-    out.innerSupport = innerSupport;
-    out.convexRadius = innerSupport.convexRadius;
-    out.transform[0] = transform[0];
-    out.transform[1] = transform[1];
-    out.transform[2] = transform[2];
-    out.transform[3] = transform[3];
-    out.transform[4] = transform[4];
-    out.transform[5] = transform[5];
-    out.transform[6] = transform[6];
-    out.transform[7] = transform[7];
-    out.transform[8] = transform[8];
-    out.transform[9] = transform[9];
-    out.transform[10] = transform[10];
-    out.transform[11] = transform[11];
-    out.transform[12] = transform[12];
-    out.transform[13] = transform[13];
-    out.transform[14] = transform[14];
-    out.transform[15] = transform[15];
-}
+/**
+ * Evaluate the support point of `support` in direction `direction`, writing it to `out`.
+ * The single hot GJK/EPA call site — monomorphic.
+ */
+export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
+    // 1. transform the direction into the shape's local space (inverse rotation = transposed 3x3)
+    let directionX = direction[0];
+    let directionY = direction[1];
+    let directionZ = direction[2];
+    if (support.hasTransform) {
+        const m = support.transform;
+        const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+        const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+        const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+        directionX = localX;
+        directionY = localY;
+        directionZ = localZ;
+    }
 
-/* add convex radius to support function */
+    // 2. core support in local space
+    let supportX: number;
+    let supportY: number;
+    let supportZ: number;
 
-export type AddConvexRadiusSupport = {
-    innerSupport: Support;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
+    switch (support.kind) {
+        case SupportKind.BOX: {
+            const halfExtents = support.box.halfExtents;
+            supportX = directionX >= 0 ? halfExtents[0] : -halfExtents[0];
+            supportY = directionY >= 0 ? halfExtents[1] : -halfExtents[1];
+            supportZ = directionZ >= 0 ? halfExtents[2] : -halfExtents[2];
+            break;
+        }
+        case SupportKind.SPHERE: {
+            // core is the origin (exclude); for include the radius produces r·dir̂
+            const radius = support.sphere.radius;
+            if (radius > 0) {
+                const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+                if (lengthSq > 0) {
+                    const scale = radius / Math.sqrt(lengthSq);
+                    supportX = directionX * scale;
+                    supportY = directionY * scale;
+                    supportZ = directionZ * scale;
+                } else {
+                    supportX = 0;
+                    supportY = 0;
+                    supportZ = 0;
+                }
+            } else {
+                supportX = 0;
+                supportY = 0;
+                supportZ = 0;
+            }
+            break;
+        }
+        case SupportKind.CAPSULE: {
+            const capsule = support.capsule;
+            const halfHeight = capsule.halfHeight;
+            const radius = capsule.radius;
+            if (radius > 0) {
+                const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+                if (lengthSq > 0) {
+                    const scale = radius / Math.sqrt(lengthSq);
+                    supportX = directionX * scale;
+                    supportY = directionY * scale + (directionY > 0 ? halfHeight : -halfHeight);
+                    supportZ = directionZ * scale;
+                } else {
+                    supportX = 0;
+                    supportY = halfHeight;
+                    supportZ = 0;
+                }
+            } else {
+                supportX = 0;
+                supportY = directionY > 0 ? halfHeight : -halfHeight;
+                supportZ = 0;
+            }
+            break;
+        }
+        case SupportKind.CYLINDER: {
+            const cylinder = support.cylinder;
+            const horizontalLen = Math.sqrt(directionX * directionX + directionZ * directionZ);
+            if (horizontalLen > 0) {
+                const scale = cylinder.radius / horizontalLen;
+                supportX = directionX * scale;
+                supportZ = directionZ * scale;
+            } else {
+                supportX = 0;
+                supportZ = 0;
+            }
+            supportY = directionY >= 0 ? cylinder.halfHeight : -cylinder.halfHeight;
+            break;
+        }
+        case SupportKind.HULL: {
+            const vertices = support.hull.vertices;
+            const length = support.hull.vertexCount * 3;
+            let bestDot = -Infinity;
+            supportX = 0;
+            supportY = 0;
+            supportZ = 0;
+            for (let i = 0; i < length; i += 3) {
+                const vertexX = vertices[i];
+                const vertexY = vertices[i + 1];
+                const vertexZ = vertices[i + 2];
+                const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
+                if (dot > bestDot) {
+                    bestDot = dot;
+                    supportX = vertexX;
+                    supportY = vertexY;
+                    supportZ = vertexZ;
+                }
+            }
+            break;
+        }
+        case SupportKind.TRIANGLE: {
+            const triangle = support.triangle;
+            const a = triangle.a;
+            const b = triangle.b;
+            const c = triangle.c;
+            const dotA = a[0] * directionX + a[1] * directionY + a[2] * directionZ;
+            const dotB = b[0] * directionX + b[1] * directionY + b[2] * directionZ;
+            const dotC = c[0] * directionX + c[1] * directionY + c[2] * directionZ;
+            let best: Vec3;
+            if (dotA > dotB) {
+                best = dotA > dotC ? a : c;
+            } else {
+                best = dotB > dotC ? b : c;
+            }
+            supportX = best[0];
+            supportY = best[1];
+            supportZ = best[2];
+            break;
+        }
+        default: {
+            // POINT
+            const position = support.point.position;
+            supportX = position[0];
+            supportY = position[1];
+            supportZ = position[2];
+            break;
+        }
+    }
 
-function addConvexRadiusGetSupport(this: AddConvexRadiusSupport, direction: Vec3, out: Vec3): void {
-    this.innerSupport.getSupport(direction, out);
+    // 3. folded AddConvexRadius — add addRadius along the local direction
+    if (support.addRadius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = support.addRadius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
 
-    const dx = direction[0];
-    const dy = direction[1];
-    const dz = direction[2];
-    const lengthSq = dx * dx + dy * dy + dz * dz;
-
-    if (lengthSq > 0) {
-        const scale = this.convexRadius / Math.sqrt(lengthSq);
-        out[0] += dx * scale;
-        out[1] += dy * scale;
-        out[2] += dz * scale;
+    // 4. transform the support point back to world space (rotation + translation)
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
     }
 }
 
-export function createAddConvexRadiusSupport(): AddConvexRadiusSupport {
-    return {
-        innerSupport: null!,
-        convexRadius: 0,
-        getSupport: addConvexRadiusGetSupport,
-    };
+/* -------------------------------------------------------------------------- */
+/* setters — bake a shape (+ mode + scale) into a Support struct, once per pair. */
+/* transform and addRadius default to identity/0; the driver sets them.       */
+/* -------------------------------------------------------------------------- */
+
+export function setBoxSupport(out: Support, shape: BoxShape, mode: SupportFunctionMode, scale: Vec3): void {
+    const scaledX = Math.abs(scale[0]) * shape.halfExtents[0];
+    const scaledY = Math.abs(scale[1]) * shape.halfExtents[1];
+    const scaledZ = Math.abs(scale[2]) * shape.halfExtents[2];
+
+    out.kind = SupportKind.BOX;
+    out.hasTransform = false;
+    out.addRadius = 0;
+
+    const halfExtents = out.box.halfExtents;
+    if (mode === SupportFunctionMode.EXCLUDE_CONVEX_RADIUS) {
+        const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
+        const scaledConvexRadius = Math.min(shape.convexRadius * minScale, DEFAULT_CONVEX_RADIUS);
+        halfExtents[0] = Math.max(0, scaledX - scaledConvexRadius);
+        halfExtents[1] = Math.max(0, scaledY - scaledConvexRadius);
+        halfExtents[2] = Math.max(0, scaledZ - scaledConvexRadius);
+        out.convexRadius = scaledConvexRadius;
+    } else {
+        halfExtents[0] = scaledX;
+        halfExtents[1] = scaledY;
+        halfExtents[2] = scaledZ;
+        out.convexRadius = 0;
+    }
 }
 
-export function setAddConvexRadiusSupport(out: AddConvexRadiusSupport, convexRadius: number, innerSupport: Support): void {
-    out.innerSupport = innerSupport;
-    out.convexRadius = convexRadius;
+export function setSphereSupport(out: Support, shape: SphereShape, mode: SupportFunctionMode, scale: Vec3): void {
+    const absScale = Math.abs(scale[0]); // uniform scale only
+    out.kind = SupportKind.SPHERE;
+    out.hasTransform = false;
+    out.addRadius = 0;
+
+    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
+        out.sphere.radius = shape.radius * absScale; // core = radius·dir̂
+        out.convexRadius = 0;
+    } else {
+        out.sphere.radius = 0; // core = origin
+        out.convexRadius = shape.radius * absScale;
+    }
 }
 
-/* box support */
+export function setCapsuleSupport(out: Support, shape: CapsuleShape, mode: SupportFunctionMode, scale: Vec3): void {
+    const absScale = Math.abs(scale[0]); // uniform scale only
+    const scaledHalfHeight = absScale * shape.halfHeightOfCylinder;
+    const scaledRadius = absScale * shape.radius;
 
-export type BoxSupport = {
-    halfExtents: Vec3;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
+    out.kind = SupportKind.CAPSULE;
+    out.hasTransform = false;
+    out.addRadius = 0;
+    out.capsule.halfHeight = scaledHalfHeight;
 
-function boxGetSupport(this: BoxSupport, direction: Vec3, out: Vec3): void {
-    out[0] = direction[0] >= 0 ? this.halfExtents[0] : -this.halfExtents[0];
-    out[1] = direction[1] >= 0 ? this.halfExtents[1] : -this.halfExtents[1];
-    out[2] = direction[2] >= 0 ? this.halfExtents[2] : -this.halfExtents[2];
+    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
+        out.capsule.radius = scaledRadius; // segment + radius·dir̂
+        out.convexRadius = 0;
+    } else {
+        out.capsule.radius = 0; // segment only
+        out.convexRadius = scaledRadius;
+    }
 }
 
-export function createBoxSupport(): BoxSupport {
-    return {
-        halfExtents: vec3.create(),
-        convexRadius: 0,
-        getSupport: boxGetSupport,
-    };
+export function setCylinderSupport(out: Support, shape: CylinderShape, mode: SupportFunctionMode, scale: Vec3): void {
+    const absScale = Math.abs(scale[0]); // uniform scale only
+    out.kind = SupportKind.CYLINDER;
+    out.hasTransform = false;
+    out.addRadius = 0;
+
+    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || mode === SupportFunctionMode.DEFAULT) {
+        out.cylinder.halfHeight = absScale * shape.halfHeight;
+        out.cylinder.radius = absScale * shape.radius;
+        out.convexRadius = 0;
+    } else {
+        const scaledHalfHeight = absScale * shape.halfHeight;
+        const scaledRadius = absScale * shape.radius;
+        const scaledConvexRadius = absScale * shape.convexRadius;
+        out.cylinder.halfHeight = scaledHalfHeight - scaledConvexRadius;
+        out.cylinder.radius = scaledRadius - scaledConvexRadius;
+        out.convexRadius = scaledConvexRadius;
+    }
 }
 
-export function setBoxSupport(
-    out: BoxSupport,
-    halfExtents: Vec3,
-    convexRadius: number,
+/** triangle operand (mesh) — copies the 3 verts */
+export function setTriangleSupport(out: Support, a: Vec3, b: Vec3, c: Vec3): void {
+    out.kind = SupportKind.TRIANGLE;
+    out.hasTransform = false;
+    out.addRadius = 0;
+    out.convexRadius = 0;
+    const ta = out.triangle.a;
+    const tb = out.triangle.b;
+    const tc = out.triangle.c;
+    ta[0] = a[0];
+    ta[1] = a[1];
+    ta[2] = a[2];
+    tb[0] = b[0];
+    tb[1] = b[1];
+    tb[2] = b[2];
+    tc[0] = c[0];
+    tc[1] = c[1];
+    tc[2] = c[2];
+}
+
+/** polygon face (KCC) — borrows the face's vertex array (read-only, valid for this pair) */
+export function setPolygonSupport(out: Support, vertices: number[], vertexCount: number): void {
+    out.kind = SupportKind.HULL; // a face is just a convex vertex set
+    out.hasTransform = false;
+    out.addRadius = 0;
+    out.convexRadius = 0;
+    out.hull.vertices = vertices; // read-only borrow, valid for this pair
+    out.hull.vertexCount = vertexCount;
+}
+
+/** point operand (collidePoint) — copies the point */
+export function setPointSupport(out: Support, point: Vec3): void {
+    out.kind = SupportKind.POINT;
+    out.hasTransform = false;
+    out.addRadius = 0;
+    out.convexRadius = 0;
+    const position = out.point.position;
+    position[0] = point[0];
+    position[1] = point[1];
+    position[2] = point[2];
+}
+
+/* -------------------------------------------------------------------------- */
+/* convex hull — the fill computes the convex-radius-shrunk vertices (exclude mode) */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Compute the convex-radius-shrunk hull vertices (unscaled) into `dst` as a flat [x,y,z,...] array.
+ * Each neighbouring face plane is offset inward by the convex radius (constant += r) and the up-to-3
+ * planes are intersected (Cramer's rule). For a 2-face vertex the third plane is perpendicular to the
+ * first two through the vertex; its `n1 × n2` normal is left unnormalized (the intersection is
+ * invariant to per-plane scale).
+ */
+function computeShrunkHullPoints(shape: ConvexHullShape, dst: number[]): void {
+    const convexRadius = shape.convexRadius;
+    const numPoints = shape.numPoints;
+    const positions = shape.pointPositions;
+    const numFacesArr = shape.pointNumFaces;
+    const facesArr = shape.pointFaces;
+    const planes = shape.planes;
+
+    const requiredLength = numPoints * 3;
+    while (dst.length < requiredLength) {
+        dst.push(0);
+    }
+
+    let w = 0;
+    for (let pi = 0; pi < numPoints; pi++) {
+        const pb = pi * 3;
+        const px = positions[pb];
+        const py = positions[pb + 1];
+        const pz = positions[pb + 2];
+        const numFaces = numFacesArr[pi];
+
+        // first neighbouring face plane (normal is unit; offset inward → constant + r)
+        const plane1 = planes[facesArr[pb]];
+        const nrm1 = plane1.normal;
+        const n1x = nrm1[0];
+        const n1y = nrm1[1];
+        const n1z = nrm1[2];
+
+        let rx: number;
+        let ry: number;
+        let rz: number;
+
+        if (numFaces === 1) {
+            // simple case: shift back along the single plane normal
+            rx = px - n1x * convexRadius;
+            ry = py - n1y * convexRadius;
+            rz = pz - n1z * convexRadius;
+        } else {
+            const plane2 = planes[facesArr[pb + 1]];
+            const nrm2 = plane2.normal;
+            const n2x = nrm2[0];
+            const n2y = nrm2[1];
+            const n2z = nrm2[2];
+
+            // offset the two face planes inward by the convex radius (use the stored plane constants)
+            const d1 = plane1.constant + convexRadius;
+            const d2 = plane2.constant + convexRadius;
+
+            // third plane: 3rd face plane (offset inward), or a perpendicular plane through the vertex
+            let n3x: number;
+            let n3y: number;
+            let n3z: number;
+            let d3: number;
+            if (numFaces === 3) {
+                const plane3v = planes[facesArr[pb + 2]];
+                const nrm3 = plane3v.normal;
+                n3x = nrm3[0];
+                n3y = nrm3[1];
+                n3z = nrm3[2];
+                d3 = plane3v.constant + convexRadius;
+            } else {
+                // third plane perpendicular to the first two, through the vertex (unnormalized normal)
+                n3x = n1y * n2z - n1z * n2y;
+                n3y = n1z * n2x - n1x * n2z;
+                n3z = n1x * n2y - n1y * n2x;
+                d3 = -(n3x * px + n3y * py + n3z * pz);
+            }
+
+            // intersect the three planes (Cramer's rule; the cross products are the adj columns)
+            const c1x = n2y * n3z - n2z * n3y;
+            const c1y = n2z * n3x - n2x * n3z;
+            const c1z = n2x * n3y - n2y * n3x;
+            const denom = n1x * c1x + n1y * c1y + n1z * c1z;
+
+            if (Math.abs(denom) < 0.000001) {
+                // near-parallel planes: fall back to pushing back along the first plane
+                rx = px - n1x * convexRadius;
+                ry = py - n1y * convexRadius;
+                rz = pz - n1z * convexRadius;
+            } else {
+                const c2x = n3y * n1z - n3z * n1y;
+                const c2y = n3z * n1x - n3x * n1z;
+                const c2z = n3x * n1y - n3y * n1x;
+                const c3x = n1y * n2z - n1z * n2y;
+                const c3y = n1z * n2x - n1x * n2z;
+                const c3z = n1x * n2y - n1y * n2x;
+                const s = -1 / denom;
+                rx = (d1 * c1x + d2 * c2x + d3 * c3x) * s;
+                ry = (d1 * c1y + d2 * c2y + d3 * c3y) * s;
+                rz = (d1 * c1z + d2 * c2z + d3 * c3z) * s;
+            }
+        }
+
+        dst[w++] = rx;
+        dst[w++] = ry;
+        dst[w++] = rz;
+    }
+}
+
+function scaleConvexRadius(radius: number, scale: Vec3): number {
+    // use minimum absolute scale component
+    const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
+    return radius * minScale;
+}
+
+/**
+ * Compute the scaled convex-radius-shrunk hull vertices into `dst` as a flat [x,y,z,...] array.
+ * Positions are scaled, face-plane normals transformed by the inverse scale and renormalized, planes
+ * rebuilt through the scaled vertex, offset inward by the scaled convex radius, then intersected.
+ * The 2-face third plane uses the unnormalized cross of n1, n2.
+ */
+function computeScaledShrunkHullPoints(shape: ConvexHullShape, scale: Vec3, dst: number[]): void {
+    const scaledRadius = scaleConvexRadius(shape.convexRadius, scale);
+    const numPoints = shape.numPoints;
+    const positions = shape.pointPositions;
+    const numFacesArr = shape.pointNumFaces;
+    const facesArr = shape.pointFaces;
+    const planes = shape.planes;
+
+    const requiredLength = numPoints * 3;
+    while (dst.length < requiredLength) {
+        dst.push(0);
+    }
+
+    const sx = scale[0];
+    const sy = scale[1];
+    const sz = scale[2];
+    const isx = 1 / sx;
+    const isy = 1 / sy;
+    const isz = 1 / sz;
+
+    let w = 0;
+    for (let pi = 0; pi < numPoints; pi++) {
+        const pb = pi * 3;
+        // scaled vertex position
+        const px = positions[pb] * sx;
+        const py = positions[pb + 1] * sy;
+        const pz = positions[pb + 2] * sz;
+        const numFaces = numFacesArr[pi];
+
+        // first face-plane normal, transformed by inverse scale and renormalized
+        const m1 = planes[facesArr[pb]].normal;
+        let n1x = m1[0] * isx;
+        let n1y = m1[1] * isy;
+        let n1z = m1[2] * isz;
+        let l1 = n1x * n1x + n1y * n1y + n1z * n1z;
+        if (l1 > 0) {
+            l1 = 1 / Math.sqrt(l1);
+            n1x *= l1;
+            n1y *= l1;
+            n1z *= l1;
+        }
+
+        let rx: number;
+        let ry: number;
+        let rz: number;
+
+        if (numFaces === 1) {
+            rx = px - n1x * scaledRadius;
+            ry = py - n1y * scaledRadius;
+            rz = pz - n1z * scaledRadius;
+        } else {
+            const m2 = planes[facesArr[pb + 1]].normal;
+            let n2x = m2[0] * isx;
+            let n2y = m2[1] * isy;
+            let n2z = m2[2] * isz;
+            let l2 = n2x * n2x + n2y * n2y + n2z * n2z;
+            if (l2 > 0) {
+                l2 = 1 / Math.sqrt(l2);
+                n2x *= l2;
+                n2y *= l2;
+                n2z *= l2;
+            }
+
+            // planes rebuilt through the scaled vertex, offset inward by the scaled convex radius
+            const d1 = -(n1x * px + n1y * py + n1z * pz) + scaledRadius;
+            const d2 = -(n2x * px + n2y * py + n2z * pz) + scaledRadius;
+
+            let n3x: number;
+            let n3y: number;
+            let n3z: number;
+            let d3: number;
+            if (numFaces === 3) {
+                const m3 = planes[facesArr[pb + 2]].normal;
+                let a = m3[0] * isx;
+                let b = m3[1] * isy;
+                let c = m3[2] * isz;
+                let l3 = a * a + b * b + c * c;
+                if (l3 > 0) {
+                    l3 = 1 / Math.sqrt(l3);
+                    a *= l3;
+                    b *= l3;
+                    c *= l3;
+                }
+                n3x = a;
+                n3y = b;
+                n3z = c;
+                d3 = -(n3x * px + n3y * py + n3z * pz) + scaledRadius;
+            } else {
+                // third plane perpendicular to the first two, through the scaled vertex (unnormalized normal)
+                n3x = n1y * n2z - n1z * n2y;
+                n3y = n1z * n2x - n1x * n2z;
+                n3z = n1x * n2y - n1y * n2x;
+                d3 = -(n3x * px + n3y * py + n3z * pz);
+            }
+
+            const c1x = n2y * n3z - n2z * n3y;
+            const c1y = n2z * n3x - n2x * n3z;
+            const c1z = n2x * n3y - n2y * n3x;
+            const denom = n1x * c1x + n1y * c1y + n1z * c1z;
+
+            if (Math.abs(denom) < 0.000001) {
+                rx = px - n1x * scaledRadius;
+                ry = py - n1y * scaledRadius;
+                rz = pz - n1z * scaledRadius;
+            } else {
+                const c2x = n3y * n1z - n3z * n1y;
+                const c2y = n3z * n1x - n3x * n1z;
+                const c2z = n3x * n1y - n3y * n1x;
+                const c3x = n1y * n2z - n1z * n2y;
+                const c3y = n1z * n2x - n1x * n2z;
+                const c3z = n1x * n2y - n1y * n2x;
+                const s = -1 / denom;
+                rx = (d1 * c1x + d2 * c2x + d3 * c3x) * s;
+                ry = (d1 * c1y + d2 * c2y + d3 * c3y) * s;
+                rz = (d1 * c1z + d2 * c2z + d3 * c3z) * s;
+            }
+        }
+
+        dst[w++] = rx;
+        dst[w++] = ry;
+        dst[w++] = rz;
+    }
+}
+
+/**
+ * Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices
+ * (borrowed directly, or scaled into scratch); exclude uses the convex-radius-shrunk vertices in
+ * scratch (scaled or not). `vertices` is a read-only borrow valid for the current pair.
+ */
+export function setHullSupport(
+    out: Support,
+    shape: ConvexHullShape,
     mode: SupportFunctionMode,
     scale: Vec3,
 ): void {
-    // scale half extents component-wise with absolute scale
-    const scaledX = Math.abs(scale[0]) * halfExtents[0];
-    const scaledY = Math.abs(scale[1]) * halfExtents[1];
-    const scaledZ = Math.abs(scale[2]) * halfExtents[2];
+    out.kind = SupportKind.HULL;
+    out.hasTransform = false;
+    out.addRadius = 0;
 
-    if (mode === SupportFunctionMode.EXCLUDE_CONVEX_RADIUS) {
-        // scale convex radius using minimum scale component
-        const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
-        const scaledConvexRadius = Math.min(convexRadius * minScale, DEFAULT_CONVEX_RADIUS);
+    const hull = out.hull;
+    hull.vertexCount = shape.numPoints;
 
-        // reduce geometry by the convex radius, then report the excluded amount
-        out.halfExtents[0] = Math.max(0, scaledX - scaledConvexRadius);
-        out.halfExtents[1] = Math.max(0, scaledY - scaledConvexRadius);
-        out.halfExtents[2] = Math.max(0, scaledZ - scaledConvexRadius);
-        out.convexRadius = scaledConvexRadius;
-    } else {
-        // DEFAULT or INCLUDE_CONVEX_RADIUS: convex radius is baked into the geometry, so report zero additional radius
-        out.halfExtents[0] = scaledX;
-        out.halfExtents[1] = scaledY;
-        out.halfExtents[2] = scaledZ;
+    const scaled = scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1;
+
+    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || shape.convexRadius === 0) {
         out.convexRadius = 0;
+        if (scaled) {
+            // bake scaled raw vertices into scratch (same per-vertex scaling as withConvexScaled)
+            const positions = shape.pointPositions;
+            const scratch = hull.scratch;
+            const requiredLength = shape.numPoints * 3;
+            while (scratch.length < requiredLength) {
+                scratch.push(0);
+            }
+            const sx = scale[0];
+            const sy = scale[1];
+            const sz = scale[2];
+            for (let i = 0; i < requiredLength; i += 3) {
+                scratch[i] = positions[i] * sx;
+                scratch[i + 1] = positions[i + 1] * sy;
+                scratch[i + 2] = positions[i + 2] * sz;
+            }
+            hull.vertices = scratch;
+        } else {
+            hull.vertices = shape.pointPositions; // read-only borrow
+        }
+    } else {
+        // EXCLUDE convex radius (nonzero) → shrunk vertices
+        if (scaled) {
+            computeScaledShrunkHullPoints(shape, scale, hull.scratch);
+            out.convexRadius = scaleConvexRadius(shape.convexRadius, scale);
+        } else {
+            computeShrunkHullPoints(shape, hull.scratch);
+            out.convexRadius = shape.convexRadius;
+        }
+        hull.vertices = hull.scratch;
     }
 }

@@ -7,17 +7,14 @@ import {
     box,
     capsule,
     convexHull,
-    createShapeSupportPool,
     createSimplex,
-    createTransformedSupport,
-    createTriangleSupport,
-    getShapeSupportFunction,
+    createSupport,
+    getSupport,
     gjkClosestPoints,
-    type ShapeSupportPool,
     type Simplex,
     type Support,
     SupportFunctionMode,
-    setTransformedSupport,
+    setShapeSupport,
     setTriangleSupport,
     sphere,
     registerAll,
@@ -120,9 +117,9 @@ function getMinkowskiSupport(supportA: Support, supportB: Support, direction: Ve
     const supportPointB = vec3.create();
     const negDirection = vec3.create();
 
-    supportA.getSupport(direction, supportPointA);
+    getSupport(supportPointA, supportA, direction);
     vec3.negate(negDirection, direction);
-    supportB.getSupport(negDirection, supportPointB);
+    getSupport(supportPointB, supportB, negDirection);
 
     vec3.subtract(out, supportPointA, supportPointB);
 }
@@ -168,11 +165,13 @@ function updateMinkowskiPoints(instancedMesh: THREE.InstancedMesh, supportA: Sup
     instancedMesh.count = MINKOWSKI_SAMPLE_COUNT;
 }
 
-function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool): { support: Support; mesh: THREE.Mesh } {
+function createSupportAndMesh(type: ShapeOption): { support: Support; mesh: THREE.Mesh } {
+    const scale = vec3.fromValues(1, 1, 1);
     switch (type) {
         case 'sphere': {
             const sphereShape = sphere.create({ radius: 1.0 });
-            const support = getShapeSupportFunction(supportPool, sphereShape, config.convexRadiusMode, vec3.fromValues(1, 1, 1));
+            const support = createSupport();
+            setShapeSupport(support, sphereShape, config.convexRadiusMode, scale);
             const geometry = new THREE.SphereGeometry(1.0, 32, 32);
             const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
             const mesh = new THREE.Mesh(geometry, material);
@@ -180,7 +179,8 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
         }
         case 'box': {
             const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
-            const support = getShapeSupportFunction(supportPool, boxShape, config.convexRadiusMode, vec3.fromValues(1, 1, 1));
+            const support = createSupport();
+            setShapeSupport(support, boxShape, config.convexRadiusMode, scale);
             const geometry = new THREE.BoxGeometry(2, 2, 2);
             const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
             const mesh = new THREE.Mesh(geometry, material);
@@ -188,7 +188,8 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
         }
         case 'capsule': {
             const capsuleShape = capsule.create({ halfHeightOfCylinder: 1.0, radius: 1 });
-            const support = getShapeSupportFunction(supportPool, capsuleShape, config.convexRadiusMode, vec3.fromValues(1, 1, 1));
+            const support = createSupport();
+            setShapeSupport(support, capsuleShape, config.convexRadiusMode, scale);
             const geometry = new THREE.CapsuleGeometry(0.5, 2.0, 16, 32);
             const material = new THREE.MeshStandardMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
             const mesh = new THREE.Mesh(geometry, material);
@@ -198,7 +199,7 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
             const a = vec3.fromValues(0, 0, 0);
             const b = vec3.fromValues(1.5, 0, 0);
             const c = vec3.fromValues(0.75, 1.3, 0);
-            const triangleSupport = createTriangleSupport();
+            const triangleSupport = createSupport();
             setTriangleSupport(triangleSupport, a, b, c);
 
             const geometry = new THREE.BufferGeometry();
@@ -215,7 +216,8 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
         }
         case 'convexhull': {
             const hullShape = convexHull.create({ positions: suzannePoints, convexRadius: 0.0 });
-            const support = getShapeSupportFunction(supportPool, hullShape, config.convexRadiusMode, vec3.fromValues(1, 1, 1));
+            const support = createSupport();
+            setShapeSupport(support, hullShape, config.convexRadiusMode, scale);
 
             // Create visual mesh from hull shape faces
             const geometry = new THREE.BufferGeometry();
@@ -263,20 +265,15 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
 }
 
 function init() {
-    const supportPool = createShapeSupportPool();
-
-    const { support: supportA, mesh: meshA } = createSupportAndMesh(config.shapeA, supportPool);
+    const { support: supportA, mesh: meshA } = createSupportAndMesh(config.shapeA);
     meshA.position.set(-2, 0, 0);
     scene.add(meshA);
     controlsA.attach(meshA);
 
-    const { support: supportB, mesh: meshB } = createSupportAndMesh(config.shapeB, supportPool);
+    const { support: supportB, mesh: meshB } = createSupportAndMesh(config.shapeB);
     meshB.position.set(2, 0, 0);
     scene.add(meshB);
     controlsB.attach(meshB);
-
-    const transformedSupportA = createTransformedSupport();
-    const transformedSupportB = createTransformedSupport();
 
     // simplex viz
     const pointGeometry = new THREE.SphereGeometry(0.04, 16, 16);
@@ -305,13 +302,10 @@ function init() {
     scene.add(minkowskiPoints);
 
     return {
-        supportPool,
         supportA,
         supportB,
         meshA,
         meshB,
-        transformedSupportA,
-        transformedSupportB,
         simplexPoints,
         minkowskiPoints,
         simplexLines: [] as THREE.Line[],
@@ -420,20 +414,22 @@ function visualizeSimplex(state: ExampleState, simplex: Simplex) {
 }
 
 function update(state: ExampleState) {
-    // compute transform for A
+    // fold A's world transform onto its support struct (was TransformedSupport)
     vec3.set(_tempPos, state.meshA.position.x, state.meshA.position.y, state.meshA.position.z);
     quat.set(_tempQuat, state.meshA.quaternion.x, state.meshA.quaternion.y, state.meshA.quaternion.z, state.meshA.quaternion.w);
     mat4.fromRotationTranslation(_transformA, _tempQuat, _tempPos);
-    setTransformedSupport(state.transformedSupportA, _transformA, state.supportA);
+    state.supportA.hasTransform = true;
+    mat4.copy(state.supportA.transform, _transformA);
 
-    // compute transform for B
+    // fold B's world transform onto its support struct
     vec3.set(_tempPos, state.meshB.position.x, state.meshB.position.y, state.meshB.position.z);
     quat.set(_tempQuat, state.meshB.quaternion.x, state.meshB.quaternion.y, state.meshB.quaternion.z, state.meshB.quaternion.w);
     mat4.fromRotationTranslation(_transformB, _tempQuat, _tempPos);
-    setTransformedSupport(state.transformedSupportB, _transformB, state.supportB);
+    state.supportB.hasTransform = true;
+    mat4.copy(state.supportB.transform, _transformB);
 
     // Update Minkowski point cloud
-    updateMinkowskiPoints(state.minkowskiPoints, state.transformedSupportA, state.transformedSupportB);
+    updateMinkowskiPoints(state.minkowskiPoints, state.supportA, state.supportB);
 
     // Run GJK collision detection
     const gjkResult = {
@@ -445,14 +441,7 @@ function update(state: ExampleState) {
     };
     const tolerance = 1e-4;
     const initialDirection = vec3.fromValues(1, 0, 0);
-    gjkClosestPoints(
-        gjkResult,
-        state.transformedSupportA,
-        state.transformedSupportB,
-        tolerance,
-        initialDirection,
-        Number.MAX_VALUE,
-    );
+    gjkClosestPoints(gjkResult, state.supportA, state.supportB, tolerance, initialDirection, Number.MAX_VALUE);
     const isColliding = gjkResult.squaredDistance <= tolerance * tolerance;
 
     // Visualize the final simplex

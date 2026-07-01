@@ -4,14 +4,7 @@ import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
-import {
-    type BoxSupport,
-    createBoxSupport,
-    DEFAULT_CONVEX_RADIUS,
-    type Support,
-    type SupportFunctionMode,
-    setBoxSupport,
-} from '../collision/support';
+import { DEFAULT_CONVEX_RADIUS, setBoxSupport } from '../collision/support';
 import { assert } from '../utils/assert';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import * as convex from './convex';
@@ -116,8 +109,7 @@ export const def = /* @__PURE__ */ (() =>
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: collidePointVsBox,
-        createSupportPool: createBoxSupportPool,
-        getSupportFunction: getBoxSupportFunction,
+        setSupport: setBoxSupport,
         register: () => {
             for (const shapeDef of Object.values(shapeDefs)) {
                 if (shapeDef.category === ShapeCategory.CONVEX) {
@@ -368,19 +360,6 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 }
 function getInnerRadius(shape: BoxShape): number {
     return Math.min(shape.halfExtents[0], shape.halfExtents[1], shape.halfExtents[2]);
-}
-
-/* support pool */
-
-type BoxSupportPool = BoxSupport;
-
-function createBoxSupportPool(): BoxSupportPool {
-    return createBoxSupport();
-}
-
-function getBoxSupportFunction(pool: BoxSupportPool, shape: BoxShape, mode: SupportFunctionMode, scale: Vec3): Support {
-    setBoxSupport(pool, shape.halfExtents, shape.convexRadius, mode, scale);
-    return pool;
 }
 
 /* collide point */

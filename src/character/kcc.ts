@@ -17,21 +17,11 @@ import {
     createDefaultCollideShapeSettings,
 } from '../collision/collide-shape-vs-shape';
 import { createGjkCastShapeResult, gjkCastShape } from '../collision/gjk';
-import {
-    type AddConvexRadiusSupport,
-    createAddConvexRadiusSupport,
-    createPolygonSupport,
-    createShapeSupportPool,
-    getShapeSupportFunction,
-    type ShapeSupportPool,
-    SupportFunctionMode,
-    setAddConvexRadiusSupport,
-    setPolygonSupport,
-} from '../collision/support';
+import { createSupport, type Support, SupportFunctionMode, setPolygonSupport } from '../collision/support';
 import type { Filter } from '../filter';
 import * as query from '../query';
 import type { Shape } from '../shapes/shapes';
-import { getShapeSupportingFace, ShapeType } from '../shapes/shapes';
+import { getShapeSupportingFace, setShapeSupport, ShapeType } from '../shapes/shapes';
 import { createFace } from '../utils/face';
 import type { World } from '../world';
 
@@ -877,9 +867,8 @@ const _characterCastSettings: CastShapeSettings = /* @__PURE__ */ createDefaultC
 const _getContacts_shapePos = /* @__PURE__ */ vec3.create();
 const _getContacts_paddingOffset = /* @__PURE__ */ vec3.create();
 
-const _paddingCorrection_characterSupportPool = /* @__PURE__ */ createShapeSupportPool();
-const _paddingCorrection_polygonSupport = /* @__PURE__ */ createPolygonSupport();
-const _paddingCorrection_addConvexRadius = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _paddingCorrection_characterSupport = /* @__PURE__ */ createSupport();
+const _paddingCorrection_polygonSupport = /* @__PURE__ */ createSupport();
 const _paddingCorrection_face = /* @__PURE__ */ createFace();
 const _paddingCorrection_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 const _paddingCorrection_negativeNormal = /* @__PURE__ */ vec3.create();
@@ -1355,7 +1344,7 @@ function getContactsAtPosition(
 /**
  * Recursively corrects the fraction for character padding by unwrapping decorator shapes.
  * Accumulates transformations through decorator shape hierarchy before performing GJK cast.
- * @param supportPool shape support pool for support function creation
+ * @param characterSupport reusable Support struct, filled with the character shape at the convex leaf
  * @param shape the character shape to cast (may be decorator)
  * @param position start position (accumulated through recursion)
  * @param quaternion start rotation (accumulated through recursion)
@@ -1367,13 +1356,13 @@ function getContactsAtPosition(
  * @returns true if correction was successful
  */
 function correctFractionForCharacterPadding(
-    supportPool: ShapeSupportPool,
+    characterSupport: Support,
     shape: Shape,
     position: Vec3,
     quaternion: Quat,
     displacement: Vec3,
     scale: Vec3,
-    polygon: AddConvexRadiusSupport,
+    polygon: Support,
     inOutFraction: { value: number },
     collisionTolerance: number,
 ): boolean {
@@ -1387,7 +1376,7 @@ function correctFractionForCharacterPadding(
 
         // recurse with accumulated transform
         return correctFractionForCharacterPadding(
-            supportPool,
+            characterSupport,
             shape.shape,
             _correctFraction_tempPos,
             _correctFraction_tempQuat,
@@ -1400,7 +1389,7 @@ function correctFractionForCharacterPadding(
     }
 
     // at the convex level, perform the GJK cast
-    const characterSupport = getShapeSupportFunction(supportPool, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
+    setShapeSupport(characterSupport, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
 
     // build transform matrix from position and quaternion
     const transform = mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position);
@@ -1413,8 +1402,8 @@ function correctFractionForCharacterPadding(
         polygon,
         displacement,
         collisionTolerance,
-        characterSupport.convexRadius,
-        polygon.convexRadius,
+        characterSupport.convexRadius + characterSupport.addRadius,
+        polygon.convexRadius + polygon.addRadius,
         inOutFraction.value,
     );
 
@@ -1541,26 +1530,24 @@ function getFirstContactForSweep(
 
         // only use advanced correction if we have a face with 2+ vertices
         if (_paddingCorrection_face.numVertices >= 2) {
-            // create polygon support from face
-            setPolygonSupport(_paddingCorrection_polygonSupport, _paddingCorrection_face);
-
-            // inflate polygon by character padding
-            setAddConvexRadiusSupport(
-                _paddingCorrection_addConvexRadius,
-                character.characterPadding,
+            // create polygon support from face, inflated by the character padding
+            setPolygonSupport(
                 _paddingCorrection_polygonSupport,
+                _paddingCorrection_face.vertices,
+                _paddingCorrection_face.numVertices,
             );
+            _paddingCorrection_polygonSupport.addRadius = character.characterPadding;
 
             // use recursive function to handle decorator shapes and perform GJK cast
             _paddingCorrection_fractionWrapper.value = out.fraction + characterPaddingFraction;
             corrected = correctFractionForCharacterPadding(
-                _paddingCorrection_characterSupportPool,
+                _paddingCorrection_characterSupport,
                 character.shape,
                 _getContacts_shapePos,
                 character.quaternion,
                 displacement,
                 _paddingCorrection_scale,
-                _paddingCorrection_addConvexRadius,
+                _paddingCorrection_polygonSupport,
                 _paddingCorrection_fractionWrapper,
                 character.collisionTolerance,
             );

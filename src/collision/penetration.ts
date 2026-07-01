@@ -2,13 +2,7 @@ import { degreesToRadians, type Mat4, type Vec3, vec3 } from 'mathcat';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
-import type { Support } from './support';
-import {
-    createAddConvexRadiusSupport,
-    createTransformedSupport,
-    setAddConvexRadiusSupport,
-    setTransformedSupport,
-} from './support';
+import { getSupport, type Support } from './support';
 
 export enum PenetrationDepthStatus {
     NOT_COLLIDING,
@@ -156,8 +150,8 @@ const clearEpaSupportPoints = (points: EpaSupportPoints) => {
 const addEpaSupportPoint = (points: EpaSupportPoints, supportA: Support, supportB: Support, direction: Vec3): number => {
     /* @inline */ vec3.negate(_epa_negatedDirection, direction);
 
-    supportA.getSupport(direction, _epa_p);
-    supportB.getSupport(_epa_negatedDirection, _epa_q);
+    getSupport(_epa_p, supportA, direction);
+    getSupport(_epa_q, supportB, _epa_negatedDirection);
 
     // store new point
     const idx = points.y.size;
@@ -208,9 +202,9 @@ const ONE_MINUS_COS_120_DEG = 1 - COS_120_DEG;
 
 /**
  * EPA penetration depth step.
- * This function expects shapes that INCLUDE their convex radius.
- * The caller should wrap base shapes with AddConvexRadiusSupport before calling,
- * typically in the EPA fallback path. This matches Jolt's EPAPenetrationDepth.h pattern.
+ * This function expects supports that INCLUDE their convex radius. The caller fills the support
+ * structs in INCLUDE mode and folds any extra separation onto `addRadius` before calling, typically
+ * in the EPA fallback path. This matches Jolt's EPAPenetrationDepth.h pattern.
  */
 export function penetrationDepthStepEPA(
     out: PenetrationDepth,
@@ -499,11 +493,11 @@ export function penetrationDepthStepEPA(
             _epa_negatedNormal[0] = -triangle.normalX;
             _epa_negatedNormal[1] = -triangle.normalY;
             _epa_negatedNormal[2] = -triangle.normalZ;
-            supportAIncludingRadius.getSupport(_epa_negatedNormal, _epa_p2);
+            getSupport(_epa_p2, supportAIncludingRadius, _epa_negatedNormal);
             _epa_triangleNormal[0] = triangle.normalX;
             _epa_triangleNormal[1] = triangle.normalY;
             _epa_triangleNormal[2] = triangle.normalZ;
-            supportBIncludingRadius.getSupport(_epa_triangleNormal, _epa_q2);
+            getSupport(_epa_q2, supportBIncludingRadius, _epa_triangleNormal);
             const w2x = _epa_p2[0] - _epa_q2[0];
             const w2y = _epa_p2[1] - _epa_q2[1];
             const w2z = _epa_p2[2] - _epa_q2[2];
@@ -623,9 +617,6 @@ export function penetrationDepthStepEPA(
 }
 
 const _castShape_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
-const _castShape_addRadiusA = /* @__PURE__ */ createAddConvexRadiusSupport();
-const _castShape_addRadiusB = /* @__PURE__ */ createAddConvexRadiusSupport();
-const _castShape_transformedA = /* @__PURE__ */ createTransformedSupport();
 
 export function penetrationCastShape(
     out: GjkCastShapeResult,
@@ -671,16 +662,16 @@ export function penetrationCastShape(
     const shouldDoEPA = returnDeepestPoint && out.lambda === 0.0 && (combinedRadius === 0.0 || contactNormalInvalid);
 
     if (shouldDoEPA) {
-        // if we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point
-        setAddConvexRadiusSupport(_castShape_addRadiusA, convexRadiusA, shapeASupport);
-        setAddConvexRadiusSupport(_castShape_addRadiusB, convexRadiusB, shapeBSupport);
-        setTransformedSupport(_castShape_transformedA, transformAtoB, _castShape_addRadiusA);
+        // if we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point.
+        // fold the convex radii onto the support structs; A's A→B transform was already folded by gjkCastShape above.
+        shapeASupport.addRadius = convexRadiusA;
+        shapeBSupport.addRadius = convexRadiusB;
 
         if (
             !penetrationDepthStepEPA(
                 _castShape_penetrationDepth,
-                _castShape_transformedA,
-                _castShape_addRadiusB,
+                shapeASupport,
+                shapeBSupport,
                 penetrationTolerance,
                 out.simplex,
             )

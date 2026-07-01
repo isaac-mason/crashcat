@@ -35,26 +35,3 @@ export declare function create(o: CapsuleShapeSettings): CapsuleShape;
 /** updates a capsule shape after it's properties have changed */
 export declare function update(shape: CapsuleShape): void;
 export declare const def: import("./shapes").ShapeDef<CapsuleShape>;
-/**
- * Capsule support for EXCLUDE_CONVEX_RADIUS mode.
- * Used by GJK - returns line segment endpoints, stores radius in convexRadius.
- */
-export type CapsuleNoConvexSupport = {
-    halfHeightOfCylinder: Vec3;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-export declare function createCapsuleNoConvexSupport(): CapsuleNoConvexSupport;
-export declare function setCapsuleNoConvexSupport(out: CapsuleNoConvexSupport, halfHeightOfCylinder: number, radius: number, scale: Vec3): void;
-/**
- * Capsule support for INCLUDE_CONVEX_RADIUS mode.
- * Used by EPA and raycasting - returns surface points, convexRadius is 0.
- */
-export type CapsuleWithConvexSupport = {
-    halfHeightOfCylinder: Vec3;
-    radius: number;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-export declare function createCapsuleWithConvexSupport(): CapsuleWithConvexSupport;
-export declare function setCapsuleWithConvexSupport(out: CapsuleWithConvexSupport, halfHeightOfCylinder: number, radius: number, scale: Vec3): void;

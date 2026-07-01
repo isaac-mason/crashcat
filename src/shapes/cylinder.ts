@@ -1,6 +1,6 @@
 import { type Box3, box3, type Vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
-import { DEFAULT_CONVEX_RADIUS, type Support, SupportFunctionMode } from '../collision/support';
+import { DEFAULT_CONVEX_RADIUS, setCylinderSupport } from '../collision/support';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import * as convex from './convex';
 import {
@@ -125,8 +125,7 @@ export const def = /* @__PURE__ */ (() =>
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        createSupportPool: createCylinderSupportPool,
-        getSupportFunction: getCylinderSupportFunction,
+        setSupport: setCylinderSupport,
         register: () => {
             // cylinder vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
@@ -290,141 +289,3 @@ function getInnerRadius(shape: CylinderShape): number {
     return Math.min(shape.halfHeight, shape.radius);
 }
 
-/* support functions */
-
-/**
- * Cylinder support for EXCLUDE_CONVEX_RADIUS mode.
- * Used by GJK - returns cylinder surface points, convexRadius stored separately.
- */
-export type CylinderNoConvexSupport = {
-    halfHeight: number; // scaled_halfHeight - scaled_convexRadius
-    radius: number; // scaled_radius - scaled_convexRadius
-    convexRadius: number; // scaled_convexRadius
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function cylinderNoConvexGetSupport(this: CylinderNoConvexSupport, direction: Vec3, out: Vec3): void {
-    // Get horizontal length (XZ plane projection)
-    const horizontalLen = Math.sqrt(direction[0] * direction[0] + direction[2] * direction[2]);
-
-    if (horizontalLen > 0) {
-        // Normalize XZ component and scale to radius
-        const scale = this.radius / horizontalLen;
-        out[0] = direction[0] * scale;
-        out[2] = direction[2] * scale;
-    } else {
-        // Purely vertical direction - point on central axis
-        out[0] = 0;
-        out[2] = 0;
-    }
-
-    // Y component: ±halfHeight based on sign of direction Y
-    out[1] = direction[1] >= 0 ? this.halfHeight : -this.halfHeight;
-}
-
-export function createCylinderNoConvexSupport(): CylinderNoConvexSupport {
-    return {
-        halfHeight: 0,
-        radius: 0,
-        convexRadius: 0,
-        getSupport: cylinderNoConvexGetSupport,
-    };
-}
-
-export function setCylinderNoConvexSupport(
-    out: CylinderNoConvexSupport,
-    halfHeight: number,
-    radius: number,
-    convexRadius: number,
-    scale: Vec3,
-): void {
-    // Uniform scale - use absolute value of first component (X)
-    const absScale = Math.abs(scale[0]);
-    const scaledHalfHeight = absScale * halfHeight;
-    const scaledRadius = absScale * radius;
-    const scaledConvexRadius = absScale * convexRadius;
-
-    // Subtract convex radius from dimensions
-    out.halfHeight = scaledHalfHeight - scaledConvexRadius;
-    out.radius = scaledRadius - scaledConvexRadius;
-    out.convexRadius = scaledConvexRadius;
-}
-
-/**
- * Cylinder support for INCLUDE_CONVEX_RADIUS mode.
- * Used by EPA and raycasting - returns surface points, convexRadius is 0.
- */
-export type CylinderWithConvexSupport = {
-    halfHeight: number; // scaled_halfHeight (full dimension)
-    radius: number; // scaled_radius (full dimension)
-    convexRadius: number; // always 0 (included in geometry)
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function cylinderWithConvexGetSupport(this: CylinderWithConvexSupport, direction: Vec3, out: Vec3): void {
-    // Same logic as NoConvex mode, but uses full dimensions
-    const horizontalLen = Math.sqrt(direction[0] * direction[0] + direction[2] * direction[2]);
-
-    if (horizontalLen > 0) {
-        const scale = this.radius / horizontalLen;
-        out[0] = direction[0] * scale;
-        out[2] = direction[2] * scale;
-    } else {
-        out[0] = 0;
-        out[2] = 0;
-    }
-
-    out[1] = direction[1] >= 0 ? this.halfHeight : -this.halfHeight;
-}
-
-export function createCylinderWithConvexSupport(): CylinderWithConvexSupport {
-    return {
-        halfHeight: 0,
-        radius: 0,
-        convexRadius: 0,
-        getSupport: cylinderWithConvexGetSupport,
-    };
-}
-
-export function setCylinderWithConvexSupport(
-    out: CylinderWithConvexSupport,
-    halfHeight: number,
-    radius: number,
-    _convexRadius: number,
-    scale: Vec3,
-): void {
-    const absScale = Math.abs(scale[0]);
-
-    // Use full dimensions, convexRadius is 0
-    out.halfHeight = absScale * halfHeight;
-    out.radius = absScale * radius;
-    out.convexRadius = 0;
-}
-
-// Support pool
-type CylinderSupportPool = {
-    noConvex: CylinderNoConvexSupport;
-    withConvex: CylinderWithConvexSupport;
-};
-
-function createCylinderSupportPool(): CylinderSupportPool {
-    return {
-        noConvex: createCylinderNoConvexSupport(),
-        withConvex: createCylinderWithConvexSupport(),
-    };
-}
-
-function getCylinderSupportFunction(
-    pool: CylinderSupportPool,
-    shape: CylinderShape,
-    mode: SupportFunctionMode,
-    scale: Vec3,
-): Support {
-    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || mode === SupportFunctionMode.DEFAULT) {
-        setCylinderWithConvexSupport(pool.withConvex, shape.halfHeight, shape.radius, shape.convexRadius, scale);
-        return pool.withConvex;
-    } else {
-        setCylinderNoConvexSupport(pool.noConvex, shape.halfHeight, shape.radius, shape.convexRadius, scale);
-        return pool.noConvex;
-    }
-}

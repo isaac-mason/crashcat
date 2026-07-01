@@ -10,7 +10,7 @@ import {
     type CollideShapeSettings,
     createCollideShapeHit,
 } from '../collision/collide-shape-vs-shape';
-import { type Support, SupportFunctionMode } from '../collision/support';
+import { setSphereSupport } from '../collision/support';
 import * as convex from './convex';
 import type { Shape } from './shapes';
 import {
@@ -100,8 +100,7 @@ export const def = /* @__PURE__ */ (() =>
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: collidePointVsSphere,
-        createSupportPool: createSphereSupportPool,
-        getSupportFunction: getSphereSupportFunction,
+        setSupport: setSphereSupport,
         register: () => {
             // sphere vs convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
@@ -171,99 +170,6 @@ function getInnerRadius(shape: SphereShape): number {
     return shape.radius;
 }
 
-/**
- * Sphere support for EXCLUDE_CONVEX_RADIUS mode.
- * Used by GJK - returns zero vector, stores sphere radius in convexRadius.
- */
-export type SphereNoConvexSupport = {
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function sphereNoConvexGetSupport(this: SphereNoConvexSupport, _direction: Vec3, out: Vec3): void {
-    // always return zero - sphere is represented entirely by convexRadius
-    vec3.zero(out);
-}
-
-export function createSphereNoConvexSupport(): SphereNoConvexSupport {
-    return {
-        convexRadius: 0,
-        getSupport: sphereNoConvexGetSupport,
-    };
-}
-
-export function setSphereNoConvexSupport(out: SphereNoConvexSupport, radius: number, scale: Vec3): void {
-    // uniform scale only - take x component
-    const absScale = Math.abs(scale[0]);
-    out.convexRadius = radius * absScale;
-}
-
-/**
- * Sphere support for INCLUDE_CONVEX_RADIUS mode.
- * Used by raycasting and epa - returns surface points, convexRadius is 0.
- */
-export type SphereWithConvexSupport = {
-    radius: number;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function sphereWithConvexGetSupport(this: SphereWithConvexSupport, direction: Vec3, out: Vec3): void {
-    const dx = direction[0];
-    const dy = direction[1];
-    const dz = direction[2];
-    const lengthSq = dx * dx + dy * dy + dz * dz;
-
-    if (lengthSq > 0) {
-        // return point on sphere surface
-        const scale = this.radius / Math.sqrt(lengthSq);
-        out[0] = dx * scale;
-        out[1] = dy * scale;
-        out[2] = dz * scale;
-    } else {
-        out[0] = 0;
-        out[1] = 0;
-        out[2] = 0;
-    }
-}
-
-export function createSphereWithConvexSupport(): SphereWithConvexSupport {
-    return {
-        radius: 0,
-        convexRadius: 0,
-        getSupport: sphereWithConvexGetSupport,
-    };
-}
-
-export function setSphereWithConvexSupport(out: SphereWithConvexSupport, radius: number, scale: Vec3): void {
-    // uniform scale only - take x component
-    const absScale = Math.abs(scale[0]);
-    out.radius = radius * absScale;
-    out.convexRadius = 0;
-}
-
-type SphereSupportPool = {
-    noConvex: SphereNoConvexSupport;
-    withConvex: SphereWithConvexSupport;
-};
-
-function createSphereSupportPool(): SphereSupportPool {
-    return {
-        noConvex: createSphereNoConvexSupport(),
-        withConvex: createSphereWithConvexSupport(),
-    };
-}
-
-function getSphereSupportFunction(pool: SphereSupportPool, shape: SphereShape, mode: SupportFunctionMode, scale: Vec3): Support {
-    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
-        setSphereWithConvexSupport(pool.withConvex, shape.radius, scale);
-        return pool.withConvex;
-    } else {
-        // EXCLUDE_CONVEX_RADIUS or DEFAULT
-        setSphereNoConvexSupport(pool.noConvex, shape.radius, scale);
-        return pool.noConvex;
-    }
-}
 
 /* collide point */
 

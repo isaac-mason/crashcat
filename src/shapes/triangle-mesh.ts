@@ -37,17 +37,7 @@ import {
 } from '../collision/penetration';
 import { createSimplex } from '../collision/simplex';
 import { FEATURE_TO_ACTIVE_EDGES, rayCylinder, raySphereFromOrigin } from '../collision/sphere-triangle';
-import {
-    createAddConvexRadiusSupport,
-    createShapeSupportPool,
-    createTransformedSupport,
-    createTriangleSupport,
-    getShapeSupportFunction,
-    SupportFunctionMode,
-    setAddConvexRadiusSupport,
-    setTransformedSupport,
-    setTriangleSupport,
-} from '../collision/support';
+import { createSupport, SupportFunctionMode, setTriangleSupport } from '../collision/support';
 import { createClosestPointOnTriangleResult, getClosestPointOnTriangle } from '../collision/triangle';
 import { assert } from '../utils/assert';
 import * as bvhStack from '../utils/bvh-stack';
@@ -63,6 +53,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    setShapeSupport,
     shapeDefs,
 } from './shapes';
 import type { SphereShape } from './sphere';
@@ -632,8 +623,7 @@ function collidePointVsTriangleMesh(
 
 const _castConvexVsTriangleMesh_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 const _castConvexVsTriangleMesh_displacementInB = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_transformedSupportA = /* @__PURE__ */ createTransformedSupport();
-const _castConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createTriangleSupport();
+const _castConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createSupport();
 const _castConvexVsTriangleMesh_sweptAABB: Box3 = /* @__PURE__ */ box3.create();
 
 const _castConvexVsTriangleMesh_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
@@ -682,7 +672,7 @@ const _castConvexVsTriangleMesh_triExpandedBounds = /* @__PURE__ */ box3.create(
 
 const _castConvexVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
-const _castConvexVsTriangleMesh_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
+const _castConvexVsTriangleMesh_supportA = /* @__PURE__ */ createSupport();
 
 function castConvexVsTriangleMesh(
     collector: CastShapeCollector,
@@ -772,14 +762,9 @@ function castConvexVsTriangleMesh(
         : SupportFunctionMode.DEFAULT;
 
     // get transformed support function for convex shape
-    // castTransform already contains A's transform in B's space
-    const supportA = getShapeSupportFunction(
-        _castConvexVsTriangleMesh_supportPoolA,
-        shapeA,
-        supportMode,
-        _castConvexVsTriangleMesh_scaleA,
-    );
-    setTransformedSupport(_castConvexVsTriangleMesh_transformedSupportA, castTransform, supportA);
+    // castTransform (passed to penetrationCastShape) folds A into B's space internally
+    const supportA = _castConvexVsTriangleMesh_supportA;
+    setShapeSupport(supportA, shapeA, supportMode, _castConvexVsTriangleMesh_scaleA);
 
     // determine if shape is inside out or not
     const scaleSign = vec3.isScaleInsideOut(_castConvexVsTriangleMesh_scaleB) ? -1 : 1;
@@ -1157,9 +1142,10 @@ const _collideConvexVsTriangleMesh_temp_faceDirA = /* @__PURE__ */ vec3.create()
 const _collideConvexVsTriangleMesh_simplex = /* @__PURE__ */ createSimplex();
 const _collideConvexVsTriangleMesh_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
 
-const _collideConvexVsTriangleMesh_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
+const _collideConvexVsTriangleMesh_supportA = /* @__PURE__ */ createSupport();
 
-const _collideConvexVsTriangleMesh_addRadiusSupport = /* @__PURE__ */ createAddConvexRadiusSupport();
+// separate struct for the EPA-inflated A, so `supportA` stays EXCLUDE across the BVH triangle loop
+const _collideConvexVsTriangleMesh_supportAWithRadius = /* @__PURE__ */ createSupport();
 
 const _collideConvexVsTriangleMesh_penetrationAxis = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_vectorAB = /* @__PURE__ */ vec3.create();
@@ -1215,7 +1201,7 @@ const _collideConvexVsTriangleMesh_posAInB = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_quatAInB = /* @__PURE__ */ quat.create();
 const _collideConvexVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 
-const _collideConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createTriangleSupport();
+const _collideConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createSupport();
 
 const _collideConvexVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
 const _collideConvexVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
@@ -1343,13 +1329,9 @@ function collideConvexVsTriangleMesh(
     // determine if mesh is inside-out
     const scaleSign = vec3.isScaleInsideOut(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
-    // get support function for shape A
-    const supportA = getShapeSupportFunction(
-        _collideConvexVsTriangleMesh_supportPoolA,
-        shapeA,
-        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
-        _collideConvexVsTriangleMesh_scaleA,
-    );
+    // get support function for shape A (shrunk core; filled once, reused across the triangle loop)
+    const supportA = _collideConvexVsTriangleMesh_supportA;
+    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
 
     // bvh traversal
     bvhStack.reset(_collideConvexVsTriangleMesh_stack);
@@ -1506,26 +1488,21 @@ function collideConvexVsTriangleMesh(
                     // clamp max separation distance to avoid excessive inflation
                     maxSeparationDistance = Math.min(maxSeparationDistance, 1.0);
 
-                    // get support function including convex radius for EPA
-                    const supportAWithRadius = getShapeSupportFunction(
-                        _collideConvexVsTriangleMesh_supportPoolA,
+                    // fill the inflated A (include convex radius + separation distance) for EPA
+                    const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
+                    setShapeSupport(
+                        supportAWithRadius,
                         shapeA,
                         SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
                         _collideConvexVsTriangleMesh_scaleA,
                     );
-
-                    // add separation distance
-                    setAddConvexRadiusSupport(
-                        _collideConvexVsTriangleMesh_addRadiusSupport,
-                        maxSeparationDistance,
-                        supportAWithRadius,
-                    );
+                    supportAWithRadius.addRadius = maxSeparationDistance;
 
                     // perform EPA step
                     if (
                         !penetrationDepthStepEPA(
                             _collideConvexVsTriangleMesh_penetrationDepth,
-                            _collideConvexVsTriangleMesh_addRadiusSupport,
+                            supportAWithRadius,
                             _collideConvexVsTriangleMesh_triangleSupport,
                             settings.penetrationTolerance,
                             _collideConvexVsTriangleMesh_simplex,
