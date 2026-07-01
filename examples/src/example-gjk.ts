@@ -233,13 +233,14 @@ function createSupportAndMesh(type: ShapeOption, supportPool: ShapeSupportPool):
                 for (let i = 1; i < faceCount - 1; i++) {
                     const baseIndex = positions.length / 3;
 
-                    const v0 = hullShape.points[v0Index].position;
-                    const v1 = hullShape.points[hullShape.vertexIndices[faceStart + i]].position;
-                    const v2 = hullShape.points[hullShape.vertexIndices[faceStart + i + 1]].position;
+                    const pp = hullShape.pointPositions;
+                    const i0 = v0Index * 3;
+                    const i1 = hullShape.vertexIndices[faceStart + i] * 3;
+                    const i2 = hullShape.vertexIndices[faceStart + i + 1] * 3;
 
-                    positions.push(v0[0], v0[1], v0[2]);
-                    positions.push(v1[0], v1[1], v1[2]);
-                    positions.push(v2[0], v2[1], v2[2]);
+                    positions.push(pp[i0], pp[i0 + 1], pp[i0 + 2]);
+                    positions.push(pp[i1], pp[i1 + 1], pp[i1 + 2]);
+                    positions.push(pp[i2], pp[i2 + 1], pp[i2 + 2]);
 
                     indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
                 }

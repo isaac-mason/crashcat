@@ -493,8 +493,9 @@ function drawShape(
                 for (let i = 0; i < n; i++) {
                     const ia = shape.vertexIndices[face.firstVertex + i];
                     const ib = shape.vertexIndices[face.firstVertex + ((i + 1) % n)];
-                    const pa = shape.points[ia].position;
-                    const pb = shape.points[ib].position;
+                    const pp = shape.pointPositions;
+                    const pa = vec3.fromValues(pp[ia * 3], pp[ia * 3 + 1], pp[ia * 3 + 2]);
+                    const pb = vec3.fromValues(pp[ib * 3], pp[ib * 3 + 1], pp[ib * 3 + 2]);
                     const wa = vec3.create();
                     const wb = vec3.create();
                     transformPoint(wa, pa, scale, [px, py, pz], q);

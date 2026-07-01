@@ -1,4 +1,4 @@
-import { type Box3, box3, type Mat4, mat4, plane3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { DEFAULT_CONVEX_RADIUS, type Support, SupportFunctionMode } from '../collision/support';
@@ -37,8 +37,14 @@ export type ConvexHullShapeSettings = {
 /** a convex hull shape */
 export type ConvexHullShape = {
     type: ShapeType.CONVEX_HULL;
-    /** points of the convex hull */
-    points: ConvexHullPoint[];
+    /** flat vertex positions `[x, y, z, ...]`, 3 per point */
+    pointPositions: number[];
+    /** number of neighbouring faces per point (1..3), 1 per point (used by the convex-radius shrink) */
+    pointNumFaces: number[];
+    /** up to 3 neighbouring face indices per point `[f0, f1, f2, ...]` (-1 = unused), 3 per point */
+    pointFaces: number[];
+    /** number of hull vertices (`pointPositions.length / 3`) */
+    numPoints: number;
     /** faces of the convex hull */
     faces: ConvexHullFace[];
     /** plane equations for each face (1-to-1 with faces) */
@@ -59,15 +65,6 @@ export type ConvexHullShape = {
     volume: number;
     /** inertia tensor (column-major mat4) */
     inertia: Mat4;
-};
-
-export type ConvexHullPoint = {
-    /** position of the vertex */
-    position: Vec3;
-    /** number of faces in the face array */
-    numFaces: number;
-    /** indices of 3 neighboring faces with the biggest difference in normal (used to shift vertices for convex radius) */
-    faces: [number, number, number];
 };
 
 export type ConvexHullFace = {
@@ -204,9 +201,12 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
     mat4.multiplyScalar(inertia, inertia, trace);
     mat4.subtract(inertia, inertia, covarianceMatrix);
 
-    // convert polygons from builder to runtime representation
+    // convert polygons from the builder into the shape's flat vertex arrays
     const vertexMap = new Map<number, number>();
-    const points: ConvexHullPoint[] = [];
+    const pointPositions: number[] = []; // [x,y,z, ...] 3 per point
+    const pointNumFaces: number[] = []; // 1 per point (1..3)
+    const pointFaces: number[] = []; // [f0,f1,f2, ...] 3 per point, -1 = unused
+    let numPoints = 0;
     const hullFaces: ConvexHullFace[] = [];
     const planes: ConvexHullPlane[] = [];
     const vertexIndices: number[] = [];
@@ -225,18 +225,16 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 
             if (newIdx === undefined) {
                 // store point in original shape space (not relative to center of mass)
-                const p = vec3.clone(inputPoints[originalIdx]);
+                const src = inputPoints[originalIdx];
 
                 // update local bounds
-                box3.expandByPoint(localBounds, localBounds, p);
+                box3.expandByPoint(localBounds, localBounds, src);
 
-                // add to point list
-                newIdx = points.length;
-                points.push({
-                    position: p,
-                    numFaces: 0,
-                    faces: [-1, -1, -1],
-                });
+                // append vertex to the packed arrays (numFaces/faces filled in below)
+                newIdx = numPoints++;
+                pointPositions.push(src[0], src[1], src[2]);
+                pointNumFaces.push(0);
+                pointFaces.push(-1, -1, -1);
                 vertexMap.set(originalIdx, newIdx);
             }
 
@@ -259,14 +257,14 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
     }
 
     // validate number of points
-    if (points.length > MAX_POINTS_IN_HULL) {
+    if (numPoints > MAX_POINTS_IN_HULL) {
         throw new Error(
-            `Too many points in hull (${points.length}), max allowed ${MAX_POINTS_IN_HULL}, try increasing hullTolerance`,
+            `Too many points in hull (${numPoints}), max allowed ${MAX_POINTS_IN_HULL}, try increasing hullTolerance`,
         );
     }
 
     // for each point, find neighboring faces for convex radius support
-    for (let p = 0; p < points.length; p++) {
+    for (let p = 0; p < numPoints; p++) {
         const neighboringFaces: number[] = [];
 
         for (let f = 0; f < hullFaces.length; f++) {
@@ -318,16 +316,22 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         }
 
         // select best faces
-        const point = points[p];
+        const fb = p * 3;
         if (best3[0] !== -1) {
-            point.numFaces = 3;
-            point.faces = [best3[0], best3[1], best3[2]];
+            pointNumFaces[p] = 3;
+            pointFaces[fb] = best3[0];
+            pointFaces[fb + 1] = best3[1];
+            pointFaces[fb + 2] = best3[2];
         } else if (best2[0] !== -1) {
-            point.numFaces = 2;
-            point.faces = [best2[0], best2[1], -1];
+            pointNumFaces[p] = 2;
+            pointFaces[fb] = best2[0];
+            pointFaces[fb + 1] = best2[1];
+            pointFaces[fb + 2] = -1;
         } else {
-            point.numFaces = 1;
-            point.faces = [neighboringFaces[0], -1, -1];
+            pointNumFaces[p] = 1;
+            pointFaces[fb] = neighboringFaces[0];
+            pointFaces[fb + 1] = -1;
+            pointFaces[fb + 2] = -1;
         }
     }
 
@@ -341,9 +345,10 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         // for each plane, find the furthest point behind it (hull thickness in that direction)
         for (const plane of planes) {
             let maxDist = 0;
-            for (const point of points) {
+            const [nx, ny, nz] = plane.normal;
+            for (let i = 0; i < pointPositions.length; i += 3) {
                 // point is always behind plane (hull is convex), so negate signed distance
-                const dist = -(vec3.dot(plane.normal, point.position) + plane.constant);
+                const dist = -(nx * pointPositions[i] + ny * pointPositions[i + 1] + nz * pointPositions[i + 2] + plane.constant);
                 if (dist > maxDist) {
                     maxDist = dist;
                 }
@@ -359,19 +364,21 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
     if (finalConvexRadius > 0) {
         const maxErrorConvexRadius = o.maxErrorConvexRadius ?? 0.05;
 
-        for (const point of points) {
+        for (let p = 0; p < numPoints; p++) {
+            const numFaces = pointNumFaces[p];
             // skip if only 1 face (no sharp edge, shifting back is simple)
-            if (point.numFaces === 1) continue;
+            if (numFaces === 1) continue;
 
+            const fb = p * 3;
             // get the 3 planes that define this vertex
-            const p1 = planes[point.faces[0]];
-            const p2 = planes[point.faces[1]];
+            const p1 = planes[pointFaces[fb]];
+            const p2 = planes[pointFaces[fb + 1]];
             let p3: ConvexHullPlane;
             let offsetMask: Vec3;
 
-            if (point.numFaces === 3) {
+            if (numFaces === 3) {
                 // all 3 neighboring planes are offset by convex radius
-                p3 = planes[point.faces[2]];
+                p3 = planes[pointFaces[fb + 2]];
                 offsetMask = [1, 1, 1];
             } else {
                 // only 2 planes, create perpendicular plane through vertex
@@ -379,7 +386,9 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
                 const n2 = p2.normal;
                 vec3.cross(_perpendicularNormal, n1, n2);
                 vec3.normalize(_perpendicularNormal, _perpendicularNormal);
-                const perpConstant = -vec3.dot(_perpendicularNormal, point.position);
+                const perpConstant = -(_perpendicularNormal[0] * pointPositions[fb] +
+                    _perpendicularNormal[1] * pointPositions[fb + 1] +
+                    _perpendicularNormal[2] * pointPositions[fb + 2]);
                 p3 = { normal: _perpendicularNormal, constant: perpConstant };
                 offsetMask = [1, 1, 0]; // third plane not offset
             }
@@ -429,7 +438,10 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 
     const shape: ConvexHullShape = {
         type: ShapeType.CONVEX_HULL,
-        points,
+        pointPositions,
+        pointNumFaces,
+        pointFaces,
+        numPoints,
         faces: hullFaces,
         planes,
         vertexIndices,
@@ -544,22 +556,22 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
         // flip winding of supporting face
         for (let i = numVertices - 1; i >= 0; i -= deltaVtx) {
             const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
-            const vertex = shape.points[vtxIdx].position;
+            const pbase = vtxIdx * 3;
             const base = face.numVertices * 3;
-            face.vertices[base] = vertex[0];
-            face.vertices[base + 1] = vertex[1];
-            face.vertices[base + 2] = vertex[2];
+            face.vertices[base] = shape.pointPositions[pbase];
+            face.vertices[base + 1] = shape.pointPositions[pbase + 1];
+            face.vertices[base + 2] = shape.pointPositions[pbase + 2];
             face.numVertices++;
         }
     } else {
         // normal winding of supporting face
         for (let i = 0; i < numVertices; i += deltaVtx) {
             const vtxIdx = shape.vertexIndices[firstVtxIdx + i];
-            const vertex = shape.points[vtxIdx].position;
+            const pbase = vtxIdx * 3;
             const base = face.numVertices * 3;
-            face.vertices[base] = vertex[0];
-            face.vertices[base + 1] = vertex[1];
-            face.vertices[base + 2] = vertex[2];
+            face.vertices[base] = shape.pointPositions[pbase];
+            face.vertices[base + 1] = shape.pointPositions[pbase + 1];
+            face.vertices[base + 2] = shape.pointPositions[pbase + 2];
             face.numVertices++;
         }
     }
@@ -592,29 +604,26 @@ export type ConvexHullWithConvexSupport = {
 
 function convexHullWithConvexGetSupport(this: ConvexHullWithConvexSupport, direction: Vec3, out: Vec3): void {
     // find point with highest projection on direction
+    const p = this.shape.pointPositions;
+    const dx = direction[0];
+    const dy = direction[1];
+    const dz = direction[2];
     let bestDot = -Infinity;
-    let bestPoint: Vec3 | null = null;
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = 0;
 
-    for (const point of this.shape.points) {
-        // const dot = vec3.dot(point.position, direction);
-        const dot = point.position[0] * direction[0] + point.position[1] * direction[1] + point.position[2] * direction[2];
-
+    for (let i = 0, L = p.length; i < L; i += 3) {
+        const x = p[i];
+        const y = p[i + 1];
+        const z = p[i + 2];
+        const dot = x * dx + y * dy + z * dz;
         if (dot > bestDot) {
             bestDot = dot;
-            bestPoint = point.position;
+            out[0] = x;
+            out[1] = y;
+            out[2] = z;
         }
-    }
-
-    if (bestPoint) {
-        // vec3.copy(out, bestPoint);
-        out[0] = bestPoint[0];
-        out[1] = bestPoint[1];
-        out[2] = bestPoint[2];
-    } else {
-        // vec3.zero(out);
-        out[0] = 0;
-        out[1] = 0;
-        out[2] = 0;
     }
 }
 
@@ -644,19 +653,24 @@ export type ConvexHullWithConvexSupportScaled = {
 };
 
 function convexHullWithConvexScaledGetSupport(this: ConvexHullWithConvexSupportScaled, direction: Vec3, out: Vec3): void {
-    // Find point with highest projection on direction
+    // find point with highest projection on direction, scaling each vertex on the fly
+    const p = this.shape.pointPositions;
+    const sx = this.scale[0];
+    const sy = this.scale[1];
+    const sz = this.scale[2];
+    const dx = direction[0];
+    const dy = direction[1];
+    const dz = direction[2];
     let bestDot = -Infinity;
     out[0] = 0;
     out[1] = 0;
     out[2] = 0;
 
-    for (const point of this.shape.points) {
-        // Apply scale per-vertex
-        const scaledX = point.position[0] * this.scale[0];
-        const scaledY = point.position[1] * this.scale[1];
-        const scaledZ = point.position[2] * this.scale[2];
-
-        const dot = scaledX * direction[0] + scaledY * direction[1] + scaledZ * direction[2];
+    for (let i = 0, L = p.length; i < L; i += 3) {
+        const scaledX = p[i] * sx;
+        const scaledY = p[i + 1] * sy;
+        const scaledZ = p[i + 2] * sz;
+        const dot = scaledX * dx + scaledY * dy + scaledZ * dz;
         if (dot > bestDot) {
             bestDot = dot;
             out[0] = scaledX;
@@ -698,18 +712,21 @@ export type ConvexHullNoConvexSupport = {
 };
 
 function convexHullNoConvexGetSupport(this: ConvexHullNoConvexSupport, direction: Vec3, out: Vec3): void {
-    // Find point with highest projection on direction
+    // find point with highest projection on direction
+    const p = this.points;
+    const dx = direction[0];
+    const dy = direction[1];
+    const dz = direction[2];
     let bestDot = -Infinity;
     out[0] = 0;
     out[1] = 0;
     out[2] = 0;
 
-    for (let i = 0; i < this.numPoints; i++) {
-        const x = this.points[i * 3 + 0];
-        const y = this.points[i * 3 + 1];
-        const z = this.points[i * 3 + 2];
-        const dot = x * direction[0] + y * direction[1] + z * direction[2];
-
+    for (let i = 0, L = this.numPoints * 3; i < L; i += 3) {
+        const x = p[i];
+        const y = p[i + 1];
+        const z = p[i + 2];
+        const dot = x * dx + y * dy + z * dz;
         if (dot > bestDot) {
             bestDot = dot;
             out[0] = x;
@@ -728,66 +745,118 @@ export function createConvexHullNoConvexSupport(): ConvexHullNoConvexSupport {
     };
 }
 
-const _convexHullNoConvex_p1 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvex_p2 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvex_p3 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvex_newPoint = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvex_perpNormal = /* @__PURE__ */ vec3.create();
-
-export function setConvexHullNoConvexSupport(out: ConvexHullNoConvexSupport, shape: ConvexHullShape): void {
+/**
+ * Compute the convex-radius-shrunk hull vertices (unscaled) into `dst` as a flat [x,y,z,...] array.
+ * Each neighbouring face plane is offset inward by the convex radius (constant += r) and the up-to-3
+ * planes are intersected (Cramer's rule). For a 2-face vertex the third plane is perpendicular to the
+ * first two through the vertex; its `n1 × n2` normal is left unnormalized (the intersection is
+ * invariant to per-plane scale).
+ */
+function computeShrunkHullPoints(shape: ConvexHullShape, dst: number[]): void {
     const convexRadius = shape.convexRadius;
-    const numPoints = shape.points.length;
+    const numPoints = shape.numPoints;
+    const positions = shape.pointPositions;
+    const numFacesArr = shape.pointNumFaces;
+    const facesArr = shape.pointFaces;
+    const planes = shape.planes;
 
-    // extend array only if needed
     const requiredLength = numPoints * 3;
-    while (out.points.length < requiredLength) {
-        out.points.push(0);
+    while (dst.length < requiredLength) {
+        dst.push(0);
     }
-    out.numPoints = numPoints;
-    out.convexRadius = convexRadius;
 
-    let writeIndex = 0;
+    let w = 0;
+    for (let pi = 0; pi < numPoints; pi++) {
+        const pb = pi * 3;
+        const px = positions[pb];
+        const py = positions[pb + 1];
+        const pz = positions[pb + 2];
+        const numFaces = numFacesArr[pi];
 
-    for (const point of shape.points) {
-        let newPoint: Vec3;
+        // first neighbouring face plane (normal is unit; offset inward → constant + r)
+        const plane1 = planes[facesArr[pb]];
+        const nrm1 = plane1.normal;
+        const n1x = nrm1[0];
+        const n1y = nrm1[1];
+        const n1z = nrm1[2];
 
-        if (point.numFaces === 1) {
-            // simple case: shift back by convex radius using the one plane
-            const plane = shape.planes[point.faces[0]];
-            newPoint = _convexHullNoConvex_newPoint;
-            vec3.scaleAndAdd(newPoint, point.position, plane.normal, -convexRadius);
+        let rx: number;
+        let ry: number;
+        let rz: number;
+
+        if (numFaces === 1) {
+            // simple case: shift back along the single plane normal
+            rx = px - n1x * convexRadius;
+            ry = py - n1y * convexRadius;
+            rz = pz - n1z * convexRadius;
         } else {
-            // get first two planes and offset inwards by convex radius
-            plane3.fromNormalAndPoint(_convexHullNoConvex_p1, shape.planes[point.faces[0]].normal, point.position);
-            plane3.offset(_convexHullNoConvex_p1, _convexHullNoConvex_p1, -convexRadius);
+            const plane2 = planes[facesArr[pb + 1]];
+            const nrm2 = plane2.normal;
+            const n2x = nrm2[0];
+            const n2y = nrm2[1];
+            const n2z = nrm2[2];
 
-            plane3.fromNormalAndPoint(_convexHullNoConvex_p2, shape.planes[point.faces[1]].normal, point.position);
-            plane3.offset(_convexHullNoConvex_p2, _convexHullNoConvex_p2, -convexRadius);
+            // offset the two face planes inward by the convex radius (use the stored plane constants)
+            const d1 = plane1.constant + convexRadius;
+            const d2 = plane2.constant + convexRadius;
 
-            if (point.numFaces === 3) {
-                // three plane intersection
-                plane3.fromNormalAndPoint(_convexHullNoConvex_p3, shape.planes[point.faces[2]].normal, point.position);
-                plane3.offset(_convexHullNoConvex_p3, _convexHullNoConvex_p3, -convexRadius);
+            // third plane: 3rd face plane (offset inward), or a perpendicular plane through the vertex
+            let n3x: number;
+            let n3y: number;
+            let n3z: number;
+            let d3: number;
+            if (numFaces === 3) {
+                const plane3v = planes[facesArr[pb + 2]];
+                const nrm3 = plane3v.normal;
+                n3x = nrm3[0];
+                n3y = nrm3[1];
+                n3z = nrm3[2];
+                d3 = plane3v.constant + convexRadius;
             } else {
-                // two faces: third plane is perpendicular to first two, through vertex
-                vec3.cross(_convexHullNoConvex_perpNormal, _convexHullNoConvex_p1.normal, _convexHullNoConvex_p2.normal);
-                vec3.normalize(_convexHullNoConvex_perpNormal, _convexHullNoConvex_perpNormal);
-                plane3.fromNormalAndPoint(_convexHullNoConvex_p3, _convexHullNoConvex_perpNormal, point.position);
+                // third plane perpendicular to the first two, through the vertex (unnormalized normal)
+                n3x = n1y * n2z - n1z * n2y;
+                n3y = n1z * n2x - n1x * n2z;
+                n3z = n1x * n2y - n1y * n2x;
+                d3 = -(n3x * px + n3y * py + n3z * pz);
             }
 
-            // intersect three planes
-            newPoint = _convexHullNoConvex_newPoint;
-            if (!plane3.intersect(_convexHullNoConvex_p1, _convexHullNoConvex_p2, _convexHullNoConvex_p3, newPoint)) {
-                // fallback: just push back using first plane
-                vec3.scaleAndAdd(newPoint, point.position, _convexHullNoConvex_p1.normal, -convexRadius);
+            // intersect the three planes (Cramer's rule; the cross products are the adj columns)
+            const c1x = n2y * n3z - n2z * n3y;
+            const c1y = n2z * n3x - n2x * n3z;
+            const c1z = n2x * n3y - n2y * n3x;
+            const denom = n1x * c1x + n1y * c1y + n1z * c1z;
+
+            if (Math.abs(denom) < 0.000001) {
+                // near-parallel planes: fall back to pushing back along the first plane
+                rx = px - n1x * convexRadius;
+                ry = py - n1y * convexRadius;
+                rz = pz - n1z * convexRadius;
+            } else {
+                const c2x = n3y * n1z - n3z * n1y;
+                const c2y = n3z * n1x - n3x * n1z;
+                const c2z = n3x * n1y - n3y * n1x;
+                const c3x = n1y * n2z - n1z * n2y;
+                const c3y = n1z * n2x - n1x * n2z;
+                const c3z = n1x * n2y - n1y * n2x;
+                const s = -1 / denom;
+                rx = (d1 * c1x + d2 * c2x + d3 * c3x) * s;
+                ry = (d1 * c1y + d2 * c2y + d3 * c3y) * s;
+                rz = (d1 * c1z + d2 * c2z + d3 * c3z) * s;
             }
         }
 
-        // write to flat array
-        out.points[writeIndex++] = newPoint[0];
-        out.points[writeIndex++] = newPoint[1];
-        out.points[writeIndex++] = newPoint[2];
+        dst[w++] = rx;
+        dst[w++] = ry;
+        dst[w++] = rz;
     }
+}
+
+export function setConvexHullNoConvexSupport(out: ConvexHullNoConvexSupport, shape: ConvexHullShape): void {
+    // rebuild the shrunk hull into the support object's buffer (runs once per pair, reused across
+    // all GJK/EPA iterations)
+    out.numPoints = shape.numPoints;
+    out.convexRadius = shape.convexRadius;
+    computeShrunkHullPoints(shape, out.points);
 }
 
 /**
@@ -833,17 +902,6 @@ export function createConvexHullNoConvexSupportScaled(): ConvexHullNoConvexSuppo
     };
 }
 
-const _convexHullNoConvexScaled_invScale = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_scaledPos = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_n1 = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_n2 = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_n3 = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_p1 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvexScaled_p2 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvexScaled_p3 = /* @__PURE__ */ plane3.create();
-const _convexHullNoConvexScaled_newPoint = /* @__PURE__ */ vec3.create();
-const _convexHullNoConvexScaled_perpNormal = /* @__PURE__ */ vec3.create();
-
 function scaleConvexRadius(radius: number, scale: Vec3): number {
     // use minimum absolute scale component
     const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
@@ -855,12 +913,16 @@ export function setConvexHullNoConvexSupportScaled(
     shape: ConvexHullShape,
     scale: Vec3,
 ): void {
-    // scale convex radius
+    // scaled variant: positions are scaled, face-plane normals are transformed by the inverse scale
+    // and renormalized, planes are rebuilt through the scaled vertex, offset inward by the scaled
+    // convex radius, then intersected. The 2-face third plane uses the unnormalized cross of n1, n2.
     const scaledRadius = scaleConvexRadius(shape.convexRadius, scale);
+    const numPoints = shape.numPoints;
+    const positions = shape.pointPositions;
+    const numFacesArr = shape.pointNumFaces;
+    const facesArr = shape.pointFaces;
+    const planes = shape.planes;
 
-    const numPoints = shape.points.length;
-
-    // extend array only if needed
     const requiredLength = numPoints * 3;
     while (out.points.length < requiredLength) {
         out.points.push(0);
@@ -868,93 +930,115 @@ export function setConvexHullNoConvexSupportScaled(
     out.numPoints = numPoints;
     out.convexRadius = scaledRadius;
 
-    // compute inverse scale for normal transformation
-    vec3.set(_convexHullNoConvexScaled_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
+    const sx = scale[0];
+    const sy = scale[1];
+    const sz = scale[2];
+    const isx = 1 / sx;
+    const isy = 1 / sy;
+    const isz = 1 / sz;
 
-    let writeIndex = 0;
+    const dst = out.points;
+    let w = 0;
+    for (let pi = 0; pi < numPoints; pi++) {
+        const pb = pi * 3;
+        // scaled vertex position
+        const px = positions[pb] * sx;
+        const py = positions[pb + 1] * sy;
+        const pz = positions[pb + 2] * sz;
+        const numFaces = numFacesArr[pi];
 
-    for (const point of shape.points) {
-        // calculate scaled position
-        vec3.multiply(_convexHullNoConvexScaled_scaledPos, point.position, scale);
+        // first face-plane normal, transformed by inverse scale and renormalized
+        const m1 = planes[facesArr[pb]].normal;
+        let n1x = m1[0] * isx;
+        let n1y = m1[1] * isy;
+        let n1z = m1[2] * isz;
+        let l1 = n1x * n1x + n1y * n1y + n1z * n1z;
+        if (l1 > 0) {
+            l1 = 1 / Math.sqrt(l1);
+            n1x *= l1;
+            n1y *= l1;
+            n1z *= l1;
+        }
 
-        let newPoint: Vec3;
+        let rx: number;
+        let ry: number;
+        let rz: number;
 
-        if (point.numFaces === 1) {
-            // transform normal with inverse scale and renormalize
-            vec3.multiply(_convexHullNoConvexScaled_n1, _convexHullNoConvexScaled_invScale, shape.planes[point.faces[0]].normal);
-            vec3.normalize(_convexHullNoConvexScaled_n1, _convexHullNoConvexScaled_n1);
-
-            // simple shift
-            newPoint = _convexHullNoConvexScaled_newPoint;
-            vec3.scaleAndAdd(newPoint, _convexHullNoConvexScaled_scaledPos, _convexHullNoConvexScaled_n1, -scaledRadius);
+        if (numFaces === 1) {
+            rx = px - n1x * scaledRadius;
+            ry = py - n1y * scaledRadius;
+            rz = pz - n1z * scaledRadius;
         } else {
-            // transform normals with inverse scale
-            vec3.multiply(_convexHullNoConvexScaled_n1, _convexHullNoConvexScaled_invScale, shape.planes[point.faces[0]].normal);
-            vec3.normalize(_convexHullNoConvexScaled_n1, _convexHullNoConvexScaled_n1);
-
-            vec3.multiply(_convexHullNoConvexScaled_n2, _convexHullNoConvexScaled_invScale, shape.planes[point.faces[1]].normal);
-            vec3.normalize(_convexHullNoConvexScaled_n2, _convexHullNoConvexScaled_n2);
-
-            // create planes from scaled position and transformed normals
-            plane3.fromNormalAndPoint(
-                _convexHullNoConvexScaled_p1,
-                _convexHullNoConvexScaled_n1,
-                _convexHullNoConvexScaled_scaledPos,
-            );
-            plane3.offset(_convexHullNoConvexScaled_p1, _convexHullNoConvexScaled_p1, -scaledRadius);
-
-            plane3.fromNormalAndPoint(
-                _convexHullNoConvexScaled_p2,
-                _convexHullNoConvexScaled_n2,
-                _convexHullNoConvexScaled_scaledPos,
-            );
-            plane3.offset(_convexHullNoConvexScaled_p2, _convexHullNoConvexScaled_p2, -scaledRadius);
-
-            if (point.numFaces === 3) {
-                // transform third normal
-                vec3.multiply(
-                    _convexHullNoConvexScaled_n3,
-                    _convexHullNoConvexScaled_invScale,
-                    shape.planes[point.faces[2]].normal,
-                );
-                vec3.normalize(_convexHullNoConvexScaled_n3, _convexHullNoConvexScaled_n3);
-
-                plane3.fromNormalAndPoint(
-                    _convexHullNoConvexScaled_p3,
-                    _convexHullNoConvexScaled_n3,
-                    _convexHullNoConvexScaled_scaledPos,
-                );
-                plane3.offset(_convexHullNoConvexScaled_p3, _convexHullNoConvexScaled_p3, -scaledRadius);
-            } else {
-                // third plane perpendicular to first two (no offset)
-                vec3.cross(_convexHullNoConvexScaled_perpNormal, _convexHullNoConvexScaled_n1, _convexHullNoConvexScaled_n2);
-                vec3.normalize(_convexHullNoConvexScaled_perpNormal, _convexHullNoConvexScaled_perpNormal);
-                plane3.fromNormalAndPoint(
-                    _convexHullNoConvexScaled_p3,
-                    _convexHullNoConvexScaled_perpNormal,
-                    _convexHullNoConvexScaled_scaledPos,
-                );
+            const m2 = planes[facesArr[pb + 1]].normal;
+            let n2x = m2[0] * isx;
+            let n2y = m2[1] * isy;
+            let n2z = m2[2] * isz;
+            let l2 = n2x * n2x + n2y * n2y + n2z * n2z;
+            if (l2 > 0) {
+                l2 = 1 / Math.sqrt(l2);
+                n2x *= l2;
+                n2y *= l2;
+                n2z *= l2;
             }
 
-            // intersect three planes
-            newPoint = _convexHullNoConvexScaled_newPoint;
-            if (
-                !plane3.intersect(
-                    _convexHullNoConvexScaled_p1,
-                    _convexHullNoConvexScaled_p2,
-                    _convexHullNoConvexScaled_p3,
-                    newPoint,
-                )
-            ) {
-                // fallback: just push back using first plane
-                vec3.scaleAndAdd(newPoint, _convexHullNoConvexScaled_scaledPos, _convexHullNoConvexScaled_n1, -scaledRadius);
+            // planes rebuilt through the scaled vertex, offset inward by the scaled convex radius
+            const d1 = -(n1x * px + n1y * py + n1z * pz) + scaledRadius;
+            const d2 = -(n2x * px + n2y * py + n2z * pz) + scaledRadius;
+
+            let n3x: number;
+            let n3y: number;
+            let n3z: number;
+            let d3: number;
+            if (numFaces === 3) {
+                const m3 = planes[facesArr[pb + 2]].normal;
+                let a = m3[0] * isx;
+                let b = m3[1] * isy;
+                let c = m3[2] * isz;
+                let l3 = a * a + b * b + c * c;
+                if (l3 > 0) {
+                    l3 = 1 / Math.sqrt(l3);
+                    a *= l3;
+                    b *= l3;
+                    c *= l3;
+                }
+                n3x = a;
+                n3y = b;
+                n3z = c;
+                d3 = -(n3x * px + n3y * py + n3z * pz) + scaledRadius;
+            } else {
+                // third plane perpendicular to the first two, through the scaled vertex (unnormalized normal)
+                n3x = n1y * n2z - n1z * n2y;
+                n3y = n1z * n2x - n1x * n2z;
+                n3z = n1x * n2y - n1y * n2x;
+                d3 = -(n3x * px + n3y * py + n3z * pz);
+            }
+
+            const c1x = n2y * n3z - n2z * n3y;
+            const c1y = n2z * n3x - n2x * n3z;
+            const c1z = n2x * n3y - n2y * n3x;
+            const denom = n1x * c1x + n1y * c1y + n1z * c1z;
+
+            if (Math.abs(denom) < 0.000001) {
+                rx = px - n1x * scaledRadius;
+                ry = py - n1y * scaledRadius;
+                rz = pz - n1z * scaledRadius;
+            } else {
+                const c2x = n3y * n1z - n3z * n1y;
+                const c2y = n3z * n1x - n3x * n1z;
+                const c2z = n3x * n1y - n3y * n1x;
+                const c3x = n1y * n2z - n1z * n2y;
+                const c3y = n1z * n2x - n1x * n2z;
+                const c3z = n1x * n2y - n1y * n2x;
+                const s = -1 / denom;
+                rx = (d1 * c1x + d2 * c2x + d3 * c3x) * s;
+                ry = (d1 * c1y + d2 * c2y + d3 * c3y) * s;
+                rz = (d1 * c1z + d2 * c2z + d3 * c3z) * s;
             }
         }
 
-        // write to flat array
-        out.points[writeIndex++] = newPoint[0];
-        out.points[writeIndex++] = newPoint[1];
-        out.points[writeIndex++] = newPoint[2];
+        dst[w++] = rx;
+        dst[w++] = ry;
+        dst[w++] = rz;
     }
 }
 

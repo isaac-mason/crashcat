@@ -169,7 +169,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             });
 
             // Interior points should be filtered, radius preserved with high tolerance
-            expect(hull.points.length).toBe(8);
+            expect(hull.numPoints).toBe(8);
             expect(hull.convexRadius).toBeCloseTo(0.1, 3);
         });
 
@@ -249,7 +249,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             });
 
             // Verify shape integrity
-            expect(hull.points.length).toBeGreaterThan(0);
+            expect(hull.numPoints).toBeGreaterThan(0);
             expect(hull.faces.length).toBeGreaterThan(0);
             expect(hull.planes.length).toBe(hull.faces.length);
             expect(hull.volume).toBeGreaterThan(0);

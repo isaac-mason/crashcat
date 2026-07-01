@@ -18,8 +18,18 @@ export type ConvexHullShapeSettings = {
 /** a convex hull shape */
 export type ConvexHullShape = {
     type: ShapeType.CONVEX_HULL;
-    /** points of the convex hull */
-    points: ConvexHullPoint[];
+    /**
+     * flat vertex positions of the convex hull `[x, y, z, ...]`, 3 per point.
+     * stored as a plain `number[]` (packed-double) rather than a typed array —
+     * benchmarked fastest for the max-dot support scan on V8 (beats Float64Array).
+     */
+    pointPositions: number[];
+    /** number of neighbouring faces per point (1..3), 1 per point — only used by the convex-radius shrink */
+    pointNumFaces: number[];
+    /** up to 3 neighbouring face indices per point `[f0, f1, f2, ...]` (-1 = unused), 3 per point — shrink only */
+    pointFaces: number[];
+    /** number of hull vertices (`pointPositions.length / 3`) */
+    numPoints: number;
     /** faces of the convex hull */
     faces: ConvexHullFace[];
     /** plane equations for each face (1-to-1 with faces) */
@@ -40,14 +50,6 @@ export type ConvexHullShape = {
     volume: number;
     /** inertia tensor (column-major mat4) */
     inertia: Mat4;
-};
-export type ConvexHullPoint = {
-    /** position of the vertex */
-    position: Vec3;
-    /** number of faces in the face array */
-    numFaces: number;
-    /** indices of 3 neighboring faces with the biggest difference in normal (used to shift vertices for convex radius) */
-    faces: [number, number, number];
 };
 export type ConvexHullFace = {
     /** index of the first vertex in the face */

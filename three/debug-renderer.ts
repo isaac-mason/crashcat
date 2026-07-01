@@ -116,8 +116,8 @@ function createConvexHullGeometry(shape: Shape & { type: ShapeType.CONVEX_HULL }
         // Collect vertex positions for this face
         for (let i = 0; i < face.numVertices; i++) {
             const vertexIdx = shape.vertexIndices[face.firstVertex + i];
-            const point = shape.points[vertexIdx];
-            faceVertices.push([point.position[0], point.position[1], point.position[2]]);
+            const pb = vertexIdx * 3;
+            faceVertices.push([shape.pointPositions[pb], shape.pointPositions[pb + 1], shape.pointPositions[pb + 2]]);
         }
 
         // Triangulate the face (simple fan triangulation from first vertex)

@@ -4,12 +4,14 @@
 
 - fix: issues with nested usage of reversedCollideShapeVsShape
 - feat: change build setup so d.ts files are compatible with typescript NodeNext module resolution
-- feat: update mathcat from v0.0.11 to v0.0.12
+- feat: update mathcat from v0.0.11 to v0.0.13
 - feat: double-buffered cached contact manifolds — warm-start λ matching now reads the previous step's data instead of aliasing this step's writes, matching Jolt's mReadCache/mWriteCache split
 - fix: stack stability — corrected inverted motion-type swap in narrowphase so collision detection runs in the dynamic body's local space, matching Jolt; tall box stacks now settle instead of rocking indefinitely
 - feat: body-pair contact cache — skip GJK/EPA when bodies stay within 1mm/1° of last fresh narrowphase pose, reconstructing the manifold from cached body-local data; eliminates penetration-axis jitter and significantly improves stacking stability (matches Jolt's `mUseBodyPairContactCache`)
 - fix: debug.* drawing for scaled and plane shapes
 - fix: CCD (LINEAR_CAST) contacts now fire the contact listener on the step of impact; previously `onContactAdded`/`onContactPersisted` were never called for continuous collisions, so contacts only surfaced a step later via the discrete narrowphase (and not at all when a body rebounded clear). Gate now matches Jolt's `mFractionPlusSlop < 1`
+- feat: **breaking** — convex hull vertices are now stored as flat `number[]` SoA arrays on `ConvexHullShape` (`pointPositions`/`pointNumFaces`/`pointFaces`/`numPoints`) instead of a `ConvexHullPoint[]` object array; read `shape.pointPositions[i * 3 + k]` in place of `shape.points[i].position[k]`, and the `ConvexHullPoint` type is removed.
+- perf: convex-radius shrink rewritten as an allocation-free scalar routine (scaled + unscaled, no `plane3` objects).
 
 ## v0.0.4
 

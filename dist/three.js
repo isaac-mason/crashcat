@@ -12,7 +12,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.12/node_modules/mathcat/dist/vec3.js
+//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/vec3.js
 /**
 * Creates a new, empty vec3
 *
@@ -103,7 +103,7 @@ function transformQuat(out, a, q) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.12/node_modules/mathcat/dist/quat.js
+//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/quat.js
 /**
 * Creates a new identity quat
 *
@@ -225,12 +225,11 @@ function createConvexHullGeometry(shape) {
 	for (const face of shape.faces) {
 		const faceVertices = [];
 		for (let i = 0; i < face.numVertices; i++) {
-			const vertexIdx = shape.vertexIndices[face.firstVertex + i];
-			const point = shape.points[vertexIdx];
+			const pb = shape.vertexIndices[face.firstVertex + i] * 3;
 			faceVertices.push([
-				point.position[0],
-				point.position[1],
-				point.position[2]
+				shape.pointPositions[pb],
+				shape.pointPositions[pb + 1],
+				shape.pointPositions[pb + 2]
 			]);
 		}
 		if (faceVertices.length >= 3) {
@@ -2905,12 +2904,11 @@ function createConvexHullHelper(shape, options) {
 	for (const face of shape.faces) {
 		const faceVertices = [];
 		for (let i = 0; i < face.numVertices; i++) {
-			const vertexIdx = shape.vertexIndices[face.firstVertex + i];
-			const point = shape.points[vertexIdx];
+			const pb = shape.vertexIndices[face.firstVertex + i] * 3;
 			faceVertices.push([
-				point.position[0],
-				point.position[1],
-				point.position[2]
+				shape.pointPositions[pb],
+				shape.pointPositions[pb + 1],
+				shape.pointPositions[pb + 2]
 			]);
 		}
 		if (faceVertices.length >= 3) {
