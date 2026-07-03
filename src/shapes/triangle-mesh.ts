@@ -40,7 +40,6 @@ import { FEATURE_TO_ACTIVE_EDGES, rayCylinder, raySphereFromOrigin } from '../co
 import { createSupport, SupportFunctionMode, setTriangleSupport } from '../collision/support';
 import { createClosestPointOnTriangleResult, getClosestPointOnTriangle } from '../collision/triangle';
 import { assert } from '../utils/assert';
-import * as bvhStack from '../utils/bvh-stack';
 import { isScaleInsideOut, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale } from '../utils/face';
 import {
     type ConvexShape,
@@ -252,7 +251,11 @@ const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
 const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayForMathcat = /* @__PURE__ */ raycast3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
-const _castRayVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
+// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
+// to the node stack). separate arrays so each keeps its optimal element kind.
+const _castRayVsTriangleMesh_stackNodes: number[] = [];
+const _castRayVsTriangleMesh_stackDist: number[] = [];
 const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
 const _castRayVsTriangleMesh_rightBounds = /* @__PURE__ */ box3.create();
 const _castRayVsTriangleMesh_a = /* @__PURE__ */ vec3.create();
@@ -338,23 +341,25 @@ function castRayVsTriangleMesh(
     }
 
     let foundHit = false;
-    bvhStack.reset(_castRayVsTriangleMesh_stack);
-    bvhStack.push(_castRayVsTriangleMesh_stack, 0, -Infinity); // root always visited
+    let stackSize = 0;
+    _castRayVsTriangleMesh_stackNodes[stackSize] = 0;
+    _castRayVsTriangleMesh_stackDist[stackSize] = -Infinity; // root always visited
+    stackSize++;
 
-    while (_castRayVsTriangleMesh_stack.size > 0) {
+    while (stackSize > 0) {
         // early out: very close hit
         if (collector.earlyOutFraction <= 0) {
             break;
         }
 
-        const entry = bvhStack.pop(_castRayVsTriangleMesh_stack)!;
+        stackSize--;
+        const nodeOffset = _castRayVsTriangleMesh_stackNodes[stackSize];
+        const nodeDistance = _castRayVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (entry.distance >= collector.earlyOutFraction) {
+        if (nodeDistance >= collector.earlyOutFraction) {
             continue;
         }
-
-        const nodeOffset = entry.nodeIndex;
 
         // note: no need to test ray x triangle bounds intersection here - we already proved the ray
         // intersects this node's bounds when we computed the distance during push.
@@ -452,18 +457,26 @@ function castRayVsTriangleMesh(
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsTriangleMesh_stack, rightOffset, rightDist);
+                    _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsTriangleMesh_stack, leftOffset, leftDist);
+                    _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
             } else {
                 // right is closer - push left first
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsTriangleMesh_stack, leftOffset, leftDist);
+                    _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsTriangleMesh_stack, rightOffset, rightDist);
+                    _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
             }
         }
@@ -663,7 +676,11 @@ const _castConvexVsTriangleMesh_AtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsTriangleMesh_invBtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsTriangleMesh_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
 
-const _castConvexVsTriangleMesh_bvhStack = /* @__PURE__ */ bvhStack.create();
+// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
+// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
+// to the node stack). separate arrays so each keeps its optimal element kind.
+const _castConvexVsTriangleMesh_stackNodes: number[] = [];
+const _castConvexVsTriangleMesh_stackDist: number[] = [];
 const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
 const _castConvexVsTriangleMesh_halfExtents = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
@@ -793,20 +810,22 @@ function castConvexVsTriangleMesh(
     halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5;
     halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5;
 
-    bvhStack.reset(_castConvexVsTriangleMesh_bvhStack);
-    bvhStack.push(_castConvexVsTriangleMesh_bvhStack, 0, 0); // root always visited
+    let stackSize = 0;
+    _castConvexVsTriangleMesh_stackNodes[stackSize] = 0;
+    _castConvexVsTriangleMesh_stackDist[stackSize] = 0; // root always visited
+    stackSize++;
 
     const expandedBounds = _castConvexVsTriangleMesh_expandedBounds;
 
-    while (_castConvexVsTriangleMesh_bvhStack.size > 0) {
-        const entry = bvhStack.pop(_castConvexVsTriangleMesh_bvhStack)!;
+    while (stackSize > 0) {
+        stackSize--;
+        const nodeOffset = _castConvexVsTriangleMesh_stackNodes[stackSize];
+        const nodeDistance = _castConvexVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (entry.distance >= collector.earlyOutFraction) {
+        if (nodeDistance >= collector.earlyOutFraction) {
             continue;
         }
-
-        const nodeOffset = entry.nodeIndex;
 
         // note: no need to test ray intersection here - we already proved the ray
         // intersects this node's expanded bounds when we computed the distance during push.
@@ -1111,18 +1130,26 @@ function castConvexVsTriangleMesh(
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castConvexVsTriangleMesh_bvhStack, rightOffset, rightDist);
+                    _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castConvexVsTriangleMesh_bvhStack, leftOffset, leftDist);
+                    _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
             } else {
                 // right is closer - push left first
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castConvexVsTriangleMesh_bvhStack, leftOffset, leftDist);
+                    _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castConvexVsTriangleMesh_bvhStack, rightOffset, rightDist);
+                    _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
             }
         }
@@ -1201,7 +1228,10 @@ const _collideConvexVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.cre
 
 const _collideConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createSupport();
 
-const _collideConvexVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this shape-query traversal — children are still pushed
+// farther-first (sorted by distance) but the sort distance itself isn't stored. grow-once with
+// a size counter (no pop()/length churn, stays packed).
+const _collideConvexVsTriangleMesh_stackNodes: number[] = [];
 const _collideConvexVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_triangleAABB = /* @__PURE__ */ box3.create();
@@ -1332,17 +1362,16 @@ function collideConvexVsTriangleMesh(
     setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
 
     // bvh traversal
-    bvhStack.reset(_collideConvexVsTriangleMesh_stack);
+    let stackSize = 0;
 
     // compute query shape center in B's space for distance-based sorting
     // use center-to-center distance heuristic
     box3.center(_collideConvexVsTriangleMesh_queryCenter, _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2);
 
-    bvhStack.push(_collideConvexVsTriangleMesh_stack, 0, 0); // root always visited (distance 0)
+    _collideConvexVsTriangleMesh_stackNodes[stackSize++] = 0; // root always visited
 
-    while (_collideConvexVsTriangleMesh_stack.size > 0) {
-        const entry = bvhStack.pop(_collideConvexVsTriangleMesh_stack)!;
-        const nodeOffset = entry.nodeIndex;
+    while (stackSize > 0) {
+        const nodeOffset = _collideConvexVsTriangleMesh_stackNodes[--stackSize];
         // distance not used for filtering in shape queries
 
         // skip if node bounds don't intersect query
@@ -1672,12 +1701,12 @@ function collideConvexVsTriangleMesh(
             // sort: push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                bvhStack.push(_collideConvexVsTriangleMesh_stack, rightOffset, rightDist);
-                bvhStack.push(_collideConvexVsTriangleMesh_stack, leftOffset, leftDist);
+                _collideConvexVsTriangleMesh_stackNodes[stackSize++] = rightOffset;
+                _collideConvexVsTriangleMesh_stackNodes[stackSize++] = leftOffset;
             } else {
                 // right is closer - push left first
-                bvhStack.push(_collideConvexVsTriangleMesh_stack, leftOffset, leftDist);
-                bvhStack.push(_collideConvexVsTriangleMesh_stack, rightOffset, rightDist);
+                _collideConvexVsTriangleMesh_stackNodes[stackSize++] = leftOffset;
+                _collideConvexVsTriangleMesh_stackNodes[stackSize++] = rightOffset;
             }
         }
     }
@@ -1696,7 +1725,10 @@ const _collideSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.cre
 const _collideSphereVsTriangleMesh_boundsOfSphere = /* @__PURE__ */ box3.create();
 const _collideSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this shape-query traversal — children are still pushed
+// farther-first (sorted by distance) but the sort distance itself isn't stored. grow-once with
+// a size counter (no pop()/length churn, stays packed).
+const _collideSphereVsTriangleMesh_stackNodes: number[] = [];
 const _collideSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_v1 = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_v2 = /* @__PURE__ */ vec3.create();
@@ -1794,16 +1826,15 @@ function collideSphereVsTriangleMesh(
     sphereBounds[5] = sphereCenterInMesh[2] + expandedRadius;
 
     // BVH traversal
-    bvhStack.reset(_collideSphereVsTriangleMesh_stack);
+    let stackSize = 0;
 
     // use sphere center for distance-based sorting
     vec3.copy(_collideSphereVsTriangleMesh_queryCenter, sphereCenterInMesh);
 
-    bvhStack.push(_collideSphereVsTriangleMesh_stack, 0, 0); // root
+    _collideSphereVsTriangleMesh_stackNodes[stackSize++] = 0; // root
 
-    while (_collideSphereVsTriangleMesh_stack.size > 0) {
-        const entry = bvhStack.pop(_collideSphereVsTriangleMesh_stack)!;
-        const nodeOffset = entry.nodeIndex;
+    while (stackSize > 0) {
+        const nodeOffset = _collideSphereVsTriangleMesh_stackNodes[--stackSize];
 
         // skip if node bounds don't intersect sphere
         if (
@@ -2014,11 +2045,11 @@ function collideSphereVsTriangleMesh(
 
             // sort: push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
-                bvhStack.push(_collideSphereVsTriangleMesh_stack, rightOffset, rightDist);
-                bvhStack.push(_collideSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                _collideSphereVsTriangleMesh_stackNodes[stackSize++] = rightOffset;
+                _collideSphereVsTriangleMesh_stackNodes[stackSize++] = leftOffset;
             } else {
-                bvhStack.push(_collideSphereVsTriangleMesh_stack, leftOffset, leftDist);
-                bvhStack.push(_collideSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                _collideSphereVsTriangleMesh_stackNodes[stackSize++] = leftOffset;
+                _collideSphereVsTriangleMesh_stackNodes[stackSize++] = rightOffset;
             }
         }
     }
@@ -2038,7 +2069,11 @@ const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create
 const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
-const _castSphereVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
+// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
+// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
+// to the node stack). separate arrays so each keeps its optimal element kind.
+const _castSphereVsTriangleMesh_stackNodes: number[] = [];
+const _castSphereVsTriangleMesh_stackDist: number[] = [];
 const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v1 = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v2 = /* @__PURE__ */ vec3.create();
@@ -2255,20 +2290,22 @@ function castSphereVsTriangleMesh(
         ray.direction[2] = 0;
     }
 
-    bvhStack.reset(_castSphereVsTriangleMesh_stack);
-    bvhStack.push(_castSphereVsTriangleMesh_stack, 0, 0); // root always visited
+    let stackSize = 0;
+    _castSphereVsTriangleMesh_stackNodes[stackSize] = 0;
+    _castSphereVsTriangleMesh_stackDist[stackSize] = 0; // root always visited
+    stackSize++;
 
     const expandedBounds = _castSphereVsTriangleMesh_expandedBounds;
 
-    while (_castSphereVsTriangleMesh_stack.size > 0) {
-        const entry = bvhStack.pop(_castSphereVsTriangleMesh_stack)!;
+    while (stackSize > 0) {
+        stackSize--;
+        const nodeOffset = _castSphereVsTriangleMesh_stackNodes[stackSize];
+        const nodeDistance = _castSphereVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (entry.distance >= collector.earlyOutFraction) {
+        if (nodeDistance >= collector.earlyOutFraction) {
             continue;
         }
-
-        const nodeOffset = entry.nodeIndex;
 
         if (bvh.nodeIsLeaf(buffer, nodeOffset)) {
             // leaf node: test triangles
@@ -2554,17 +2591,25 @@ function castSphereVsTriangleMesh(
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                    _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                    _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
             } else {
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                    _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
+                    _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                    _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
+                    _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
             }
         }
