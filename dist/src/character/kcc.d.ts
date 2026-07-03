@@ -169,10 +169,6 @@ export type CharacterContactSettings = {
  * Used to track which contacts are new, persisted, or removed.
  */
 type ListenerContactValue = {
-    /** pool index when active, -1 when pooled */
-    poolIndex: number;
-    /** packed key for lookup (bodyId << 16 | subShapeId) */
-    packedKey: number;
     /** body ID of the contact */
     bodyId: BodyId;
     /** sub-shape ID of the contact */
@@ -300,12 +296,21 @@ export declare function add(world: World, character: KCC): void;
  * @param character the character controller
  */
 export declare function remove(world: World, character: KCC): void;
-/** pool for managing ListenerContactValue objects with minimal allocations */
+/**
+ * O(active) store for listener contact tracking (added / persisted / removed detection).
+ *
+ * `live` is a compact array of the currently tracked contacts; lookup is a linear scan
+ * comparing the FULL `bodyId` and `subShapeId` fields. a BodyId is a 52-bit index+sequence
+ * (see body-id.ts) and a subShapeId can exceed 16 bits, so no single JS number packs both
+ * losslessly — identity is compared field-wise. live counts are small, so the scan is cheap
+ * and every operation is O(active) instead of O(capacity). entries are pooled (grow-once):
+ * steady state performs zero allocations.
+ */
 type ListenerContactsPool = {
-    /** all contacts (pooled and active) */
-    pool: ListenerContactValue[];
-    /** indices of free (pooled) contacts */
-    freeIndices: number[];
+    /** compact list of active entries */
+    live: ListenerContactValue[];
+    /** free entry objects (grow-once) */
+    free: ListenerContactValue[];
 };
 /**
  * Settings for update() with stair walking and floor sticking.

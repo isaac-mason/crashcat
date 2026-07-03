@@ -107,3 +107,156 @@ describe('KCC steep slope escape', () => {
         expect(Math.abs(character.position[2])).toBeLessThan(2.0);
     });
 });
+
+describe('KCC conflicting contacts', () => {
+    /**
+     * a character wedged between two DIFFERENT static bodies with opposing contact
+     * normals must keep both contacts. removeConflictingContacts only discards
+     * opposing-normal pairs on the SAME body — that algorithm targets one body's
+     * internal-edge double hits, not a real two-body wedge.
+     */
+    test('character wedged between two bodies keeps both contacts', () => {
+        const { world, layers } = createTestWorld();
+
+        // floor
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(50, 0.5, 50) }),
+            position: vec3.fromValues(0, -0.5, 0),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        });
+
+        // two walls forming a corridor slightly narrower than the capsule:
+        // capsule radius 0.3, wall inner faces at x = ±0.25 → 0.05 penetration per
+        // side, beyond the 1.25 * characterPadding (0.02) conflict threshold
+        const wallShape = box.create({ halfExtents: vec3.fromValues(0.5, 1, 1) });
+        const wallA = rigidBody.create(world, {
+            shape: wallShape,
+            position: vec3.fromValues(-0.75, 0.5, 0),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        });
+        const wallB = rigidBody.create(world, {
+            shape: wallShape,
+            position: vec3.fromValues(0.75, 0.5, 0),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        });
+
+        updateWorld(world, undefined, DELTA_TIME);
+
+        const character = kcc.create(
+            {
+                shape: capsule.create({ halfHeightOfCylinder: 0.5, radius: 0.3 }),
+                mass: 70,
+                up: vec3.fromValues(0, 1, 0),
+                supportingVolumePlane: vec4.fromValues(0, 1, 0, -1e10),
+            },
+            vec3.fromValues(0, 0, 0),
+            quat.create(),
+        );
+
+        const characterFilter = filter.create(world.settings.layers);
+        const updateSettings = kcc.createDefaultUpdateSettings();
+        vec3.zero(updateSettings.stickToFloorStepDown);
+        vec3.zero(updateSettings.walkStairsStepUp);
+
+        const gravity = vec3.fromValues(0, -10, 0);
+
+        // assert after the FIRST update, while still deeply penetrating both walls:
+        // the conflict-discard logic only runs for penetration beyond
+        // 1.25 * characterPadding, which recovery resolves within a few steps
+        vec3.scaleAndAdd(character.linearVelocity, character.linearVelocity, gravity, DELTA_TIME);
+        kcc.update(world, character, DELTA_TIME, gravity, updateSettings, undefined, characterFilter);
+        updateWorld(world, undefined, DELTA_TIME);
+
+        // both wall contacts must be live — discarding one lets penetration
+        // recovery push the character one-sided through the other wall
+        expect(kcc.hasCollidedWith(character, wallA.id)).toBe(true);
+        expect(kcc.hasCollidedWith(character, wallB.id)).toBe(true);
+
+        // settle and verify the character stays centered in the corridor
+        for (let step = 0; step < 5; step++) {
+            vec3.scaleAndAdd(character.linearVelocity, character.linearVelocity, gravity, DELTA_TIME);
+            kcc.update(world, character, DELTA_TIME, gravity, updateSettings, undefined, characterFilter);
+            updateWorld(world, undefined, DELTA_TIME);
+        }
+        expect(Math.abs(character.position[0])).toBeLessThan(0.1);
+    });
+});
+
+describe('KCC listener contact identity', () => {
+    /**
+     * listener contact tracking must key on the FULL body id (52-bit index+sequence).
+     * a destroyed body whose pool slot is recycled produces a new id with the same
+     * index but a bumped sequence — under the old 16/16-bit packed key both ids
+     * collided, so the recycled body fired onContactPersisted instead of
+     * onContactAdded.
+     */
+    test('recycled body slot fires onContactAdded, not onContactPersisted', () => {
+        const { world, layers } = createTestWorld();
+
+        const floorSpec = {
+            shape: box.create({ halfExtents: vec3.fromValues(50, 0.5, 50) }),
+            position: vec3.fromValues(0, -0.5, 0),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        };
+        const floorA = rigidBody.create(world, floorSpec);
+
+        updateWorld(world, undefined, DELTA_TIME);
+
+        const character = kcc.create(
+            {
+                shape: capsule.create({ halfHeightOfCylinder: 0.5, radius: 0.3 }),
+                mass: 70,
+                up: vec3.fromValues(0, 1, 0),
+                supportingVolumePlane: vec4.fromValues(0, 1, 0, -1e10),
+            },
+            vec3.fromValues(0, 0.01, 0),
+            quat.create(),
+        );
+
+        const characterFilter = filter.create(world.settings.layers);
+        const updateSettings = kcc.createDefaultUpdateSettings();
+        const gravity = vec3.fromValues(0, -10, 0);
+
+        const added: number[] = [];
+        const persisted: number[] = [];
+        const listener = {
+            onContactAdded: (_c: unknown, body: { id: number }) => {
+                added.push(body.id);
+            },
+            onContactPersisted: (_c: unknown, body: { id: number }) => {
+                persisted.push(body.id);
+            },
+        };
+
+        const step = () => {
+            vec3.scaleAndAdd(character.linearVelocity, character.linearVelocity, gravity, DELTA_TIME);
+            kcc.update(world, character, DELTA_TIME, gravity, updateSettings, listener, characterFilter);
+            updateWorld(world, undefined, DELTA_TIME);
+        };
+
+        // settle onto floor A: contact added once, then persisted
+        for (let i = 0; i < 5; i++) step();
+        expect(added).toContain(floorA.id);
+
+        // destroy floor A and create floor B — the pool slot recycles: same index,
+        // bumped sequence, so the ids collide under a 16-bit packed key
+        const floorAId = floorA.id;
+        rigidBody.remove(world, floorA);
+        const floorB = rigidBody.create(world, floorSpec);
+        expect(floorB.id).not.toBe(floorAId);
+
+        added.length = 0;
+        persisted.length = 0;
+        for (let i = 0; i < 3; i++) step();
+
+        // the recycled body is a NEW contact: it must fire onContactAdded.
+        // under the old packed key it matched floor A's stale tracking entry and
+        // fired onContactPersisted on first touch instead.
+        expect(added).toContain(floorB.id);
+        expect(persisted).not.toContain(floorAId);
+    });
+});

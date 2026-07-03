@@ -23653,7 +23653,7 @@ function initConstraint(constraint, invMass1, invMass2, invInertia1, invInertia2
 function initAngularConstraint(constraint, invInertia1, invInertia2, axis) {
 	multiply3x3Vec(constraint.invI1_Axis, invInertia1, axis);
 	multiply3x3Vec(constraint.invI2_Axis, invInertia2, axis);
-	let invEffectiveMass = dot$2(axis, constraint.invI1_Axis) + dot$2(axis, constraint.invI2_Axis);
+	const invEffectiveMass = dot$2(axis, constraint.invI1_Axis) + dot$2(axis, constraint.invI2_Axis);
 	constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
 }
 /** compute relative velocity along constraint axis */
@@ -29931,13 +29931,11 @@ function remove(world, character) {
 	if (innerRigidBody) remove$1(world, innerRigidBody);
 	character.innerRigidBodyId = -1;
 }
-/** default capacity for listener contacts pool */
-const DEFAULT_LISTENER_CONTACTS_POOL_SIZE = 256;
+/** initial number of pooled listener contact entries */
+const DEFAULT_LISTENER_CONTACTS_POOL_SIZE = 16;
 /** creates a listener contact value (used for initialization and pooling) */
 function createListenerContactValue() {
 	return {
-		poolIndex: -1,
-		packedKey: 0,
 		bodyId: 0,
 		subShapeId: 0,
 		count: 0,
@@ -29947,53 +29945,39 @@ function createListenerContactValue() {
 		}
 	};
 }
-/** creates a new listener contacts pool with the given capacity */
+/** creates a new listener contacts pool with the given initial entry capacity */
 function createListenerContactsPool(capacity = DEFAULT_LISTENER_CONTACTS_POOL_SIZE) {
 	const pool = {
-		pool: [],
-		freeIndices: []
+		live: [],
+		free: []
 	};
-	for (let i = 0; i < capacity; i++) {
-		const value = createListenerContactValue();
-		pool.pool.push(value);
-		pool.freeIndices.push(i);
-	}
+	for (let i = 0; i < capacity; i++) pool.free.push(createListenerContactValue());
 	return pool;
 }
-/** pack bodyId and subShapeId into a single 32-bit number */
-function packListenerContactKey(bodyId, subShapeId) {
-	return (bodyId & 65535) << 16 | subShapeId & 65535;
-}
-/** acquires a listener contact from the pool */
-function acquireListenerContact(pool) {
-	let value;
-	if (pool.freeIndices.length > 0) {
-		const index = pool.freeIndices.pop();
-		value = pool.pool[index];
-		value.poolIndex = index;
-	} else {
-		value = createListenerContactValue();
-		value.poolIndex = pool.pool.length;
-		pool.pool.push(value);
-	}
+/** acquires an entry for (bodyId, subShapeId), resets it, and adds it to the live list */
+function acquireListenerContact(pool, bodyId, subShapeId) {
+	const value = pool.free.pop() ?? createListenerContactValue();
+	value.bodyId = bodyId;
+	value.subShapeId = subShapeId;
+	value.count = 0;
+	value.settings.canPushCharacter = true;
+	value.settings.canReceiveImpulses = true;
+	pool.live.push(value);
 	return value;
 }
-/** releases all listener contacts back to the pool */
+/** releases all live entries back to the free list */
 function releaseAllListenerContacts(pool) {
-	pool.freeIndices.length = 0;
-	for (let i = 0; i < pool.pool.length; i++) {
-		pool.pool[i].poolIndex = -1;
-		pool.freeIndices.push(i);
+	for (let i = 0; i < pool.live.length; i++) pool.free.push(pool.live[i]);
+	pool.live.length = 0;
+}
+/** finds a live entry by full body id + sub-shape id, returns null if not found */
+function findListenerContact(pool, bodyId, subShapeId) {
+	const live = pool.live;
+	for (let i = 0; i < live.length; i++) {
+		const value = live[i];
+		if (value.bodyId === bodyId && value.subShapeId === subShapeId) return value;
 	}
-}
-/** finds a listener contact by packed key, returns null if not found */
-function findListenerContact(pool, packedKey) {
-	for (const value of pool.pool) if (value.poolIndex !== -1 && value.packedKey === packedKey) return value;
 	return null;
-}
-/** iterates all active listener contacts */
-function getActiveListenerContacts(listenerContacts) {
-	return listenerContacts.pool.filter((v) => v.poolIndex !== -1);
 }
 function createDefaultUpdateSettings() {
 	return {
@@ -30092,6 +30076,24 @@ function resetContact(contact) {
 	contact.canPushCharacter = false;
 	contact.canReceiveImpulses = true;
 }
+/** copies all fields of a contact (for probe passes that must not mutate the live contacts) */
+function copyCharacterContact(out, source) {
+	copy$9(out.position, source.position);
+	copy$9(out.linearVelocity, source.linearVelocity);
+	copy$9(out.contactNormal, source.contactNormal);
+	copy$9(out.surfaceNormal, source.surfaceNormal);
+	out.distance = source.distance;
+	out.fraction = source.fraction;
+	out.bodyId = source.bodyId;
+	out.subShapeId = source.subShapeId;
+	out.materialId = source.materialId;
+	out.motionType = source.motionType;
+	out.isSensor = source.isSensor;
+	out.hadCollision = source.hadCollision;
+	out.wasDiscarded = source.wasDiscarded;
+	out.canPushCharacter = source.canPushCharacter;
+	out.canReceiveImpulses = source.canReceiveImpulses;
+}
 /** creates an empty CharacterConstraint with default values */
 function createEmptyCharacterConstraint() {
 	return {
@@ -30109,6 +30111,11 @@ function createEmptyCharacterConstraint() {
 * All contacts are considered supported regardless of angle.
 */
 const NO_MAX_SLOPE_ANGLE = .9999;
+/**
+* backface flip threshold for surface normals: ~-sin(1°). allow a 1 degree slop —
+* a perpendicular (grazing) contact is not backfacing and must not be flipped.
+*/
+const BACK_FACE_FLIP_THRESHOLD = -.0174524;
 /**
 * Checks if a slope is too steep to walk on.
 * @param character the character controller
@@ -30238,13 +30245,15 @@ const characterCollideCollector = {
 		}
 		const contact = acquireContact(this.contacts);
 		copy$9(contact.position, hit.pointB);
-		normalize$2(contact.contactNormal, hit.penetrationAxis);
-		negate(contact.contactNormal, contact.contactNormal);
+		if (squaredLength(hit.penetrationAxis) > 0) {
+			normalize$2(contact.contactNormal, hit.penetrationAxis);
+			negate(contact.contactNormal, contact.contactNormal);
+		} else set$8(contact.contactNormal, 0, 0, 0);
 		const body = get(this.world, hit.bodyIdB);
 		if (!body) return;
 		getSurfaceNormal(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
 		copy$9(contact.surfaceNormal, _surfaceNormal_temp);
-		if (dot$2(contact.contactNormal, contact.surfaceNormal) < 0) negate(contact.surfaceNormal, contact.surfaceNormal);
+		if (dot$2(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) negate(contact.surfaceNormal, contact.surfaceNormal);
 		if (dot$2(contact.contactNormal, this.character.up) > dot$2(contact.surfaceNormal, this.character.up)) copy$9(contact.surfaceNormal, contact.contactNormal);
 		contact.distance = -hit.penetration;
 		contact.fraction = 0;
@@ -30327,7 +30336,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 		if (body.sensor) return;
 		getSurfaceNormal(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
 		copy$9(contact.surfaceNormal, _surfaceNormal_temp);
-		if (dot$2(contact.contactNormal, contact.surfaceNormal) < 0) negate(contact.surfaceNormal, contact.surfaceNormal);
+		if (dot$2(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) negate(contact.surfaceNormal, contact.surfaceNormal);
 		if (dot$2(contact.contactNormal, this.character.up) > dot$2(contact.surfaceNormal, this.character.up)) copy$9(contact.surfaceNormal, contact.contactNormal);
 		contact.distance = -hit.penetrationDepth;
 		contact.fraction = hit.fraction;
@@ -30556,6 +30565,7 @@ function removeConflictingContacts(contacts, characterPadding, outIgnored) {
 			const contactB = contacts[j];
 			if (contactB.wasDiscarded) continue;
 			if (contactB.distance > -minRequiredPenetration) continue;
+			if (contactA.bodyId !== contactB.bodyId) continue;
 			if (dot$2(contactA.contactNormal, contactB.contactNormal) < 0) if (contactA.distance > contactB.distance) {
 				contactA.wasDiscarded = true;
 				outIgnored.push(contactA);
@@ -30841,7 +30851,7 @@ function solveConstraints(world, character, velocity, deltaTime, timeRemaining, 
 		copy$9(velocity, _solveConstraints_newVelocity);
 		previousConstraints.push(activeConstraint);
 		if (activeConstraint.projectedVelocity < 1e-8 && squaredLength(velocity) < 1e-8) break;
-		if (squaredLength(activeConstraint.linearVelocity) > 1e-16) copy$9(_solveConstraints_lastVelocity, activeConstraint.linearVelocity);
+		if (squaredLength(activeConstraint.linearVelocity) >= 1e-8) copy$9(_solveConstraints_lastVelocity, activeConstraint.linearVelocity);
 		else if (dot$2(velocity, _solveConstraints_lastVelocity) < 0) break;
 	}
 	return timeSimulated;
@@ -30865,6 +30875,7 @@ const _updateSupporting_invQ = /* @__PURE__ */ create$45();
 const _updateSupporting_downVelocity = /* @__PURE__ */ create$49();
 const _updateSupporting_displacement = /* @__PURE__ */ create$49();
 const _updateSupporting_ignoredContacts = [];
+const _updateSupporting_probeContacts = [];
 /**
 * Updates ground state from current contacts.
 * Determines if character is on ground, on steep ground, not supported, or in air.
@@ -30974,11 +30985,14 @@ function updateSupportingContact(world, character, skipContactVelocityCheck, las
 	if (numSupported > 0) ground.state = 0;
 	else if (numSliding > 0) if (deepestContact) if ((character.linearVelocity[0] - deepestContact.linearVelocity[0]) * character.up[0] + (character.linearVelocity[1] - deepestContact.linearVelocity[1]) * character.up[1] + (character.linearVelocity[2] - deepestContact.linearVelocity[2]) * character.up[2] > 1e-4) ground.state = 1;
 	else {
-		determineConstraints(character, contacts, lastDeltaTime, _activeConstraints);
+		releaseAllContacts(_updateSupporting_probeContacts);
+		for (let i = 0; i < contacts.length; i++) copyCharacterContact(acquireContact(_updateSupporting_probeContacts), contacts[i]);
+		determineConstraints(character, _updateSupporting_probeContacts, lastDeltaTime, _activeConstraints);
 		negate(_updateSupporting_downVelocity, character.up);
 		_updateSupporting_ignoredContacts.length = 0;
 		const timeSimulated = solveConstraints(world, character, _updateSupporting_downVelocity, 1, 1, void 0, _updateSupporting_displacement, _updateSupporting_ignoredContacts, _activeConstraints);
 		releaseAllConstraints(_activeConstraints);
+		releaseAllContacts(_updateSupporting_probeContacts);
 		const minRequiredDisplacementSq = .36 * lastDeltaTime * lastDeltaTime;
 		const displacementLenSq = squaredLength(_updateSupporting_displacement);
 		if (timeSimulated < .001 || displacementLenSq < minRequiredDisplacementSq) ground.state = 0;
@@ -31077,8 +31091,9 @@ const _moveShape_velocity = /* @__PURE__ */ create$49();
 * @param deltaTime time step
 * @param filter collision filter
 * @param listener optional listener for contact callbacks
+* @param outContacts contact list to collect into — character.contacts for real movement, scratch for probes
 */
-function moveShape(world, character, position, velocity, deltaTime, filter, listener) {
+function moveShape(world, character, position, velocity, deltaTime, filter, listener, outContacts) {
 	const velocityLenSq = squaredLength(velocity);
 	if (velocityLenSq > 1e-12) scale$4(_moveShape_movementDirection, velocity, 1 / Math.sqrt(velocityLenSq));
 	else zero$1(_moveShape_movementDirection);
@@ -31086,8 +31101,8 @@ function moveShape(world, character, position, velocity, deltaTime, filter, list
 	let timeRemaining = deltaTime;
 	for (let iteration = 0; iteration < character.maxCollisionIterations; iteration++) {
 		if (timeRemaining < character.minTimeRemaining) break;
-		getContactsAtPosition(world, character, position, _moveShape_movementDirection, filter, listener, character.contacts);
-		const contacts = character.contacts;
+		getContactsAtPosition(world, character, position, _moveShape_movementDirection, filter, listener, outContacts);
+		const contacts = outContacts;
 		_moveShape_ignoredContacts.length = 0;
 		removeConflictingContacts(contacts, character.characterPadding, _moveShape_ignoredContacts);
 		determineConstraints(character, contacts, deltaTime, _activeConstraints);
@@ -31111,16 +31126,7 @@ function resetContactTracking(character) {
 	const contacts = character.contacts;
 	for (let i = 0; i < contacts.length; i++) {
 		const contact = contacts[i];
-		if (contact.hadCollision) {
-			const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-			const value = acquireListenerContact(character.listenerContacts);
-			value.packedKey = packedKey;
-			value.bodyId = contact.bodyId;
-			value.subShapeId = contact.subShapeId;
-			value.count = 0;
-			value.settings.canPushCharacter = true;
-			value.settings.canReceiveImpulses = true;
-		}
+		if (contact.hadCollision) acquireListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
 	}
 }
 const _validateContact_negatedNormal = /* @__PURE__ */ create$49();
@@ -31145,8 +31151,7 @@ const _contactAdded_negatedNormal = /* @__PURE__ */ create$49();
 */
 function contactAdded(world, character, contact, listener, ioSettings) {
 	if (!listener) return;
-	const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-	const tracked = findListenerContact(character.listenerContacts, packedKey);
+	const tracked = findListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
 	if (tracked) if (++tracked.count === 1) {
 		if (listener.onContactPersisted) {
 			const body = get(world, contact.bodyId);
@@ -31163,10 +31168,7 @@ function contactAdded(world, character, contact, listener, ioSettings) {
 			const body = get(world, contact.bodyId);
 			if (body) listener.onContactAdded(character, body, contact.subShapeId, contact.position, negate(_contactAdded_negatedNormal, contact.contactNormal), ioSettings);
 		}
-		const value = acquireListenerContact(character.listenerContacts);
-		value.packedKey = packedKey;
-		value.bodyId = contact.bodyId;
-		value.subShapeId = contact.subShapeId;
+		const value = acquireListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
 		value.count = 1;
 		value.settings.canPushCharacter = ioSettings.canPushCharacter;
 		value.settings.canReceiveImpulses = ioSettings.canReceiveImpulses;
@@ -31214,19 +31216,19 @@ function handleContact(world, character, contact, listener, characterVelocity, d
 * @param listener optional listener for callbacks
 */
 function finalizeContactTracking(world, character, listener) {
-	const activeListenerContacts = getActiveListenerContacts(character.listenerContacts);
-	for (const value of activeListenerContacts) value.count = 0;
+	const live = character.listenerContacts.live;
+	for (let i = 0; i < live.length; i++) live[i].count = 0;
 	const contacts = character.contacts;
 	for (let i = 0; i < contacts.length; i++) {
 		const contact = contacts[i];
 		if (contact.hadCollision) {
-			const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-			const tracked = findListenerContact(character.listenerContacts, packedKey);
+			const tracked = findListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
 			if (tracked) tracked.count = 1;
 		}
 	}
-	if (listener?.onContactRemoved) {
-		for (const value of activeListenerContacts) if (value.count === 0) {
+	if (listener?.onContactRemoved) for (let i = 0; i < live.length; i++) {
+		const value = live[i];
+		if (value.count === 0) {
 			const body = get(world, value.bodyId);
 			if (body) listener.onContactRemoved(character, body, value.subShapeId);
 		}
@@ -31457,7 +31459,7 @@ const _move_gravityImpulse = /* @__PURE__ */ create$49();
 function move(world, character, deltaTime, gravity, listener, filter) {
 	if (deltaTime <= 0) return;
 	character.lastDeltaTime = deltaTime;
-	moveShape(world, character, character.position, character.linearVelocity, deltaTime, filter, listener);
+	moveShape(world, character, character.position, character.linearVelocity, deltaTime, filter, listener, character.contacts);
 	updateSupportingContact(world, character, false, deltaTime, listener);
 	updateInnerBodyTransform(world, character);
 	if (character.ground.bodyId !== -1 && character.mass > 0) {
@@ -31551,6 +31553,7 @@ function stickToFloor(world, character, stepDown, filter, listener) {
 const _walkStairs_contact = /* @__PURE__ */ createCharacterContact();
 const _walkStairs_testContact = /* @__PURE__ */ createCharacterContact();
 const _walkStairs_up = /* @__PURE__ */ create$49();
+const _walkStairs_probeContacts = [];
 const _walkStairs_down = /* @__PURE__ */ create$49();
 const _walkStairs_upPosition = /* @__PURE__ */ create$49();
 const _walkStairs_newPosition = /* @__PURE__ */ create$49();
@@ -31607,7 +31610,8 @@ function walkStairs(world, character, deltaTime, stepUp, stepForward, stepForwar
 	}
 	if (_walkStairs_steepSlopeNormalsCount === 0) return false;
 	copy$9(_walkStairs_newPosition, _walkStairs_upPosition);
-	moveShape(world, character, _walkStairs_newPosition, _walkStairs_characterVelocity, deltaTime, filter, listener);
+	moveShape(world, character, _walkStairs_newPosition, _walkStairs_characterVelocity, deltaTime, filter, listener, _walkStairs_probeContacts);
+	releaseAllContacts(_walkStairs_probeContacts);
 	sub(_walkStairs_horizontalMovement, _walkStairs_newPosition, _walkStairs_upPosition);
 	const horizontalMovementSq = squaredLength(_walkStairs_horizontalMovement);
 	if (horizontalMovementSq < 1e-8) return false;
@@ -31625,7 +31629,8 @@ function walkStairs(world, character, deltaTime, stepUp, stepForward, stepForwar
 		if (squaredLength(stepForwardTest) < 1e-12) return false;
 		copy$9(_walkStairs_testPosition, _walkStairs_upPosition);
 		scale$4(_walkStairs_characterVelocity, stepForwardTest, 1 / deltaTime);
-		moveShape(world, character, _walkStairs_testPosition, _walkStairs_characterVelocity, deltaTime, filter, listener);
+		moveShape(world, character, _walkStairs_testPosition, _walkStairs_characterVelocity, deltaTime, filter, listener, _walkStairs_probeContacts);
+		releaseAllContacts(_walkStairs_probeContacts);
 		sub(_walkStairs_horizontalMovement, _walkStairs_testPosition, _walkStairs_upPosition);
 		if (squaredLength(_walkStairs_horizontalMovement) <= horizontalMovementSq + 1e-8) return false;
 		if (!getFirstContactForSweep(_walkStairs_testContact, world, character, _walkStairs_testPosition, _walkStairs_down, filter, listener, void 0)) return false;
