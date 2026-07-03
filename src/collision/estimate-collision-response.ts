@@ -153,7 +153,7 @@ function initAngularConstraint(
     mat4.multiply3x3Vec(constraint.invI1_Axis, invInertia1, axis);
     mat4.multiply3x3Vec(constraint.invI2_Axis, invInertia2, axis);
 
-    let invEffectiveMass = vec3.dot(axis, constraint.invI1_Axis) + vec3.dot(axis, constraint.invI2_Axis);
+    const invEffectiveMass = vec3.dot(axis, constraint.invI1_Axis) + vec3.dot(axis, constraint.invI2_Axis);
     constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
 }
 
