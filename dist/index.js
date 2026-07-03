@@ -24130,6 +24130,7 @@ var dbvt_exports = /* @__PURE__ */ __exportAll({
 	walk: () => walk
 });
 const _stack = /* @__PURE__ */ create$9(128);
+const _flatStack = [];
 function create$3() {
 	return {
 		nodes: [],
@@ -24820,15 +24821,15 @@ function intersectAABB$1(world, dbvt, aabb, queryFilter, visitor) {
 	const qMaxX = aabb[3];
 	const qMaxY = aabb[4];
 	const qMaxZ = aabb[5];
-	reset(_stack);
-	push(_stack, dbvt.root, 0);
-	while (_stack.size > 0) {
-		const nodeIndex = pop(_stack).nodeIndex;
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
 		const node = dbvt.nodes[nodeIndex];
 		if (node.aabb[0] > qMaxX || node.aabb[3] < qMinX || node.aabb[1] > qMaxY || node.aabb[4] < qMinY || node.aabb[2] > qMaxZ || node.aabb[5] < qMinZ) continue;
 		if (!isLeaf(node)) {
-			if (node.left !== -1) push(_stack, node.left, 0);
-			if (node.right !== -1) push(_stack, node.right, 0);
+			if (node.left !== -1) _flatStack[stackSize++] = node.left;
+			if (node.right !== -1) _flatStack[stackSize++] = node.right;
 			continue;
 		}
 		const body = world.bodies.pool[node.bodyIndex];
@@ -24845,15 +24846,15 @@ function intersectPoint$1(world, dbvt, point, queryFilter, visitor) {
 	const px = point[0];
 	const py = point[1];
 	const pz = point[2];
-	reset(_stack);
-	push(_stack, dbvt.root, 0);
-	while (_stack.size > 0) {
-		const nodeIndex = pop(_stack).nodeIndex;
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
 		const node = dbvt.nodes[nodeIndex];
 		if (px < node.aabb[0] || px > node.aabb[3] || py < node.aabb[1] || py > node.aabb[4] || pz < node.aabb[2] || pz > node.aabb[5]) continue;
 		if (!isLeaf(node)) {
-			if (node.left !== -1) push(_stack, node.left, 0);
-			if (node.right !== -1) push(_stack, node.right, 0);
+			if (node.left !== -1) _flatStack[stackSize++] = node.left;
+			if (node.right !== -1) _flatStack[stackSize++] = node.right;
 			continue;
 		}
 		const body = world.bodies.pool[node.bodyIndex];
@@ -24868,14 +24869,14 @@ function intersectPoint$1(world, dbvt, point, queryFilter, visitor) {
 }
 function walk(dbvt, visitor, world) {
 	if (dbvt.root === -1) return;
-	reset(_stack);
-	push(_stack, dbvt.root, 0);
-	while (_stack.size > 0) {
-		const nodeIndex = pop(_stack).nodeIndex;
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
 		const node = dbvt.nodes[nodeIndex];
 		if (!isLeaf(node)) {
-			if (node.left !== -1) push(_stack, node.left, 0);
-			if (node.right !== -1) push(_stack, node.right, 0);
+			if (node.left !== -1) _flatStack[stackSize++] = node.left;
+			if (node.right !== -1) _flatStack[stackSize++] = node.right;
 			continue;
 		}
 		const body = world.bodies.pool[node.bodyIndex];

@@ -43,6 +43,11 @@ export type DBVTNode = {
 
 const _stack = /* @__PURE__ */ bvhStack.create(128);
 
+// flat SMI stack of node indices for overlap traversals (intersectAABB / intersectPoint /
+// walk) — they never use the distance that bvhStack entries carry. grow-once with a size
+// counter (no pop()/length churn, stays packed). cast traversals keep the distance stack.
+const _flatStack: number[] = [];
+
 export function create(): DBVT {
     const dbvt: DBVT = {
         nodes: [],
@@ -634,12 +639,11 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
     const qMaxY = aabb[4];
     const qMaxZ = aabb[5];
 
-    bvhStack.reset(_stack);
-    bvhStack.push(_stack, dbvt.root, 0);
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
 
-    while (_stack.size > 0) {
-        const entry = bvhStack.pop(_stack)!;
-        const nodeIndex = entry.nodeIndex;
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
         const node = dbvt.nodes[nodeIndex];
 
         // node aabb test
@@ -656,8 +660,8 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 
         // if internal node, push children
         if (!isLeaf(node)) {
-            if (node.left !== -1) bvhStack.push(_stack, node.left, 0);
-            if (node.right !== -1) bvhStack.push(_stack, node.right, 0);
+            if (node.left !== -1) _flatStack[stackSize++] = node.left;
+            if (node.right !== -1) _flatStack[stackSize++] = node.right;
             continue;
         }
 
@@ -715,12 +719,11 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
     const py = point[1];
     const pz = point[2];
 
-    bvhStack.reset(_stack);
-    bvhStack.push(_stack, dbvt.root, 0);
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
 
-    while (_stack.size > 0) {
-        const entry = bvhStack.pop(_stack)!;
-        const nodeIndex = entry.nodeIndex;
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
         const node = dbvt.nodes[nodeIndex];
 
         // skip if point is not inside node's AABB
@@ -737,8 +740,8 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
 
         // if internal node, push children
         if (!isLeaf(node)) {
-            if (node.left !== -1) bvhStack.push(_stack, node.left, 0);
-            if (node.right !== -1) bvhStack.push(_stack, node.right, 0);
+            if (node.left !== -1) _flatStack[stackSize++] = node.left;
+            if (node.right !== -1) _flatStack[stackSize++] = node.right;
             continue;
         }
 
@@ -791,17 +794,16 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
 export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     if (dbvt.root === -1) return;
 
-    bvhStack.reset(_stack);
-    bvhStack.push(_stack, dbvt.root, 0);
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
 
-    while (_stack.size > 0) {
-        const entry = bvhStack.pop(_stack)!;
-        const nodeIndex = entry.nodeIndex;
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
         const node = dbvt.nodes[nodeIndex];
 
         if (!isLeaf(node)) {
-            if (node.left !== -1) bvhStack.push(_stack, node.left, 0);
-            if (node.right !== -1) bvhStack.push(_stack, node.right, 0);
+            if (node.left !== -1) _flatStack[stackSize++] = node.left;
+            if (node.right !== -1) _flatStack[stackSize++] = node.right;
             continue;
         }
 
