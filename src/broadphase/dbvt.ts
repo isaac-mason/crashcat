@@ -3,7 +3,6 @@ import type { RigidBody } from '../body/rigid-body';
 import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
-import * as bvhStack from '../utils/bvh-stack';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
 
@@ -41,12 +40,16 @@ export type DBVTNode = {
     previousAabb: Box3;
 };
 
-const _stack = /* @__PURE__ */ bvhStack.create(128);
-
 // flat SMI stack of node indices for overlap traversals (intersectAABB / intersectPoint /
-// walk) — they never use the distance that bvhStack entries carry. grow-once with a size
-// counter (no pop()/length churn, stays packed). cast traversals keep the distance stack.
+// walk) — they carry no distances. grow-once with a size counter (no pop()/length churn,
+// stays packed).
 const _flatStack: number[] = [];
+
+// parallel flat stacks for cast traversals: node indices (SMI array) + distances (double
+// array) sharing one size counter — jolt keeps the same structure (a distance stack
+// parallel to the node stack). separate arrays so each keeps its optimal element kind.
+const _castStackNode: number[] = [];
+const _castStackDist: number[] = [];
 
 export function create(): DBVT {
     const dbvt: DBVT = {
@@ -842,13 +845,15 @@ export function castRay(
     const dirZ = _ray.direction[2];
     const rayLen = _ray.length;
 
-    bvhStack.reset(_stack);
-    bvhStack.push(_stack, dbvt.root, -Infinity); // root always visited
+    let stackSize = 0;
+    _castStackNode[stackSize] = dbvt.root;
+    _castStackDist[stackSize] = -Infinity; // root always visited
+    stackSize++;
 
-    while (_stack.size > 0) {
-        const entry = bvhStack.pop(_stack)!;
-        const nodeIndex = entry.nodeIndex;
-        const nodeDistance = entry.distance;
+    while (stackSize > 0) {
+        stackSize--;
+        const nodeIndex = _castStackNode[stackSize];
+        const nodeDistance = _castStackDist[stackSize];
         const node = dbvt.nodes[nodeIndex];
 
         // early-out: skip nodes beyond ray length
@@ -879,11 +884,27 @@ export function castRay(
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
-                if (node.right !== -1) bvhStack.push(_stack, node.right, rightDist);
-                if (node.left !== -1) bvhStack.push(_stack, node.left, leftDist);
+                if (node.right !== -1) {
+                    _castStackNode[stackSize] = node.right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
+                if (node.left !== -1) {
+                    _castStackNode[stackSize] = node.left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
             } else {
-                if (node.left !== -1) bvhStack.push(_stack, node.left, leftDist);
-                if (node.right !== -1) bvhStack.push(_stack, node.right, rightDist);
+                if (node.left !== -1) {
+                    _castStackNode[stackSize] = node.left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
+                if (node.right !== -1) {
+                    _castStackNode[stackSize] = node.right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
             }
             continue;
         }
@@ -963,13 +984,15 @@ export function castAABB(
     const dirY = castLen > 0 ? displacement[1] / castLen : 0;
     const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
 
-    bvhStack.reset(_stack);
-    bvhStack.push(_stack, dbvt.root, -Infinity); // root always visited
+    let stackSize = 0;
+    _castStackNode[stackSize] = dbvt.root;
+    _castStackDist[stackSize] = -Infinity; // root always visited
+    stackSize++;
 
-    while (_stack.size > 0) {
-        const entry = bvhStack.pop(_stack)!;
-        const nodeIndex = entry.nodeIndex;
-        const nodeDistance = entry.distance;
+    while (stackSize > 0) {
+        stackSize--;
+        const nodeIndex = _castStackNode[stackSize];
+        const nodeDistance = _castStackDist[stackSize];
         const node = dbvt.nodes[nodeIndex];
 
         // early-out: skip nodes beyond cast length
@@ -1013,11 +1036,27 @@ export function castAABB(
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
-                if (node.right !== -1) bvhStack.push(_stack, node.right, rightDist);
-                if (node.left !== -1) bvhStack.push(_stack, node.left, leftDist);
+                if (node.right !== -1) {
+                    _castStackNode[stackSize] = node.right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
+                if (node.left !== -1) {
+                    _castStackNode[stackSize] = node.left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
             } else {
-                if (node.left !== -1) bvhStack.push(_stack, node.left, leftDist);
-                if (node.right !== -1) bvhStack.push(_stack, node.right, rightDist);
+                if (node.left !== -1) {
+                    _castStackNode[stackSize] = node.left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
+                if (node.right !== -1) {
+                    _castStackNode[stackSize] = node.right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
             }
             continue;
         }
