@@ -43,6 +43,9 @@ import type { World } from './world';
  * @param timeStep the time step to advance the world by, in seconds
  */
 export function updateWorld(world: World, listener: Listener | undefined, timeStep: number): void {
+    /* fire deferred contact-removed events (queued by body removal since the last update) */
+    contacts.flushPendingContactRemoved(world.contacts, listener);
+
     /* reset CCD state for this frame */
     ccd.clear(world.ccd, world.bodies);
 

@@ -434,7 +434,11 @@ export function create(world: World, settings: RigidBodySettings): RigidBody {
 }
 
 /**
- * Removes a body from the world
+ * Removes a body from the world.
+ *
+ * onContactRemoved events for the body's live contacts are deferred and fired during the
+ * next updateWorld (matching jolt semantics — the callback carries body IDs, so it is safe
+ * even though the body is destroyed by then).
  * @returns true if the body was successfully removed, false if the body was already pooled (invalid)
  */
 export function remove(world: World, body: RigidBody): boolean {
@@ -446,7 +450,7 @@ export function remove(world: World, body: RigidBody): boolean {
     // remove from active bodies list
     removeBodyFromActiveBodies(world, body);
 
-    // destroy all contacts involving this body
+    // destroy all contacts involving this body (removal events are queued for the next updateWorld)
     contacts.destroyBodyContacts(world.contacts, world.bodies, body);
 
     // destroy all constraints involving this body

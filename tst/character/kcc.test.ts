@@ -260,3 +260,61 @@ describe('KCC listener contact identity', () => {
         expect(persisted).not.toContain(floorAId);
     });
 });
+
+describe('KCC contact removed for destroyed body', () => {
+    /**
+     * onContactRemoved receives the body ID (not the body) so removal fires even when
+     * the contacted body has been destroyed — a destroyed body has no RigidBody to pass.
+     */
+    test('destroying the ground fires onContactRemoved with its id', () => {
+        const { world, layers } = createTestWorld();
+
+        const floor = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(50, 0.5, 50) }),
+            position: vec3.fromValues(0, -0.5, 0),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        });
+
+        updateWorld(world, undefined, DELTA_TIME);
+
+        const character = kcc.create(
+            {
+                shape: capsule.create({ halfHeightOfCylinder: 0.5, radius: 0.3 }),
+                mass: 70,
+                up: vec3.fromValues(0, 1, 0),
+                supportingVolumePlane: vec4.fromValues(0, 1, 0, -1e10),
+            },
+            vec3.fromValues(0, 0.01, 0),
+            quat.create(),
+        );
+
+        const characterFilter = filter.create(world.settings.layers);
+        const updateSettings = kcc.createDefaultUpdateSettings();
+        const gravity = vec3.fromValues(0, -10, 0);
+
+        const removed: number[] = [];
+        const listener = {
+            onContactRemoved: (_c: unknown, bodyId: number) => {
+                removed.push(bodyId);
+            },
+        };
+
+        const step = () => {
+            vec3.scaleAndAdd(character.linearVelocity, character.linearVelocity, gravity, DELTA_TIME);
+            kcc.update(world, character, DELTA_TIME, gravity, updateSettings, listener, characterFilter);
+            updateWorld(world, listener, DELTA_TIME);
+        };
+
+        // settle onto the floor to establish the tracked contact
+        for (let i = 0; i < 5; i++) step();
+        expect(removed.length).toBe(0);
+
+        // destroy the floor, then step: the tracked contact disappears and the removal
+        // must fire with the destroyed body's id
+        const floorId = floor.id;
+        rigidBody.remove(world, floor);
+        step();
+        expect(removed).toContain(floorId);
+    });
+});

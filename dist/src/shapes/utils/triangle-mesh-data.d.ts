@@ -16,6 +16,12 @@ export type TriangleMeshData = {
     triangleBuffer: number[];
     /** total number of triangles */
     triangleCount: number;
+    /**
+     * per-triangle mesh-local aabbs [minX, minY, minZ, maxX, maxY, maxZ, ...], 6 per triangle.
+     * derived at build time (after the bvh build finalizes triangle order) so cast queries
+     * read them instead of recomputing from the vertex indices per query.
+     */
+    triangleAABBs: number[];
 };
 /** get triangle vertex indices */
 export declare function getTriangleIndices(out: [number, number, number], data: TriangleMeshData, triIdx: number): void;
@@ -31,6 +37,8 @@ export declare function getActiveEdges(data: TriangleMeshData, triIdx: number): 
 export declare function setActiveEdges(data: TriangleMeshData, triIdx: number, activeEdges: number): void;
 /** get material id */
 export declare function getMaterialId(data: TriangleMeshData, triIdx: number): number;
+/** fill data.triangleAABBs from the (final, post-bvh-build) triangle buffer */
+export declare function precomputeTriangleAABBs(data: TriangleMeshData): void;
 /** calculate triangle aabb from vertices */
 export declare function calculateTriangleAABB(out: Box3, data: TriangleMeshData, triIdx: number): void;
 /** calculate triangle centroid from vertices */

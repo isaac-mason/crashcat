@@ -239,8 +239,12 @@ export type CharacterListener = {
     onContactPersisted?: (character: KCC, body: RigidBody, subShapeId: number, contactPosition: Vec3, contactNormal: Vec3, settings: CharacterContactSettings) => void;
     /** called during constraint solving to allow velocity modification */
     onContactSolve?: (character: KCC, body: RigidBody, subShapeId: number, contactPosition: Vec3, contactNormal: Vec3, contactVelocity: Vec3, characterVelocity: Vec3, ioCharacterVelocity: Vec3) => void;
-    /** called when a contact is removed */
-    onContactRemoved?: (character: KCC, body: RigidBody, subShapeId: number) => void;
+    /**
+     * called when a contact is removed. receives the body ID (not the body): the body may
+     * have been removed and destroyed, in which case this still fires but the body cannot
+     * be accessed.
+     */
+    onContactRemoved?: (character: KCC, bodyId: BodyId, subShapeId: number) => void;
 };
 /** default settings for kinematic character controller when settings are not specified */
 export declare const DEFAULT_KCC_SETTINGS: {

@@ -21422,6 +21422,30 @@ function getActiveEdges(data, triIdx) {
 function getMaterialId(data, triIdx) {
 	return data.triangleBuffer[triIdx * 8 + 7];
 }
+const _precomputeAABB = [
+	0,
+	0,
+	0,
+	0,
+	0,
+	0
+];
+/** fill data.triangleAABBs from the (final, post-bvh-build) triangle buffer */
+function precomputeTriangleAABBs(data) {
+	const count = data.triangleCount;
+	const aabbs = data.triangleAABBs;
+	aabbs.length = count * 6;
+	for (let triIdx = 0; triIdx < count; triIdx++) {
+		calculateTriangleAABB(_precomputeAABB, data, triIdx);
+		const offset = triIdx * 6;
+		aabbs[offset] = _precomputeAABB[0];
+		aabbs[offset + 1] = _precomputeAABB[1];
+		aabbs[offset + 2] = _precomputeAABB[2];
+		aabbs[offset + 3] = _precomputeAABB[3];
+		aabbs[offset + 4] = _precomputeAABB[4];
+		aabbs[offset + 5] = _precomputeAABB[5];
+	}
+}
 /** calculate triangle aabb from vertices */
 function calculateTriangleAABB(out, data, triIdx) {
 	const buffer = data.triangleBuffer;
@@ -22142,15 +22166,18 @@ function buildTriangleMesh(settings) {
 	const data = {
 		positions,
 		triangleBuffer,
-		triangleCount: finalTriangleCount
+		triangleCount: finalTriangleCount,
+		triangleAABBs: []
 	};
 	computeActiveEdges(data, settings.activeEdgeCosThresholdAngle);
+	const bvh = build(data, {
+		strategy: settings.bvhSplitStrategy,
+		maxLeafTris: settings.bvhMaxLeafTris
+	});
+	precomputeTriangleAABBs(data);
 	return {
 		data,
-		bvh: build(data, {
-			strategy: settings.bvhSplitStrategy,
-			maxLeafTris: settings.bvhMaxLeafTris
-		})
+		bvh
 	};
 }
 const WELD_GRID_INV = 1e8;
@@ -22524,7 +22551,6 @@ const _castConvexVsTriangleMesh_triangleC = /* @__PURE__ */ create$49();
 const _castConvexVsTriangleMesh_getTriangleVertices_a = /* @__PURE__ */ create$49();
 const _castConvexVsTriangleMesh_getTriangleVertices_b = /* @__PURE__ */ create$49();
 const _castConvexVsTriangleMesh_getTriangleVertices_c = /* @__PURE__ */ create$49();
-const _castConvexVsTriangleMesh_computeTriangleAABB_result = /* @__PURE__ */ create$42();
 const _castConvexVsTriangleMesh_edgeA = /* @__PURE__ */ create$49();
 const _castConvexVsTriangleMesh_edgeB = /* @__PURE__ */ create$49();
 const _castConvexVsTriangleMesh_triangleNormal = /* @__PURE__ */ create$49();
@@ -22596,17 +22622,17 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 		if (nodeIsLeaf(buffer, nodeOffset)) {
 			const triStart = nodeTriStart(buffer, nodeOffset);
 			const triCount = nodeTriCount(buffer, nodeOffset);
+			const triangleAABBs = meshData.triangleAABBs;
 			for (let i = 0; i < triCount; i++) {
 				const triangleIndex = triStart + i;
-				calculateTriangleAABB(_castConvexVsTriangleMesh_computeTriangleAABB_result, meshData, triangleIndex);
+				const aabbOffset = triangleIndex * 6;
 				const triBounds = _castConvexVsTriangleMesh_triExpandedBounds;
-				copy$4(triBounds, _castConvexVsTriangleMesh_computeTriangleAABB_result);
-				triBounds[0] -= halfExtents[0];
-				triBounds[1] -= halfExtents[1];
-				triBounds[2] -= halfExtents[2];
-				triBounds[3] += halfExtents[0];
-				triBounds[4] += halfExtents[1];
-				triBounds[5] += halfExtents[2];
+				triBounds[0] = triangleAABBs[aabbOffset] - halfExtents[0];
+				triBounds[1] = triangleAABBs[aabbOffset + 1] - halfExtents[1];
+				triBounds[2] = triangleAABBs[aabbOffset + 2] - halfExtents[2];
+				triBounds[3] = triangleAABBs[aabbOffset + 3] + halfExtents[0];
+				triBounds[4] = triangleAABBs[aabbOffset + 4] + halfExtents[1];
+				triBounds[5] = triangleAABBs[aabbOffset + 5] + halfExtents[2];
 				if (!intersectsBox3(ray, triBounds)) continue;
 				if (collector.earlyOutFraction <= 0) return;
 				getTriangleVertices(_castConvexVsTriangleMesh_getTriangleVertices_a, _castConvexVsTriangleMesh_getTriangleVertices_b, _castConvexVsTriangleMesh_getTriangleVertices_c, meshData, triangleIndex);
@@ -23054,9 +23080,8 @@ const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ create$45();
 const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ create$49();
-const _castSphereVsTriangleMesh_sweptBounds = /* @__PURE__ */ create$42();
-const _castSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ create$49();
-const _castSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ create$49();
+const _castSphereVsTriangleMesh_ray = /* @__PURE__ */ create$40();
+const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ create$42();
 const _castSphereVsTriangleMesh_stack = /* @__PURE__ */ create$9();
 const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_v1 = /* @__PURE__ */ create$49();
@@ -23075,7 +23100,6 @@ const _castSphereVsTriangleMesh_hit = /* @__PURE__ */ createCastShapeHit();
 const _castSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ builder();
 const _castSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_origin = /* @__PURE__ */ create$49();
-const _castSphereVsTriangleMesh_endPoint = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_contactPointAWorld = /* @__PURE__ */ create$49();
 const _castSphereVsTriangleMesh_contactPointBWorld = /* @__PURE__ */ create$49();
@@ -23160,20 +23184,22 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const start = _castSphereVsTriangleMesh_start;
 	const direction = _castSphereVsTriangleMesh_direction;
 	const scaleSign = isScaleInsideOut$1(scaleB) ? -1 : 1;
-	const sweptBounds = _castSphereVsTriangleMesh_sweptBounds;
-	const endPoint = add$3(_castSphereVsTriangleMesh_endPoint, start, direction);
-	sweptBounds[0] = Math.min(start[0], endPoint[0]) - sphereRadius;
-	sweptBounds[1] = Math.min(start[1], endPoint[1]) - sphereRadius;
-	sweptBounds[2] = Math.min(start[2], endPoint[2]) - sphereRadius;
-	sweptBounds[3] = Math.max(start[0], endPoint[0]) + sphereRadius;
-	sweptBounds[4] = Math.max(start[1], endPoint[1]) + sphereRadius;
-	sweptBounds[5] = Math.max(start[2], endPoint[2]) + sphereRadius;
+	const ray = _castSphereVsTriangleMesh_ray;
+	copy$9(ray.origin, start);
+	ray.length = length(direction);
+	if (ray.length > 1e-10) normalize$2(ray.direction, direction);
+	else {
+		ray.direction[0] = 0;
+		ray.direction[1] = 0;
+		ray.direction[2] = 0;
+	}
 	reset(_castSphereVsTriangleMesh_stack);
-	center(_castSphereVsTriangleMesh_queryCenter, sweptBounds);
 	push(_castSphereVsTriangleMesh_stack, 0, 0);
+	const expandedBounds = _castSphereVsTriangleMesh_expandedBounds;
 	while (_castSphereVsTriangleMesh_stack.size > 0) {
-		const nodeOffset = pop(_castSphereVsTriangleMesh_stack).nodeIndex;
-		if (!nodeIntersectsBox(buffer, nodeOffset, sweptBounds[0], sweptBounds[1], sweptBounds[2], sweptBounds[3], sweptBounds[4], sweptBounds[5])) continue;
+		const entry = pop(_castSphereVsTriangleMesh_stack);
+		if (entry.distance >= collector.earlyOutFraction) continue;
+		const nodeOffset = entry.nodeIndex;
 		if (nodeIsLeaf(buffer, nodeOffset)) {
 			const triStart = nodeTriStart(buffer, nodeOffset);
 			const triCount = nodeTriCount(buffer, nodeOffset);
@@ -23266,16 +23292,26 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 		} else {
 			const leftOffset = nodeLeft(nodeOffset);
 			const rightOffset = nodeRight(buffer, nodeOffset);
-			nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, leftOffset);
-			const leftDist = squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
-			nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, rightOffset);
-			const rightDist = squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
+			expandedBounds[0] = buffer[leftOffset + 0] - sphereRadius;
+			expandedBounds[1] = buffer[leftOffset + 1] - sphereRadius;
+			expandedBounds[2] = buffer[leftOffset + 2] - sphereRadius;
+			expandedBounds[3] = buffer[leftOffset + 3] + sphereRadius;
+			expandedBounds[4] = buffer[leftOffset + 4] + sphereRadius;
+			expandedBounds[5] = buffer[leftOffset + 5] + sphereRadius;
+			const leftDist = rayDistanceToBox3(ray.origin[0], ray.origin[1], ray.origin[2], ray.direction[0], ray.direction[1], ray.direction[2], ray.length, expandedBounds);
+			expandedBounds[0] = buffer[rightOffset + 0] - sphereRadius;
+			expandedBounds[1] = buffer[rightOffset + 1] - sphereRadius;
+			expandedBounds[2] = buffer[rightOffset + 2] - sphereRadius;
+			expandedBounds[3] = buffer[rightOffset + 3] + sphereRadius;
+			expandedBounds[4] = buffer[rightOffset + 4] + sphereRadius;
+			expandedBounds[5] = buffer[rightOffset + 5] + sphereRadius;
+			const rightDist = rayDistanceToBox3(ray.origin[0], ray.origin[1], ray.origin[2], ray.direction[0], ray.direction[1], ray.direction[2], ray.length, expandedBounds);
 			if (leftDist <= rightDist) {
-				push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
-				push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+				if (rightDist < collector.earlyOutFraction) push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+				if (leftDist < collector.earlyOutFraction) push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
 			} else {
-				push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
-				push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+				if (leftDist < collector.earlyOutFraction) push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+				if (rightDist < collector.earlyOutFraction) push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
 			}
 		}
 	}
@@ -23880,174 +23916,6 @@ function estimateCollisionResponse(result, body1, body2, manifold, combinedFrict
 			result.contactImpulse[c] = solve(normalConstraint, result.contactImpulse[c], 0, Number.MAX_VALUE, invMass1, invMass2, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, normal);
 		}
 	}
-}
-//#endregion
-//#region src/body/sleep.ts
-/** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
-const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
-const _extents = /* @__PURE__ */ create$49();
-const _rot = /* @__PURE__ */ create$46();
-const _axis = /* @__PURE__ */ create$49();
-/**
-* get the 3 test points for sleep detection:
-* - center of mass
-* - center of mass + largest bounding box axis
-* - center of mass + second largest bounding box axis
-* 
-*/
-function getSleepTestPoints(body, outPoints) {
-	const com = body.centerOfMassPosition;
-	let out = outPoints[0];
-	out[0] = com[0];
-	out[1] = com[1];
-	out[2] = com[2];
-	let box = body.shape.aabb;
-	_extents[0] = (box[3] - box[0]) * .5;
-	_extents[1] = (box[4] - box[1]) * .5;
-	_extents[2] = (box[5] - box[2]) * .5;
-	const ex = _extents[0];
-	const ey = _extents[1];
-	const ez = _extents[2];
-	let q = body.quaternion;
-	const x = q[0];
-	const y = q[1];
-	const z = q[2];
-	const w = q[3];
-	const x2 = x + x;
-	const y2 = y + y;
-	const z2 = z + z;
-	const xx = x * x2;
-	const yx = y * x2;
-	const yy = y * y2;
-	const zx = z * x2;
-	const zy = z * y2;
-	const zz = z * z2;
-	const wx = w * x2;
-	const wy = w * y2;
-	const wz = w * z2;
-	_rot[0] = 1 - yy - zz;
-	_rot[3] = yx - wz;
-	_rot[6] = zx + wy;
-	_rot[1] = yx + wz;
-	_rot[4] = 1 - xx - zz;
-	_rot[7] = zy - wx;
-	_rot[2] = zx - wy;
-	_rot[5] = zy + wx;
-	_rot[8] = 1 - xx - yy;
-	let c1;
-	let s1;
-	let c2;
-	let s2;
-	if (ex <= ey && ex <= ez) {
-		c1 = 3;
-		s1 = ey;
-		c2 = 6;
-		s2 = ez;
-	} else if (ey <= ez) {
-		c1 = 0;
-		s1 = ex;
-		c2 = 6;
-		s2 = ez;
-	} else {
-		c1 = 0;
-		s1 = ex;
-		c2 = 3;
-		s2 = ey;
-	}
-	_axis[0] = _rot[c1];
-	_axis[1] = _rot[c1 + 1];
-	_axis[2] = _rot[c1 + 2];
-	let out$1 = outPoints[1];
-	out$1[0] = com[0] + _axis[0] * s1;
-	out$1[1] = com[1] + _axis[1] * s1;
-	out$1[2] = com[2] + _axis[2] * s1;
-	_axis[0] = _rot[c2];
-	_axis[1] = _rot[c2 + 1];
-	_axis[2] = _rot[c2 + 2];
-	let out$2 = outPoints[2];
-	out$2[0] = com[0] + _axis[0] * s2;
-	out$2[1] = com[1] + _axis[1] * s2;
-	out$2[2] = com[2] + _axis[2] * s2;
-}
-/** reset the sleep test spheres to center around the given points with radius 0 */
-function resetSleepTestSpheres(mp, points) {
-	for (let i = 0; i < 3; i++) {
-		copy$9(mp.sleepTestSpheres[i].center, points[i]);
-		mp.sleepTestSpheres[i].radius = 0;
-	}
-	mp.sleepTestTimer = 0;
-}
-const _updateSleepState_points = [
-	create$49(),
-	create$49(),
-	create$49()
-];
-/** update the sleep state of a body, returns true if the body can sleep, false if it cannot */
-function updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep) {
-	const mp = body.motionProperties;
-	if (!mp.allowSleeping || body.sensor) return false;
-	getSleepTestPoints(body, _updateSleepState_points);
-	for (let i = 0; i < 3; i++) {
-		const sphere = mp.sleepTestSpheres[i];
-		const distanceToPoint = distance(sphere.center, _updateSleepState_points[i]);
-		sphere.radius = Math.max(sphere.radius, distanceToPoint);
-		if (sphere.radius > maxMovement) {
-			resetSleepTestSpheres(mp, _updateSleepState_points);
-			return false;
-		}
-	}
-	mp.sleepTestTimer += deltaTime;
-	return mp.sleepTestTimer >= timeBeforeSleep;
-}
-const _resetSleepTimer_points = [
-	create$49(),
-	create$49(),
-	create$49()
-];
-/** reset the sleep timer for a body (called when body is activated or velocity is set) */
-function resetSleepTimer(body) {
-	if (body.motionType !== 2) return;
-	getSleepTestPoints(body, _resetSleepTimer_points);
-	resetSleepTestSpheres(body.motionProperties, _resetSleepTimer_points);
-}
-/** adds a body to the active bodies list, alled when a body wakes up or is created as non-sleeping */
-function addBodyToActiveBodies(world, body) {
-	const bodies = world.bodies;
-	if (body.activeIndex !== INACTIVE_BODY_INDEX) return;
-	body.activeIndex = bodies.activeBodyCount;
-	bodies.activeBodyIndices[bodies.activeBodyCount] = body.index;
-	bodies.activeBodyCount++;
-}
-/** removes a body from the active bodies list using swap-remove, called when a body goes to sleep or is destroyed */
-function removeBodyFromActiveBodies(world, body) {
-	const bodies = world.bodies;
-	if (body.activeIndex === INACTIVE_BODY_INDEX) return;
-	const lastIndex = bodies.activeBodyCount - 1;
-	if (body.activeIndex !== lastIndex) {
-		const lastBodyIndex = bodies.activeBodyIndices[lastIndex];
-		bodies.activeBodyIndices[body.activeIndex] = lastBodyIndex;
-		const lastBody = bodies.pool[lastBodyIndex];
-		lastBody.activeIndex = body.activeIndex;
-	}
-	body.activeIndex = INACTIVE_BODY_INDEX;
-	bodies.activeBodyCount--;
-}
-/** puts a body to sleep, sleeping bodies are excluded from physics simulation until woken */
-function sleep(world, body) {
-	if (body.motionType === 0) return;
-	if (body.sleeping) return;
-	removeBodyFromActiveBodies(world, body);
-	body.sleeping = true;
-	zero$1(body.motionProperties.linearVelocity);
-	zero$1(body.motionProperties.angularVelocity);
-}
-/** wakes a sleeping body and all connected bodies (via contacts and constraints) */
-function wake(world, body) {
-	if (body.motionType === 0) return;
-	resetSleepTimer(body);
-	if (!body.sleeping) return;
-	body.sleeping = false;
-	addBodyToActiveBodies(world, body);
 }
 //#endregion
 //#region src/filter.ts
@@ -25139,41 +25007,37 @@ var broadphase_exports = /* @__PURE__ */ __exportAll({
 	updateBody: () => updateBody
 });
 /**
-* Determines if a body will query the broadphase during findCollidingPairs.
-* Bodies that don't query rely on other bodies to find collision pairs with them.
+* The single pair predicate for findCollidingPairs: decides whether an (activeBody, otherBody)
+* candidate found by the tree query becomes a narrowphase pair. All pair-level filtering lives
+* here, in one place (jolt: Body::sFindCollidingPairsCanCollide + ObjectLayerPairFilter,
+* evaluated together at the query leaf).
 *
-* Static bodies never query (they are found by active bodies).
-* Sleeping bodies never query (they are found by active bodies, which wakes them).
+* `activeBody` is always drawn from the active body list, so it is awake and non-static —
+* static-static pairs are unrepresentable.
 */
-function shouldQueryBroadphase(body) {
-	if (body.motionType === 0) return false;
-	if (body.sleeping) return false;
+function shouldReportPair(layers, activeBody, otherBody) {
+	if (activeBody.activeIndex >= otherBody.activeIndex) return false;
+	if (!activeBody.collideKinematicVsNonDynamic && !otherBody.collideKinematicVsNonDynamic && activeBody.motionType !== 2 && otherBody.motionType !== 2 && !(activeBody.motionType === 1 && otherBody.sensor) && !(otherBody.motionType === 1 && activeBody.sensor)) return false;
+	if (!objectLayerCollidesWithObjectLayer(layers, activeBody.objectLayer, otherBody.objectLayer)) return false;
+	if (!shouldPairCollide(activeBody.collisionGroups, activeBody.collisionMask, otherBody.collisionGroups, otherBody.collisionMask)) return false;
 	return true;
-}
-/** gets a deduplication index for skipping processing of duplicate pairs */
-function getDeduplicationIndex(body) {
-	if (!shouldQueryBroadphase(body)) return INACTIVE_BODY_INDEX;
-	return body.index;
 }
 /** visitor for finding colliding body pairs, does pair deduplication and motion type filtering */
 var CollisionBodyPairVisitor = class {
 	shouldExit = false;
+	layers = null;
 	activeBody = null;
 	pairs = null;
 	listener = void 0;
-	setup(activeBody, pairs, listener) {
+	setup(layers, activeBody, pairs, listener) {
+		this.layers = layers;
 		this.activeBody = activeBody;
 		this.pairs = pairs;
 		this.listener = listener;
 		this.shouldExit = false;
 	}
 	visit(otherBody) {
-		if (this.activeBody.id === otherBody.id) return;
-		if (getDeduplicationIndex(this.activeBody) >= getDeduplicationIndex(otherBody)) return;
-		const motionTypeA = this.activeBody.motionType;
-		const motionTypeB = otherBody.motionType;
-		if (motionTypeA === 0 && motionTypeB === 0) return;
-		if (!this.activeBody.collideKinematicVsNonDynamic && !otherBody.collideKinematicVsNonDynamic && motionTypeA !== 2 && motionTypeB !== 2 && !(motionTypeA === 1 && otherBody.sensor) && !(motionTypeB === 1 && this.activeBody.sensor)) return;
+		if (!shouldReportPair(this.layers, this.activeBody, otherBody)) return;
 		if (this.listener?.onBodyPairValidate) {
 			let bodyA = this.activeBody;
 			let bodyB = otherBody;
@@ -25242,6 +25106,7 @@ function findCollidingPairs(world, speculativeContactDistance, listener) {
 	const layers = world.settings.layers;
 	const broadphase = world.broadphase;
 	broadphase.pairs.n = 0;
+	setAllEnabled(_findCollidingPairs_filter, layers);
 	for (let i = 0; i < broadphase.dbvts.length; i++) {
 		const tree = broadphase.dbvts[i];
 		optimizeIncremental(tree, Math.max(1, Math.floor((tree.nodes.length - tree.freeNodeIndices.length) * .01)));
@@ -25258,8 +25123,7 @@ function findCollidingPairs(world, speculativeContactDistance, listener) {
 			if (!objectLayerCollidesWithBroadphaseLayer(layers, activeObjectLayer, otherBroadphaseLayer)) continue;
 			if (!broadphaseLayerCollidesWithBroadphaseLayer(layers, activeBroadphaseLayer, otherBroadphaseLayer)) continue;
 			const tree = broadphase.dbvts[otherBroadphaseLayer];
-			setFromBody(_findCollidingPairs_filter, layers, body);
-			_collisionBodyPairVisitor.setup(body, broadphase.pairs, listener);
+			_collisionBodyPairVisitor.setup(layers, body, broadphase.pairs, listener);
 			intersectAABB$1(world, tree, _findCollidingPairs_expandedAABB, _findCollidingPairs_filter, _collisionBodyPairVisitor);
 		}
 	}
@@ -25309,6 +25173,174 @@ function bounds(out, broadphase) {
 		union(out, out, rootNode.aabb);
 	}
 	return out;
+}
+//#endregion
+//#region src/body/sleep.ts
+/** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
+const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
+const _extents = /* @__PURE__ */ create$49();
+const _rot = /* @__PURE__ */ create$46();
+const _axis = /* @__PURE__ */ create$49();
+/**
+* get the 3 test points for sleep detection:
+* - center of mass
+* - center of mass + largest bounding box axis
+* - center of mass + second largest bounding box axis
+* 
+*/
+function getSleepTestPoints(body, outPoints) {
+	const com = body.centerOfMassPosition;
+	let out = outPoints[0];
+	out[0] = com[0];
+	out[1] = com[1];
+	out[2] = com[2];
+	let box = body.shape.aabb;
+	_extents[0] = (box[3] - box[0]) * .5;
+	_extents[1] = (box[4] - box[1]) * .5;
+	_extents[2] = (box[5] - box[2]) * .5;
+	const ex = _extents[0];
+	const ey = _extents[1];
+	const ez = _extents[2];
+	let q = body.quaternion;
+	const x = q[0];
+	const y = q[1];
+	const z = q[2];
+	const w = q[3];
+	const x2 = x + x;
+	const y2 = y + y;
+	const z2 = z + z;
+	const xx = x * x2;
+	const yx = y * x2;
+	const yy = y * y2;
+	const zx = z * x2;
+	const zy = z * y2;
+	const zz = z * z2;
+	const wx = w * x2;
+	const wy = w * y2;
+	const wz = w * z2;
+	_rot[0] = 1 - yy - zz;
+	_rot[3] = yx - wz;
+	_rot[6] = zx + wy;
+	_rot[1] = yx + wz;
+	_rot[4] = 1 - xx - zz;
+	_rot[7] = zy - wx;
+	_rot[2] = zx - wy;
+	_rot[5] = zy + wx;
+	_rot[8] = 1 - xx - yy;
+	let c1;
+	let s1;
+	let c2;
+	let s2;
+	if (ex <= ey && ex <= ez) {
+		c1 = 3;
+		s1 = ey;
+		c2 = 6;
+		s2 = ez;
+	} else if (ey <= ez) {
+		c1 = 0;
+		s1 = ex;
+		c2 = 6;
+		s2 = ez;
+	} else {
+		c1 = 0;
+		s1 = ex;
+		c2 = 3;
+		s2 = ey;
+	}
+	_axis[0] = _rot[c1];
+	_axis[1] = _rot[c1 + 1];
+	_axis[2] = _rot[c1 + 2];
+	let out$1 = outPoints[1];
+	out$1[0] = com[0] + _axis[0] * s1;
+	out$1[1] = com[1] + _axis[1] * s1;
+	out$1[2] = com[2] + _axis[2] * s1;
+	_axis[0] = _rot[c2];
+	_axis[1] = _rot[c2 + 1];
+	_axis[2] = _rot[c2 + 2];
+	let out$2 = outPoints[2];
+	out$2[0] = com[0] + _axis[0] * s2;
+	out$2[1] = com[1] + _axis[1] * s2;
+	out$2[2] = com[2] + _axis[2] * s2;
+}
+/** reset the sleep test spheres to center around the given points with radius 0 */
+function resetSleepTestSpheres(mp, points) {
+	for (let i = 0; i < 3; i++) {
+		copy$9(mp.sleepTestSpheres[i].center, points[i]);
+		mp.sleepTestSpheres[i].radius = 0;
+	}
+	mp.sleepTestTimer = 0;
+}
+const _updateSleepState_points = [
+	create$49(),
+	create$49(),
+	create$49()
+];
+/** update the sleep state of a body, returns true if the body can sleep, false if it cannot */
+function updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep) {
+	const mp = body.motionProperties;
+	if (!mp.allowSleeping || body.sensor) return false;
+	getSleepTestPoints(body, _updateSleepState_points);
+	for (let i = 0; i < 3; i++) {
+		const sphere = mp.sleepTestSpheres[i];
+		const distanceToPoint = distance(sphere.center, _updateSleepState_points[i]);
+		sphere.radius = Math.max(sphere.radius, distanceToPoint);
+		if (sphere.radius > maxMovement) {
+			resetSleepTestSpheres(mp, _updateSleepState_points);
+			return false;
+		}
+	}
+	mp.sleepTestTimer += deltaTime;
+	return mp.sleepTestTimer >= timeBeforeSleep;
+}
+const _resetSleepTimer_points = [
+	create$49(),
+	create$49(),
+	create$49()
+];
+/** reset the sleep timer for a body (called when body is activated or velocity is set) */
+function resetSleepTimer(body) {
+	if (body.motionType !== 2) return;
+	getSleepTestPoints(body, _resetSleepTimer_points);
+	resetSleepTestSpheres(body.motionProperties, _resetSleepTimer_points);
+}
+/** adds a body to the active bodies list, alled when a body wakes up or is created as non-sleeping */
+function addBodyToActiveBodies(world, body) {
+	const bodies = world.bodies;
+	if (body.activeIndex !== INACTIVE_BODY_INDEX) return;
+	body.activeIndex = bodies.activeBodyCount;
+	bodies.activeBodyIndices[bodies.activeBodyCount] = body.index;
+	bodies.activeBodyCount++;
+}
+/** removes a body from the active bodies list using swap-remove, called when a body goes to sleep or is destroyed */
+function removeBodyFromActiveBodies(world, body) {
+	const bodies = world.bodies;
+	if (body.activeIndex === INACTIVE_BODY_INDEX) return;
+	const lastIndex = bodies.activeBodyCount - 1;
+	if (body.activeIndex !== lastIndex) {
+		const lastBodyIndex = bodies.activeBodyIndices[lastIndex];
+		bodies.activeBodyIndices[body.activeIndex] = lastBodyIndex;
+		const lastBody = bodies.pool[lastBodyIndex];
+		lastBody.activeIndex = body.activeIndex;
+	}
+	body.activeIndex = INACTIVE_BODY_INDEX;
+	bodies.activeBodyCount--;
+}
+/** puts a body to sleep, sleeping bodies are excluded from physics simulation until woken */
+function sleep(world, body) {
+	if (body.motionType === 0) return;
+	if (body.sleeping) return;
+	removeBodyFromActiveBodies(world, body);
+	body.sleeping = true;
+	zero$1(body.motionProperties.linearVelocity);
+	zero$1(body.motionProperties.angularVelocity);
+}
+/** wakes a sleeping body and all connected bodies (via contacts and constraints) */
+function wake(world, body) {
+	if (body.motionType === 0) return;
+	resetSleepTimer(body);
+	if (!body.sleeping) return;
+	body.sleeping = false;
+	addBodyToActiveBodies(world, body);
 }
 //#endregion
 //#region src/constraints/combine-material.ts
@@ -25371,6 +25403,7 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	destroyUnprocessedContacts: () => destroyUnprocessedContacts,
 	findContact: () => findContact,
 	flipManifoldCache: () => flipManifoldCache,
+	flushPendingContactRemoved: () => flushPendingContactRemoved,
 	getContactKeyEdge: () => getContactKeyEdge,
 	getContactKeyId: () => getContactKeyId,
 	getReadManifold: () => getReadManifold,
@@ -25398,7 +25431,8 @@ function init$4() {
 		contacts: [],
 		contactsFreeIndices: [],
 		readIdx: 0,
-		cachedBodyPairs: /* @__PURE__ */ new Map()
+		cachedBodyPairs: /* @__PURE__ */ new Map(),
+		pendingContactRemoved: []
 	};
 }
 /**
@@ -25406,6 +25440,13 @@ function init$4() {
 * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
 * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
 */
+/** fire and clear deferred onContactRemoved events (queued by body removal) */
+function flushPendingContactRemoved(contacts, listener) {
+	const pending = contacts.pendingContactRemoved;
+	if (pending.length === 0) return;
+	if (listener?.onContactRemoved) for (let i = 0; i < pending.length; i += 4) listener.onContactRemoved(pending[i], pending[i + 1], pending[i + 2], pending[i + 3]);
+	pending.length = 0;
+}
 function bodyPairKey(idA, idB) {
 	return idA < idB ? idA * 4294967296 + idB : idB * 4294967296 + idA;
 }
@@ -25687,7 +25728,7 @@ function hasContactsBetweenBodies(contacts, bodyA, bodyB) {
 * @param body body whose contacts should be destroyed
 * @param listener optional contact listener to notify of removal
 */
-function destroyBodyContacts(contacts, bodies, body, listener) {
+function destroyBodyContacts(contacts, bodies, body) {
 	let contactKey = body.headContactKey;
 	while (contactKey !== -1) {
 		const contactId = getContactKeyId(contactKey);
@@ -25696,7 +25737,10 @@ function destroyBodyContacts(contacts, bodies, body, listener) {
 		contactKey = contact.edges[edgeIndex].nextKey;
 		const otherBodyIndex = edgeIndex === 0 ? contact.edges[1].bodyIndex : contact.edges[0].bodyIndex;
 		const otherBody = bodies.pool[otherBodyIndex];
-		if (otherBody) destroyContact(contacts, body, otherBody, contact, listener);
+		if (otherBody) {
+			contacts.pendingContactRemoved.push(contact.bodyIdA, contact.bodyIdB, contact.subShapeIdA, contact.subShapeIdB);
+			destroyContact(contacts, body, otherBody, contact, void 0);
+		}
 	}
 	body.headContactKey = -1;
 	body.contactCount = 0;
@@ -25986,7 +26030,11 @@ function create$2(world, settings) {
 	return body;
 }
 /**
-* Removes a body from the world
+* Removes a body from the world.
+*
+* onContactRemoved events for the body's live contacts are deferred and fired during the
+* next updateWorld (matching jolt semantics — the callback carries body IDs, so it is safe
+* even though the body is destroyed by then).
 * @returns true if the body was successfully removed, false if the body was already pooled (invalid)
 */
 function remove$1(world, body) {
@@ -26146,34 +26194,34 @@ function updateShape(world, body) {
 /**
 * Sets the body's position and recomputes the world-space center of mass and AABB.
 */
-function setPosition$1(world, body, position, wake$2) {
+function setPosition$1(world, body, position, wake$5) {
 	copy$9(body.position, position);
-	updateCenterOfMassPosition(body);
-	updateAABB(body);
-	updateBody(world.broadphase, body);
-	if (wake$2) wake(world, body);
-}
-/**
-* Sets the body's orientation and recomputes the world-space center of mass and AABB.
-*/
-function setQuaternion$1(world, body, quaternion, wake$5) {
-	copy$5(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	updateBody(world.broadphase, body);
 	if (wake$5) wake(world, body);
 }
 /**
+* Sets the body's orientation and recomputes the world-space center of mass and AABB.
+*/
+function setQuaternion$1(world, body, quaternion, wake$1) {
+	copy$5(body.quaternion, quaternion);
+	updateCenterOfMassPosition(body);
+	updateAABB(body);
+	updateBody(world.broadphase, body);
+	if (wake$1) wake(world, body);
+}
+/**
 * Sets both the body's position and orientation, then recomputes the world-space center of mass and AABB.
 * This is the most efficient way to update both transform components in one operation.
 */
-function setTransform(world, body, position, quaternion, wake$4) {
+function setTransform(world, body, position, quaternion, wake$7) {
 	copy$9(body.position, position);
 	copy$5(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	updateBody(world.broadphase, body);
-	if (wake$4) wake(world, body);
+	if (wake$7) wake(world, body);
 }
 /**
 * Sets the body's object layer and updates broadphase accordingly.
@@ -26189,7 +26237,7 @@ function setObjectLayer(world, body, layer) {
 * @param motionType the new motion type
 * @param wake if true and changing to dynamic/kinematic, wakes the body
 */
-function setMotionType(world, body, motionType, wake$6) {
+function setMotionType(world, body, motionType, wake$2) {
 	const oldMotionType = body.motionType;
 	if (oldMotionType === motionType) return;
 	body.motionType = motionType;
@@ -26201,7 +26249,7 @@ function setMotionType(world, body, motionType, wake$6) {
 		if (!body.sleeping) addBodyToActiveBodies(world, body);
 		if (motionType === 2) resetSleepTimer(body);
 	}
-	if (wake$6 && motionType !== 0) wake(world, body);
+	if (wake$2 && motionType !== 0) wake(world, body);
 	if (motionType !== 0 && oldMotionType === 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
 }
 /**
@@ -26213,10 +26261,10 @@ function setMotionType(world, body, motionType, wake$6) {
 * @param force Force vector in world space
 * @param wake If true, wakes the body if sleeping
 */
-function addForce(world, body, force, wake$3) {
+function addForce(world, body, force, wake$6) {
 	if (body.motionType !== 2) return;
 	addForce$1(body.motionProperties, force);
-	if (wake$3) wake(world, body);
+	if (wake$6) wake(world, body);
 }
 /**
 * Adds a torque (angular force) directly.
@@ -26227,10 +26275,10 @@ function addForce(world, body, force, wake$3) {
 * @param torque torque vector in world space
 * @param wake if true, wakes the body if sleeping
 */
-function addTorque(world, body, torque, wake$7) {
+function addTorque(world, body, torque, wake$3) {
 	if (body.motionType !== 2) return;
 	addTorque$1(body.motionProperties, torque);
-	if (wake$7) wake(world, body);
+	if (wake$3) wake(world, body);
 }
 /**
 * Adds a force at a specific world-space position.
@@ -26243,10 +26291,10 @@ function addTorque(world, body, torque, wake$7) {
 * @param worldPosition position in world space where force is applied
 * @param wake if true, wakes the body if sleeping
 */
-function addForceAtPosition(world, body, force, worldPosition, wake$1) {
+function addForceAtPosition(world, body, force, worldPosition, wake$4) {
 	if (body.motionType !== 2) return;
 	addForceAtPosition$1(body.motionProperties, force, worldPosition, body.centerOfMassPosition);
-	if (wake$1) wake(world, body);
+	if (wake$4) wake(world, body);
 }
 /**
 * Applies an impulse at the body's center of mass.
@@ -28769,6 +28817,7 @@ function checkIslandSleep(island, world, deltaTime) {
 * @param timeStep the time step to advance the world by, in seconds
 */
 function updateWorld(world, listener, timeStep) {
+	flushPendingContactRemoved(world.contacts, listener);
 	clear(world.ccd, world.bodies);
 	world.contactConstraints.count = 0;
 	markAllUnprocessed(world.contacts);
@@ -31215,7 +31264,7 @@ function handleContact(world, character, contact, listener, characterVelocity, d
 * @param character the character controller
 * @param listener optional listener for callbacks
 */
-function finalizeContactTracking(world, character, listener) {
+function finalizeContactTracking(character, listener) {
 	const live = character.listenerContacts.live;
 	for (let i = 0; i < live.length; i++) live[i].count = 0;
 	const contacts = character.contacts;
@@ -31228,10 +31277,7 @@ function finalizeContactTracking(world, character, listener) {
 	}
 	if (listener?.onContactRemoved) for (let i = 0; i < live.length; i++) {
 		const value = live[i];
-		if (value.count === 0) {
-			const body = get(world, value.bodyId);
-			if (body) listener.onContactRemoved(character, body, value.subShapeId);
-		}
+		if (value.count === 0) listener.onContactRemoved(character, value.bodyId, value.subShapeId);
 	}
 	releaseAllListenerContacts(character.listenerContacts);
 }
@@ -31346,7 +31392,7 @@ function refreshContacts(world, character, filter, listener) {
 	else zero$1(_refreshContacts_movementDirection);
 	getContactsAtPosition(world, character, character.position, _refreshContacts_movementDirection, filter, listener, character.contacts);
 	updateSupportingContact(world, character, true, character.lastDeltaTime, listener);
-	finalizeContactTracking(world, character, listener);
+	finalizeContactTracking(character, listener);
 }
 /**
 * Checks if the character has collided with a specific body during the current frame.
@@ -31421,7 +31467,7 @@ function setShape(world, character, newShape, filter, listener, maxPenetrationDe
 		releaseAllContacts(character.contacts);
 		character.contacts = tempContacts;
 		updateSupportingContact(world, character, true, character.lastDeltaTime, listener);
-		finalizeContactTracking(world, character, listener);
+		finalizeContactTracking(character, listener);
 	} else character.shape = newShape;
 	if (character.innerRigidBodyId !== -1) {
 		const innerBody = get(world, character.innerRigidBodyId);
@@ -31708,7 +31754,7 @@ function update(world, character, deltaTime, gravity, settings, listener, filter
 			}
 		}
 	}
-	finalizeContactTracking(world, character, listener);
+	finalizeContactTracking(character, listener);
 }
 //#endregion
 //#region src/debug.ts

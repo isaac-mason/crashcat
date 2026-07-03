@@ -272,3 +272,52 @@ describe('World', () => {
         expect(bodyA.contactCount).toBe(0);
     });
 });
+
+describe('World: Contact Removed on Body Removal', () => {
+    test('removing a touching body fires onContactRemoved on the next update', () => {
+        const { world, layers } = createTestWorld();
+        const shape = sphere.create({ radius: 0.5 });
+
+        const bodyA = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, 0, 0),
+        });
+        const bodyB = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0.5, 0, 0), // overlapping
+        });
+
+        const contactRemoved: Array<{ bodyIdA: number; bodyIdB: number }> = [];
+        const listener = {
+            onContactRemoved: (bodyIdA: number, bodyIdB: number) => {
+                contactRemoved.push({ bodyIdA, bodyIdB });
+            },
+        };
+
+        // establish the contact
+        updateWorld(world, listener, 1 / 60);
+        expect(bodyA.contactCount).toBeGreaterThan(0);
+        expect(contactRemoved.length).toBe(0);
+
+        // remove body B — events are DEFERRED, not fired at removal time (jolt semantics:
+        // "you'll receive an onContactRemoved callback in the update after the body has
+        // been removed")
+        const bodyBId = bodyB.id;
+        rigidBody.remove(world, bodyB);
+        expect(contactRemoved.length).toBe(0);
+
+        // the next update fires the queued removal with the (now dead) body's id
+        updateWorld(world, listener, 1 / 60);
+        expect(contactRemoved.length).toBe(1);
+        expect(contactRemoved[0].bodyIdA).toBe(bodyA.id);
+        expect(contactRemoved[0].bodyIdB).toBe(bodyBId);
+
+        // fired exactly once
+        updateWorld(world, listener, 1 / 60);
+        expect(contactRemoved.length).toBe(1);
+    });
+});

@@ -29,6 +29,17 @@ export type Contacts = {
      * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
      */
     cachedBodyPairs: Map<number, CachedBodyPair>;
+
+    /**
+     * Deferred onContactRemoved event payloads, flat quads
+     * [bodyIdA, bodyIdB, subShapeIdA, subShapeIdB, ...].
+     *
+     * Removing a body destroys its contacts immediately, but the contact listener is an
+     * updateWorld argument — so the removal events are queued here as plain ids and fired
+     * at the start of the next updateWorld (matching jolt: "you'll receive an
+     * OnContactRemoved callback in the update after the body has been removed").
+     */
+    pendingContactRemoved: number[];
 };
 
 /**
@@ -147,6 +158,7 @@ export function init(): Contacts {
         contactsFreeIndices: [],
         readIdx: 0,
         cachedBodyPairs: new Map(),
+        pendingContactRemoved: [],
     };
 }
 
@@ -155,6 +167,19 @@ export function init(): Contacts {
  * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
  * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
  */
+/** fire and clear deferred onContactRemoved events (queued by body removal) */
+export function flushPendingContactRemoved(contacts: Contacts, listener: Listener | undefined): void {
+    const pending = contacts.pendingContactRemoved;
+    if (pending.length === 0) return;
+
+    if (listener?.onContactRemoved) {
+        for (let i = 0; i < pending.length; i += 4) {
+            listener.onContactRemoved(pending[i], pending[i + 1], pending[i + 2], pending[i + 3]);
+        }
+    }
+    pending.length = 0;
+}
+
 export function bodyPairKey(idA: number, idB: number): number {
     return idA < idB ? idA * 0x1_0000_0000 + idB : idB * 0x1_0000_0000 + idA;
 }
@@ -531,7 +556,7 @@ export function hasContactsBetweenBodies(contacts: Contacts, bodyA: RigidBody, b
  * @param body body whose contacts should be destroyed
  * @param listener optional contact listener to notify of removal
  */
-export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody, listener?: Listener): void {
+export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody): void {
     // destroy all contacts
     let contactKey = body.headContactKey;
     while (contactKey !== INVALID_CONTACT_KEY) {
@@ -547,7 +572,15 @@ export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: Ri
         const otherBody = bodies.pool[otherBodyIndex];
 
         if (otherBody) {
-            destroyContact(contacts, body, otherBody, contact, listener);
+            // queue the removal event for the next updateWorld — the listener is an
+            // updateWorld argument and is not available at body-removal time
+            contacts.pendingContactRemoved.push(
+                contact.bodyIdA,
+                contact.bodyIdB,
+                contact.subShapeIdA,
+                contact.subShapeIdB,
+            );
+            destroyContact(contacts, body, otherBody, contact, undefined);
         }
     }
 

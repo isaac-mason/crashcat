@@ -189,7 +189,11 @@ export type RigidBody = {
  */
 export declare function create(world: World, settings: RigidBodySettings): RigidBody;
 /**
- * Removes a body from the world
+ * Removes a body from the world.
+ *
+ * onContactRemoved events for the body's live contacts are deferred and fired during the
+ * next updateWorld (matching jolt semantics — the callback carries body IDs, so it is safe
+ * even though the body is destroyed by then).
  * @returns true if the body was successfully removed, false if the body was already pooled (invalid)
  */
 export declare function remove(world: World, body: RigidBody): boolean;

@@ -343,8 +343,12 @@ export type CharacterListener = {
         ioCharacterVelocity: Vec3, // can be modified
     ) => void;
 
-    /** called when a contact is removed */
-    onContactRemoved?: (character: KCC, body: RigidBody, subShapeId: number) => void;
+    /**
+     * called when a contact is removed. receives the body ID (not the body): the body may
+     * have been removed and destroyed, in which case this still fires but the body cannot
+     * be accessed.
+     */
+    onContactRemoved?: (character: KCC, bodyId: BodyId, subShapeId: number) => void;
 };
 
 const _create_supportingVolume = /* @__PURE__ */ vec4.create();
@@ -2965,7 +2969,7 @@ function handleContact(
  * @param character the character controller
  * @param listener optional listener for callbacks
  */
-function finalizeContactTracking(world: World, character: KCC, listener: CharacterListener | undefined): void {
+function finalizeContactTracking(character: KCC, listener: CharacterListener | undefined): void {
     // re-mark all contacts - reset all counts to 0, then mark active ones as 1
     const live = character.listenerContacts.live;
     for (let i = 0; i < live.length; i++) {
@@ -2983,15 +2987,13 @@ function finalizeContactTracking(world: World, character: KCC, listener: Charact
         }
     }
 
-    // fire removal callbacks for contacts not seen this frame
+    // fire removal callbacks for contacts not seen this frame — unconditionally, with the
+    // body ID: the body may already be destroyed, and removal must still be reported
     if (listener?.onContactRemoved) {
         for (let i = 0; i < live.length; i++) {
             const value = live[i];
             if (value.count === 0) {
-                const body = rigidBody.get(world, value.bodyId);
-                if (body) {
-                    listener.onContactRemoved(character, body, value.subShapeId);
-                }
+                listener.onContactRemoved(character, value.bodyId, value.subShapeId);
             }
         }
     }
@@ -3173,7 +3175,7 @@ export function refreshContacts(world: World, character: KCC, filter: Filter, li
     updateSupportingContact(world, character, true /* skipContactVelocityCheck */, character.lastDeltaTime, listener);
 
     // finalize contact tracking (fires onContactRemoved callbacks for contacts no longer active)
-    finalizeContactTracking(world, character, listener);
+    finalizeContactTracking(character, listener);
 }
 
 /**
@@ -3281,7 +3283,7 @@ export function setShape(
         releaseAllContacts(character.contacts);
         character.contacts = tempContacts;
         updateSupportingContact(world, character, true /* skipContactVelocityCheck */, character.lastDeltaTime, listener);
-        finalizeContactTracking(world, character, listener);
+        finalizeContactTracking(character, listener);
     } else {
         // no penetration test needed - just change the shape
         character.shape = newShape;
@@ -3895,5 +3897,5 @@ export function update(
     }
 
     // finalize contact tracking and fire removal callbacks at end of frame
-    finalizeContactTracking(world, character, listener);
+    finalizeContactTracking(character, listener);
 }
