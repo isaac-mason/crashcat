@@ -72,7 +72,7 @@ function gitRev() {
 
 // convert an analysis + metadata into the machine-readable summary object.
 function buildSummary(scenario, analysis, meta) {
-    const { hotspots, categories, totalMicros, wallMs, sampleCount } = analysis;
+    const { hotspots, categories, totalMicros, wallMs, startupMs, sampleCount } = analysis;
     return {
         scenario,
         date: meta.date,
@@ -81,6 +81,7 @@ function buildSummary(scenario, analysis, meta) {
         cpu: meta.cpu,
         wallMs: Number(wallMs.toFixed(1)),
         attributedMs: Number((totalMicros / 1000).toFixed(1)),
+        startupExcludedMs: Number((startupMs ?? 0).toFixed(1)),
         sampleCount,
         categories: categories.map((c) => ({
             category: c.category,
@@ -112,6 +113,7 @@ function renderReport(summary) {
     out.push(`| cpu | ${summary.cpu} |`);
     out.push(`| wall | ${summary.wallMs} ms |`);
     out.push(`| attributed | ${summary.attributedMs} ms |`);
+    out.push(`| startup excluded | ${summary.startupExcludedMs} ms |`);
     out.push(`| samples | ${summary.sampleCount} |`);
     out.push('');
 

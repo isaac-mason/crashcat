@@ -140,6 +140,7 @@ export function categorize(url) {
     if (url.includes('/src/body/')) return 'body';
     if (url.includes('/src/shapes/')) return 'shapes';
     if (url.includes('/src/update.ts') || url.includes('/src/world.ts')) return 'step';
+    if (url.includes('/src/character/')) return 'character';
     if (url.includes('/src/')) return 'crashcat-util';
     if (url.includes('/bench/')) return 'bench-harness';
     return 'other';
@@ -168,8 +169,26 @@ export function analyzeProfile(profile, resolver = createSourceMapResolver()) {
     const byId = new Map();
     for (const node of profile.nodes) byId.set(node.id, node);
 
-    const selfMicros = new Map(); // nodeId → microseconds
+    // exclude process startup: everything sampled before the first scenario-code
+    // frame (built bundle or a .bench.ts frame) is module loading / tsx compile.
+    // In short scenarios that overhead is 10-20% of samples and pollutes the
+    // category shares; it's reported separately as startupMs, not attributed.
+    let startIdx = 0;
     for (let i = 0; i < profile.samples.length; i++) {
+        const node = byId.get(profile.samples[i]);
+        const url = node?.callFrame?.url ?? '';
+        if (url.includes('/dist/index.js') || url.endsWith('.bench.ts')) {
+            startIdx = i;
+            break;
+        }
+    }
+    let startupMicros = 0;
+    for (let i = 0; i < startIdx; i++) {
+        startupMicros += Math.max(0, profile.timeDeltas[i] ?? 0);
+    }
+
+    const selfMicros = new Map(); // nodeId → microseconds
+    for (let i = startIdx; i < profile.samples.length; i++) {
         const id = profile.samples[i];
         const dt = profile.timeDeltas[i] ?? 0;
         selfMicros.set(id, (selfMicros.get(id) ?? 0) + Math.max(0, dt));
@@ -220,6 +239,7 @@ export function analyzeProfile(profile, resolver = createSourceMapResolver()) {
         categories,
         totalMicros,
         wallMs,
+        startupMs: startupMicros / 1000,
         sampleCount: profile.samples.length,
     };
 }

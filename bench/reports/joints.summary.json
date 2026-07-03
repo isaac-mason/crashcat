@@ -1,0 +1,712 @@
+{
+  "scenario": "joints",
+  "date": "2026-07-03T05:02:21.500Z",
+  "git": {
+    "rev": "ab84e99",
+    "dirty": true
+  },
+  "node": "v24.10.0",
+  "cpu": "Apple M1 Pro",
+  "wallMs": 1029.4,
+  "attributedMs": 1029.1,
+  "sampleCount": 837,
+  "categories": [
+    {
+      "category": "solver",
+      "ms": 389.2,
+      "pct": 37.8
+    },
+    {
+      "category": "runtime",
+      "ms": 210.1,
+      "pct": 20.4
+    },
+    {
+      "category": "math",
+      "ms": 121.4,
+      "pct": 11.8
+    },
+    {
+      "category": "broadphase",
+      "ms": 121.2,
+      "pct": 11.8
+    },
+    {
+      "category": "body",
+      "ms": 94.5,
+      "pct": 9.2
+    },
+    {
+      "category": "step",
+      "ms": 78.1,
+      "pct": 7.6
+    },
+    {
+      "category": "bench-harness",
+      "ms": 9.5,
+      "pct": 0.9
+    },
+    {
+      "category": "other",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "category": "ccd",
+      "ms": 1.3,
+      "pct": 0.1
+    },
+    {
+      "category": "crashcat-util",
+      "ms": 1.2,
+      "pct": 0.1
+    },
+    {
+      "category": "shapes",
+      "ms": 0.2,
+      "pct": 0
+    }
+  ],
+  "hotspots": [
+    {
+      "name": "intersectAABB$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 627,
+      "location": "src/broadphase/dbvt.ts:627",
+      "ms": 77.3,
+      "pct": 7.5
+    },
+    {
+      "name": "solveVelocityConstraint$5",
+      "file": "src/constraints/constraint-part/point-constraint-part.ts",
+      "line": 204,
+      "location": "src/constraints/constraint-part/point-constraint-part.ts:204",
+      "ms": 75.1,
+      "pct": 7.3
+    },
+    {
+      "name": "applyVelocityStep$2",
+      "file": "src/constraints/constraint-part/point-constraint-part.ts",
+      "line": 255,
+      "location": "src/constraints/constraint-part/point-constraint-part.ts:255",
+      "ms": 69.8,
+      "pct": 6.8
+    },
+    {
+      "name": "getInverseInertiaForRotation",
+      "file": "src/body/motion-properties.ts",
+      "line": 500,
+      "location": "src/body/motion-properties.ts:500",
+      "ms": 67.5,
+      "pct": 6.6
+    },
+    {
+      "name": "calculateConstraintProperties$6",
+      "file": "src/constraints/constraint-part/point-constraint-part.ts",
+      "line": 77,
+      "location": "src/constraints/constraint-part/point-constraint-part.ts:77",
+      "ms": 41.4,
+      "pct": 4
+    },
+    {
+      "name": "updateWorld",
+      "file": "src/update.ts",
+      "line": 45,
+      "location": "src/update.ts:45",
+      "ms": 40.3,
+      "pct": 3.9
+    },
+    {
+      "name": "makeSyncRequest",
+      "file": "node:internal/modules/esm/hooks",
+      "line": null,
+      "location": "node:internal/modules/esm/hooks",
+      "ms": 38,
+      "pct": 3.7
+    },
+    {
+      "name": "waitForWorker",
+      "file": "node:internal/modules/esm/hooks",
+      "line": null,
+      "location": "node:internal/modules/esm/hooks",
+      "ms": 31.3,
+      "pct": 3
+    },
+    {
+      "name": "(idle)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 28.3,
+      "pct": 2.7
+    },
+    {
+      "name": "multiply3x3",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 510,
+      "location": "…/node_modules/mathcat/dist/mat4.js:510",
+      "ms": 27.2,
+      "pct": 2.6
+    },
+    {
+      "name": "add$2",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 2039,
+      "location": "…/node_modules/mathcat/dist/mat4.js:2039",
+      "ms": 24.4,
+      "pct": 2.4
+    },
+    {
+      "name": "findCollidingPairs",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 213,
+      "location": "src/broadphase/broadphase.ts:213",
+      "ms": 21.9,
+      "pct": 2.1
+    },
+    {
+      "name": "solveVelocity$4",
+      "file": "src/constraints/hinge-constraint.ts",
+      "line": 665,
+      "location": "src/constraints/hinge-constraint.ts:665",
+      "ms": 21.2,
+      "pct": 2.1
+    },
+    {
+      "name": "compileSourceTextModule",
+      "file": "node:internal/modules/esm/utils",
+      "line": null,
+      "location": "node:internal/modules/esm/utils",
+      "ms": 19.9,
+      "pct": 1.9
+    },
+    {
+      "name": "multiply3x3RightTransposed",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 558,
+      "location": "…/node_modules/mathcat/dist/mat4.js:558",
+      "ms": 18.5,
+      "pct": 1.8
+    },
+    {
+      "name": "updateAABB",
+      "file": "src/body/rigid-body.ts",
+      "line": 567,
+      "location": "src/body/rigid-body.ts:567",
+      "ms": 17.1,
+      "pct": 1.7
+    },
+    {
+      "name": "multiply3x3Vec",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 620,
+      "location": "…/node_modules/mathcat/dist/mat4.js:620",
+      "ms": 16.2,
+      "pct": 1.6
+    },
+    {
+      "name": "finalize",
+      "file": "src/islands.ts",
+      "line": 240,
+      "location": "src/islands.ts:240",
+      "ms": 15.3,
+      "pct": 1.5
+    },
+    {
+      "name": "velocityIntegrationUpdate",
+      "file": "src/update.ts",
+      "line": 1131,
+      "location": "src/update.ts:1131",
+      "ms": 15.2,
+      "pct": 1.5
+    },
+    {
+      "name": "solveVelocityConstraintsForIsland",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 1121,
+      "location": "src/constraints/contact-constraints.ts:1121",
+      "ms": 14.4,
+      "pct": 1.4
+    },
+    {
+      "name": "(garbage collector)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 13.6,
+      "pct": 1.3
+    },
+    {
+      "name": "update$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 485,
+      "location": "src/broadphase/dbvt.ts:485",
+      "ms": 13.1,
+      "pct": 1.3
+    },
+    {
+      "name": "solveVelocity",
+      "file": "src/constraints/swing-twist-constraint.ts",
+      "line": 677,
+      "location": "src/constraints/swing-twist-constraint.ts:677",
+      "ms": 12.5,
+      "pct": 1.2
+    },
+    {
+      "name": "fromQuat$1",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 1518,
+      "location": "…/node_modules/mathcat/dist/mat4.js:1518",
+      "ms": 12.4,
+      "pct": 1.2
+    },
+    {
+      "name": "invert3x3",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 313,
+      "location": "…/node_modules/mathcat/dist/mat4.js:313",
+      "ms": 12.2,
+      "pct": 1.2
+    },
+    {
+      "name": "solvePositionConstraint$5",
+      "file": "src/constraints/constraint-part/point-constraint-part.ts",
+      "line": 307,
+      "location": "src/constraints/constraint-part/point-constraint-part.ts:307",
+      "ms": 11.8,
+      "pct": 1.1
+    },
+    {
+      "name": "solvePosition$4",
+      "file": "src/constraints/hinge-constraint.ts",
+      "line": 741,
+      "location": "src/constraints/hinge-constraint.ts:741",
+      "ms": 11.3,
+      "pct": 1.1
+    },
+    {
+      "name": "(program)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 10.5,
+      "pct": 1
+    },
+    {
+      "name": "addContactConstraint",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 582,
+      "location": "src/constraints/contact-constraints.ts:582",
+      "ms": 8,
+      "pct": 0.8
+    },
+    {
+      "name": "setupVelocity",
+      "file": "src/constraints/swing-twist-constraint.ts",
+      "line": 484,
+      "location": "src/constraints/swing-twist-constraint.ts:484",
+      "ms": 7.5,
+      "pct": 0.7
+    },
+    {
+      "name": "accelerationIntegrationUpdate",
+      "file": "src/update.ts",
+      "line": 287,
+      "location": "src/update.ts:287",
+      "ms": 7.3,
+      "pct": 0.7
+    },
+    {
+      "name": "readFileUtf8",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 6.3,
+      "pct": 0.6
+    },
+    {
+      "name": "linkUserConstraints",
+      "file": "src/islands.ts",
+      "line": 210,
+      "location": "src/islands.ts:210",
+      "ms": 6.3,
+      "pct": 0.6
+    },
+    {
+      "name": "sortConstraintIds",
+      "file": "src/constraints/constraints.ts",
+      "line": 248,
+      "location": "src/constraints/constraints.ts:248",
+      "ms": 6.2,
+      "pct": 0.6
+    },
+    {
+      "name": "lineLengths",
+      "file": "node:internal/source_map/source_map_cache",
+      "line": null,
+      "location": "node:internal/source_map/source_map_cache",
+      "ms": 6.2,
+      "pct": 0.6
+    },
+    {
+      "name": "runSim",
+      "file": "bench/joints.bench.ts",
+      "line": null,
+      "location": "bench/joints.bench.ts",
+      "ms": 5.9,
+      "pct": 0.6
+    },
+    {
+      "name": "warmStartVelocity$3",
+      "file": "src/constraints/point-constraint.ts",
+      "line": 200,
+      "location": "src/constraints/point-constraint.ts:200",
+      "ms": 5.2,
+      "pct": 0.5
+    },
+    {
+      "name": "warmStartVelocity",
+      "file": "src/constraints/swing-twist-constraint.ts",
+      "line": 663,
+      "location": "src/constraints/swing-twist-constraint.ts:663",
+      "ms": 5.1,
+      "pct": 0.5
+    },
+    {
+      "name": "compileForInternalLoader",
+      "file": "node:internal/bootstrap/realm",
+      "line": null,
+      "location": "node:internal/bootstrap/realm",
+      "ms": 5,
+      "pct": 0.5
+    },
+    {
+      "name": "solvePositionConstraintsForIsland",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 1399,
+      "location": "src/constraints/contact-constraints.ts:1399",
+      "ms": 4.9,
+      "pct": 0.5
+    },
+    {
+      "name": "solveVelocity$3",
+      "file": "src/constraints/point-constraint.ts",
+      "line": 209,
+      "location": "src/constraints/point-constraint.ts:209",
+      "ms": 4.9,
+      "pct": 0.5
+    },
+    {
+      "name": "parseSource",
+      "file": "node:internal/deps/cjs-module-lexer/lexer",
+      "line": null,
+      "location": "node:internal/deps/cjs-module-lexer/lexer",
+      "ms": 4.7,
+      "pct": 0.5
+    },
+    {
+      "name": "wakeBodiesInUserConstraints",
+      "file": "src/update.ts",
+      "line": 1098,
+      "location": "src/update.ts:1098",
+      "ms": 4,
+      "pct": 0.4
+    },
+    {
+      "name": "transformQuat",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 567,
+      "location": "…/node_modules/mathcat/dist/vec3.js:567",
+      "ms": 4,
+      "pct": 0.4
+    },
+    {
+      "name": "solvePosition",
+      "file": "src/constraints/swing-twist-constraint.ts",
+      "line": 747,
+      "location": "src/constraints/swing-twist-constraint.ts:747",
+      "ms": 3.8,
+      "pct": 0.4
+    },
+    {
+      "name": "calculateConstraintProperties$3",
+      "file": "src/constraints/constraint-part/hinge-rotation-constraint-part.ts",
+      "line": 105,
+      "location": "src/constraints/constraint-part/hinge-rotation-constraint-part.ts:105",
+      "ms": 3.8,
+      "pct": 0.4
+    },
+    {
+      "name": "reconstructManifoldFromCache",
+      "file": "src/update.ts",
+      "line": 799,
+      "location": "src/update.ts:799",
+      "ms": 3.8,
+      "pct": 0.4
+    },
+    {
+      "name": "optimizeIncremental",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 587,
+      "location": "src/broadphase/dbvt.ts:587",
+      "ms": 3.8,
+      "pct": 0.4
+    },
+    {
+      "name": "updateSleeping",
+      "file": "src/constraints/constraints.ts",
+      "line": 264,
+      "location": "src/constraints/constraints.ts:264",
+      "ms": 3.7,
+      "pct": 0.4
+    },
+    {
+      "name": "solveVelocityConstraintsForIsland$1",
+      "file": "src/constraints/constraints.ts",
+      "line": 303,
+      "location": "src/constraints/constraints.ts:303",
+      "ms": 3.7,
+      "pct": 0.4
+    },
+    {
+      "name": "solvePosition$3",
+      "file": "src/constraints/point-constraint.ts",
+      "line": 219,
+      "location": "src/constraints/point-constraint.ts:219",
+      "ms": 3.7,
+      "pct": 0.4
+    },
+    {
+      "name": "readFileSync",
+      "file": "node:fs",
+      "line": null,
+      "location": "node:fs",
+      "ms": 3.6,
+      "pct": 0.3
+    },
+    {
+      "name": "sourceMapFromFile",
+      "file": "node:internal/source_map/source_map_cache",
+      "line": null,
+      "location": "node:internal/source_map/source_map_cache",
+      "ms": 3.6,
+      "pct": 0.3
+    },
+    {
+      "name": "prepare",
+      "file": "src/islands.ts",
+      "line": 64,
+      "location": "src/islands.ts:64",
+      "ms": 3.3,
+      "pct": 0.3
+    },
+    {
+      "name": "setupVelocityConstraints",
+      "file": "src/constraints/constraints.ts",
+      "line": 277,
+      "location": "src/constraints/constraints.ts:277",
+      "ms": 3.2,
+      "pct": 0.3
+    },
+    {
+      "name": "calculateInverseEffectiveMass",
+      "file": "src/constraints/constraint-part/axis-constraint-part.ts",
+      "line": 81,
+      "location": "src/constraints/constraint-part/axis-constraint-part.ts:81",
+      "ms": 3.1,
+      "pct": 0.3
+    },
+    {
+      "name": "(anonymous)",
+      "file": "src/constraints/constraints.ts",
+      "line": 249,
+      "location": "src/constraints/constraints.ts:249",
+      "ms": 2.8,
+      "pct": 0.3
+    },
+    {
+      "name": "decode",
+      "file": "node:internal/encoding",
+      "line": null,
+      "location": "node:internal/encoding",
+      "ms": 2.6,
+      "pct": 0.3
+    },
+    {
+      "name": "create$28",
+      "file": "src/constraints/hinge-constraint.ts",
+      "line": 240,
+      "location": "src/constraints/hinge-constraint.ts:240",
+      "ms": 2.6,
+      "pct": 0.3
+    },
+    {
+      "name": "#translate",
+      "file": "node:internal/modules/esm/loader",
+      "line": null,
+      "location": "node:internal/modules/esm/loader",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "(anonymous)",
+      "file": "file:///Users/isaacmason/Development/crashcat/dist/index.js",
+      "line": 1,
+      "location": "file:///Users/isaacmason/Development/crashcat/dist/index.js:1",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "applyVelocityStep$3",
+      "file": "src/constraints/constraint-part/angle-constraint-part.ts",
+      "line": 283,
+      "location": "src/constraints/constraint-part/angle-constraint-part.ts:283",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "subRotationStep",
+      "file": "src/body/rigid-body-step.ts",
+      "line": 83,
+      "location": "src/body/rigid-body-step.ts:83",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "updateBodyPositions",
+      "file": "src/update.ts",
+      "line": 371,
+      "location": "src/update.ts:371",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "getContactsFromCache",
+      "file": "src/update.ts",
+      "line": 868,
+      "location": "src/update.ts:868",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "removeLeaf",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 402,
+      "location": "src/broadphase/dbvt.ts:402",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "calculateFrictionConstraintProperties",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 475,
+      "location": "src/constraints/contact-constraints.ts:475",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "getPerpendicularVector",
+      "file": "src/constraints/constraint-part/hinge-rotation-constraint-part.ts",
+      "line": 333,
+      "location": "src/constraints/constraint-part/hinge-rotation-constraint-part.ts:333",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "getSortFields",
+      "file": "src/constraints/point-constraint.ts",
+      "line": 265,
+      "location": "src/constraints/point-constraint.ts:265",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "(anonymous)",
+      "file": "bench/joints.bench.ts",
+      "line": null,
+      "location": "bench/joints.bench.ts",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "warmStartVelocity$4",
+      "file": "src/constraints/hinge-constraint.ts",
+      "line": 652,
+      "location": "src/constraints/hinge-constraint.ts:652",
+      "ms": 2.5,
+      "pct": 0.2
+    },
+    {
+      "name": "bodiesShareConstraint",
+      "file": "src/body/rigid-body.ts",
+      "line": 1051,
+      "location": "src/body/rigid-body.ts:1051",
+      "ms": 2.4,
+      "pct": 0.2
+    },
+    {
+      "name": "narrowphase",
+      "file": "src/update.ts",
+      "line": 949,
+      "location": "src/update.ts:949",
+      "ms": 2.4,
+      "pct": 0.2
+    },
+    {
+      "name": "solvePositionConstraint$1",
+      "file": "src/constraints/constraint-part/swing-twist-constraint-part.ts",
+      "line": 746,
+      "location": "src/constraints/constraint-part/swing-twist-constraint-part.ts:746",
+      "ms": 2.2,
+      "pct": 0.2
+    },
+    {
+      "name": "subtract$1",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 154,
+      "location": "…/node_modules/mathcat/dist/vec3.js:154",
+      "ms": 1.8,
+      "pct": 0.2
+    },
+    {
+      "name": "(anonymous)",
+      "file": "node:internal/modules/esm/assert",
+      "line": null,
+      "location": "node:internal/modules/esm/assert",
+      "ms": 1.5,
+      "pct": 0.1
+    },
+    {
+      "name": "insertLeaf",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 118,
+      "location": "src/broadphase/dbvt.ts:118",
+      "ms": 1.3,
+      "pct": 0.1
+    },
+    {
+      "name": "visit",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 79,
+      "location": "src/broadphase/broadphase.ts:79",
+      "ms": 1.3,
+      "pct": 0.1
+    },
+    {
+      "name": "(anonymous)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 1.3,
+      "pct": 0.1
+    },
+    {
+      "name": "(anonymous)",
+      "file": "…/node_modules/tsx/dist/index-gckBtVBf.cjs",
+      "line": 1,
+      "location": "…/node_modules/tsx/dist/index-gckBtVBf.cjs:1",
+      "ms": 1.3,
+      "pct": 0.1
+    }
+  ]
+}
