@@ -1,10 +1,14 @@
 import { type Box3, box3, type Vec3 } from 'mathcat';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
-import { INACTIVE_BODY_INDEX } from '../body/sleep';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
-import { broadphaseLayerCollidesWithBroadphaseLayer, type Layers, objectLayerCollidesWithBroadphaseLayer } from '../layers';
+import {
+    broadphaseLayerCollidesWithBroadphaseLayer,
+    type Layers,
+    objectLayerCollidesWithBroadphaseLayer,
+    objectLayerCollidesWithObjectLayer,
+} from '../layers';
 import type { Listener } from '../listener';
 import { assert } from '../utils/assert';
 import type { World } from '../world';
@@ -31,45 +35,71 @@ export type Pairs = {
 };
 
 /**
- * Determines if a body will query the broadphase during findCollidingPairs.
- * Bodies that don't query rely on other bodies to find collision pairs with them.
+ * The single pair predicate for findCollidingPairs: decides whether an (activeBody, otherBody)
+ * candidate found by the tree query becomes a narrowphase pair. All pair-level filtering lives
+ * here, in one place (jolt: Body::sFindCollidingPairsCanCollide + ObjectLayerPairFilter,
+ * evaluated together at the query leaf).
  *
- * Static bodies never query (they are found by active bodies).
- * Sleeping bodies never query (they are found by active bodies, which wakes them).
+ * `activeBody` is always drawn from the active body list, so it is awake and non-static —
+ * static-static pairs are unrepresentable.
  */
-function shouldQueryBroadphase(body: RigidBody): boolean {
-    // static bodies never query - they are found by active bodies
-    if (body.motionType === MotionType.STATIC) {
+function shouldReportPair(layers: Layers, activeBody: RigidBody, otherBody: RigidBody): boolean {
+    // self-collision + deduplication: report only when activeBody.activeIndex < otherBody.activeIndex.
+    // sleeping and static bodies have activeIndex = INACTIVE_BODY_INDEX (the max value), so an
+    // active body always reports pairs with them; two active bodies report exactly once. bodies
+    // are woken only AFTER the pair loop, so the active list is frozen while querying — no
+    // mid-step activation ordering cases exist (unlike jolt, which relies on activating bodies
+    // appending to the end of the active list).
+    if (activeBody.activeIndex >= otherBody.activeIndex) {
         return false;
     }
-    // sleeping bodies never query - active bodies will find them and wake them
-    if (body.sleeping) {
+
+    // motion type / sensor gate — one of these must hold:
+    // - either body opted into kinematic-vs-non-dynamic collisions
+    // - at least one body is dynamic
+    // - a kinematic body can always collide with a sensor
+    if (
+        !activeBody.collideKinematicVsNonDynamic &&
+        !otherBody.collideKinematicVsNonDynamic &&
+        activeBody.motionType !== MotionType.DYNAMIC &&
+        otherBody.motionType !== MotionType.DYNAMIC &&
+        !(activeBody.motionType === MotionType.KINEMATIC && otherBody.sensor) &&
+        !(otherBody.motionType === MotionType.KINEMATIC && activeBody.sensor)
+    ) {
         return false;
     }
-    // all active dynamic and kinematic bodies query
+
+    // object layer pair table
+    if (!objectLayerCollidesWithObjectLayer(layers, activeBody.objectLayer, otherBody.objectLayer)) {
+        return false;
+    }
+
+    // collision group / mask
+    if (
+        !filter.shouldPairCollide(
+            activeBody.collisionGroups,
+            activeBody.collisionMask,
+            otherBody.collisionGroups,
+            otherBody.collisionMask,
+        )
+    ) {
+        return false;
+    }
+
     return true;
-}
-
-/** gets a deduplication index for skipping processing of duplicate pairs */
-function getDeduplicationIndex(body: RigidBody): number {
-    // bodies that don't query get max value - this ensures querying bodies always report pairs with them
-    if (!shouldQueryBroadphase(body)) {
-        return INACTIVE_BODY_INDEX;
-    }
-
-    // querying bodies use their array index for deduplication between themselves
-    return body.index;
 }
 
 /** visitor for finding colliding body pairs, does pair deduplication and motion type filtering */
 class CollisionBodyPairVisitor implements BodyVisitor {
     shouldExit = false;
 
+    layers: Layers = null!;
     activeBody: RigidBody = null!;
     pairs: Pairs = null!;
     listener: Listener | undefined = undefined;
 
-    setup(activeBody: RigidBody, pairs: Pairs, listener: Listener | undefined): void {
+    setup(layers: Layers, activeBody: RigidBody, pairs: Pairs, listener: Listener | undefined): void {
+        this.layers = layers;
         this.activeBody = activeBody;
         this.pairs = pairs;
         this.listener = listener;
@@ -77,32 +107,7 @@ class CollisionBodyPairVisitor implements BodyVisitor {
     }
 
     visit(otherBody: RigidBody): void {
-        // avoid self-collision
-        if (this.activeBody.id === otherBody.id) return;
-
-        // avoid duplicate pairs
-        if (getDeduplicationIndex(this.activeBody) >= getDeduplicationIndex(otherBody)) return;
-
-        // motion type filtering: static-static never collide
-        const motionTypeA = this.activeBody.motionType;
-        const motionTypeB = otherBody.motionType;
-
-        if (motionTypeA === MotionType.STATIC && motionTypeB === MotionType.STATIC) {
-            return;
-        }
-
-        // kinematic-kinematic and kinematic-static pairs require opt-in, EXCEPT:
-        // - a kinematic body can always collide with a sensor
-        if (
-            !this.activeBody.collideKinematicVsNonDynamic &&
-            !otherBody.collideKinematicVsNonDynamic &&
-            motionTypeA !== MotionType.DYNAMIC &&
-            motionTypeB !== MotionType.DYNAMIC &&
-            !(motionTypeA === MotionType.KINEMATIC && otherBody.sensor) &&
-            !(motionTypeB === MotionType.KINEMATIC && this.activeBody.sensor)
-        ) {
-            return;
-        }
+        if (!shouldReportPair(this.layers, this.activeBody, otherBody)) return;
 
         // user body pair filter - called after all built-in checks pass
         if (this.listener?.onBodyPairValidate) {
@@ -217,6 +222,11 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
     // reset pair count
     broadphase.pairs.n = 0;
 
+    // permissive query filter: all pair-level filtering (layer pairs, group/mask,
+    // motion/sensor, dedup) happens in shouldReportPair at visit time, so the tree
+    // query only contributes the tight AABB test at its leaves
+    filter.setAllEnabled(_findCollidingPairs_filter, layers);
+
     // optimize trees incrementally (matching Bullet's btDbvtBroadphase::collide)
     // bullet default: 1 + (m_leaves * m_dupdates / 100), where m_dupdates = 0
     // this means minimum 1 node per frame is optimized even with 0% setting
@@ -258,12 +268,9 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
             // query this broadphase layer's dynamic bounding volume tree
             const tree = broadphase.dbvts[otherBroadphaseLayer];
 
-            // setup filter based on active body's collision properties
-            // this enables only object layers that can collide with the active body
-            filter.setFromBody(_findCollidingPairs_filter, layers, body);
-
-            // setup body pair visitor for this query
-            _collisionBodyPairVisitor.setup(body, broadphase.pairs, listener);
+            // setup body pair visitor for this query — all pair-level filtering
+            // (layer pairs, group/mask, motion/sensor, dedup) happens in shouldReportPair
+            _collisionBodyPairVisitor.setup(layers, body, broadphase.pairs, listener);
 
             // query bvh with filter
             dbvt.intersectAABB(
