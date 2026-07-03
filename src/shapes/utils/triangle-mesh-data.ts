@@ -23,6 +23,13 @@ export type TriangleMeshData = {
 
 	/** total number of triangles */
 	triangleCount: number;
+
+	/**
+	 * per-triangle mesh-local aabbs [minX, minY, minZ, maxX, maxY, maxZ, ...], 6 per triangle.
+	 * derived at build time (after the bvh build finalizes triangle order) so cast queries
+	 * read them instead of recomputing from the vertex indices per query.
+	 */
+	triangleAABBs: number[];
 };
 
 /** get triangle vertex indices */
@@ -87,6 +94,25 @@ export function setActiveEdges(data: TriangleMeshData, triIdx: number, activeEdg
 /** get material id */
 export function getMaterialId(data: TriangleMeshData, triIdx: number): number {
 	return data.triangleBuffer[triIdx * TRIANGLE_STRIDE + OFFSET_MATERIAL_ID];
+}
+
+const _precomputeAABB: Box3 = [0, 0, 0, 0, 0, 0];
+
+/** fill data.triangleAABBs from the (final, post-bvh-build) triangle buffer */
+export function precomputeTriangleAABBs(data: TriangleMeshData): void {
+	const count = data.triangleCount;
+	const aabbs = data.triangleAABBs;
+	aabbs.length = count * 6;
+	for (let triIdx = 0; triIdx < count; triIdx++) {
+		calculateTriangleAABB(_precomputeAABB, data, triIdx);
+		const offset = triIdx * 6;
+		aabbs[offset] = _precomputeAABB[0];
+		aabbs[offset + 1] = _precomputeAABB[1];
+		aabbs[offset + 2] = _precomputeAABB[2];
+		aabbs[offset + 3] = _precomputeAABB[3];
+		aabbs[offset + 4] = _precomputeAABB[4];
+		aabbs[offset + 5] = _precomputeAABB[5];
+	}
 }
 
 /** calculate triangle aabb from vertices */

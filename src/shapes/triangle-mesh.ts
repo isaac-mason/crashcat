@@ -63,7 +63,7 @@ import type { BvhSplitStrategy, TriangleMeshBVH } from './utils/triangle-mesh-bv
 import * as triangleMeshBvh from './utils/triangle-mesh-bvh';
 import type { TriangleMeshData } from './utils/triangle-mesh-data';
 import * as triangleMeshData from './utils/triangle-mesh-data';
-import { calculateTriangleAABB, getActiveEdges, getTriangleNormal, getTriangleVertices } from './utils/triangle-mesh-data';
+import { getActiveEdges, getTriangleNormal, getTriangleVertices } from './utils/triangle-mesh-data';
 
 export { BvhSplitStrategy } from './utils/triangle-mesh-bvh';
 
@@ -644,7 +644,6 @@ const _castConvexVsTriangleMesh_triangleC = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_getTriangleVertices_a = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_getTriangleVertices_b = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_getTriangleVertices_c = /* @__PURE__ */ vec3.create();
-const _castConvexVsTriangleMesh_computeTriangleAABB_result = /* @__PURE__ */ box3.create();
 const _castConvexVsTriangleMesh_edgeA = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_edgeB = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create();
@@ -818,21 +817,20 @@ function castConvexVsTriangleMesh(
             // leaf: test triangles
             const triStart = triangleMeshBvh.nodeTriStart(buffer, nodeOffset);
             const triCount = triangleMeshBvh.nodeTriCount(buffer, nodeOffset);
+            const triangleAABBs = meshData.triangleAABBs;
+
             for (let i = 0; i < triCount; i++) {
                 const triangleIndex = triStart + i;
 
-                // compute triangle aabb
-                calculateTriangleAABB(_castConvexVsTriangleMesh_computeTriangleAABB_result, meshData, triangleIndex);
+                // triangle aabb (precomputed at build) expanded by the cast shape's half-extents
+                const aabbOffset = triangleIndex * 6;
                 const triBounds = _castConvexVsTriangleMesh_triExpandedBounds;
-                box3.copy(triBounds, _castConvexVsTriangleMesh_computeTriangleAABB_result);
-
-                // expand by half-extents
-                triBounds[0] -= halfExtents[0];
-                triBounds[1] -= halfExtents[1];
-                triBounds[2] -= halfExtents[2];
-                triBounds[3] += halfExtents[0];
-                triBounds[4] += halfExtents[1];
-                triBounds[5] += halfExtents[2];
+                triBounds[0] = triangleAABBs[aabbOffset] - halfExtents[0];
+                triBounds[1] = triangleAABBs[aabbOffset + 1] - halfExtents[1];
+                triBounds[2] = triangleAABBs[aabbOffset + 2] - halfExtents[2];
+                triBounds[3] = triangleAABBs[aabbOffset + 3] + halfExtents[0];
+                triBounds[4] = triangleAABBs[aabbOffset + 4] + halfExtents[1];
+                triBounds[5] = triangleAABBs[aabbOffset + 5] + halfExtents[2];
 
                 // early out: ray x triangle expanded bounds
                 if (!raycast3.intersectsBox3(ray, triBounds)) {
@@ -2038,9 +2036,8 @@ const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
 const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_sweptBounds = /* @__PURE__ */ box3.create();
-const _castSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
+const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 const _castSphereVsTriangleMesh_stack = /* @__PURE__ */ bvhStack.create();
 const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v1 = /* @__PURE__ */ vec3.create();
@@ -2059,7 +2056,6 @@ const _castSphereVsTriangleMesh_hit = /* @__PURE__ */ createCastShapeHit();
 const _castSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 const _castSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_origin = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_endPoint = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_contactPointAWorld = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_contactPointBWorld = /* @__PURE__ */ vec3.create();
@@ -2245,41 +2241,34 @@ function castSphereVsTriangleMesh(
     // detect inside-out scaling
     const scaleSign = vec3.isScaleInsideOut(scaleB) ? -1 : 1;
 
-    // create swept AABB for BVH culling
-    const sweptBounds = _castSphereVsTriangleMesh_sweptBounds;
-    const endPoint = vec3.add(_castSphereVsTriangleMesh_endPoint, start, direction);
+    // ordered front-to-back traversal (matches castConvexVsTriangleMesh): ray from the
+    // sphere center at t=0 along the displacement, node bounds expanded by the sphere
+    // radius, children pushed nearest-on-top and pruned against the early-out fraction
+    const ray = _castSphereVsTriangleMesh_ray;
+    vec3.copy(ray.origin, start);
+    ray.length = vec3.length(direction);
+    if (ray.length > 1e-10) {
+        vec3.normalize(ray.direction, direction);
+    } else {
+        ray.direction[0] = 0;
+        ray.direction[1] = 0;
+        ray.direction[2] = 0;
+    }
 
-    sweptBounds[0] = Math.min(start[0], endPoint[0]) - sphereRadius;
-    sweptBounds[1] = Math.min(start[1], endPoint[1]) - sphereRadius;
-    sweptBounds[2] = Math.min(start[2], endPoint[2]) - sphereRadius;
-    sweptBounds[3] = Math.max(start[0], endPoint[0]) + sphereRadius;
-    sweptBounds[4] = Math.max(start[1], endPoint[1]) + sphereRadius;
-    sweptBounds[5] = Math.max(start[2], endPoint[2]) + sphereRadius;
-
-    // bvh traversal
     bvhStack.reset(_castSphereVsTriangleMesh_stack);
-    box3.center(_castSphereVsTriangleMesh_queryCenter, sweptBounds);
-    bvhStack.push(_castSphereVsTriangleMesh_stack, 0, 0); // root
+    bvhStack.push(_castSphereVsTriangleMesh_stack, 0, 0); // root always visited
+
+    const expandedBounds = _castSphereVsTriangleMesh_expandedBounds;
 
     while (_castSphereVsTriangleMesh_stack.size > 0) {
         const entry = bvhStack.pop(_castSphereVsTriangleMesh_stack)!;
-        const nodeOffset = entry.nodeIndex;
 
-        // skip if node bounds don't intersect swept sphere
-        if (
-            !bvh.nodeIntersectsBox(
-                buffer,
-                nodeOffset,
-                sweptBounds[0],
-                sweptBounds[1],
-                sweptBounds[2],
-                sweptBounds[3],
-                sweptBounds[4],
-                sweptBounds[5],
-            )
-        ) {
+        // early out: if fraction to this node >= closest hit, skip it
+        if (entry.distance >= collector.earlyOutFraction) {
             continue;
         }
+
+        const nodeOffset = entry.nodeIndex;
 
         if (bvh.nodeIsLeaf(buffer, nodeOffset)) {
             // leaf node: test triangles
@@ -2521,24 +2510,62 @@ function castSphereVsTriangleMesh(
                 }
             }
         } else {
-            // internal node: compute distances to both children and sort by distance
+            // internal node: distance-order both children along the cast ray,
+            // node bounds expanded by the sphere radius
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            // compute squared distances from query center to child node centers
-            bvh.nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, leftOffset);
-            const leftDist = vec3.squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - sphereRadius;
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - sphereRadius;
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - sphereRadius;
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + sphereRadius;
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + sphereRadius;
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + sphereRadius;
 
-            bvh.nodeGetCenter(_castSphereVsTriangleMesh_nodeCenter, buffer, rightOffset);
-            const rightDist = vec3.squaredDistance(_castSphereVsTriangleMesh_queryCenter, _castSphereVsTriangleMesh_nodeCenter);
+            const leftDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
 
-            // sort: push farther child first (so closer child is on top of stack)
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - sphereRadius;
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - sphereRadius;
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - sphereRadius;
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + sphereRadius;
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + sphereRadius;
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + sphereRadius;
+
+            const rightDist = rayDistanceToBox3(
+                ray.origin[0],
+                ray.origin[1],
+                ray.origin[2],
+                ray.direction[0],
+                ray.direction[1],
+                ray.direction[2],
+                ray.length,
+                expandedBounds,
+            );
+
+            // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
-                bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
-                bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                if (rightDist < collector.earlyOutFraction) {
+                    bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                }
+                if (leftDist < collector.earlyOutFraction) {
+                    bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                }
             } else {
-                bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
-                bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                if (leftDist < collector.earlyOutFraction) {
+                    bvhStack.push(_castSphereVsTriangleMesh_stack, leftOffset, leftDist);
+                }
+                if (rightDist < collector.earlyOutFraction) {
+                    bvhStack.push(_castSphereVsTriangleMesh_stack, rightOffset, rightDist);
+                }
             }
         }
     }

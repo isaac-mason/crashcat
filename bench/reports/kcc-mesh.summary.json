@@ -1,245 +1,250 @@
 {
   "scenario": "kcc-mesh",
-  "date": "2026-07-03T06:14:24.034Z",
+  "date": "2026-07-03T14:15:21.619Z",
   "git": {
-    "rev": "ab84e99",
+    "rev": "9b65b0d",
     "dirty": true
   },
   "node": "v24.10.0",
   "cpu": "Apple M1 Pro",
-  "wallMs": 1239.5,
-  "attributedMs": 1019.8,
-  "startupExcludedMs": 219.3,
-  "sampleCount": 978,
+  "wallMs": 1097.3,
+  "attributedMs": 907.7,
+  "startupExcludedMs": 189.1,
+  "sampleCount": 1027,
   "categories": [
     {
       "category": "narrowphase",
-      "ms": 424.2,
-      "pct": 41.6
+      "ms": 372.2,
+      "pct": 41
     },
     {
       "category": "shapes",
-      "ms": 219.9,
-      "pct": 21.6
-    },
-    {
-      "category": "character",
-      "ms": 120.5,
-      "pct": 11.8
+      "ms": 166.7,
+      "pct": 18.4
     },
     {
       "category": "math",
-      "ms": 97.1,
-      "pct": 9.5
+      "ms": 91.9,
+      "pct": 10.1
+    },
+    {
+      "category": "character",
+      "ms": 87.7,
+      "pct": 9.7
     },
     {
       "category": "broadphase",
-      "ms": 37,
-      "pct": 3.6
+      "ms": 45.7,
+      "pct": 5
     },
     {
       "category": "solver",
-      "ms": 30.9,
-      "pct": 3
+      "ms": 36.5,
+      "pct": 4
     },
     {
       "category": "runtime",
-      "ms": 29.5,
-      "pct": 2.9
+      "ms": 28.5,
+      "pct": 3.1
     },
     {
       "category": "crashcat-util",
-      "ms": 22.3,
-      "pct": 2.2
+      "ms": 18.5,
+      "pct": 2
     },
     {
       "category": "step",
-      "ms": 14,
-      "pct": 1.4
-    },
-    {
-      "category": "bench-harness",
-      "ms": 12,
-      "pct": 1.2
+      "ms": 18.3,
+      "pct": 2
     },
     {
       "category": "body",
-      "ms": 10.5,
-      "pct": 1
+      "ms": 18,
+      "pct": 2
+    },
+    {
+      "category": "bench-harness",
+      "ms": 13.6,
+      "pct": 1.5
     },
     {
       "category": "manifold",
-      "ms": 1.9,
-      "pct": 0.2
+      "ms": 7.7,
+      "pct": 0.8
+    },
+    {
+      "category": "other",
+      "ms": 2.4,
+      "pct": 0.3
     }
   ],
   "hotspots": [
-    {
-      "name": "collideConvexVsTriangleMesh",
-      "file": "src/shapes/triangle-mesh.ts",
-      "line": 1211,
-      "location": "src/shapes/triangle-mesh.ts:1211",
-      "ms": 96.9,
-      "pct": 9.5
-    },
     {
       "name": "gjkCastShape",
       "file": "src/collision/gjk.ts",
       "line": 913,
       "location": "src/collision/gjk.ts:913",
-      "ms": 93,
-      "pct": 9.1
-    },
-    {
-      "name": "gjkClosestPoints",
-      "file": "src/collision/gjk.ts",
-      "line": 1225,
-      "location": "src/collision/gjk.ts:1225",
-      "ms": 82.9,
-      "pct": 8.1
+      "ms": 88.3,
+      "pct": 9.7
     },
     {
       "name": "getSupport",
       "file": "src/collision/support.ts",
       "line": 125,
       "location": "src/collision/support.ts:125",
-      "ms": 81.2,
-      "pct": 8
+      "ms": 81.9,
+      "pct": 9
+    },
+    {
+      "name": "collideConvexVsTriangleMesh",
+      "file": "src/shapes/triangle-mesh.ts",
+      "line": 1209,
+      "location": "src/shapes/triangle-mesh.ts:1209",
+      "ms": 75.5,
+      "pct": 8.3
     },
     {
       "name": "penetrationCastShape",
       "file": "src/collision/penetration.ts",
       "line": 621,
       "location": "src/collision/penetration.ts:621",
-      "ms": 75.7,
-      "pct": 7.4
+      "ms": 65.2,
+      "pct": 7.2
+    },
+    {
+      "name": "gjkClosestPoints",
+      "file": "src/collision/gjk.ts",
+      "line": 1225,
+      "location": "src/collision/gjk.ts:1225",
+      "ms": 60,
+      "pct": 6.6
     },
     {
       "name": "castConvexVsTriangleMesh",
       "file": "src/shapes/triangle-mesh.ts",
-      "line": 677,
-      "location": "src/shapes/triangle-mesh.ts:677",
-      "ms": 43.4,
-      "pct": 4.3
+      "line": 676,
+      "location": "src/shapes/triangle-mesh.ts:676",
+      "ms": 40.5,
+      "pct": 4.5
     },
     {
       "name": "penetrationDepthStepGJK",
       "file": "src/collision/penetration.ts",
       "line": 29,
       "location": "src/collision/penetration.ts:29",
-      "ms": 42.9,
-      "pct": 4.2
+      "ms": 32,
+      "pct": 3.5
     },
     {
       "name": "rayDistanceToBox3",
       "file": "src/collision/cast-utils.ts",
       "line": 20,
       "location": "src/collision/cast-utils.ts:20",
-      "ms": 26.7,
+      "ms": 23.4,
       "pct": 2.6
-    },
-    {
-      "name": "intersectsBox3",
-      "file": "…/node_modules/mathcat/dist/raycast3.js",
-      "line": 195,
-      "location": "…/node_modules/mathcat/dist/raycast3.js:195",
-      "ms": 26,
-      "pct": 2.5
-    },
-    {
-      "name": "(garbage collector)",
-      "file": "",
-      "line": null,
-      "location": "",
-      "ms": 21.9,
-      "pct": 2.1
-    },
-    {
-      "name": "correctFractionForCharacterPadding",
-      "file": "src/character/kcc.ts",
-      "line": 1374,
-      "location": "src/character/kcc.ts:1374",
-      "ms": 20.9,
-      "pct": 2.1
-    },
-    {
-      "name": "calculateTriangleAABB",
-      "file": "src/shapes/utils/triangle-mesh-data.ts",
-      "line": 93,
-      "location": "src/shapes/utils/triangle-mesh-data.ts:93",
-      "ms": 20.8,
-      "pct": 2
     },
     {
       "name": "transformMat4$1",
       "file": "…/node_modules/mathcat/dist/vec3.js",
       "line": 530,
       "location": "…/node_modules/mathcat/dist/vec3.js:530",
-      "ms": 16.8,
-      "pct": 1.7
-    },
-    {
-      "name": "getTriangleVertices",
-      "file": "src/shapes/utils/triangle-mesh-data.ts",
-      "line": 37,
-      "location": "src/shapes/utils/triangle-mesh-data.ts:37",
-      "ms": 16.1,
-      "pct": 1.6
+      "ms": 21.1,
+      "pct": 2.3
     },
     {
       "name": "intersectAABB$1",
       "file": "src/broadphase/dbvt.ts",
       "line": 627,
       "location": "src/broadphase/dbvt.ts:627",
-      "ms": 13.1,
-      "pct": 1.3
+      "ms": 20,
+      "pct": 2.2
     },
     {
-      "name": "push",
-      "file": "src/utils/bvh-stack.ts",
-      "line": 36,
-      "location": "src/utils/bvh-stack.ts:36",
-      "ms": 11.3,
-      "pct": 1.1
-    },
-    {
-      "name": "addHit",
-      "file": "src/character/kcc.ts",
-      "line": 912,
-      "location": "src/character/kcc.ts:912",
-      "ms": 11.2,
-      "pct": 1.1
-    },
-    {
-      "name": "solveConstraints",
-      "file": "src/character/kcc.ts",
-      "line": 2012,
-      "location": "src/character/kcc.ts:2012",
-      "ms": 11.2,
-      "pct": 1.1
+      "name": "(garbage collector)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 18.4,
+      "pct": 2
     },
     {
       "name": "castAABB$1",
       "file": "src/broadphase/dbvt.ts",
       "line": 936,
       "location": "src/broadphase/dbvt.ts:936",
-      "ms": 10.1,
-      "pct": 1
+      "ms": 14.2,
+      "pct": 1.6
     },
     {
-      "name": "getContactsAtPosition",
+      "name": "getTriangleVertices",
+      "file": "src/shapes/utils/triangle-mesh-data.ts",
+      "line": 44,
+      "location": "src/shapes/utils/triangle-mesh-data.ts:44",
+      "ms": 13.5,
+      "pct": 1.5
+    },
+    {
+      "name": "addHit",
       "file": "src/character/kcc.ts",
-      "line": 1272,
-      "location": "src/character/kcc.ts:1272",
-      "ms": 10,
+      "line": 910,
+      "location": "src/character/kcc.ts:910",
+      "ms": 10.9,
+      "pct": 1.2
+    },
+    {
+      "name": "intersectsBox3",
+      "file": "…/node_modules/mathcat/dist/raycast3.js",
+      "line": 195,
+      "location": "…/node_modules/mathcat/dist/raycast3.js:195",
+      "ms": 9.1,
       "pct": 1
     },
     {
-      "name": "solveVelocityConstraintsForIsland",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 1121,
-      "location": "src/constraints/contact-constraints.ts:1121",
-      "ms": 9.3,
+      "name": "runSim",
+      "file": "bench/kcc-mesh.bench.ts",
+      "line": null,
+      "location": "bench/kcc-mesh.bench.ts",
+      "ms": 8.5,
+      "pct": 0.9
+    },
+    {
+      "name": "updateSupportingContact",
+      "file": "src/character/kcc.ts",
+      "line": 2290,
+      "location": "src/character/kcc.ts:2290",
+      "ms": 8.3,
+      "pct": 0.9
+    },
+    {
+      "name": "updateWorld",
+      "file": "src/update.ts",
+      "line": 45,
+      "location": "src/update.ts:45",
+      "ms": 8,
+      "pct": 0.9
+    },
+    {
+      "name": "solveConstraints",
+      "file": "src/character/kcc.ts",
+      "line": 2008,
+      "location": "src/character/kcc.ts:2008",
+      "ms": 8,
+      "pct": 0.9
+    },
+    {
+      "name": "correctFractionForCharacterPadding",
+      "file": "src/character/kcc.ts",
+      "line": 1370,
+      "location": "src/character/kcc.ts:1370",
+      "ms": 7.9,
+      "pct": 0.9
+    },
+    {
+      "name": "moveShape",
+      "file": "src/character/kcc.ts",
+      "line": 2683,
+      "location": "src/character/kcc.ts:2683",
+      "ms": 7.9,
       "pct": 0.9
     },
     {
@@ -247,94 +252,102 @@
       "file": "…/node_modules/mathcat/dist/triangle3.js",
       "line": 9,
       "location": "…/node_modules/mathcat/dist/triangle3.js:9",
-      "ms": 9,
-      "pct": 0.9
-    },
-    {
-      "name": "cancelVelocityTowardsSteepSlopes",
-      "file": "src/character/kcc.ts",
-      "line": 2564,
-      "location": "src/character/kcc.ts:2564",
-      "ms": 7.9,
+      "ms": 7.6,
       "pct": 0.8
     },
     {
-      "name": "determineConstraints",
-      "file": "src/character/kcc.ts",
-      "line": 1664,
-      "location": "src/character/kcc.ts:1664",
-      "ms": 6.5,
-      "pct": 0.6
+      "name": "cross",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 401,
+      "location": "…/node_modules/mathcat/dist/vec3.js:401",
+      "ms": 7.5,
+      "pct": 0.8
+    },
+    {
+      "name": "buildTriangleMesh",
+      "file": "src/shapes/utils/triangle-mesh-builder.ts",
+      "line": 63,
+      "location": "src/shapes/utils/triangle-mesh-builder.ts:63",
+      "ms": 7.3,
+      "pct": 0.8
+    },
+    {
+      "name": "push",
+      "file": "src/utils/bvh-stack.ts",
+      "line": 36,
+      "location": "src/utils/bvh-stack.ts:36",
+      "ms": 7.1,
+      "pct": 0.8
     },
     {
       "name": "(idle)",
       "file": "",
       "line": null,
       "location": "",
-      "ms": 6.3,
-      "pct": 0.6
+      "ms": 6.8,
+      "pct": 0.7
     },
     {
-      "name": "finalize",
-      "file": "src/islands.ts",
-      "line": 240,
-      "location": "src/islands.ts:240",
-      "ms": 6.3,
-      "pct": 0.6
-    },
-    {
-      "name": "collideTransformedVsShape",
-      "file": "src/shapes/transformed.ts",
-      "line": 377,
-      "location": "src/shapes/transformed.ts:377",
-      "ms": 6.2,
-      "pct": 0.6
-    },
-    {
-      "name": "findCollidingPairs",
-      "file": "src/broadphase/broadphase.ts",
-      "line": 213,
-      "location": "src/broadphase/broadphase.ts:213",
-      "ms": 6,
-      "pct": 0.6
-    },
-    {
-      "name": "runSim",
-      "file": "bench/kcc-mesh.bench.ts",
-      "line": null,
-      "location": "bench/kcc-mesh.bench.ts",
-      "ms": 5.7,
-      "pct": 0.6
-    },
-    {
-      "name": "subtract$1",
+      "name": "copy$9",
       "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 154,
-      "location": "…/node_modules/mathcat/dist/vec3.js:154",
-      "ms": 5.5,
-      "pct": 0.5
+      "line": 58,
+      "location": "…/node_modules/mathcat/dist/vec3.js:58",
+      "ms": 6,
+      "pct": 0.7
     },
     {
       "name": "negate",
       "file": "…/node_modules/mathcat/dist/vec3.js",
       "line": 343,
       "location": "…/node_modules/mathcat/dist/vec3.js:343",
-      "ms": 5.2,
+      "ms": 5.9,
+      "pct": 0.6
+    },
+    {
+      "name": "getFirstContactForSweep",
+      "file": "src/character/kcc.ts",
+      "line": 1441,
+      "location": "src/character/kcc.ts:1441",
+      "ms": 5.6,
+      "pct": 0.6
+    },
+    {
+      "name": "update",
+      "file": "src/character/kcc.ts",
+      "line": 3784,
+      "location": "src/character/kcc.ts:3784",
+      "ms": 5.3,
+      "pct": 0.6
+    },
+    {
+      "name": "compareConstraints",
+      "file": "src/character/kcc.ts",
+      "line": 1912,
+      "location": "src/character/kcc.ts:1912",
+      "ms": 5.1,
+      "pct": 0.6
+    },
+    {
+      "name": "castTransformedVsShape",
+      "file": "src/shapes/transformed.ts",
+      "line": 553,
+      "location": "src/shapes/transformed.ts:553",
+      "ms": 5,
+      "pct": 0.6
+    },
+    {
+      "name": "fixNormal",
+      "file": "src/collision/active-edges.ts",
+      "line": 74,
+      "location": "src/collision/active-edges.ts:74",
+      "ms": 4.9,
       "pct": 0.5
     },
     {
-      "name": "setTriangleSupport",
-      "file": "src/collision/support.ts",
-      "line": 376,
-      "location": "src/collision/support.ts:376",
-      "ms": 4.8,
-      "pct": 0.5
-    },
-    {
-      "name": "castShape",
-      "file": "src/query.ts",
-      "line": 185,
-      "location": "src/query.ts:185",
+      "name": "update$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 485,
+      "location": "src/broadphase/dbvt.ts:485",
       "ms": 4.8,
       "pct": 0.5
     },
@@ -343,199 +356,207 @@
       "file": "src/constraints/contact-constraints.ts",
       "line": 582,
       "location": "src/constraints/contact-constraints.ts:582",
-      "ms": 4.4,
-      "pct": 0.4
+      "ms": 4.8,
+      "pct": 0.5
     },
     {
-      "name": "buildRecursive",
-      "file": "src/shapes/utils/triangle-mesh-bvh.ts",
-      "line": 308,
-      "location": "src/shapes/utils/triangle-mesh-bvh.ts:308",
-      "ms": 4.3,
-      "pct": 0.4
-    },
-    {
-      "name": "computeActiveEdges",
-      "file": "src/shapes/utils/triangle-mesh-builder.ts",
-      "line": 276,
-      "location": "src/shapes/utils/triangle-mesh-builder.ts:276",
-      "ms": 4.2,
-      "pct": 0.4
+      "name": "dot$2",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 390,
+      "location": "…/node_modules/mathcat/dist/vec3.js:390",
+      "ms": 4.5,
+      "pct": 0.5
     },
     {
       "name": "steerAgent",
       "file": "bench/kcc-mesh.bench.ts",
       "line": null,
       "location": "bench/kcc-mesh.bench.ts",
-      "ms": 3.9,
-      "pct": 0.4
+      "ms": 4.1,
+      "pct": 0.5
     },
     {
-      "name": "releaseAllContacts",
+      "name": "getContactsAtPosition",
       "file": "src/character/kcc.ts",
-      "line": 638,
-      "location": "src/character/kcc.ts:638",
+      "line": 1268,
+      "location": "src/character/kcc.ts:1268",
       "ms": 3.9,
       "pct": 0.4
     },
     {
-      "name": "update$1",
-      "file": "src/broadphase/dbvt.ts",
-      "line": 485,
-      "location": "src/broadphase/dbvt.ts:485",
-      "ms": 3.9,
-      "pct": 0.4
-    },
-    {
-      "name": "multiply$2",
+      "name": "subtract$1",
       "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 182,
-      "location": "…/node_modules/mathcat/dist/vec3.js:182",
-      "ms": 3.9,
-      "pct": 0.4
-    },
-    {
-      "name": "transformQuat",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 567,
-      "location": "…/node_modules/mathcat/dist/vec3.js:567",
-      "ms": 3.9,
-      "pct": 0.4
-    },
-    {
-      "name": "moveShape",
-      "file": "src/character/kcc.ts",
-      "line": 2691,
-      "location": "src/character/kcc.ts:2691",
-      "ms": 3.9,
-      "pct": 0.4
-    },
-    {
-      "name": "sortContacts",
-      "file": "src/character/kcc.ts",
-      "line": 1253,
-      "location": "src/character/kcc.ts:1253",
+      "line": 154,
+      "location": "…/node_modules/mathcat/dist/vec3.js:154",
       "ms": 3.8,
       "pct": 0.4
     },
     {
-      "name": "handleContact",
-      "file": "src/character/kcc.ts",
-      "line": 2924,
-      "location": "src/character/kcc.ts:2924",
+      "name": "solveVelocityConstraintsForIsland",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 1121,
+      "location": "src/constraints/contact-constraints.ts:1121",
       "ms": 3.8,
       "pct": 0.4
     },
     {
-      "name": "castTransformedVsShape",
+      "name": "collideTransformedVsShape",
       "file": "src/shapes/transformed.ts",
-      "line": 553,
-      "location": "src/shapes/transformed.ts:553",
+      "line": 377,
+      "location": "src/shapes/transformed.ts:377",
       "ms": 3.8,
       "pct": 0.4
-    },
-    {
-      "name": "updateWorld",
-      "file": "src/update.ts",
-      "line": 45,
-      "location": "src/update.ts:45",
-      "ms": 3.8,
-      "pct": 0.4
-    },
-    {
-      "name": "update",
-      "file": "src/character/kcc.ts",
-      "line": 3793,
-      "location": "src/character/kcc.ts:3793",
-      "ms": 3.7,
-      "pct": 0.4
-    },
-    {
-      "name": "fixNormal",
-      "file": "src/collision/active-edges.ts",
-      "line": 74,
-      "location": "src/collision/active-edges.ts:74",
-      "ms": 3.7,
-      "pct": 0.4
-    },
-    {
-      "name": "finalizeContactTracking",
-      "file": "src/character/kcc.ts",
-      "line": 2976,
-      "location": "src/character/kcc.ts:2976",
-      "ms": 3.5,
-      "pct": 0.3
-    },
-    {
-      "name": "register",
-      "file": "src/shapes/static-compound.ts",
-      "line": 168,
-      "location": "src/shapes/static-compound.ts:168",
-      "ms": 3.3,
-      "pct": 0.3
-    },
-    {
-      "name": "create$6",
-      "file": "src/shapes/triangle-mesh.ts",
-      "line": 113,
-      "location": "src/shapes/triangle-mesh.ts:113",
-      "ms": 3.2,
-      "pct": 0.3
-    },
-    {
-      "name": "addHit",
-      "file": "src/character/kcc.ts",
-      "line": 1093,
-      "location": "src/character/kcc.ts:1093",
-      "ms": 3,
-      "pct": 0.3
-    },
-    {
-      "name": "updateSupportingContact",
-      "file": "src/character/kcc.ts",
-      "line": 2295,
-      "location": "src/character/kcc.ts:2295",
-      "ms": 3,
-      "pct": 0.3
-    },
-    {
-      "name": "getFirstContactForSweep",
-      "file": "src/character/kcc.ts",
-      "line": 1445,
-      "location": "src/character/kcc.ts:1445",
-      "ms": 3,
-      "pct": 0.3
-    },
-    {
-      "name": "getSurfaceNormal",
-      "file": "src/body/rigid-body.ts",
-      "line": 924,
-      "location": "src/body/rigid-body.ts:924",
-      "ms": 2.7,
-      "pct": 0.3
-    },
-    {
-      "name": "invert$2",
-      "file": "…/node_modules/mathcat/dist/mat4.js",
-      "line": 251,
-      "location": "…/node_modules/mathcat/dist/mat4.js:251",
-      "ms": 2.7,
-      "pct": 0.3
     },
     {
       "name": "clamp",
       "file": "…/node_modules/mathcat/dist/common.js",
       "line": 69,
       "location": "…/node_modules/mathcat/dist/common.js:69",
-      "ms": 2.7,
+      "ms": 3.7,
+      "pct": 0.4
+    },
+    {
+      "name": "set",
+      "file": "src/query.ts",
+      "line": 258,
+      "location": "src/query.ts:258",
+      "ms": 3.7,
+      "pct": 0.4
+    },
+    {
+      "name": "pruneContactPoints",
+      "file": "src/manifold/manifold.ts",
+      "line": 168,
+      "location": "src/manifold/manifold.ts:168",
+      "ms": 3.6,
+      "pct": 0.4
+    },
+    {
+      "name": "prepare",
+      "file": "src/islands.ts",
+      "line": 64,
+      "location": "src/islands.ts:64",
+      "ms": 3.6,
+      "pct": 0.4
+    },
+    {
+      "name": "getSurfaceNormal",
+      "file": "src/body/rigid-body.ts",
+      "line": 924,
+      "location": "src/body/rigid-body.ts:924",
+      "ms": 3.6,
+      "pct": 0.4
+    },
+    {
+      "name": "determineConstraints",
+      "file": "src/character/kcc.ts",
+      "line": 1660,
+      "location": "src/character/kcc.ts:1660",
+      "ms": 3.6,
+      "pct": 0.4
+    },
+    {
+      "name": "fromRotationTranslationScale",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 1400,
+      "location": "…/node_modules/mathcat/dist/mat4.js:1400",
+      "ms": 3.5,
+      "pct": 0.4
+    },
+    {
+      "name": "setTriangleSupport",
+      "file": "src/collision/support.ts",
+      "line": 376,
+      "location": "src/collision/support.ts:376",
+      "ms": 3.5,
+      "pct": 0.4
+    },
+    {
+      "name": "pushIndex",
+      "file": "src/body/sub-shape.ts",
+      "line": 60,
+      "location": "src/body/sub-shape.ts:60",
+      "ms": 3.4,
+      "pct": 0.4
+    },
+    {
+      "name": "(program)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 3.3,
+      "pct": 0.4
+    },
+    {
+      "name": "sortContacts",
+      "file": "src/character/kcc.ts",
+      "line": 1249,
+      "location": "src/character/kcc.ts:1249",
+      "ms": 3.3,
+      "pct": 0.4
+    },
+    {
+      "name": "addHit",
+      "file": "src/update.ts",
+      "line": 432,
+      "location": "src/update.ts:432",
+      "ms": 3.2,
+      "pct": 0.4
+    },
+    {
+      "name": "finalize",
+      "file": "src/islands.ts",
+      "line": 240,
+      "location": "src/islands.ts:240",
+      "ms": 3.2,
+      "pct": 0.4
+    },
+    {
+      "name": "visit",
+      "file": "src/query.ts",
+      "line": 218,
+      "location": "src/query.ts:218",
+      "ms": 3,
       "pct": 0.3
     },
     {
-      "name": "addImpulseAtPosition",
-      "file": "src/body/rigid-body.ts",
-      "line": 800,
-      "location": "src/body/rigid-body.ts:800",
+      "name": "computeBarycentricCoordinates3d",
+      "file": "src/collision/closest-points.ts",
+      "line": 57,
+      "location": "src/collision/closest-points.ts:57",
+      "ms": 2.9,
+      "pct": 0.3
+    },
+    {
+      "name": "calculateConstraintProperties$5",
+      "file": "src/constraints/constraint-part/axis-constraint-part.ts",
+      "line": 164,
+      "location": "src/constraints/constraint-part/axis-constraint-part.ts:164",
       "ms": 2.6,
+      "pct": 0.3
+    },
+    {
+      "name": "clipPolyVsPlane",
+      "file": "src/manifold/clip.ts",
+      "line": 13,
+      "location": "src/manifold/clip.ts:13",
+      "ms": 2.6,
+      "pct": 0.3
+    },
+    {
+      "name": "destroyUnprocessedContacts",
+      "file": "src/contacts.ts",
+      "line": 700,
+      "location": "src/contacts.ts:700",
+      "ms": 2.6,
+      "pct": 0.3
+    },
+    {
+      "name": "copySimplex",
+      "file": "src/collision/simplex.ts",
+      "line": 32,
+      "location": "src/collision/simplex.ts:32",
+      "ms": 2.5,
       "pct": 0.3
     },
     {
@@ -543,95 +564,135 @@
       "file": "src/query.ts",
       "line": 108,
       "location": "src/query.ts:108",
-      "ms": 2.6,
+      "ms": 2.5,
       "pct": 0.3
+    },
+    {
+      "name": "setBoxSupport",
+      "file": "src/collision/support.ts",
+      "line": 296,
+      "location": "src/collision/support.ts:296",
+      "ms": 2.5,
+      "pct": 0.3
+    },
+    {
+      "name": "warmStartVelocityConstraints",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 971,
+      "location": "src/constraints/contact-constraints.ts:971",
+      "ms": 2.5,
+      "pct": 0.3
+    },
+    {
+      "name": "combineMaterial",
+      "file": "src/constraints/combine-material.ts",
+      "line": 40,
+      "location": "src/constraints/combine-material.ts:40",
+      "ms": 2.5,
+      "pct": 0.3
+    },
+    {
+      "name": "transformQuat",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 567,
+      "location": "…/node_modules/mathcat/dist/vec3.js:567",
+      "ms": 2.5,
+      "pct": 0.3
+    },
+    {
+      "name": "conjugate",
+      "file": "…/node_modules/mathcat/dist/quat.js",
+      "line": 333,
+      "location": "…/node_modules/mathcat/dist/quat.js:333",
+      "ms": 2.3,
+      "pct": 0.3
+    },
+    {
+      "name": "moveToContact",
+      "file": "src/character/kcc.ts",
+      "line": 3398,
+      "location": "src/character/kcc.ts:3398",
+      "ms": 2.3,
+      "pct": 0.3
+    },
+    {
+      "name": "releaseAllConstraints",
+      "file": "src/character/kcc.ts",
+      "line": 665,
+      "location": "src/character/kcc.ts:665",
+      "ms": 2.3,
+      "pct": 0.3
+    },
+    {
+      "name": "velocityIntegrationUpdate",
+      "file": "src/update.ts",
+      "line": 1131,
+      "location": "src/update.ts:1131",
+      "ms": 2.3,
+      "pct": 0.3
+    },
+    {
+      "name": "buildRecursive",
+      "file": "src/shapes/utils/triangle-mesh-bvh.ts",
+      "line": 308,
+      "location": "src/shapes/utils/triangle-mesh-bvh.ts:308",
+      "ms": 2.3,
+      "pct": 0.2
     },
     {
       "name": "deduplicateVertices",
       "file": "src/shapes/utils/triangle-mesh-builder.ts",
-      "line": 222,
-      "location": "src/shapes/utils/triangle-mesh-builder.ts:222",
-      "ms": 2.5,
+      "line": 227,
+      "location": "src/shapes/utils/triangle-mesh-builder.ts:227",
+      "ms": 2.2,
       "pct": 0.2
     },
     {
-      "name": "accelerationIntegrationUpdate",
-      "file": "src/update.ts",
-      "line": 287,
-      "location": "src/update.ts:287",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "transformMat4",
-      "file": "…/node_modules/mathcat/dist/box3.js",
-      "line": 326,
-      "location": "…/node_modules/mathcat/dist/box3.js:326",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "collideConvexVsConvexLocal",
-      "file": "src/shapes/convex.ts",
-      "line": 329,
-      "location": "src/shapes/convex.ts:329",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "updateAABB",
-      "file": "src/body/rigid-body.ts",
-      "line": 567,
-      "location": "src/body/rigid-body.ts:567",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "castConvexVsConvex",
-      "file": "src/shapes/convex.ts",
-      "line": 531,
-      "location": "src/shapes/convex.ts:531",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "solvePositionConstraintsForIsland",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 1399,
-      "location": "src/constraints/contact-constraints.ts:1399",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "copy$9",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 58,
-      "location": "…/node_modules/mathcat/dist/vec3.js:58",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "compareContactsForDeterminism",
-      "file": "src/character/kcc.ts",
-      "line": 1245,
-      "location": "src/character/kcc.ts:1245",
-      "ms": 2.5,
-      "pct": 0.2
-    },
-    {
-      "name": "visit",
+      "name": "castShape",
       "file": "src/query.ts",
-      "line": 218,
-      "location": "src/query.ts:218",
-      "ms": 2.5,
+      "line": 185,
+      "location": "src/query.ts:185",
+      "ms": 2.2,
       "pct": 0.2
     },
     {
-      "name": "normalize$2",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 369,
-      "location": "…/node_modules/mathcat/dist/vec3.js:369",
-      "ms": 2.4,
+      "name": "getShapeSurfaceNormal",
+      "file": "src/shapes/shapes.ts",
+      "line": 464,
+      "location": "src/shapes/shapes.ts:464",
+      "ms": 2.2,
+      "pct": 0.2
+    },
+    {
+      "name": "finalizeAndCreateConstraints",
+      "file": "src/update.ts",
+      "line": 577,
+      "location": "src/update.ts:577",
+      "ms": 2.2,
+      "pct": 0.2
+    },
+    {
+      "name": "updateBody",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 196,
+      "location": "src/broadphase/broadphase.ts:196",
+      "ms": 2.1,
+      "pct": 0.2
+    },
+    {
+      "name": "removeConflictingContacts",
+      "file": "src/character/kcc.ts",
+      "line": 1597,
+      "location": "src/character/kcc.ts:1597",
+      "ms": 2.1,
+      "pct": 0.2
+    },
+    {
+      "name": "move",
+      "file": "src/character/kcc.ts",
+      "line": 3327,
+      "location": "src/character/kcc.ts:3327",
+      "ms": 2,
       "pct": 0.2
     },
     {
@@ -639,47 +700,15 @@
       "file": "src/shapes/shapes.ts",
       "line": 494,
       "location": "src/shapes/shapes.ts:494",
-      "ms": 2.3,
+      "ms": 1.7,
       "pct": 0.2
     },
     {
-      "name": "rayHitsBox3",
-      "file": "src/collision/cast-utils.ts",
-      "line": 114,
-      "location": "src/collision/cast-utils.ts:114",
-      "ms": 2.2,
-      "pct": 0.2
-    },
-    {
-      "name": "scaleAndAdd",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 292,
-      "location": "…/node_modules/mathcat/dist/vec3.js:292",
-      "ms": 2.2,
-      "pct": 0.2
-    },
-    {
-      "name": "narrowphase",
-      "file": "src/update.ts",
-      "line": 949,
-      "location": "src/update.ts:949",
-      "ms": 2.2,
-      "pct": 0.2
-    },
-    {
-      "name": "buildTriangleMesh",
-      "file": "src/shapes/utils/triangle-mesh-builder.ts",
-      "line": 62,
-      "location": "src/shapes/utils/triangle-mesh-builder.ts:62",
-      "ms": 2.1,
-      "pct": 0.2
-    },
-    {
-      "name": "computeBarycentricCoordinates3d",
-      "file": "src/collision/closest-points.ts",
-      "line": 57,
-      "location": "src/collision/closest-points.ts:57",
-      "ms": 2,
+      "name": "updateShape",
+      "file": "src/body/rigid-body.ts",
+      "line": 574,
+      "location": "src/body/rigid-body.ts:574",
+      "ms": 1.5,
       "pct": 0.2
     },
     {
@@ -687,31 +716,7 @@
       "file": "src/manifold/manifold.ts",
       "line": 394,
       "location": "src/manifold/manifold.ts:394",
-      "ms": 1.9,
-      "pct": 0.2
-    },
-    {
-      "name": "move",
-      "file": "src/character/kcc.ts",
-      "line": 3335,
-      "location": "src/character/kcc.ts:3335",
-      "ms": 1.8,
-      "pct": 0.2
-    },
-    {
-      "name": "moveToContact",
-      "file": "src/character/kcc.ts",
-      "line": 3406,
-      "location": "src/character/kcc.ts:3406",
-      "ms": 1.8,
-      "pct": 0.2
-    },
-    {
-      "name": "build",
-      "file": "src/shapes/utils/triangle-mesh-bvh.ts",
-      "line": 248,
-      "location": "src/shapes/utils/triangle-mesh-bvh.ts:248",
-      "ms": 1.8,
+      "ms": 1.5,
       "pct": 0.2
     }
   ]

@@ -3,63 +3,64 @@
 | field | value |
 | --- | --- |
 | scenario | `projectiles-terrain` |
-| date | 2026-07-03T05:02:23.025Z |
-| git rev | `ab84e99` (dirty) |
+| date | 2026-07-03T14:15:22.748Z |
+| git rev | `9b65b0d` (dirty) |
 | node | v24.10.0 |
 | cpu | Apple M1 Pro |
-| wall | 1375.4 ms |
-| attributed | 1374.3 ms |
-| samples | 1017 |
+| wall | 987.2 ms |
+| attributed | 819.1 ms |
+| startup excluded | 167.5 ms |
+| samples | 911 |
 
 ## by category
 
 | category      |   pct |    ms |
 | ------------- | ----: | ----: |
-| narrowphase   | 21.9% | 300.7 |
-| runtime       | 19.3% | 264.7 |
-| shapes        | 17.9% | 246.2 |
-| step          | 10.6% | 145.0 |
-| broadphase    |  9.9% | 135.9 |
-| solver        |  9.0% | 123.8 |
-| math          |  6.6% |  90.5 |
-| body          |  1.9% |  25.9 |
-| crashcat-util |  1.1% |  14.8 |
-| manifold      |  1.0% |  14.0 |
-| bench-harness |  0.8% |  10.3 |
-| ccd           |  0.2% |   2.5 |
+| narrowphase   | 30.3% | 248.5 |
+| shapes        | 18.7% | 153.3 |
+| solver        | 11.2% |  91.5 |
+| step          | 10.9% |  89.1 |
+| broadphase    | 10.6% |  87.2 |
+| math          |  8.4% |  69.2 |
+| body          |  3.4% |  27.8 |
+| runtime       |  2.6% |  21.0 |
+| crashcat-util |  1.8% |  14.5 |
+| manifold      |  1.0% |   8.0 |
+| bench-harness |  0.6% |   5.3 |
+| ccd           |  0.5% |   3.8 |
 
 ## top 30 self-time hotspots
 
-|   # |  pct |   ms | function                            | location                                      |
-| --: | ---: | ---: | ----------------------------------- | --------------------------------------------- |
-|   1 | 6.4% | 88.4 | `castSphereVsTriangleMesh`          | `src/shapes/triangle-mesh.ts:2177`            |
-|   2 | 5.4% | 74.9 | `(idle)`                            | ``                                            |
-|   3 | 3.7% | 51.3 | `intersectAABB$1`                   | `src/broadphase/dbvt.ts:627`                  |
-|   4 | 3.7% | 50.2 | `rayDistanceToBox3`                 | `src/collision/cast-utils.ts:20`              |
-|   5 | 3.6% | 48.9 | `castAABB$1`                        | `src/broadphase/dbvt.ts:936`                  |
-|   6 | 3.3% | 46.0 | `collideConvexVsTriangleMesh`       | `src/shapes/triangle-mesh.ts:1211`            |
-|   7 | 3.2% | 43.3 | `gjkCastShape`                      | `src/collision/gjk.ts:913`                    |
-|   8 | 2.8% | 38.7 | `solveVelocityConstraintsForIsland` | `src/constraints/contact-constraints.ts:1121` |
-|   9 | 2.6% | 35.5 | `waitForWorker`                     | `node:internal/modules/esm/hooks`             |
-|  10 | 2.6% | 35.4 | `makeSyncRequest`                   | `node:internal/modules/esm/hooks`             |
-|  11 | 2.5% | 33.8 | `collideSphereVsTriangleMesh`       | `src/shapes/triangle-mesh.ts:1725`            |
-|  12 | 2.4% | 33.5 | `gjkClosestPoints`                  | `src/collision/gjk.ts:1225`                   |
-|  13 | 2.4% | 33.1 | `findCCDContacts`                   | `src/update.ts:1576`                          |
-|  14 | 2.2% | 30.7 | `penetrationDepthStepGJK`           | `src/collision/penetration.ts:29`             |
-|  15 | 2.1% | 29.5 | `penetrationCastShape`              | `src/collision/penetration.ts:621`            |
-|  16 | 2.1% | 29.4 | `updateWorld`                       | `src/update.ts:45`                            |
-|  17 | 2.0% | 27.6 | `castConvexVsTriangleMesh`          | `src/shapes/triangle-mesh.ts:677`             |
-|  18 | 2.0% | 27.5 | `update$1`                          | `src/broadphase/dbvt.ts:485`                  |
-|  19 | 1.9% | 26.0 | `(garbage collector)`               | ``                                            |
-|  20 | 1.7% | 23.5 | `rayHitsBox3`                       | `src/collision/cast-utils.ts:114`             |
-|  21 | 1.5% | 20.2 | `compileSourceTextModule`           | `node:internal/modules/esm/utils`             |
-|  22 | 1.5% | 20.1 | `addContactConstraint`              | `src/constraints/contact-constraints.ts:582`  |
-|  23 | 1.3% | 17.9 | `getSupport`                        | `src/collision/support.ts:125`                |
-|  24 | 1.3% | 17.3 | `narrowphase`                       | `src/update.ts:949`                           |
-|  25 | 1.2% | 16.7 | `velocityIntegrationUpdate`         | `src/update.ts:1131`                          |
-|  26 | 1.2% | 16.4 | `visit`                             | `src/update.ts:1387`                          |
-|  27 | 1.1% | 14.5 | `collideConvexVsConvex`             | `src/shapes/convex.ts:247`                    |
-|  28 | 1.0% | 14.3 | `penetrationDepthStepEPA`           | `src/collision/penetration.ts:209`            |
-|  29 | 0.9% | 12.4 | `subtract$1`                        | `…/node_modules/mathcat/dist/vec3.js:154`     |
-|  30 | 0.9% | 11.8 | `collideConvexVsConvexLocal`        | `src/shapes/convex.ts:329`                    |
+|   # |  pct |   ms | function                            | location                                       |
+| --: | ---: | ---: | ----------------------------------- | ---------------------------------------------- |
+|   1 | 9.1% | 74.8 | `rayDistanceToBox3`                 | `src/collision/cast-utils.ts:20`               |
+|   2 | 4.4% | 35.8 | `castAABB$1`                        | `src/broadphase/dbvt.ts:936`                   |
+|   3 | 4.3% | 34.9 | `collideSphereVsTriangleMesh`       | `src/shapes/triangle-mesh.ts:1723`             |
+|   4 | 4.0% | 32.5 | `collideConvexVsTriangleMesh`       | `src/shapes/triangle-mesh.ts:1209`             |
+|   5 | 3.8% | 31.3 | `castSphereVsTriangleMesh`          | `src/shapes/triangle-mesh.ts:2173`             |
+|   6 | 3.4% | 28.0 | `penetrationDepthStepGJK`           | `src/collision/penetration.ts:29`              |
+|   7 | 3.2% | 26.2 | `intersectAABB$1`                   | `src/broadphase/dbvt.ts:627`                   |
+|   8 | 2.6% | 21.6 | `gjkClosestPoints`                  | `src/collision/gjk.ts:1225`                    |
+|   9 | 2.6% | 21.4 | `getSupport`                        | `src/collision/support.ts:125`                 |
+|  10 | 2.6% | 21.2 | `updateWorld`                       | `src/update.ts:45`                             |
+|  11 | 2.6% | 21.0 | `solveVelocityConstraintsForIsland` | `src/constraints/contact-constraints.ts:1121`  |
+|  12 | 2.5% | 20.1 | `gjkCastShape`                      | `src/collision/gjk.ts:913`                     |
+|  13 | 2.4% | 19.6 | `update$1`                          | `src/broadphase/dbvt.ts:485`                   |
+|  14 | 2.3% | 19.0 | `castConvexVsTriangleMesh`          | `src/shapes/triangle-mesh.ts:676`              |
+|  15 | 2.0% | 16.1 | `penetrationCastShape`              | `src/collision/penetration.ts:621`             |
+|  16 | 1.8% | 14.9 | `(garbage collector)`               | ``                                             |
+|  17 | 1.8% | 14.9 | `visit`                             | `src/update.ts:1387`                           |
+|  18 | 1.7% | 14.1 | `penetrationDepthStepEPA`           | `src/collision/penetration.ts:209`             |
+|  19 | 1.5% | 12.3 | `push`                              | `src/utils/bvh-stack.ts:36`                    |
+|  20 | 1.5% | 12.2 | `velocityIntegrationUpdate`         | `src/update.ts:1131`                           |
+|  21 | 1.4% | 11.8 | `rayHitsBox3`                       | `src/collision/cast-utils.ts:114`              |
+|  22 | 1.4% | 11.5 | `getInverseInertiaForRotation`      | `src/body/motion-properties.ts:500`            |
+|  23 | 1.4% | 11.2 | `addContactConstraint`              | `src/constraints/contact-constraints.ts:582`   |
+|  24 | 1.3% | 11.0 | `transformQuat`                     | `…/node_modules/mathcat/dist/vec3.js:567`      |
+|  25 | 1.2% |  9.5 | `finalize`                          | `src/islands.ts:240`                           |
+|  26 | 1.1% |  9.1 | `intersectsBox3`                    | `…/node_modules/mathcat/dist/raycast3.js:195`  |
+|  27 | 1.1% |  9.0 | `createTriangle$1`                  | `src/collision/epa-convex-hull-builder.ts:251` |
+|  28 | 1.1% |  8.8 | `getTriangleVertices`               | `src/shapes/utils/triangle-mesh-data.ts:44`    |
+|  29 | 1.0% |  8.2 | `getContactsFromCache`              | `src/update.ts:868`                            |
+|  30 | 0.9% |  7.0 | `subtract$1`                        | `…/node_modules/mathcat/dist/vec3.js:154`      |
 

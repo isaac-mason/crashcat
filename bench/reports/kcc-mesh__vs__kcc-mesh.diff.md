@@ -2,136 +2,135 @@
 
 | side | scenario | git rev | attributed ms | date |
 | --- | --- | --- | --- | --- |
-| baseline | `kcc-mesh` | `ab84e99` (dirty) | 1060.4 | 2026-07-03T05:08:09.291Z |
-| current | `kcc-mesh` | `ab84e99` (dirty) | 1019.8 | 2026-07-03T06:14:24.034Z |
+| baseline | `kcc-mesh` | `9b65b0d` (dirty) | 1068.9 | 2026-07-03T13:48:58.232Z |
+| current | `kcc-mesh` | `9b65b0d` (dirty) | 907.7 | 2026-07-03T14:15:21.619Z |
 
-**total attributed time:** 1060.4 ms → 1019.8 ms  (**-40.6 ms**, -3.8%)
+**total attributed time:** 1068.9 ms → 907.7 ms  (**-161.2 ms**, -15.1%)
 
 ## category deltas
 
 | category      | base ms | cur ms |  Δ ms | Δ pts |   rel % |
 | ------------- | ------: | -----: | ----: | ----: | ------: |
-| character     |   181.2 |  120.5 | -60.7 |  -5.3 |  -33.5% |
-| narrowphase   |   367.7 |  424.2 | +56.5 |  +6.9 |  +15.4% |
-| step          |    34.5 |   14.0 | -20.5 |  -1.9 |  -59.4% |
-| shapes        |   211.1 |  219.9 |  +8.8 |  +1.7 |   +4.2% |
-| broadphase    |    43.7 |   37.0 |  -6.7 |  -0.5 |  -15.3% |
-| body          |    16.8 |   10.5 |  -6.3 |  -0.6 |  -37.5% |
-| manifold      |     6.2 |    1.9 |  -4.3 |  -0.4 |  -69.4% |
-| ccd           |     2.7 |    0.0 |  -2.7 |  -0.3 | -100.0% |
-| other         |     2.5 |    0.0 |  -2.5 |  -0.2 | -100.0% |
-| bench-harness |     9.8 |   12.0 |  +2.2 |  +0.3 |  +22.4% |
-| solver        |    33.0 |   30.9 |  -2.1 |  -0.1 |   -6.4% |
-| math          |    98.7 |   97.1 |  -1.6 |  +0.2 |   -1.6% |
-| crashcat-util |    23.3 |   22.3 |  -1.0 |  +0.0 |   -4.3% |
+| shapes        |   234.1 |  166.7 | -67.4 |  -3.5 |  -28.8% |
+| character     |   137.6 |   87.7 | -49.9 |  -3.2 |  -36.3% |
+| broadphase    |    65.7 |   45.7 | -20.0 |  -1.1 |  -30.4% |
+| narrowphase   |   392.1 |  372.2 | -19.9 |  +4.3 |   -5.1% |
+| bench-harness |     4.8 |   13.6 |  +8.8 |  +1.1 | +183.3% |
+| math          |    84.8 |   91.9 |  +7.1 |  +2.2 |   +8.4% |
+| step          |    25.3 |   18.3 |  -7.0 |  -0.4 |  -27.7% |
+| solver        |    41.5 |   36.5 |  -5.0 |  +0.1 |  -12.0% |
+| runtime       |    31.6 |   28.5 |  -3.1 |  +0.1 |   -9.8% |
+| manifold      |     9.8 |    7.7 |  -2.1 |  -0.1 |  -21.4% |
+| crashcat-util |    20.0 |   18.5 |  -1.5 |  +0.1 |   -7.5% |
+| ccd           |     1.3 |    0.0 |  -1.3 |  -0.1 | -100.0% |
+| other         |     1.3 |    2.4 |  +1.1 |  +0.2 |  +84.6% |
+| body          |    19.0 |   18.0 |  -1.0 |  +0.2 |   -5.3% |
 
 ## function hotspot deltas
 
 _matched by name + file; deltas below 0.5 ms hidden._
 
-| function                                | location                                                        | base ms | cur ms |  Δ ms | note     |
-| --------------------------------------- | --------------------------------------------------------------- | ------: | -----: | ----: | -------- |
-| `finalizeContactTracking`               | `src/character/kcc.ts:2976`                                     |    49.3 |    3.5 | -45.8 |          |
-| `intersectsBox3`                        | `…/node_modules/mathcat/dist/raycast3.js:195`                   |     8.7 |   26.0 | +17.3 |          |
-| `gjkCastShape`                          | `src/collision/gjk.ts:913`                                      |    76.0 |   93.0 | +17.0 |          |
-| `update`                                | `src/character/kcc.ts:3793`                                     |    20.6 |    3.7 | -16.9 |          |
-| `getSupport`                            | `src/collision/support.ts:125`                                  |    65.2 |   81.2 | +16.0 |          |
-| `penetrationCastShape`                  | `src/collision/penetration.ts:621`                              |    61.2 |   75.7 | +14.5 |          |
-| `updateWorld`                           | `src/update.ts:45`                                              |    18.2 |    3.8 | -14.4 |          |
-| `transformMat4$1`                       | `…/node_modules/mathcat/dist/vec3.js:530`                       |    29.2 |   16.8 | -12.4 |          |
-| `solveConstraints`                      | `src/character/kcc.ts:2012`                                     |    21.5 |   11.2 | -10.3 |          |
-| `correctFractionForCharacterPadding`    | `src/character/kcc.ts:1374`                                     |    11.7 |   20.9 |  +9.2 |          |
-| `addHit`                                | `src/character/kcc.ts:1093`                                     |    12.0 |    3.0 |  -9.0 |          |
-| `cancelVelocityTowardsSteepSlopes`      | `src/character/kcc.ts:2564`                                     |     0.0 |    7.9 |  +7.9 | appeared |
-| `collideConvexVsTriangleMesh`           | `src/shapes/triangle-mesh.ts:1211`                              |    90.1 |   96.9 |  +6.8 |          |
-| `(program)`                             | ``                                                              |     6.8 |    0.0 |  -6.8 | gone     |
-| `penetrationDepthStepGJK`               | `src/collision/penetration.ts:29`                               |    36.1 |   42.9 |  +6.8 |          |
-| `findCollidingPairs`                    | `src/broadphase/broadphase.ts:213`                              |     0.0 |    6.0 |  +6.0 | appeared |
-| `getTriangleVertices`                   | `src/shapes/utils/triangle-mesh-data.ts:37`                     |    10.2 |   16.1 |  +5.9 |          |
-| `getFirstContactForSweep`               | `src/character/kcc.ts:1445`                                     |     8.6 |    3.0 |  -5.6 |          |
-| `getContactsAtPosition`                 | `src/character/kcc.ts:1272`                                     |     4.7 |   10.0 |  +5.3 |          |
-| `bounds$2`                              | `…/node_modules/mathcat/dist/triangle3.js:9`                    |     3.7 |    9.0 |  +5.3 |          |
-| `negate`                                | `…/node_modules/mathcat/dist/vec3.js:343`                       |     0.0 |    5.2 |  +5.2 | appeared |
-| `update$1`                              | `src/broadphase/dbvt.ts:485`                                    |     8.9 |    3.9 |  -5.0 |          |
-| `findListenerContact`                   | `src/character/kcc.ts:600`                                      |     5.0 |    0.0 |  -5.0 | gone     |
-| `setTriangleSupport`                    | `src/collision/support.ts:376`                                  |     0.0 |    4.8 |  +4.8 | appeared |
-| `addContactConstraint`                  | `src/constraints/contact-constraints.ts:582`                    |     0.0 |    4.4 |  +4.4 | appeared |
-| `castTransformedVsShape`                | `src/shapes/transformed.ts:553`                                 |     8.1 |    3.8 |  -4.3 |          |
-| `computeActiveEdges`                    | `src/shapes/utils/triangle-mesh-builder.ts:276`                 |     0.0 |    4.2 |  +4.2 | appeared |
-| `set$8`                                 | `…/node_modules/mathcat/dist/vec3.js:73`                        |     4.0 |    0.0 |  -4.0 | gone     |
-| `determineConstraints`                  | `src/character/kcc.ts:1664`                                     |     2.5 |    6.5 |  +4.0 |          |
-| `steerAgent`                            | `bench/kcc-mesh.bench.ts`                                       |     0.0 |    3.9 |  +3.9 | appeared |
-| `releaseAllContacts`                    | `src/character/kcc.ts:638`                                      |     0.0 |    3.9 |  +3.9 | appeared |
-| `multiply$2`                            | `…/node_modules/mathcat/dist/vec3.js:182`                       |     0.0 |    3.9 |  +3.9 | appeared |
-| `updateSupportingContact`               | `src/character/kcc.ts:2295`                                     |     6.8 |    3.0 |  -3.8 |          |
-| `collideConvexVsConvex`                 | `src/shapes/convex.ts:247`                                      |     3.8 |    0.0 |  -3.8 | gone     |
-| `castConvexVsConvexLocal`               | `src/shapes/convex.ts:605`                                      |     3.8 |    0.0 |  -3.8 | gone     |
-| `dot$2`                                 | `…/node_modules/mathcat/dist/vec3.js:390`                       |     3.8 |    0.0 |  -3.8 | gone     |
-| `releaseAllListenerContacts`            | `src/character/kcc.ts:591`                                      |     3.8 |    0.0 |  -3.8 | gone     |
-| `resetContact`                          | `src/character/kcc.ts:715`                                      |     3.8 |    0.0 |  -3.8 | gone     |
-| `sortContacts`                          | `src/character/kcc.ts:1253`                                     |     0.0 |    3.8 |  +3.8 | appeared |
-| `handleContact`                         | `src/character/kcc.ts:2924`                                     |     0.0 |    3.8 |  +3.8 | appeared |
-| `computeBarycentricCoordinates3d`       | `src/collision/closest-points.ts:57`                            |     5.7 |    2.0 |  -3.7 |          |
-| `fromRotationTranslationScale`          | `…/node_modules/mathcat/dist/mat4.js:1400`                      |     3.7 |    0.0 |  -3.7 | gone     |
-| `isScaleInsideOut$1`                    | `…/node_modules/mathcat/dist/vec3.js:756`                       |     3.7 |    0.0 |  -3.7 | gone     |
-| `fixNormal`                             | `src/collision/active-edges.ts:74`                              |     0.0 |    3.7 |  +3.7 | appeared |
-| (anonymous)                             | `src/character/kcc.ts:612`                                      |     3.6 |    0.0 |  -3.6 | gone     |
-| `castAABB$1`                            | `src/broadphase/dbvt.ts:936`                                    |    13.7 |   10.1 |  -3.6 |          |
-| `castConvexVsTriangleMesh`              | `src/shapes/triangle-mesh.ts:677`                               |    40.0 |   43.4 |  +3.4 |          |
-| `register`                              | `src/shapes/static-compound.ts:168`                             |     0.0 |    3.3 |  +3.3 | appeared |
-| `create$6`                              | `src/shapes/triangle-mesh.ts:113`                               |     0.0 |    3.2 |  +3.2 | appeared |
-| `getContactsFromCache`                  | `src/update.ts:868`                                             |     3.1 |    0.0 |  -3.1 | gone     |
-| `(garbage collector)`                   | ``                                                              |    18.9 |   21.9 |  +3.0 |          |
-| `push`                                  | `src/utils/bvh-stack.ts:36`                                     |     8.6 |   11.3 |  +2.7 |          |
-| `compareConstraints`                    | `src/character/kcc.ts:1895`                                     |     2.7 |    0.0 |  -2.7 | gone     |
-| `clear`                                 | `src/ccd.ts:107`                                                |     2.7 |    0.0 |  -2.7 | gone     |
-| `invert$2`                              | `…/node_modules/mathcat/dist/mat4.js:251`                       |     0.0 |    2.7 |  +2.7 | appeared |
-| `(idle)`                                | ``                                                              |     3.6 |    6.3 |  +2.7 |          |
-| `collideTransformedVsShape`             | `src/shapes/transformed.ts:377`                                 |     8.8 |    6.2 |  -2.6 |          |
-| `moveShape`                             | `src/character/kcc.ts:2691`                                     |     6.5 |    3.9 |  -2.6 |          |
-| `updateGroundVelocity`                  | `src/character/kcc.ts:3068`                                     |     2.6 |    0.0 |  -2.6 | gone     |
-| `destroyUnprocessedContacts`            | `src/contacts.ts:700`                                           |     2.6 |    0.0 |  -2.6 | gone     |
-| `insertLeaf`                            | `src/broadphase/dbvt.ts:118`                                    |     2.6 |    0.0 |  -2.6 | gone     |
-| `addImpulseAtPosition`                  | `src/body/rigid-body.ts:800`                                    |     0.0 |    2.6 |  +2.6 | appeared |
-| `visit`                                 | `src/query.ts:218`                                              |     5.1 |    2.5 |  -2.6 |          |
-| `getShapeSupportingFace`                | `src/shapes/shapes.ts:494`                                      |     4.8 |    2.3 |  -2.5 |          |
-| `processEdge`                           | `src/shapes/utils/triangle-mesh-builder.ts:340`                 |     2.5 |    0.0 |  -2.5 | gone     |
-| `calculateFrictionConstraintProperties` | `src/constraints/contact-constraints.ts:475`                    |     2.5 |    0.0 |  -2.5 | gone     |
-| `fromRotationTranslation`               | `…/node_modules/mathcat/dist/mat4.js:1150`                      |     2.5 |    0.0 |  -2.5 | gone     |
-| `set`                                   | `src/query.ts:258`                                              |     2.5 |    0.0 |  -2.5 | gone     |
-| `scale$4`                               | `…/node_modules/mathcat/dist/vec3.js:277`                       |     2.5 |    0.0 |  -2.5 | gone     |
-| `velocityIntegrationUpdate`             | `src/update.ts:1131`                                            |     2.5 |    0.0 |  -2.5 | gone     |
-| `scale$1`                               | `…/node_modules/mathcat/dist/box3.js:294`                       |     2.5 |    0.0 |  -2.5 | gone     |
-| (anonymous)                             | `file:///Users/isaacmason/Development/crashcat/dist/index.js:1` |     2.5 |    0.0 |  -2.5 | gone     |
-| `accelerationIntegrationUpdate`         | `src/update.ts:287`                                             |     0.0 |    2.5 |  +2.5 | appeared |
-| `transformMat4`                         | `…/node_modules/mathcat/dist/box3.js:326`                       |     0.0 |    2.5 |  +2.5 | appeared |
-| `collideConvexVsConvexLocal`            | `src/shapes/convex.ts:329`                                      |     0.0 |    2.5 |  +2.5 | appeared |
-| `castConvexVsConvex`                    | `src/shapes/convex.ts:531`                                      |     0.0 |    2.5 |  +2.5 | appeared |
-| `copy$9`                                | `…/node_modules/mathcat/dist/vec3.js:58`                        |     0.0 |    2.5 |  +2.5 | appeared |
-| `compareContactsForDeterminism`         | `src/character/kcc.ts:1245`                                     |     0.0 |    2.5 |  +2.5 | appeared |
-| `multiply3x3Vec`                        | `…/node_modules/mathcat/dist/mat4.js:620`                       |     2.4 |    0.0 |  -2.4 | gone     |
-| `updateInnerBodyTransform`              | `src/character/kcc.ts:3014`                                     |     2.4 |    0.0 |  -2.4 | gone     |
-| `getSurfaceNormal`                      | `src/body/rigid-body.ts:924`                                    |     5.1 |    2.7 |  -2.4 |          |
-| `rayDistanceToBox3`                     | `src/collision/cast-utils.ts:20`                                |    24.3 |   26.7 |  +2.4 |          |
-| `castShape`                             | `src/query.ts:185`                                              |     2.5 |    4.8 |  +2.3 |          |
-| `collideShapeVsShape`                   | `src/collision/narrowphase.ts:183`                              |     2.3 |    0.0 |  -2.3 | gone     |
-| `hasContactsBetweenBodyIds`             | `src/contacts.ts:479`                                           |     2.2 |    0.0 |  -2.2 | gone     |
-| `scaleAndAdd`                           | `…/node_modules/mathcat/dist/vec3.js:292`                       |     0.0 |    2.2 |  +2.2 | appeared |
-| `rayHitsBox3`                           | `src/collision/cast-utils.ts:114`                               |     4.3 |    2.2 |  -2.1 |          |
-| `finalize`                              | `src/islands.ts:240`                                            |     4.3 |    6.3 |  +2.0 |          |
-| `manifoldBetweenTwoFaces`               | `src/manifold/manifold.ts:394`                                  |     0.0 |    1.9 |  +1.9 | appeared |
-| `move`                                  | `src/character/kcc.ts:3335`                                     |     0.0 |    1.8 |  +1.8 | appeared |
-| `moveToContact`                         | `src/character/kcc.ts:3406`                                     |     0.0 |    1.8 |  +1.8 | appeared |
-| `build`                                 | `src/shapes/utils/triangle-mesh-bvh.ts:248`                     |     0.0 |    1.8 |  +1.8 | appeared |
-| `solvePositionConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1399`                   |     4.1 |    2.5 |  -1.6 |          |
-| `runSim`                                | `bench/kcc-mesh.bench.ts`                                       |     4.4 |    5.7 |  +1.3 |          |
-| `buildTriangleMesh`                     | `src/shapes/utils/triangle-mesh-builder.ts:62`                  |     3.3 |    2.1 |  -1.2 |          |
-| `clamp`                                 | `…/node_modules/mathcat/dist/common.js:69`                      |     3.8 |    2.7 |  -1.1 |          |
-| `gjkClosestPoints`                      | `src/collision/gjk.ts:1225`                                     |    83.9 |   82.9 |  -1.0 |          |
-| `updateAABB`                            | `src/body/rigid-body.ts:567`                                    |     3.5 |    2.5 |  -1.0 |          |
-| `buildRecursive`                        | `src/shapes/utils/triangle-mesh-bvh.ts:308`                     |     3.3 |    4.3 |  +1.0 |          |
-| `solveVelocityConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1121`                   |     8.4 |    9.3 |  +0.9 |          |
-| `normalize$2`                           | `…/node_modules/mathcat/dist/vec3.js:369`                       |     3.0 |    2.4 |  -0.6 |          |
-| `intersectAABB$1`                       | `src/broadphase/dbvt.ts:627`                                    |    13.7 |   13.1 |  -0.6 |          |
-| `subtract$1`                            | `…/node_modules/mathcat/dist/vec3.js:154`                       |     5.0 |    5.5 |  +0.5 |          |
+| function                                | location                                                      | base ms | cur ms |  Δ ms | note     |
+| --------------------------------------- | ------------------------------------------------------------- | ------: | -----: | ----: | -------- |
+| `collideConvexVsTriangleMesh`           | `src/shapes/triangle-mesh.ts:1209`                            |   100.1 |   75.5 | -24.6 |          |
+| `calculateTriangleAABB`                 | `src/shapes/utils/triangle-mesh-data.ts:93`                   |    24.2 |    0.0 | -24.2 | gone     |
+| `gjkCastShape`                          | `src/collision/gjk.ts:913`                                    |   108.1 |   88.3 | -19.8 |          |
+| `getSupport`                            | `src/collision/support.ts:125`                                |    63.0 |   81.9 | +18.9 |          |
+| `gjkClosestPoints`                      | `src/collision/gjk.ts:1225`                                   |    78.5 |   60.0 | -18.5 |          |
+| `correctFractionForCharacterPadding`    | `src/character/kcc.ts:1370`                                   |    20.7 |    7.9 | -12.8 |          |
+| `penetrationCastShape`                  | `src/collision/penetration.ts:621`                            |    53.7 |   65.2 | +11.5 |          |
+| `solveConstraints`                      | `src/character/kcc.ts:2008`                                   |    18.1 |    8.0 | -10.1 |          |
+| `setCapsuleSupport`                     | `src/collision/support.ts:336`                                |     8.4 |    0.0 |  -8.4 | gone     |
+| `getSurfaceNormal`                      | `src/body/rigid-body.ts:924`                                  |    11.1 |    3.6 |  -7.5 |          |
+| `(garbage collector)`                   | ``                                                            |    25.3 |   18.4 |  -6.9 |          |
+| `finalizeContactTracking`               | `src/character/kcc.ts:2968`                                   |     6.8 |    0.0 |  -6.8 | gone     |
+| `castConvexVsTriangleMesh`              | `src/shapes/triangle-mesh.ts:676`                             |    47.1 |   40.5 |  -6.6 |          |
+| `getContactsAtPosition`                 | `src/character/kcc.ts:1268`                                   |     9.9 |    3.9 |  -6.0 |          |
+| `runSim`                                | `bench/kcc-mesh.bench.ts`                                     |     2.6 |    8.5 |  +5.9 |          |
+| `negate`                                | `…/node_modules/mathcat/dist/vec3.js:343`                     |     0.0 |    5.9 |  +5.9 | appeared |
+| `update`                                | `src/character/kcc.ts:3784`                                   |    11.0 |    5.3 |  -5.7 |          |
+| `addHit`                                | `src/character/kcc.ts:910`                                    |     5.2 |   10.9 |  +5.7 |          |
+| `intersectAABB$1`                       | `src/broadphase/dbvt.ts:627`                                  |    25.6 |   20.0 |  -5.6 |          |
+| `move`                                  | `src/character/kcc.ts:3327`                                   |     7.4 |    2.0 |  -5.4 |          |
+| `compareConstraints`                    | `src/character/kcc.ts:1912`                                   |     0.0 |    5.1 |  +5.1 | appeared |
+| `updateGroundVelocity`                  | `src/character/kcc.ts:3087`                                   |     4.8 |    0.0 |  -4.8 | gone     |
+| `updateWorld`                           | `src/update.ts:45`                                            |    12.6 |    8.0 |  -4.6 |          |
+| `castAABB$1`                            | `src/broadphase/dbvt.ts:936`                                  |    18.7 |   14.2 |  -4.5 |          |
+| `dot$2`                                 | `…/node_modules/mathcat/dist/vec3.js:390`                     |     0.0 |    4.5 |  +4.5 | appeared |
+| `solveVelocityConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1121`                 |     8.1 |    3.8 |  -4.3 |          |
+| `buildTriangleMesh`                     | `src/shapes/utils/triangle-mesh-builder.ts:63`                |     3.0 |    7.3 |  +4.3 |          |
+| `steerAgent`                            | `bench/kcc-mesh.bench.ts`                                     |     0.0 |    4.1 |  +4.1 | appeared |
+| `collideTransformedVsShape`             | `src/shapes/transformed.ts:377`                               |     7.8 |    3.8 |  -4.0 |          |
+| `calculateFrictionConstraintProperties` | `src/constraints/contact-constraints.ts:475`                  |     4.0 |    0.0 |  -4.0 | gone     |
+| `checkIslandSleep`                      | `src/islands.ts:378`                                          |     3.9 |    0.0 |  -3.9 | gone     |
+| `getSurfaceNormal$1`                    | `src/shapes/triangle-mesh.ts:184`                             |     3.8 |    0.0 |  -3.8 | gone     |
+| `optimizeIncremental`                   | `src/broadphase/dbvt.ts:587`                                  |     3.8 |    0.0 |  -3.8 | gone     |
+| `clipPolyVsPoly`                        | `src/manifold/clip.ts:108`                                    |     3.8 |    0.0 |  -3.8 | gone     |
+| `updateAABB`                            | `src/body/rigid-body.ts:567`                                  |     3.7 |    0.0 |  -3.7 | gone     |
+| `clamp`                                 | `…/node_modules/mathcat/dist/common.js:69`                    |     0.0 |    3.7 |  +3.7 | appeared |
+| `set`                                   | `src/query.ts:258`                                            |     0.0 |    3.7 |  +3.7 | appeared |
+| `distance`                              | `…/node_modules/mathcat/dist/vec3.js:305`                     |     3.5 |    0.0 |  -3.5 | gone     |
+| `multiply3x3Vec`                        | `…/node_modules/mathcat/dist/mat4.js:620`                     |     3.5 |    0.0 |  -3.5 | gone     |
+| `fromRotationTranslationScale`          | `…/node_modules/mathcat/dist/mat4.js:1400`                    |     0.0 |    3.5 |  +3.5 | appeared |
+| `intersectsBox3`                        | `…/node_modules/mathcat/dist/raycast3.js:195`                 |    12.5 |    9.1 |  -3.4 |          |
+| `cross`                                 | `…/node_modules/mathcat/dist/vec3.js:401`                     |     4.1 |    7.5 |  +3.4 |          |
+| `pushIndex`                             | `src/body/sub-shape.ts:60`                                    |     0.0 |    3.4 |  +3.4 | appeared |
+| `rayDistanceToBox3`                     | `src/collision/cast-utils.ts:20`                              |    20.0 |   23.4 |  +3.4 |          |
+| `(program)`                             | ``                                                            |     0.0 |    3.3 |  +3.3 | appeared |
+| `sortContacts`                          | `src/character/kcc.ts:1249`                                   |     0.0 |    3.3 |  +3.3 | appeared |
+| `addHit`                                | `src/update.ts:432`                                           |     0.0 |    3.2 |  +3.2 | appeared |
+| `bounds$2`                              | `…/node_modules/mathcat/dist/triangle3.js:9`                  |     4.5 |    7.6 |  +3.1 |          |
+| `castShape`                             | `src/query.ts:185`                                            |     5.2 |    2.2 |  -3.0 |          |
+| `create$6`                              | `src/shapes/triangle-mesh.ts:113`                             |     3.0 |    0.0 |  -3.0 | gone     |
+| `updateSupportingContact`               | `src/character/kcc.ts:2290`                                   |    11.2 |    8.3 |  -2.9 |          |
+| `update$1`                              | `src/broadphase/dbvt.ts:485`                                  |     7.6 |    4.8 |  -2.8 |          |
+| `determineConstraints`                  | `src/character/kcc.ts:1660`                                   |     6.3 |    3.6 |  -2.7 |          |
+| `penetrationDepthStepGJK`               | `src/collision/penetration.ts:29`                             |    34.6 |   32.0 |  -2.6 |          |
+| `collideConvexVsConvexLocal`            | `src/shapes/convex.ts:329`                                    |     2.6 |    0.0 |  -2.6 | gone     |
+| `accelerationIntegrationUpdate`         | `src/update.ts:287`                                           |     2.6 |    0.0 |  -2.6 | gone     |
+| `castShapeVsShape`                      | `src/collision/narrowphase.ts:91`                             |     2.6 |    0.0 |  -2.6 | gone     |
+| `calculateConstraintProperties$5`       | `src/constraints/constraint-part/axis-constraint-part.ts:164` |     0.0 |    2.6 |  +2.6 | appeared |
+| `clipPolyVsPlane`                       | `src/manifold/clip.ts:13`                                     |     0.0 |    2.6 |  +2.6 | appeared |
+| `processEdge`                           | `src/shapes/utils/triangle-mesh-builder.ts:340`               |     2.5 |    0.0 |  -2.5 | gone     |
+| `resetCachedManifold`                   | `src/contacts.ts:264`                                         |     2.5 |    0.0 |  -2.5 | gone     |
+| `findCollidingPairs`                    | `src/broadphase/broadphase.ts:213`                            |     2.5 |    0.0 |  -2.5 | gone     |
+| `reconstructManifoldFromCache`          | `src/update.ts:799`                                           |     2.5 |    0.0 |  -2.5 | gone     |
+| `castAABB`                              | `src/broadphase/broadphase.ts:328`                            |     2.5 |    0.0 |  -2.5 | gone     |
+| `transformFaceWithMat4Scale`            | `src/utils/face.ts:68`                                        |     2.5 |    0.0 |  -2.5 | gone     |
+| `compareContactsForDeterminism`         | `src/character/kcc.ts:1241`                                   |     2.5 |    0.0 |  -2.5 | gone     |
+| `insertLeaf`                            | `src/broadphase/dbvt.ts:118`                                  |     2.5 |    0.0 |  -2.5 | gone     |
+| `multiply`                              | `…/node_modules/mathcat/dist/quat.js:93`                      |     2.5 |    0.0 |  -2.5 | gone     |
+| `copySimplex`                           | `src/collision/simplex.ts:32`                                 |     0.0 |    2.5 |  +2.5 | appeared |
+| `warmStartVelocityConstraints`          | `src/constraints/contact-constraints.ts:971`                  |     0.0 |    2.5 |  +2.5 | appeared |
+| `combineMaterial`                       | `src/constraints/combine-material.ts:40`                      |     0.0 |    2.5 |  +2.5 | appeared |
+| `transformQuat`                         | `…/node_modules/mathcat/dist/vec3.js:567`                     |     0.0 |    2.5 |  +2.5 | appeared |
+| `getTriangleVertices`                   | `src/shapes/utils/triangle-mesh-data.ts:44`                   |    15.8 |   13.5 |  -2.3 |          |
+| `conjugate`                             | `…/node_modules/mathcat/dist/quat.js:333`                     |     0.0 |    2.3 |  +2.3 | appeared |
+| `moveToContact`                         | `src/character/kcc.ts:3398`                                   |     0.0 |    2.3 |  +2.3 | appeared |
+| `releaseAllConstraints`                 | `src/character/kcc.ts:665`                                    |     0.0 |    2.3 |  +2.3 | appeared |
+| `velocityIntegrationUpdate`             | `src/update.ts:1131`                                          |     0.0 |    2.3 |  +2.3 | appeared |
+| `getShapeSurfaceNormal`                 | `src/shapes/shapes.ts:464`                                    |     0.0 |    2.2 |  +2.2 | appeared |
+| `finalizeAndCreateConstraints`          | `src/update.ts:577`                                           |     0.0 |    2.2 |  +2.2 | appeared |
+| `updateBody`                            | `src/broadphase/broadphase.ts:196`                            |     0.0 |    2.1 |  +2.1 | appeared |
+| `removeConflictingContacts`             | `src/character/kcc.ts:1597`                                   |     0.0 |    2.1 |  +2.1 | appeared |
+| `subtract$1`                            | `…/node_modules/mathcat/dist/vec3.js:154`                     |     5.8 |    3.8 |  -2.0 |          |
+| `solvePositionConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1399`                 |     2.0 |    0.0 |  -2.0 | gone     |
+| `resetContactTracking`                  | `src/character/kcc.ts:2780`                                   |     1.8 |    0.0 |  -1.8 | gone     |
+| `(idle)`                                | ``                                                            |     5.1 |    6.8 |  +1.7 |          |
+| `getShapeSupportingFace`                | `src/shapes/shapes.ts:494`                                    |     0.0 |    1.7 |  +1.7 | appeared |
+| `transformMat4$1`                       | `…/node_modules/mathcat/dist/vec3.js:530`                     |    22.6 |   21.1 |  -1.5 |          |
+| `moveShape`                             | `src/character/kcc.ts:2683`                                   |     6.4 |    7.9 |  +1.5 |          |
+| `visit`                                 | `src/query.ts:108`                                            |     4.0 |    2.5 |  -1.5 |          |
+| `updateShape`                           | `src/body/rigid-body.ts:574`                                  |     0.0 |    1.5 |  +1.5 | appeared |
+| `prepare`                               | `src/islands.ts:64`                                           |     2.2 |    3.6 |  +1.4 |          |
+| `computeBarycentricCoordinates3d`       | `src/collision/closest-points.ts:57`                          |     4.2 |    2.9 |  -1.3 |          |
+| `buildRecursive`                        | `src/shapes/utils/triangle-mesh-bvh.ts:308`                   |     3.6 |    2.3 |  -1.3 |          |
+| `addContactConstraint`                  | `src/constraints/contact-constraints.ts:582`                  |     6.1 |    4.8 |  -1.3 |          |
+| `setBoxSupport`                         | `src/collision/support.ts:296`                                |     3.8 |    2.5 |  -1.3 |          |
+| `copy$9`                                | `…/node_modules/mathcat/dist/vec3.js:58`                      |     7.2 |    6.0 |  -1.2 |          |
+| `pruneContactPoints`                    | `src/manifold/manifold.ts:168`                                |     2.5 |    3.6 |  +1.1 |          |
+| `finalize`                              | `src/islands.ts:240`                                          |     4.1 |    3.2 |  -0.9 |          |
+| `manifoldBetweenTwoFaces`               | `src/manifold/manifold.ts:394`                                |     2.2 |    1.5 |  -0.7 |          |
+| `push`                                  | `src/utils/bvh-stack.ts:36`                                   |     6.4 |    7.1 |  +0.7 |          |
+| `setTriangleSupport`                    | `src/collision/support.ts:376`                                |     4.0 |    3.5 |  -0.5 |          |
 
