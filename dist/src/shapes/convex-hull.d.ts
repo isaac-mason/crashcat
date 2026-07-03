@@ -1,5 +1,4 @@
 import { type Box3, type Mat4, type Vec3 } from 'mathcat';
-import { type Support, SupportFunctionMode } from '../collision/support.js';
 import { ShapeType } from './shapes.js';
 /** settings for creating a convex hull shape */
 export type ConvexHullShapeSettings = {
@@ -21,6 +20,8 @@ export type ConvexHullShape = {
     type: ShapeType.CONVEX_HULL;
     /** flat vertex positions `[x, y, z, ...]`, 3 per point */
     pointPositions: number[];
+    /** convex-radius-shrunk vertex positions `[x, y, z, ...]` (derived, immutable); the same reference as `pointPositions` when `convexRadius` is 0. computed once at create so the exclude-mode support fill can borrow it per pair instead of rebuilding it every frame */
+    shrunkPointPositions: number[];
     /** number of neighbouring faces per point (1..3), 1 per point (used by the convex-radius shrink) */
     pointNumFaces: number[];
     /** up to 3 neighbouring face indices per point `[f0, f1, f2, ...]` (-1 = unused), 3 per point */
@@ -63,16 +64,3 @@ export type ConvexHullPlane = {
 /** create a convex hull shape */
 export declare function create(o: ConvexHullShapeSettings): ConvexHullShape;
 export declare const def: import("./shapes").ShapeDef<ConvexHullShape>;
-/**
- * Compute the scaled convex-radius-shrunk hull vertices into `dst` as a flat [x,y,z,...] array.
- * Positions are scaled, face-plane normals transformed by the inverse scale and renormalized, planes
- * rebuilt through the scaled vertex, offset inward by the scaled convex radius, then intersected.
- * The 2-face third plane uses the unnormalized cross of n1, n2.
- */
-export declare function computeScaledShrunkHullPoints(shape: ConvexHullShape, scale: Vec3, dst: number[]): void;
-/**
- * Monomorphic HULL support setter. Mirrors `getConvexHullSupportFunction`'s variant selection:
- * include (or zero-radius) → raw vertices (borrowed, or scaled into scratch); exclude → shrunk
- * vertices in scratch (scaled or not). `vertices` is a read-only borrow valid for the current pair.
- */
-export declare function setHullSupport(out: Support, shape: ConvexHullShape, mode: SupportFunctionMode, scale: Vec3): void;

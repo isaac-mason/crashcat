@@ -258,4 +258,75 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             expect(hull.centerOfMass).toBeDefined();
         });
     });
+
+    describe('Shrunk Point Set', () => {
+        // ~n points spread on a unit sphere (each is a hull vertex)
+        function fibonacciSphere(n: number): number[] {
+            const out: number[] = [];
+            const phi = Math.PI * (3 - Math.sqrt(5));
+            for (let i = 0; i < n; i++) {
+                const y = 1 - (i / (n - 1)) * 2;
+                const r = Math.sqrt(Math.max(0, 1 - y * y));
+                const theta = phi * i;
+                out.push(Math.cos(theta) * r, y, Math.sin(theta) * r);
+            }
+            return out;
+        }
+
+        const cubePositions = [
+            -1, -1, -1,
+            1, -1, -1,
+            1, 1, -1,
+            -1, 1, -1,
+            -1, -1, 1,
+            1, -1, 1,
+            1, 1, 1,
+            -1, 1, 1,
+        ];
+
+        // every shrunk vertex must lie on each of its neighbouring face planes offset inward by the
+        // convex radius (numFaces >= 2), or be the vertex pushed straight back along the single normal
+        function expectShrunkOnPlanes(shape: ReturnType<typeof convexHull.create>): void {
+            const r = shape.convexRadius;
+            expect(r).toBeGreaterThan(0);
+            const sp = shape.shrunkPointPositions;
+            expect(sp).not.toBe(shape.pointPositions);
+
+            for (let p = 0; p < shape.numPoints; p++) {
+                const b = p * 3;
+                const px = sp[b];
+                const py = sp[b + 1];
+                const pz = sp[b + 2];
+                const numFaces = shape.pointNumFaces[p];
+
+                if (numFaces === 1) {
+                    const n = shape.planes[shape.pointFaces[b]].normal;
+                    expect(Math.abs(px - (shape.pointPositions[b] - n[0] * r))).toBeLessThan(1e-6);
+                    expect(Math.abs(py - (shape.pointPositions[b + 1] - n[1] * r))).toBeLessThan(1e-6);
+                    expect(Math.abs(pz - (shape.pointPositions[b + 2] - n[2] * r))).toBeLessThan(1e-6);
+                } else {
+                    for (let f = 0; f < numFaces; f++) {
+                        const plane = shape.planes[shape.pointFaces[b + f]];
+                        const n = plane.normal;
+                        const d = n[0] * px + n[1] * py + n[2] * pz + plane.constant + r;
+                        expect(Math.abs(d)).toBeLessThan(1e-6);
+                    }
+                }
+            }
+        }
+
+        test('fibonacci-sphere hull: shrunk vertices sit on the inward-offset neighbour planes', () => {
+            expectShrunkOnPlanes(convexHull.create({ positions: fibonacciSphere(100), convexRadius: 0.05 }));
+        });
+
+        test('box-like 8-point hull: shrunk vertices sit on the inward-offset neighbour planes', () => {
+            expectShrunkOnPlanes(convexHull.create({ positions: cubePositions, convexRadius: 0.05 }));
+        });
+
+        test('radius-0 hull shares the pointPositions reference (shrink is identity)', () => {
+            const shape = convexHull.create({ positions: cubePositions, convexRadius: 0 });
+            expect(shape.convexRadius).toBe(0);
+            expect(shape.shrunkPointPositions).toBe(shape.pointPositions);
+        });
+    });
 });

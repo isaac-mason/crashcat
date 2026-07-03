@@ -83,7 +83,9 @@ export type Support = {
         vertices: number[];
         /** number of vertices in `vertices` (it may be longer than `vertexCount * 3`) */
         vertexCount: number;
-        /** owned grow-once buffer that `vertices` points at for shrunk / scaled hull vertices */
+        /** per-vertex output scale — the winning vertex is multiplied by this (uniform-scale fast path); 1 when `vertices` are already baked */
+        outputScale: number;
+        /** owned grow-once buffer that `vertices` points at for the non-uniform scaled slow path */
         scratch: number[];
     };
 
@@ -110,7 +112,7 @@ export function createSupport(): Support {
         sphere: { radius: 0 },
         capsule: { halfHeight: 0, radius: 0 },
         cylinder: { radius: 0, halfHeight: 0 },
-        hull: { vertices: EMPTY_VERTICES, vertexCount: 0, scratch: [] },
+        hull: { vertices: EMPTY_VERTICES, vertexCount: 0, outputScale: 1, scratch: [] },
         triangle: { a: vec3.create(), b: vec3.create(), c: vec3.create() },
         point: { position: vec3.create() },
     };
@@ -226,6 +228,11 @@ export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
                     supportZ = vertexZ;
                 }
             }
+            // uniform-scale fast path: scale the winning local vertex (must precede addRadius + transform-back)
+            const outputScale = support.hull.outputScale;
+            supportX *= outputScale;
+            supportY *= outputScale;
+            supportZ *= outputScale;
             break;
         }
         case SupportKind.TRIANGLE: {
@@ -393,6 +400,7 @@ export function setPolygonSupport(out: Support, vertices: number[], vertexCount:
     out.convexRadius = 0;
     out.hull.vertices = vertices; // read-only borrow, valid for this pair
     out.hull.vertexCount = vertexCount;
+    out.hull.outputScale = 1;
 }
 
 /** point operand (collidePoint) — copies the point */
@@ -417,9 +425,15 @@ export function setPointSupport(out: Support, point: Vec3): void {
  * planes are intersected (Cramer's rule). For a 2-face vertex the third plane is perpendicular to the
  * first two through the vertex; its `n1 × n2` normal is left unnormalized (the intersection is
  * invariant to per-plane scale).
+ *
+ * Computed once per shape at create time (see convex-hull.ts) and borrowed by the exclude-mode fill,
+ * so `convexRadius` is passed in explicitly rather than read off the (not-yet-built) shape.
  */
-function computeShrunkHullPoints(shape: ConvexHullShape, dst: number[]): void {
-    const convexRadius = shape.convexRadius;
+export function computeShrunkHullPoints(
+    shape: Pick<ConvexHullShape, 'numPoints' | 'pointPositions' | 'pointNumFaces' | 'pointFaces' | 'planes'>,
+    convexRadius: number,
+    dst: number[],
+): void {
     const numPoints = shape.numPoints;
     const positions = shape.pointPositions;
     const numFacesArr = shape.pointNumFaces;
@@ -654,9 +668,11 @@ function computeScaledShrunkHullPoints(shape: ConvexHullShape, scale: Vec3, dst:
 }
 
 /**
- * Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices
- * (borrowed directly, or scaled into scratch); exclude uses the convex-radius-shrunk vertices in
- * scratch (scaled or not). `vertices` is a read-only borrow valid for the current pair.
+ * Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices;
+ * exclude uses the convex-radius-shrunk vertices. Uniform positive scale borrows the shape-owned
+ * arrays and scales the support point in getSupport (fast path); non-uniform / mirrored scale bakes
+ * scaled vertices into scratch per pair (slow path). `vertices` is a read-only borrow valid for the
+ * current pair.
  */
 export function setHullSupport(
     out: Support,
@@ -671,39 +687,49 @@ export function setHullSupport(
     const hull = out.hull;
     hull.vertexCount = shape.numPoints;
 
-    const scaled = scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1;
+    // uniform positive scale (identity is just s=1): borrow the shape-owned vertex arrays and scale the
+    // winning support point in getSupport — exact, and no per-pair bake. non-uniform / mirrored scale:
+    // fall back to baking scaled vertices into scratch per pair (slow path).
+    const uniform = scale[0] === scale[1] && scale[1] === scale[2] && scale[0] > 0;
+
+    if (uniform) {
+        const s = scale[0];
+        hull.outputScale = s;
+        if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || shape.convexRadius === 0) {
+            out.convexRadius = 0;
+            hull.vertices = shape.pointPositions; // read-only borrow, scaled via outputScale
+        } else {
+            out.convexRadius = shape.convexRadius * s;
+            hull.vertices = shape.shrunkPointPositions; // read-only borrow, scaled via outputScale
+        }
+        return;
+    }
+
+    // slow path: non-uniform / mirrored scale bakes per-pair vertices into scratch
+    hull.outputScale = 1;
 
     if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || shape.convexRadius === 0) {
         out.convexRadius = 0;
-        if (scaled) {
-            // bake scaled raw vertices into scratch (same per-vertex scaling as withConvexScaled)
-            const positions = shape.pointPositions;
-            const scratch = hull.scratch;
-            const requiredLength = shape.numPoints * 3;
-            while (scratch.length < requiredLength) {
-                scratch.push(0);
-            }
-            const sx = scale[0];
-            const sy = scale[1];
-            const sz = scale[2];
-            for (let i = 0; i < requiredLength; i += 3) {
-                scratch[i] = positions[i] * sx;
-                scratch[i + 1] = positions[i + 1] * sy;
-                scratch[i + 2] = positions[i + 2] * sz;
-            }
-            hull.vertices = scratch;
-        } else {
-            hull.vertices = shape.pointPositions; // read-only borrow
+        // bake scaled raw vertices into scratch (same per-vertex scaling as withConvexScaled)
+        const positions = shape.pointPositions;
+        const scratch = hull.scratch;
+        const requiredLength = shape.numPoints * 3;
+        while (scratch.length < requiredLength) {
+            scratch.push(0);
         }
+        const sx = scale[0];
+        const sy = scale[1];
+        const sz = scale[2];
+        for (let i = 0; i < requiredLength; i += 3) {
+            scratch[i] = positions[i] * sx;
+            scratch[i + 1] = positions[i + 1] * sy;
+            scratch[i + 2] = positions[i + 2] * sz;
+        }
+        hull.vertices = scratch;
     } else {
-        // EXCLUDE convex radius (nonzero) → shrunk vertices
-        if (scaled) {
-            computeScaledShrunkHullPoints(shape, scale, hull.scratch);
-            out.convexRadius = scaleConvexRadius(shape.convexRadius, scale);
-        } else {
-            computeShrunkHullPoints(shape, hull.scratch);
-            out.convexRadius = shape.convexRadius;
-        }
+        // EXCLUDE convex radius (nonzero) → scaled shrunk vertices
+        computeScaledShrunkHullPoints(shape, scale, hull.scratch);
+        out.convexRadius = scaleConvexRadius(shape.convexRadius, scale);
         hull.vertices = hull.scratch;
     }
 }

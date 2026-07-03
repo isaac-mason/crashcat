@@ -9163,6 +9163,7 @@ function createSupport() {
 		hull: {
 			vertices: EMPTY_VERTICES,
 			vertexCount: 0,
+			outputScale: 1,
 			scratch: []
 		},
 		triangle: {
@@ -9278,6 +9279,10 @@ function getSupport(out, support, direction) {
 					supportZ = vertexZ;
 				}
 			}
+			const outputScale = support.hull.outputScale;
+			supportX *= outputScale;
+			supportY *= outputScale;
+			supportZ *= outputScale;
 			break;
 		}
 		case 5: {
@@ -9420,6 +9425,7 @@ function setPolygonSupport(out, vertices, vertexCount) {
 	out.convexRadius = 0;
 	out.hull.vertices = vertices;
 	out.hull.vertexCount = vertexCount;
+	out.hull.outputScale = 1;
 }
 /** point operand (collidePoint) — copies the point */
 function setPointSupport(out, point) {
@@ -9438,9 +9444,11 @@ function setPointSupport(out, point) {
 * planes are intersected (Cramer's rule). For a 2-face vertex the third plane is perpendicular to the
 * first two through the vertex; its `n1 × n2` normal is left unnormalized (the intersection is
 * invariant to per-plane scale).
+*
+* Computed once per shape at create time (see convex-hull.ts) and borrowed by the exclude-mode fill,
+* so `convexRadius` is passed in explicitly rather than read off the (not-yet-built) shape.
 */
-function computeShrunkHullPoints(shape, dst) {
-	const convexRadius = shape.convexRadius;
+function computeShrunkHullPoints(shape, convexRadius, dst) {
 	const numPoints = shape.numPoints;
 	const positions = shape.pointPositions;
 	const numFacesArr = shape.pointNumFaces;
@@ -9634,9 +9642,11 @@ function computeScaledShrunkHullPoints(shape, scale, dst) {
 	}
 }
 /**
-* Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices
-* (borrowed directly, or scaled into scratch); exclude uses the convex-radius-shrunk vertices in
-* scratch (scaled or not). `vertices` is a read-only borrow valid for the current pair.
+* Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices;
+* exclude uses the convex-radius-shrunk vertices. Uniform positive scale borrows the shape-owned
+* arrays and scales the support point in getSupport (fast path); non-uniform / mirrored scale bakes
+* scaled vertices into scratch per pair (slow path). `vertices` is a read-only borrow valid for the
+* current pair.
 */
 function setHullSupport(out, shape, mode, scale) {
 	out.kind = 4;
@@ -9644,32 +9654,37 @@ function setHullSupport(out, shape, mode, scale) {
 	out.addRadius = 0;
 	const hull = out.hull;
 	hull.vertexCount = shape.numPoints;
-	const scaled = scale[0] !== 1 || scale[1] !== 1 || scale[2] !== 1;
+	if (scale[0] === scale[1] && scale[1] === scale[2] && scale[0] > 0) {
+		const s = scale[0];
+		hull.outputScale = s;
+		if (mode === 0 || shape.convexRadius === 0) {
+			out.convexRadius = 0;
+			hull.vertices = shape.pointPositions;
+		} else {
+			out.convexRadius = shape.convexRadius * s;
+			hull.vertices = shape.shrunkPointPositions;
+		}
+		return;
+	}
+	hull.outputScale = 1;
 	if (mode === 0 || shape.convexRadius === 0) {
 		out.convexRadius = 0;
-		if (scaled) {
-			const positions = shape.pointPositions;
-			const scratch = hull.scratch;
-			const requiredLength = shape.numPoints * 3;
-			while (scratch.length < requiredLength) scratch.push(0);
-			const sx = scale[0];
-			const sy = scale[1];
-			const sz = scale[2];
-			for (let i = 0; i < requiredLength; i += 3) {
-				scratch[i] = positions[i] * sx;
-				scratch[i + 1] = positions[i + 1] * sy;
-				scratch[i + 2] = positions[i + 2] * sz;
-			}
-			hull.vertices = scratch;
-		} else hull.vertices = shape.pointPositions;
-	} else {
-		if (scaled) {
-			computeScaledShrunkHullPoints(shape, scale, hull.scratch);
-			out.convexRadius = scaleConvexRadius(shape.convexRadius, scale);
-		} else {
-			computeShrunkHullPoints(shape, hull.scratch);
-			out.convexRadius = shape.convexRadius;
+		const positions = shape.pointPositions;
+		const scratch = hull.scratch;
+		const requiredLength = shape.numPoints * 3;
+		while (scratch.length < requiredLength) scratch.push(0);
+		const sx = scale[0];
+		const sy = scale[1];
+		const sz = scale[2];
+		for (let i = 0; i < requiredLength; i += 3) {
+			scratch[i] = positions[i] * sx;
+			scratch[i + 1] = positions[i + 1] * sy;
+			scratch[i + 2] = positions[i + 2] * sz;
 		}
+		hull.vertices = scratch;
+	} else {
+		computeScaledShrunkHullPoints(shape, scale, hull.scratch);
+		out.convexRadius = scaleConvexRadius(shape.convexRadius, scale);
 		hull.vertices = hull.scratch;
 	}
 }
@@ -18480,9 +18495,22 @@ function create$16(o) {
 			}
 		}
 	}
+	let shrunkPointPositions;
+	if (finalConvexRadius === 0) shrunkPointPositions = pointPositions;
+	else {
+		shrunkPointPositions = [];
+		computeShrunkHullPoints({
+			numPoints,
+			pointPositions,
+			pointNumFaces,
+			pointFaces,
+			planes
+		}, finalConvexRadius, shrunkPointPositions);
+	}
 	return {
 		type: 3,
 		pointPositions,
+		shrunkPointPositions,
 		pointNumFaces,
 		pointFaces,
 		numPoints,
@@ -32776,6 +32804,6 @@ function joints(world, options) {
 	return finalizeLineBuffer(out);
 }
 //#endregion
-export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeCategory, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeClosestPointOnLine, computeClosestPointOnTetrahedron, computeClosestPointOnTriangle, computeMassProperties, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
+export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeCategory, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeClosestPointOnLine, computeClosestPointOnTetrahedron, computeClosestPointOnTriangle, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
 
 //# sourceMappingURL=index.js.map

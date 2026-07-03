@@ -1,7 +1,7 @@
 import { type Box3, box3, type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
-import { DEFAULT_CONVEX_RADIUS, setHullSupport } from '../collision/support';
+import { computeShrunkHullPoints, DEFAULT_CONVEX_RADIUS, setHullSupport } from '../collision/support';
 
 import { assert } from '../utils/assert';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
@@ -40,6 +40,8 @@ export type ConvexHullShape = {
     type: ShapeType.CONVEX_HULL;
     /** flat vertex positions `[x, y, z, ...]`, 3 per point */
     pointPositions: number[];
+    /** convex-radius-shrunk vertex positions `[x, y, z, ...]` (derived, immutable); the same reference as `pointPositions` when `convexRadius` is 0. computed once at create so the exclude-mode support fill can borrow it per pair instead of rebuilding it every frame */
+    shrunkPointPositions: number[];
     /** number of neighbouring faces per point (1..3), 1 per point (used by the convex-radius shrink) */
     pointNumFaces: number[];
     /** up to 3 neighbouring face indices per point `[f0, f1, f2, ...]` (-1 = unused), 3 per point */
@@ -437,9 +439,24 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         }
     }
 
+    // compute the convex-radius-shrunk vertex set once; the exclude-mode support fill borrows it per pair.
+    // identity when there is no convex radius → share the pointPositions reference.
+    let shrunkPointPositions: number[];
+    if (finalConvexRadius === 0) {
+        shrunkPointPositions = pointPositions;
+    } else {
+        shrunkPointPositions = [];
+        computeShrunkHullPoints(
+            { numPoints, pointPositions, pointNumFaces, pointFaces, planes },
+            finalConvexRadius,
+            shrunkPointPositions,
+        );
+    }
+
     const shape: ConvexHullShape = {
         type: ShapeType.CONVEX_HULL,
         pointPositions,
+        shrunkPointPositions,
         pointNumFaces,
         pointFaces,
         numPoints,

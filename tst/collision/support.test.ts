@@ -201,6 +201,99 @@ describe('getSupport — convex hull', () => {
     });
 });
 
+describe('getSupport — convex hull scaling', () => {
+    // ~n points spread on a unit sphere (each is a hull vertex, all with a nonzero convex radius)
+    function fibonacciSphere(n: number): number[] {
+        const out: number[] = [];
+        const phi = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < n; i++) {
+            const y = 1 - (i / (n - 1)) * 2;
+            const r = Math.sqrt(Math.max(0, 1 - y * y));
+            const theta = phi * i;
+            out.push(Math.cos(theta) * r, y, Math.sin(theta) * r);
+        }
+        return out;
+    }
+
+    // seeded PRNG so directions are stable across runs
+    function mulberry32(seed: number): () => number {
+        let a = seed;
+        return () => {
+            a |= 0;
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+    }
+
+    function randomDirections(count: number): Vec3[] {
+        const rand = mulberry32(0x9e3779b9);
+        const dirs: Vec3[] = [];
+        while (dirs.length < count) {
+            const d = vec3.fromValues(rand() * 2 - 1, rand() * 2 - 1, rand() * 2 - 1);
+            if (vec3.length(d) > 1e-3) dirs.push(d);
+        }
+        return dirs;
+    }
+
+    const shape = convexHull.create({ positions: fibonacciSphere(100), convexRadius: 0.05 });
+    const dirs = randomDirections(50);
+
+    test('uniform-scale fast path matches explicitly scaling the raw / shrunk vertices', () => {
+        for (const s of [0.5, 1, 2.37]) {
+            const scale = vec3.fromValues(s, s, s);
+
+            // INCLUDE → raw vertices scaled by s
+            const inc = createSupport();
+            setShapeSupport(inc, shape, INCLUDE_CONVEX_RADIUS, scale);
+            expect(inc.convexRadius).toBe(0);
+            const scaledRaw: number[] = [];
+            for (let i = 0; i < shape.numPoints * 3; i++) scaledRaw.push(shape.pointPositions[i] * s);
+            for (const dir of dirs) {
+                expectVec(at(inc, dir), Array.from(bruteForceMaxDot(scaledRaw, shape.numPoints, dir)), 9);
+            }
+
+            // EXCLUDE → shrunk vertices scaled by s, radius reported as r·s
+            const exc = createSupport();
+            setShapeSupport(exc, shape, EXCLUDE_CONVEX_RADIUS, scale);
+            expect(exc.convexRadius).toBeCloseTo(shape.convexRadius * s, 9);
+            const scaledShrunk: number[] = [];
+            for (let i = 0; i < shape.numPoints * 3; i++) scaledShrunk.push(shape.shrunkPointPositions[i] * s);
+            for (const dir of dirs) {
+                expectVec(at(exc, dir), Array.from(bruteForceMaxDot(scaledShrunk, shape.numPoints, dir)), 9);
+            }
+        }
+    });
+
+    test('non-uniform EXCLUDE bakes scaled shrunk vertices (analytic box reference, outputScale stays 1)', () => {
+        // an axis-aligned box hull: the scaled shrunk corner is the scaled corner pushed inward by the
+        // scaled radius (r·minScale) along each of its three perpendicular face normals
+        const cube = convexHull.create({
+            positions: [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1],
+            convexRadius: 0.05,
+        });
+        const scale = vec3.fromValues(1, 2, 0.5);
+        const rScaled = cube.convexRadius * 0.5; // minScale = 0.5
+
+        const s = createSupport();
+        setShapeSupport(s, cube, EXCLUDE_CONVEX_RADIUS, scale);
+        expect(s.convexRadius).toBeCloseTo(rScaled, 9);
+        expect(s.hull.outputScale).toBe(1); // slow path: vertices are pre-baked, not output-scaled
+
+        const ref: number[] = [];
+        for (let i = 0; i < cube.numPoints * 3; i += 3) {
+            const cx = cube.pointPositions[i];
+            const cy = cube.pointPositions[i + 1];
+            const cz = cube.pointPositions[i + 2];
+            ref.push(cx * scale[0] - Math.sign(cx) * rScaled, cy * scale[1] - Math.sign(cy) * rScaled, cz * scale[2] - Math.sign(cz) * rScaled);
+        }
+        for (const dir of dirs) {
+            expectVec(at(s, dir), Array.from(bruteForceMaxDot(ref, cube.numPoints, dir)), 9);
+        }
+    });
+});
+
 describe('getSupport — triangle / point / polygon primitives', () => {
     test('triangle returns the max-dot of its three vertices', () => {
         const a = vec3.fromValues(0, 0, 0);
