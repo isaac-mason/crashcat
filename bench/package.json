@@ -3,8 +3,12 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "bench": "labs cube-heap.bench.ts pyramid.bench.ts",
-        "perf:profile": "node profile.mjs"
+        "bench": "labs",
+        "bench:save": "labs -b",
+        "bench:compare": "labs -c",
+        "perf:profile": "node profile.mjs",
+        "perf:report": "node perf-report.mjs run",
+        "perf:diff": "node perf-report.mjs diff"
     },
     "dependencies": {
         "crashcat": "workspace:^"

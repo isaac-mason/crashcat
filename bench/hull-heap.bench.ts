@@ -1,17 +1,16 @@
-// Macro perf benchmark — cube-heap.
+// Macro perf benchmark — hull-heap.
 //
-// 200 dynamic boxes drop into a static plane, round-robin churn re-spawns one
-// box per frame to keep contacts hot. Deterministic mulberry32 RNG so labs's
-// adaptive sampling (and the cpu-prof rig in profile.mjs) sees a stationary
-// signal. `runForProfiling` is the entry the cpu-prof rig invokes via
-// `run-scenario.ts`.
+// Same harness as cube-heap, but the 200 dynamic bodies are a shared 100-vertex
+// convex hull instead of a box. This puts real weight on the support machinery:
+// the O(numPoints) `getSupport` vertex scan and the per-pair convex-radius shrink
+// build. `runForProfiling` is the entry the cpu-prof rig invokes via `run-scenario.ts`.
 
 import { bench, group } from '@pmndrs/labs';
 
 import {
     addBroadphaseLayer,
     addObjectLayer,
-    box,
+    convexHull,
     createWorld,
     createWorldSettings,
     enableCollision,
@@ -28,7 +27,7 @@ import {
 
 registerAll();
 
-const NUMBER_OF_CUBES = 200;
+const NUMBER_OF_BODIES = 200;
 const SPAWN_HEIGHT = 10;
 const SPAWN_AREA = 2.5;
 const STEPS_PER_OP = 300; // 5s of sim at 60Hz
@@ -59,7 +58,19 @@ function makeWorldSettings(): WorldSettings {
     return s;
 }
 
-const cubeShape: Shape = box.create({ halfExtents: [0.25, 0.25, 0.25], convexRadius: 0.05 });
+// 100 points on a fibonacci sphere — every point is a hull vertex, so numPoints ≈ 100
+function hullPositions(n: number, radius: number): number[] {
+    const positions: number[] = [];
+    for (let i = 0; i < n; i++) {
+        const y = 1 - (i / (n - 1)) * 2;
+        const r = Math.sqrt(Math.max(0, 1 - y * y));
+        const th = i * 2.399963;
+        positions.push(Math.cos(th) * r * radius, y * radius, Math.sin(th) * r * radius);
+    }
+    return positions;
+}
+
+const hullShape: Shape = convexHull.create({ positions: hullPositions(100, 0.28), convexRadius: 0.05 });
 
 function populate(world: World, rng: () => number): RigidBody[] {
     rigidBody.create(world, {
@@ -71,14 +82,14 @@ function populate(world: World, rng: () => number): RigidBody[] {
         friction: 0.5,
     });
 
-    const cubes: RigidBody[] = [];
-    for (let i = 0; i < NUMBER_OF_CUBES; i++) {
+    const bodies: RigidBody[] = [];
+    for (let i = 0; i < NUMBER_OF_BODIES; i++) {
         const x = (rng() * 2 - 1) * SPAWN_AREA;
         const y = rng() * SPAWN_HEIGHT;
         const z = (rng() * 2 - 1) * SPAWN_AREA;
-        cubes.push(
+        bodies.push(
             rigidBody.create(world, {
-                shape: cubeShape,
+                shape: hullShape,
                 objectLayer: 0, // OL_MOVING
                 motionType: MotionType.DYNAMIC,
                 position: [x, y, z],
@@ -88,47 +99,40 @@ function populate(world: World, rng: () => number): RigidBody[] {
             }),
         );
     }
-    return cubes;
+    return bodies;
 }
 
-function runSim(world: World, cubes: RigidBody[], rng: () => number, steps: number): void {
+function runSim(world: World, bodies: RigidBody[], rng: () => number, steps: number): void {
     const zero: [number, number, number] = [0, 0, 0];
     for (let i = 0; i < steps; i++) {
-        const idx = (rng() * cubes.length) | 0;
-        const cube = cubes[idx];
-        rigidBody.setPosition(world, cube, [0, rng() * SPAWN_HEIGHT, 0], true);
-        rigidBody.setLinearVelocity(world, cube, zero);
-        rigidBody.setAngularVelocity(world, cube, zero);
+        const idx = (rng() * bodies.length) | 0;
+        const body = bodies[idx];
+        rigidBody.setPosition(world, body, [0, rng() * SPAWN_HEIGHT, 0], true);
+        rigidBody.setLinearVelocity(world, body, zero);
+        rigidBody.setAngularVelocity(world, body, zero);
         updateWorld(world, undefined, TIME_STEP);
     }
 }
 
-group('cube-heap', () => {
-    bench('cube-heap', function* () {
+group('hull-heap', () => {
+    bench('hull-heap', function* () {
         const settings = makeWorldSettings();
         const world = createWorld(settings);
-        const cubes = populate(world, makeRng(RNG_SEED));
-        runSim(world, cubes, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
-        // fixed per-op seed: every iteration runs the IDENTICAL 300-step workload.
-        // a rotating seed made contact-count variance masquerade as timing noise
-        // (2x spread, no convergence); world-state drift between ops is fine.
+        const bodies = populate(world, makeRng(RNG_SEED));
+        runSim(world, bodies, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
+        // fixed per-op seed: identical workload every iteration (see cube-heap note)
         yield () => {
-            runSim(world, cubes, makeRng(RNG_SEED), STEPS_PER_OP);
+            runSim(world, bodies, makeRng(RNG_SEED), STEPS_PER_OP);
         };
     }).gc('inner');
 });
 
-/**
- * Canonical run for cpu-prof attribution (invoked by `run-scenario.ts`).
- * Pre-settle, then run 5×STEPS_PER_OP steady-state steps so the sampler
- * collects ~5s of in-scenario CPU.
- */
 export function runForProfiling(): void {
     const settings = makeWorldSettings();
     const world = createWorld(settings);
-    const cubes = populate(world, makeRng(RNG_SEED));
-    runSim(world, cubes, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
+    const bodies = populate(world, makeRng(RNG_SEED));
+    runSim(world, bodies, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
     for (let i = 0; i < 5; i++) {
-        runSim(world, cubes, makeRng(RNG_SEED + i), STEPS_PER_OP);
+        runSim(world, bodies, makeRng(RNG_SEED + i), STEPS_PER_OP);
     }
 }
