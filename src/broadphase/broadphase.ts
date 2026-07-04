@@ -12,7 +12,7 @@ import * as dbvt from './dbvt';
 export type Broadphase = {
     /** dynamic bounding volume trees, one per broadphase layer */
     dbvts: dbvt.DBVT[];
-    /** round-robin cursor for the dirty-gated rebuild (jolt's mNextLayerToUpdate) */
+    /** round-robin cursor for the dirty-gated rebuild — which tree to check next */
     nextTreeToOptimize: number;
 };
 
@@ -73,11 +73,10 @@ export function removeBody(broadphase: Broadphase, body: RigidBody): void {
 }
 
 /**
- * Dirty-gated balanced rebuild (jolt's BroadPhaseQuadTree::UpdatePrepare). Called once per step by
- * updateWorld, before pair finding. Scans layers from the round-robin cursor and rebuilds the first
- * dirty tree found — at most one rebuild per step to cap worst-frame cost. A clean tree (e.g. a
- * settled static field) costs a single boolean check and is never touched; this replaces Bullet's
- * unconditional per-frame incremental rotation, which never balanced a large static tree.
+ * Dirty-gated balanced rebuild. Called once per step by updateWorld, before pair finding. Scans
+ * layers from the round-robin cursor and rebuilds the first dirty tree found — at most one rebuild
+ * per step to cap worst-frame cost. A clean tree (e.g. a settled static field) costs a single
+ * boolean check and is never touched.
  */
 export function optimize(broadphase: Broadphase): void {
     const n = broadphase.dbvts.length;

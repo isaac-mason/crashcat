@@ -140,13 +140,10 @@ function edgePrevSlot(recordIndex: number, side: number): number {
     return recordIndex * RECORD_STRIDE + 2 + side * 2;
 }
 
-// Type/role eligibility gate — whether two bodies can EVER collide given their motion types, sensor
-// roles, and the kinematic-vs-non-dynamic opt-in, independent of position/layer/group. One must hold:
-// a body is dynamic, a body opted into kinematic-vs-non-dynamic, or it's a kinematic-vs-sensor pair.
-// Two non-dynamic bodies (static-static, static-kinematic without opt-in, …) can never collide.
-// crashcat's port of jolt's `Body::sFindCollidingPairsCanCollide` (minus its id-ordering dedup, which
-// crashcat handles separately). Shared between pair discovery (skip creating a dead record) and
-// emission (skip reporting) so the two gates can't drift.
+// whether two bodies can ever collide given their motion types, sensor roles, and the
+// kinematic-vs-non-dynamic opt-in (independent of position/layer/group). two non-dynamic bodies
+// (static-static, static-kinematic without opt-in, …) never can. shared by pair discovery (skip
+// creating a dead record) and emission (skip reporting) so the two can't drift.
 function bodiesCanCollide(a: RigidBody, b: RigidBody): boolean {
     return (
         a.collideKinematicVsNonDynamic ||
@@ -160,9 +157,8 @@ function bodiesCanCollide(a: RigidBody, b: RigidBody): boolean {
 
 /**
  * The pair-emission predicate for findCollidingPairs' sweep: decides whether a persistent record
- * emits an (activeBody, otherBody) narrowphase pair this frame. Layers/groups + the shared
- * {@link bodiesCanCollide} type gate + activeIndex dedup (jolt: Body::sFindCollidingPairsCanCollide
- * + ObjectLayerPairFilter).
+ * emits an (activeBody, otherBody) narrowphase pair this frame — layers/groups, the shared
+ * {@link bodiesCanCollide} type gate, and the activeIndex dedup.
  */
 function shouldReportPair(layers: Layers, activeBody: RigidBody, otherBody: RigidBody): boolean {
     // self-collision + deduplication: report only when activeBody.activeIndex < otherBody.activeIndex.
