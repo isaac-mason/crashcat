@@ -1,4 +1,4 @@
-import { type Mat4, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies.js';
 import * as body from '../body/rigid-body.js';
 import * as contacts from '../contacts.js';
@@ -73,10 +73,6 @@ export type ContactConstraint = {
     invMassA: number;
     /** inverse mass of body B (1/massB), 0 if body is static. cached from body at constraint setup time */
     invMassB: number;
-    /** inverse inertia matrix of body A, used to compute angular impulse response. cached from body at constraint setup time */
-    invInertiaA: Mat4;
-    /** inverse mass matrix of body B, used to compute angular impulse response. cached from body at constraint setup time */
-    invInertiaB: Mat4;
     /** inverse inertia scale for body A, applied during position constraint solving to override inertia */
     invInertiaScaleA: number;
     /** inverse inertia scale for body B, applied during position constraint solving to override inertia */

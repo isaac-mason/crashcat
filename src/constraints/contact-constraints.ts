@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Vec3, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
@@ -98,12 +98,6 @@ export type ContactConstraint = {
 
     /** inverse mass of body B (1/massB), 0 if body is static. cached from body at constraint setup time */
     invMassB: number;
-
-    /** inverse inertia matrix of body A, used to compute angular impulse response. cached from body at constraint setup time */
-    invInertiaA: Mat4;
-
-    /** inverse mass matrix of body B, used to compute angular impulse response. cached from body at constraint setup time */
-    invInertiaB: Mat4;
 
     /** inverse inertia scale for body A, applied during position constraint solving to override inertia */
     invInertiaScaleA: number;
@@ -534,8 +528,8 @@ function calculateFrictionConstraintProperties(
         bodyB,
         constraint.invMassA,
         constraint.invMassB,
-        constraint.invInertiaA,
-        constraint.invInertiaB,
+        _addContactConstraint_invInertiaA,
+        _addContactConstraint_invInertiaB,
         rA,
         rB,
         constraint.tangent1,
@@ -548,8 +542,8 @@ function calculateFrictionConstraintProperties(
         bodyB,
         constraint.invMassA,
         constraint.invMassB,
-        constraint.invInertiaA,
-        constraint.invInertiaB,
+        _addContactConstraint_invInertiaA,
+        _addContactConstraint_invInertiaB,
         rA,
         rB,
         constraint.tangent2,
@@ -567,8 +561,8 @@ function calculateFrictionConstraintProperties(
             constraint.angularFrictionConstraint,
             bodyA,
             bodyB,
-            constraint.invInertiaA,
-            constraint.invInertiaB,
+            _addContactConstraint_invInertiaA,
+            _addContactConstraint_invInertiaB,
             constraint.normal,
             angBias,
         );
@@ -718,30 +712,25 @@ export function addContactConstraint(
 
         // compute inverse inertia only for dynamic bodies (static/kinematic don't contribute)
         // reuse rotation matrices computed earlier
+        // scaled world inverse inertia lives in module scratch for the duration of setup — the
+        // velocity solve reads only the baked invI·(r×axis) terms and the position solve recomputes
+        // fresh, so nothing is stored on the constraint
         if (bodyA.motionType === MotionType.DYNAMIC) {
-            const invInertiaA = getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
+            getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
             const scale1 = contactSettings.invInertiaScale1;
             if (scale1 !== 1) {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaA[j] = invInertiaA[j] * scale1;
-                }
-            } else {
-                for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaA[j] = invInertiaA[j];
+                    _addContactConstraint_invInertiaA[j] *= scale1;
                 }
             }
         }
 
         if (bodyB.motionType === MotionType.DYNAMIC) {
-            const invInertiaB = getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
+            getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
             const scale2 = contactSettings.invInertiaScale2;
             if (scale2 !== 1) {
                 for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaB[j] = invInertiaB[j] * scale2;
-                }
-            } else {
-                for (let j = 0; j < 16; j++) {
-                    constraint.invInertiaB[j] = invInertiaB[j];
+                    _addContactConstraint_invInertiaB[j] *= scale2;
                 }
             }
         }
@@ -830,8 +819,8 @@ export function addContactConstraint(
                 bodyB,
                 constraint.invMassA,
                 constraint.invMassB,
-                constraint.invInertiaA,
-                constraint.invInertiaB,
+                _addContactConstraint_invInertiaA,
+                _addContactConstraint_invInertiaB,
                 _addContactConstraint_rA,
                 _addContactConstraint_rB,
                 smoothedNormal,
@@ -947,8 +936,6 @@ function createContactConstraint(): ContactConstraint {
         angularFrictionConstraint: angularFrictionConstraintPart.create(),
         invMassA: 0,
         invMassB: 0,
-        invInertiaA: mat4.identity(mat4.create()),
-        invInertiaB: mat4.identity(mat4.create()),
         invInertiaScaleA: 1,
         invInertiaScaleB: 1,
         contactIndex: -1,
@@ -1430,13 +1417,9 @@ export function solvePositionConstraintsForIsland(
         mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
         mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
 
-        // get inverse inertia for dynamic bodies (static/kinematic don't contribute)
-        if (bodyA.motionType === MotionType.DYNAMIC) {
-            getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
-        }
-        if (bodyB.motionType === MotionType.DYNAMIC) {
-            getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
-        }
+        // world inverse inertia is recomputed lazily on the first penetrating point — a
+        // constraint whose points are all separated (speculative contacts) skips it entirely
+        let inertiaComputed = false;
 
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
@@ -1466,6 +1449,16 @@ export function solvePositionConstraintsForIsland(
             // early exit if not penetrating
             if (separation >= 0) {
                 continue;
+            }
+
+            if (!inertiaComputed) {
+                inertiaComputed = true;
+                if (bodyA.motionType === MotionType.DYNAMIC) {
+                    getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
+                }
+                if (bodyB.motionType === MotionType.DYNAMIC) {
+                    getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+                }
             }
 
             // calculate midpoint and moment arms

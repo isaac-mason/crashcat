@@ -18231,9 +18231,17 @@ function calculateConstraintProperties$3(part, bodyA, bodyB, invMassA, invMassB,
 * @param bias velocity bias (for restitution or speculative contacts)
 */
 function calculateConstraintPropertiesWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, invInertiaScaleA, invInertiaScaleB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
-	if (bodyA.motionType === 2) multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
-	if (bodyB.motionType === 2) multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
-	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, _acp_scaledInvInertiaA, _acp_scaledInvInertiaB, r1PlusU, r2, axis);
+	let invIA = invInertiaA;
+	if (bodyA.motionType === 2 && invInertiaScaleA !== 1) {
+		multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
+		invIA = _acp_scaledInvInertiaA;
+	}
+	let invIB = invInertiaB;
+	if (bodyB.motionType === 2 && invInertiaScaleB !== 1) {
+		multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
+		invIB = _acp_scaledInvInertiaB;
+	}
+	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invIA, invIB, r1PlusU, r2, axis);
 	if (invEffectiveMass === 0) deactivate$3(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
@@ -30918,11 +30926,11 @@ function calculateFrictionConstraintProperties(constraint, bodyA, bodyB, midpoin
 	rB[2] = fpz - bodyB.centerOfMassPosition[2];
 	const frictionBias1 = calculateFrictionBias(settings, rA, constraint.tangent1);
 	const frictionBias2 = calculateFrictionBias(settings, rA, constraint.tangent2);
-	calculateConstraintProperties$3(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaA, constraint.invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
-	calculateConstraintProperties$3(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaA, constraint.invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
+	calculateConstraintProperties$3(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
+	calculateConstraintProperties$3(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
 	if (N > 1) {
 		const angBias = settings.relativeAngularSurfaceVelocity[0] * nx + settings.relativeAngularSurfaceVelocity[1] * ny + settings.relativeAngularSurfaceVelocity[2] * nz;
-		calculateConstraintProperties(constraint.angularFrictionConstraint, bodyA, bodyB, constraint.invInertiaA, constraint.invInertiaB, constraint.normal, angBias);
+		calculateConstraintProperties(constraint.angularFrictionConstraint, bodyA, bodyB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, constraint.normal, angBias);
 	} else deactivate(constraint.angularFrictionConstraint);
 }
 /**
@@ -30983,16 +30991,14 @@ function addContactConstraint(contactConstraints, contactsState, pairs, pairReco
 		constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
 		constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
 		if (bodyA.motionType === 2) {
-			const invInertiaA = getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
+			getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
 			const scale1 = contactSettings.invInertiaScale1;
-			if (scale1 !== 1) for (let j = 0; j < 16; j++) constraint.invInertiaA[j] = invInertiaA[j] * scale1;
-			else for (let j = 0; j < 16; j++) constraint.invInertiaA[j] = invInertiaA[j];
+			if (scale1 !== 1) for (let j = 0; j < 16; j++) _addContactConstraint_invInertiaA[j] *= scale1;
 		}
 		if (bodyB.motionType === 2) {
-			const invInertiaB = getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
+			getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
 			const scale2 = contactSettings.invInertiaScale2;
-			if (scale2 !== 1) for (let j = 0; j < 16; j++) constraint.invInertiaB[j] = invInertiaB[j] * scale2;
-			else for (let j = 0; j < 16; j++) constraint.invInertiaB[j] = invInertiaB[j];
+			if (scale2 !== 1) for (let j = 0; j < 16; j++) _addContactConstraint_invInertiaB[j] *= scale2;
 		}
 		constraint.numContactPoints = 0;
 		for (let i = 0; i < contactManifold.numContactPoints; i++) {
@@ -31030,7 +31036,7 @@ function addContactConstraint(contactConstraints, contactsState, pairs, pairReco
 			subtract$1(rA, midpoint, bodyA.centerOfMassPosition);
 			subtract$1(rB, midpoint, bodyB.centerOfMassPosition);
 			const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, cp.positionA, cp.positionB, smoothedNormal, _addContactConstraint_rA, _addContactConstraint_rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
-			calculateConstraintProperties$3(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaA, constraint.invInertiaB, _addContactConstraint_rA, _addContactConstraint_rB, smoothedNormal, normalVelocityBias);
+			calculateConstraintProperties$3(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, _addContactConstraint_rA, _addContactConstraint_rB, smoothedNormal, normalVelocityBias);
 			const cachedPoint = curr.contactPoints[i];
 			copy$9(cachedPoint.position1, cp.localPositionA);
 			copy$9(cachedPoint.position2, cp.localPositionB);
@@ -31114,8 +31120,6 @@ function createContactConstraint() {
 		angularFrictionConstraint: create(),
 		invMassA: 0,
 		invMassB: 0,
-		invInertiaA: identity$2(create$46()),
-		invInertiaB: identity$2(create$46()),
 		invInertiaScaleA: 1,
 		invInertiaScaleB: 1,
 		contactIndex: -1,
@@ -31698,8 +31702,7 @@ function solvePositionConstraintsForIsland(contactConstraints, bodies, constrain
 				_solvePos_rotB[13] = 0;
 				_solvePos_rotB[14] = 0;
 				_solvePos_rotB[15] = 1;
-				if (bodyA.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
-				if (bodyB.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+				let inertiaComputed = false;
 				for (let i = 0; i < constraint.numContactPoints; i++) {
 					const cp = constraint.contactPoints[i];
 					let vec = cp.localPositionA;
@@ -31725,6 +31728,11 @@ function solvePositionConstraintsForIsland(contactConstraints, bodies, constrain
 					let separation = (pointBX - pointAX) * normal[0] + (pointBY - pointAY) * normal[1] + (pointBZ - pointAZ) * normal[2] + penetrationSlop;
 					separation = Math.max(separation, -maxPenetrationDistance);
 					if (!(separation >= 0)) {
+						if (!inertiaComputed) {
+							inertiaComputed = true;
+							if (bodyA.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
+							if (bodyB.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+						}
 						const midpointX = (pointAX + pointBX) * .5;
 						const midpointY = (pointAY + pointBY) * .5;
 						const midpointZ = (pointAZ + pointBZ) * .5;
