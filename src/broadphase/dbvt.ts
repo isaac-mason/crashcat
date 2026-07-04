@@ -187,56 +187,56 @@ function indexof(dbvt: DBVT, n: number): number {
 
 /** @optimize */
 function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
-    const T = dbvt.topo;
-    const B = dbvt.bounds;
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
 
     if (dbvt.root === -1) {
         dbvt.root = leafIndex;
-        T[leafIndex * STRIDE_TOPO + T_PARENT] = -1;
+        topo[leafIndex * STRIDE_TOPO + T_PARENT] = -1;
         return;
     }
 
     // descend to find best leaf position
     let root = rootIndex;
-    while (T[root * STRIDE_TOPO + T_LEFT] !== -1) {
-        const child = select(B, leafIndex, T[root * STRIDE_TOPO + T_LEFT], T[root * STRIDE_TOPO + T_RIGHT]);
-        root = child === 0 ? T[root * STRIDE_TOPO + T_LEFT] : T[root * STRIDE_TOPO + T_RIGHT];
+    while (topo[root * STRIDE_TOPO + T_LEFT] !== -1) {
+        const child = select(bounds, leafIndex, topo[root * STRIDE_TOPO + T_LEFT], topo[root * STRIDE_TOPO + T_RIGHT]);
+        root = child === 0 ? topo[root * STRIDE_TOPO + T_LEFT] : topo[root * STRIDE_TOPO + T_RIGHT];
     }
 
-    const prev = T[root * STRIDE_TOPO + T_PARENT];
+    const prev = topo[root * STRIDE_TOPO + T_PARENT];
     const newParent = requestNode(dbvt);
 
-    T[newParent * STRIDE_TOPO + T_PARENT] = prev;
-    bUnionNodes(B, newParent, leafIndex, root);
+    topo[newParent * STRIDE_TOPO + T_PARENT] = prev;
+    bUnionNodes(bounds, newParent, leafIndex, root);
 
     if (prev !== -1) {
         if (indexof(dbvt, root) === 0) {
-            T[prev * STRIDE_TOPO + T_LEFT] = newParent;
+            topo[prev * STRIDE_TOPO + T_LEFT] = newParent;
         } else {
-            T[prev * STRIDE_TOPO + T_RIGHT] = newParent;
+            topo[prev * STRIDE_TOPO + T_RIGHT] = newParent;
         }
-        T[newParent * STRIDE_TOPO + T_LEFT] = root;
-        T[root * STRIDE_TOPO + T_PARENT] = newParent;
-        T[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
-        T[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
+        topo[newParent * STRIDE_TOPO + T_LEFT] = root;
+        topo[root * STRIDE_TOPO + T_PARENT] = newParent;
+        topo[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
+        topo[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
 
         // refit: walk up the tree, checking if parent contains child
         let childNode = newParent;
         let parentIndex = prev;
         while (parentIndex !== -1) {
-            if (!bContainsNode(B, parentIndex, childNode)) {
-                bUnionNodes(B, parentIndex, T[parentIndex * STRIDE_TOPO + T_LEFT], T[parentIndex * STRIDE_TOPO + T_RIGHT]);
+            if (!bContainsNode(bounds, parentIndex, childNode)) {
+                bUnionNodes(bounds, parentIndex, topo[parentIndex * STRIDE_TOPO + T_LEFT], topo[parentIndex * STRIDE_TOPO + T_RIGHT]);
             } else {
                 break;
             }
             childNode = parentIndex;
-            parentIndex = T[parentIndex * STRIDE_TOPO + T_PARENT];
+            parentIndex = topo[parentIndex * STRIDE_TOPO + T_PARENT];
         }
     } else {
-        T[newParent * STRIDE_TOPO + T_LEFT] = root;
-        T[root * STRIDE_TOPO + T_PARENT] = newParent;
-        T[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
-        T[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
+        topo[newParent * STRIDE_TOPO + T_LEFT] = root;
+        topo[root * STRIDE_TOPO + T_PARENT] = newParent;
+        topo[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
+        topo[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
         dbvt.root = newParent;
     }
 }
@@ -245,12 +245,12 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
 // ancestor (the invariant changed ⇒ parent.changed guarantees everything above is done).
 // jolt's MarkNodeAndParentsChanged.
 function markNodeAndParentsChanged(dbvt: DBVT, nodeIndex: number): void {
-    const T = dbvt.topo;
+    const topo = dbvt.topo;
     let idx = nodeIndex;
     while (idx !== -1) {
-        if (T[idx * STRIDE_TOPO + T_CHANGED] !== 0) break;
-        T[idx * STRIDE_TOPO + T_CHANGED] = 1;
-        idx = T[idx * STRIDE_TOPO + T_PARENT];
+        if (topo[idx * STRIDE_TOPO + T_CHANGED] !== 0) break;
+        topo[idx * STRIDE_TOPO + T_CHANGED] = 1;
+        idx = topo[idx * STRIDE_TOPO + T_PARENT];
     }
 }
 
@@ -259,18 +259,18 @@ function markNodeAndParentsChanged(dbvt: DBVT, nodeIndex: number): void {
 // instant (queries never miss); the next rebuild recomputes exact unions. once an ancestor already
 // contains the source, only the changed-marking remains. jolt's WidenAndMarkNodeAndParentsChanged.
 function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, srcNode: number): void {
-    const T = dbvt.topo;
-    const B = dbvt.bounds;
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
     let idx = parentIndex;
     while (idx !== -1) {
-        T[idx * STRIDE_TOPO + T_CHANGED] = 1;
-        if (bContainsNode(B, idx, srcNode)) {
+        topo[idx * STRIDE_TOPO + T_CHANGED] = 1;
+        if (bContainsNode(bounds, idx, srcNode)) {
             // containment is monotone up the tree — nothing above needs widening, only marking
-            markNodeAndParentsChanged(dbvt, T[idx * STRIDE_TOPO + T_PARENT]);
+            markNodeAndParentsChanged(dbvt, topo[idx * STRIDE_TOPO + T_PARENT]);
             break;
         }
-        bUnionNodes(B, idx, idx, srcNode);
-        idx = T[idx * STRIDE_TOPO + T_PARENT];
+        bUnionNodes(bounds, idx, idx, srcNode);
+        idx = topo[idx * STRIDE_TOPO + T_PARENT];
     }
 }
 
@@ -715,8 +715,8 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
-    const T = dbvt.topo;
-    const B = dbvt.bounds;
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
 
     const px = point[0];
     const py = point[1];
@@ -730,19 +730,19 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
         const nb = nodeIndex * STRIDE_BOUNDS;
 
         // skip if point is not inside node's AABB
-        if (px < B[nb] || px > B[nb + 3] || py < B[nb + 1] || py > B[nb + 4] || pz < B[nb + 2] || pz > B[nb + 5]) {
+        if (px < bounds[nb] || px > bounds[nb + 3] || py < bounds[nb + 1] || py > bounds[nb + 4] || pz < bounds[nb + 2] || pz > bounds[nb + 5]) {
             continue;
         }
 
         // if internal node, push children
-        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
-            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
-            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+        if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         // collision group/mask filtering
@@ -790,7 +790,7 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
 export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     if (dbvt.root === -1) return;
 
-    const T = dbvt.topo;
+    const topo = dbvt.topo;
 
     let stackSize = 0;
     _flatStack[stackSize++] = dbvt.root;
@@ -798,13 +798,13 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     while (stackSize > 0) {
         const nodeIndex = _flatStack[--stackSize];
 
-        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
-            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
-            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+        if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
-        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         visitor.visit(body);
@@ -830,8 +830,8 @@ export function castRay(
 ): void {
     if (dbvt.root === -1) return;
 
-    const T = dbvt.topo;
-    const B = dbvt.bounds;
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
 
     raycast3.set(_ray, origin, direction, length);
 
@@ -851,7 +851,7 @@ export function castRay(
 
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
-    _castStackDist[stackSize] = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, dbvt.root * STRIDE_BOUNDS);
+    _castStackDist[stackSize] = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, dbvt.root * STRIDE_BOUNDS);
     stackSize++;
 
     while (stackSize > 0) {
@@ -866,14 +866,14 @@ export function castRay(
             continue;
         }
 
-        const left = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+        const left = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
 
         // if internal node, push children sorted by distance, culling any beyond best-t
         if (left !== -1) {
-            const right = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+            const right = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
 
-            const leftDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, left * STRIDE_BOUNDS);
-            const rightDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, right * STRIDE_BOUNDS);
+            const leftDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, left * STRIDE_BOUNDS);
+            const rightDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, right * STRIDE_BOUNDS);
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
@@ -903,7 +903,7 @@ export function castRay(
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
 
         // early out: collision group/mask filtering
         if (
@@ -964,15 +964,15 @@ export function castRay(
 export function castAABB(
     world: World,
     dbvt: DBVT,
-    bounds: Box3,
+    castBounds: Box3,
     displacement: Vec3,
     queryFilter: Filter,
     visitor: BodyVisitor,
 ): void {
     if (dbvt.root === -1) return;
 
-    const T = dbvt.topo;
-    const B = dbvt.bounds;
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
 
     // AABB cast is done by:
     // 1. Shrink the shape aabb by its own extents down to a point (compute ray origin from AABB center)
@@ -980,12 +980,12 @@ export function castAABB(
     // 3. Cast the point by the displacement against the expanded node aabb (ray-slab test)
 
     // compute ray origin from AABB center and half extents — all as plain scalars
-    const originX = (bounds[0] + bounds[3]) * 0.5;
-    const originY = (bounds[1] + bounds[4]) * 0.5;
-    const originZ = (bounds[2] + bounds[5]) * 0.5;
-    const halfX = (bounds[3] - bounds[0]) * 0.5;
-    const halfY = (bounds[4] - bounds[1]) * 0.5;
-    const halfZ = (bounds[5] - bounds[2]) * 0.5;
+    const originX = (castBounds[0] + castBounds[3]) * 0.5;
+    const originY = (castBounds[1] + castBounds[4]) * 0.5;
+    const originZ = (castBounds[2] + castBounds[5]) * 0.5;
+    const halfX = (castBounds[3] - castBounds[0]) * 0.5;
+    const halfY = (castBounds[4] - castBounds[1]) * 0.5;
+    const halfZ = (castBounds[5] - castBounds[2]) * 0.5;
 
     const castLen = vec3.length(displacement);
     const dirX = castLen > 0 ? displacement[0] / castLen : 0;
@@ -1018,39 +1018,39 @@ export function castAABB(
                 dirY,
                 dirZ,
                 castLen,
-                B[nb] - halfX,
-                B[nb + 1] - halfY,
-                B[nb + 2] - halfZ,
-                B[nb + 3] + halfX,
-                B[nb + 4] + halfY,
-                B[nb + 5] + halfZ,
+                bounds[nb] - halfX,
+                bounds[nb + 1] - halfY,
+                bounds[nb + 2] - halfZ,
+                bounds[nb + 3] + halfX,
+                bounds[nb + 4] + halfY,
+                bounds[nb + 5] + halfZ,
             )
         ) {
             continue;
         }
 
-        const left = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+        const left = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
 
         // if internal node, push children sorted by distance
         if (left !== -1) {
-            const right = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+            const right = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
             const lb = left * STRIDE_BOUNDS;
             const rb = right * STRIDE_BOUNDS;
 
-            _nodeBounds[0] = B[lb] - halfX;
-            _nodeBounds[1] = B[lb + 1] - halfY;
-            _nodeBounds[2] = B[lb + 2] - halfZ;
-            _nodeBounds[3] = B[lb + 3] + halfX;
-            _nodeBounds[4] = B[lb + 4] + halfY;
-            _nodeBounds[5] = B[lb + 5] + halfZ;
+            _nodeBounds[0] = bounds[lb] - halfX;
+            _nodeBounds[1] = bounds[lb + 1] - halfY;
+            _nodeBounds[2] = bounds[lb + 2] - halfZ;
+            _nodeBounds[3] = bounds[lb + 3] + halfX;
+            _nodeBounds[4] = bounds[lb + 4] + halfY;
+            _nodeBounds[5] = bounds[lb + 5] + halfZ;
             const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
-            _nodeBounds[0] = B[rb] - halfX;
-            _nodeBounds[1] = B[rb + 1] - halfY;
-            _nodeBounds[2] = B[rb + 2] - halfZ;
-            _nodeBounds[3] = B[rb + 3] + halfX;
-            _nodeBounds[4] = B[rb + 4] + halfY;
-            _nodeBounds[5] = B[rb + 5] + halfZ;
+            _nodeBounds[0] = bounds[rb] - halfX;
+            _nodeBounds[1] = bounds[rb + 1] - halfY;
+            _nodeBounds[2] = bounds[rb + 2] - halfZ;
+            _nodeBounds[3] = bounds[rb + 3] + halfX;
+            _nodeBounds[4] = bounds[rb + 4] + halfY;
+            _nodeBounds[5] = bounds[rb + 5] + halfZ;
             const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
             // push in reverse order (furthest first) so closest is popped first
@@ -1073,7 +1073,7 @@ export function castAABB(
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         // collision group/mask filtering
