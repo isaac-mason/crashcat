@@ -845,7 +845,7 @@ export function castRay(
 
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
-    _castStackDist[stackSize] = -Infinity; // root always visited
+    _castStackDist[stackSize] = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, dbvt.nodes[dbvt.root].aabb);
     stackSize++;
 
     while (stackSize > 0) {
@@ -854,29 +854,10 @@ export function castRay(
         const nodeDistance = _castStackDist[stackSize];
         const node = dbvt.nodes[nodeIndex];
 
-        // early-out: skip nodes beyond ray length
+        // early-out: skip missed nodes (Infinity distance) and nodes beyond ray length.
+        // the node's own aabb was already ray-tested when its parent pushed it — a finite
+        // stored distance means it hits — so a re-test of node.aabb here would be redundant.
         if (nodeDistance > length) {
-            continue;
-        }
-
-        // early out: ray x node aabb
-        if (
-            !rayHitsBox3(
-                originX,
-                originY,
-                originZ,
-                dirX,
-                dirY,
-                dirZ,
-                rayLen,
-                node.aabb[0],
-                node.aabb[1],
-                node.aabb[2],
-                node.aabb[3],
-                node.aabb[4],
-                node.aabb[5],
-            )
-        ) {
             continue;
         }
 
