@@ -440,7 +440,12 @@ function castRayVsTriangleMesh(
                 _castRayVsTriangleMesh_rayForMathcat.direction[1],
                 _castRayVsTriangleMesh_rayForMathcat.direction[2],
                 _castRayVsTriangleMesh_rayForMathcat.length,
-                _castRayVsTriangleMesh_leftBounds,
+                _castRayVsTriangleMesh_leftBounds[0],
+                _castRayVsTriangleMesh_leftBounds[1],
+                _castRayVsTriangleMesh_leftBounds[2],
+                _castRayVsTriangleMesh_leftBounds[3],
+                _castRayVsTriangleMesh_leftBounds[4],
+                _castRayVsTriangleMesh_leftBounds[5],
             );
             const rightDist = rayDistanceToBox3(
                 _castRayVsTriangleMesh_rayForMathcat.origin[0],
@@ -450,7 +455,12 @@ function castRayVsTriangleMesh(
                 _castRayVsTriangleMesh_rayForMathcat.direction[1],
                 _castRayVsTriangleMesh_rayForMathcat.direction[2],
                 _castRayVsTriangleMesh_rayForMathcat.length,
-                _castRayVsTriangleMesh_rightBounds,
+                _castRayVsTriangleMesh_rightBounds[0],
+                _castRayVsTriangleMesh_rightBounds[1],
+                _castRayVsTriangleMesh_rightBounds[2],
+                _castRayVsTriangleMesh_rightBounds[3],
+                _castRayVsTriangleMesh_rightBounds[4],
+                _castRayVsTriangleMesh_rightBounds[5],
             );
 
             // push farther child first (so closer child is on top of stack)
@@ -1103,7 +1113,12 @@ function castConvexVsTriangleMesh(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             // expanded bounds for right child
@@ -1123,7 +1138,12 @@ function castConvexVsTriangleMesh(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
@@ -2567,7 +2587,12 @@ function castSphereVsTriangleMesh(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - sphereRadius;
@@ -2585,7 +2610,12 @@ function castSphereVsTriangleMesh(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal

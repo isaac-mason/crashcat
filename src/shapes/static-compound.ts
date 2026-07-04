@@ -520,7 +520,12 @@ function castRay(
                 localDirY,
                 localDirZ,
                 length,
-                _castRayVsStaticCompound_nodeBounds,
+                _castRayVsStaticCompound_nodeBounds[0],
+                _castRayVsStaticCompound_nodeBounds[1],
+                _castRayVsStaticCompound_nodeBounds[2],
+                _castRayVsStaticCompound_nodeBounds[3],
+                _castRayVsStaticCompound_nodeBounds[4],
+                _castRayVsStaticCompound_nodeBounds[5],
             );
 
             bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
@@ -532,7 +537,12 @@ function castRay(
                 localDirY,
                 localDirZ,
                 length,
-                _castRayVsStaticCompound_nodeBounds,
+                _castRayVsStaticCompound_nodeBounds[0],
+                _castRayVsStaticCompound_nodeBounds[1],
+                _castRayVsStaticCompound_nodeBounds[2],
+                _castRayVsStaticCompound_nodeBounds[3],
+                _castRayVsStaticCompound_nodeBounds[4],
+                _castRayVsStaticCompound_nodeBounds[5],
             );
 
             // push farther child first (so closer child is on top of stack)
@@ -1595,7 +1605,12 @@ function castShapeVsStaticCompound(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
@@ -1612,7 +1627,12 @@ function castShapeVsStaticCompound(
                 ray.direction[1],
                 ray.direction[2],
                 ray.length,
-                expandedBounds,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal

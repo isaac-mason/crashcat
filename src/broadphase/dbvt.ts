@@ -1,6 +1,6 @@
 import { type Box3, box3, raycast3, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from '../body/rigid-body';
-import { rayDistanceToBox3, rayDistanceToBox3Flat, rayHitsBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { World } from '../world';
@@ -225,7 +225,12 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
         let parentIndex = prev;
         while (parentIndex !== -1) {
             if (!bContainsNode(bounds, parentIndex, childNode)) {
-                bUnionNodes(bounds, parentIndex, topo[parentIndex * STRIDE_TOPO + T_LEFT], topo[parentIndex * STRIDE_TOPO + T_RIGHT]);
+                bUnionNodes(
+                    bounds,
+                    parentIndex,
+                    topo[parentIndex * STRIDE_TOPO + T_LEFT],
+                    topo[parentIndex * STRIDE_TOPO + T_RIGHT],
+                );
             } else {
                 break;
             }
@@ -287,7 +292,9 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     const parentIndex = topo[leafIndex * STRIDE_TOPO + T_PARENT];
     const prevIndex = topo[parentIndex * STRIDE_TOPO + T_PARENT];
     const siblingIndex =
-        topo[parentIndex * STRIDE_TOPO + T_LEFT] === leafIndex ? topo[parentIndex * STRIDE_TOPO + T_RIGHT] : topo[parentIndex * STRIDE_TOPO + T_LEFT];
+        topo[parentIndex * STRIDE_TOPO + T_LEFT] === leafIndex
+            ? topo[parentIndex * STRIDE_TOPO + T_RIGHT]
+            : topo[parentIndex * STRIDE_TOPO + T_LEFT];
 
     if (prevIndex !== -1) {
         if (indexof(dbvt, parentIndex) === 0) {
@@ -313,7 +320,14 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
             const o4 = bounds[nb + 4];
             const o5 = bounds[nb + 5];
             bUnionNodes(bounds, nodeIndex, topo[nodeIndex * STRIDE_TOPO + T_LEFT], topo[nodeIndex * STRIDE_TOPO + T_RIGHT]);
-            if (bounds[nb] !== o0 || bounds[nb + 1] !== o1 || bounds[nb + 2] !== o2 || bounds[nb + 3] !== o3 || bounds[nb + 4] !== o4 || bounds[nb + 5] !== o5) {
+            if (
+                bounds[nb] !== o0 ||
+                bounds[nb + 1] !== o1 ||
+                bounds[nb + 2] !== o2 ||
+                bounds[nb + 3] !== o3 ||
+                bounds[nb + 4] !== o4 ||
+                bounds[nb + 5] !== o5
+            ) {
                 nodeIndex = topo[nodeIndex * STRIDE_TOPO + T_PARENT];
             } else {
                 break;
@@ -589,7 +603,7 @@ export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED
  * Used by persistent-pair discovery: a pair must exist whenever the two fat boxes could
  * bring the bodies into contact while both coast inside them, so the leaf test must be the
  * fat node AABB (already tested during descent), NOT the current tight body AABB.
- * 
+ *
  * @optimize
  */
 export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void {
@@ -613,7 +627,14 @@ export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, vis
         const nb = nodeIndex * STRIDE_BOUNDS;
 
         // node aabb test (for a leaf this IS the fat leaf test)
-        if (bounds[nb] > qMaxX || bounds[nb + 3] < qMinX || bounds[nb + 1] > qMaxY || bounds[nb + 4] < qMinY || bounds[nb + 2] > qMaxZ || bounds[nb + 5] < qMinZ) {
+        if (
+            bounds[nb] > qMaxX ||
+            bounds[nb + 3] < qMinX ||
+            bounds[nb + 1] > qMaxY ||
+            bounds[nb + 4] < qMinY ||
+            bounds[nb + 2] > qMaxZ ||
+            bounds[nb + 5] < qMinZ
+        ) {
             continue;
         }
 
@@ -653,7 +674,14 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
         const nb = nodeIndex * STRIDE_BOUNDS;
 
         // node aabb test
-        if (bounds[nb] > qMaxX || bounds[nb + 3] < qMinX || bounds[nb + 1] > qMaxY || bounds[nb + 4] < qMinY || bounds[nb + 2] > qMaxZ || bounds[nb + 5] < qMinZ) {
+        if (
+            bounds[nb] > qMaxX ||
+            bounds[nb + 3] < qMinX ||
+            bounds[nb + 1] > qMaxY ||
+            bounds[nb + 4] < qMinY ||
+            bounds[nb + 2] > qMaxZ ||
+            bounds[nb + 5] < qMinZ
+        ) {
             continue;
         }
 
@@ -730,7 +758,14 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
         const nb = nodeIndex * STRIDE_BOUNDS;
 
         // skip if point is not inside node's AABB
-        if (px < bounds[nb] || px > bounds[nb + 3] || py < bounds[nb + 1] || py > bounds[nb + 4] || pz < bounds[nb + 2] || pz > bounds[nb + 5]) {
+        if (
+            px < bounds[nb] ||
+            px > bounds[nb + 3] ||
+            py < bounds[nb + 1] ||
+            py > bounds[nb + 4] ||
+            pz < bounds[nb + 2] ||
+            pz > bounds[nb + 5]
+        ) {
             continue;
         }
 
@@ -816,7 +851,6 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
 }
 
 const _ray = /* @__PURE__ */ raycast3.create();
-const _nodeBounds = /* @__PURE__ */ box3.create(); // scratch for expanded child bounds in castAABB distance sort
 
 /** @optimize */
 export function castRay(
@@ -845,13 +879,28 @@ export function castRay(
 
     // closest-hit fraction so far (jolt's GetEarlyOutFraction); any node whose fat-AABB entry
     // fraction is >= this can't hold a closer hit and is pruned. distances are normalized to
-    // [0, 1] of the ray length (rayDistanceToBox3Flat), matching the collector's fraction. visitors
+    // [0, 1] of the ray length (rayDistanceToBox3), matching the collector's fraction. visitors
     // that don't cast omit it → Infinity → distance pruning off (only misses rejected).
     let bestFraction = visitor.earlyOutFraction ?? Infinity;
 
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
-    _castStackDist[stackSize] = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, dbvt.root * STRIDE_BOUNDS);
+    const rootB = dbvt.root * STRIDE_BOUNDS;
+    _castStackDist[stackSize] = rayDistanceToBox3(
+        originX,
+        originY,
+        originZ,
+        dirX,
+        dirY,
+        dirZ,
+        rayLen,
+        bounds[rootB],
+        bounds[rootB + 1],
+        bounds[rootB + 2],
+        bounds[rootB + 3],
+        bounds[rootB + 4],
+        bounds[rootB + 5],
+    );
     stackSize++;
 
     while (stackSize > 0) {
@@ -872,8 +921,38 @@ export function castRay(
         if (left !== -1) {
             const right = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
 
-            const leftDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, left * STRIDE_BOUNDS);
-            const rightDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, bounds, right * STRIDE_BOUNDS);
+            const lb = left * STRIDE_BOUNDS;
+            const leftDist = rayDistanceToBox3(
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
+                rayLen,
+                bounds[lb],
+                bounds[lb + 1],
+                bounds[lb + 2],
+                bounds[lb + 3],
+                bounds[lb + 4],
+                bounds[lb + 5],
+            );
+            const rb = right * STRIDE_BOUNDS;
+            const rightDist = rayDistanceToBox3(
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
+                rayLen,
+                bounds[rb],
+                bounds[rb + 1],
+                bounds[rb + 2],
+                bounds[rb + 3],
+                bounds[rb + 4],
+                bounds[rb + 5],
+            );
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
@@ -1037,21 +1116,37 @@ export function castAABB(
             const lb = left * STRIDE_BOUNDS;
             const rb = right * STRIDE_BOUNDS;
 
-            _nodeBounds[0] = bounds[lb] - halfX;
-            _nodeBounds[1] = bounds[lb + 1] - halfY;
-            _nodeBounds[2] = bounds[lb + 2] - halfZ;
-            _nodeBounds[3] = bounds[lb + 3] + halfX;
-            _nodeBounds[4] = bounds[lb + 4] + halfY;
-            _nodeBounds[5] = bounds[lb + 5] + halfZ;
-            const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
-
-            _nodeBounds[0] = bounds[rb] - halfX;
-            _nodeBounds[1] = bounds[rb + 1] - halfY;
-            _nodeBounds[2] = bounds[rb + 2] - halfZ;
-            _nodeBounds[3] = bounds[rb + 3] + halfX;
-            _nodeBounds[4] = bounds[rb + 4] + halfY;
-            _nodeBounds[5] = bounds[rb + 5] + halfZ;
-            const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
+            // node bounds expanded by the shape's half extents (minkowski sum), passed inline
+            const leftDist = rayDistanceToBox3(
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
+                castLen,
+                bounds[lb] - halfX,
+                bounds[lb + 1] - halfY,
+                bounds[lb + 2] - halfZ,
+                bounds[lb + 3] + halfX,
+                bounds[lb + 4] + halfY,
+                bounds[lb + 5] + halfZ,
+            );
+            const rightDist = rayDistanceToBox3(
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
+                castLen,
+                bounds[rb] - halfX,
+                bounds[rb + 1] - halfY,
+                bounds[rb + 2] - halfZ,
+                bounds[rb + 3] + halfX,
+                bounds[rb + 4] + halfY,
+                bounds[rb + 5] + halfZ,
+            );
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
