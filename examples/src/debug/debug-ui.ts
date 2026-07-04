@@ -20,7 +20,7 @@ export type DebugStats = {
     };
     broadphase: {
         numPairs: number;
-        pairsPoolSize: number;
+        persistentPairs: number;
         dbvtTotalNodes: number;
         dbvtActiveNodes: number;
         dbvtMaxDepth: number;
@@ -104,7 +104,7 @@ export function init(options: debugRenderer.DebugRendererOptions): DebugUI {
         },
         broadphase: {
             numPairs: 0,
-            pairsPoolSize: 0,
+            persistentPairs: 0,
             dbvtTotalNodes: 0,
             dbvtActiveNodes: 0,
             dbvtMaxDepth: 0,
@@ -118,8 +118,8 @@ export function init(options: debugRenderer.DebugRendererOptions): DebugUI {
     statsFolder.add(stats.contacts, 'count').name('Contacts').listen().disable();
     statsFolder.add(stats.contactConstraints, 'count').name('Contact Constraints').listen().disable();
     statsFolder.add(stats.userConstraints, 'count').name('User Constraints').listen().disable();
-    statsFolder.add(stats.broadphase, 'numPairs').name('Broadphase Pairs').listen().disable();
-    statsFolder.add(stats.broadphase, 'pairsPoolSize').name('Broadphase Pairs Pool Size').listen().disable();
+    statsFolder.add(stats.broadphase, 'numPairs').name('Colliding Pairs').listen().disable();
+    statsFolder.add(stats.broadphase, 'persistentPairs').name('Persistent Pairs').listen().disable();
     statsFolder.add(stats.broadphase, 'dbvtTotalNodes').name('Broadphase DBVT Total Nodes').listen().disable();
     statsFolder.add(stats.broadphase, 'dbvtActiveNodes').name('Broadphase DBVT Active Nodes').listen().disable();
     statsFolder.add(stats.broadphase, 'dbvtMaxDepth').name('Broadphase DBVT Max Depth').listen().disable();
@@ -161,8 +161,8 @@ export function updateStats(ui: DebugUI, world: World): void {
     }
     ui.stats.userConstraints.count = userConstraintCount;
 
-    ui.stats.broadphase.numPairs = world.broadphase.pairs.n;
-    ui.stats.broadphase.pairsPoolSize = world.broadphase.pairs.pool.length;
+    ui.stats.broadphase.numPairs = world.pairs.collidingPairCount;
+    ui.stats.broadphase.persistentPairs = world.pairs.recordCount;
 
     // calculate dbvt stats across all broadphase layers
     let totalNodes = 0;

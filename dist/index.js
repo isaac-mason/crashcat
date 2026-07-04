@@ -15741,239 +15741,170 @@ function estimateCollisionResponse(result, body1, body2, manifold, combinedFrict
 const EPA_MAX_TRIANGLES = 256;
 const EPA_MAX_EDGE_LENGTH = 128;
 const EPA_MIN_TRIANGLE_AREA = 1e-10;
-function createEdge() {
-	return {
-		neighbourTriangle: null,
-		neighbourEdge: 0,
-		startIndex: 0
-	};
-}
-function allocateTriangle() {
-	return {
-		e0NeighbourTriangle: null,
-		e0NeighbourEdge: 0,
-		e0StartIndex: 0,
-		e1NeighbourTriangle: null,
-		e1NeighbourEdge: 0,
-		e1StartIndex: 0,
-		e2NeighbourTriangle: null,
-		e2NeighbourEdge: 0,
-		e2StartIndex: 0,
-		normalX: 0,
-		normalY: 0,
-		normalZ: 0,
-		centroidX: 0,
-		centroidY: 0,
-		centroidZ: 0,
-		closestLengthSq: Infinity,
-		lambda0: 0,
-		lambda1: 0,
-		lambdaRelativeTo0: false,
-		closestPointInterior: false,
-		removed: false,
-		inQueue: false,
-		index: -1,
-		nextFree: -1
-	};
-}
-function getNeighbourTriangle(t, edge) {
-	if (edge === 0) return t.e0NeighbourTriangle;
-	if (edge === 1) return t.e1NeighbourTriangle;
-	return t.e2NeighbourTriangle;
-}
-function getNeighbourEdge(t, edge) {
-	if (edge === 0) return t.e0NeighbourEdge;
-	if (edge === 1) return t.e1NeighbourEdge;
-	return t.e2NeighbourEdge;
-}
-function getStartIndex(t, edge) {
-	if (edge === 0) return t.e0StartIndex;
-	if (edge === 1) return t.e1StartIndex;
-	return t.e2StartIndex;
-}
-function setNeighbour(t, edge, neighbour, neighbourEdge) {
-	if (edge === 0) {
-		t.e0NeighbourTriangle = neighbour;
-		t.e0NeighbourEdge = neighbourEdge;
-	} else if (edge === 1) {
-		t.e1NeighbourTriangle = neighbour;
-		t.e1NeighbourEdge = neighbourEdge;
-	} else {
-		t.e2NeighbourTriangle = neighbour;
-		t.e2NeighbourEdge = neighbourEdge;
-	}
-}
-function clearNeighbour(t, edge) {
-	if (edge === 0) t.e0NeighbourTriangle = null;
-	else if (edge === 1) t.e1NeighbourTriangle = null;
-	else t.e2NeighbourTriangle = null;
-}
-function triangleIsFacing(triangle, position) {
-	const abx = position[0] - triangle.centroidX;
-	const aby = position[1] - triangle.centroidY;
-	const abz = position[2] - triangle.centroidZ;
-	return triangle.normalX * abx + triangle.normalY * aby + triangle.normalZ * abz > 0;
+/**
+* DFS stack for the silhouette flood-fill, flat with stride STACK_STRIDE (3):
+* [triangleIndex, edge, iter]. `edge` is the entry edge, needed to compute the visited edge index.
+*/
+const STACK_STRIDE = 3;
+function triangleIsFacing(state, tri, points, offset) {
+	const fBase = tri * 9;
+	const abx = points[offset] - state.triFloat[fBase + 3];
+	const aby = points[offset + 1] - state.triFloat[fBase + 3 + 1];
+	const abz = points[offset + 2] - state.triFloat[fBase + 3 + 2];
+	return state.triFloat[fBase + 0] * abx + state.triFloat[fBase + 0 + 1] * aby + state.triFloat[fBase + 0 + 2] * abz > 0;
 }
 function createPoints(capacity) {
-	const values = [];
-	for (let i = 0; i < capacity; i++) values.push(create$48());
 	return {
-		values,
+		values: new Array(capacity * 3).fill(0),
 		size: 0
 	};
 }
-function createEdges(capacity) {
-	const values = [];
-	for (let i = 0; i < capacity; i++) values.push(createEdge());
-	return {
-		values,
-		size: 0
-	};
-}
-function pushTriangleToQueue(state, triangle) {
+function pushTriangleToQueue(state, tri) {
 	const queue = state.queue;
-	queue.push(triangle);
-	triangle.inQueue = true;
+	const triFloat = state.triFloat;
+	queue.push(tri);
+	state.triInt[tri * 11 + 9] |= 2;
 	let current = queue.length - 1;
 	while (current > 0) {
 		const currentElement = queue[current];
 		const parent = current - 1 >> 1;
 		const parentElement = queue[parent];
-		if (parentElement.closestLengthSq > currentElement.closestLengthSq) {
+		if (triFloat[parentElement * 9 + 6] > triFloat[currentElement * 9 + 6]) {
 			queue[parent] = currentElement;
 			queue[current] = parentElement;
 			current = parent;
 		} else break;
 	}
 }
-function createStackEntry() {
-	return {
-		triangle: null,
-		edge: 0,
-		iter: -1
-	};
-}
 function init$4() {
-	const stack = [];
-	for (let i = 0; i < EPA_MAX_EDGE_LENGTH; i++) stack.push(createStackEntry());
-	const triangles = [];
-	for (let i = 0; i < EPA_MAX_TRIANGLES; i++) {
-		const triangle = allocateTriangle();
-		triangle.index = i;
-		triangles.push(triangle);
-	}
 	return {
-		triangles,
+		triFloat: new Array(EPA_MAX_TRIANGLES * 9).fill(0),
+		triInt: new Array(EPA_MAX_TRIANGLES * 11).fill(0),
 		triangleHighWatermark: 0,
 		triangleFreeHead: -1,
 		queue: [],
 		positions: [],
-		stack,
-		edges: createEdges(EPA_MAX_EDGE_LENGTH)
+		stack: new Array(EPA_MAX_EDGE_LENGTH * STACK_STRIDE).fill(0),
+		edges: new Array(EPA_MAX_EDGE_LENGTH * 3).fill(0),
+		edgesSize: 0
 	};
 }
-function linkTriangle(t1, edge1, t2, edge2) {
-	setNeighbour(t1, edge1, t2, edge2);
-	setNeighbour(t2, edge2, t1, edge1);
+function linkTriangle(state, t1, edge1, t2, edge2) {
+	const triInt = state.triInt;
+	const b1 = t1 * 11 + edge1 * 3;
+	triInt[b1 + 0] = t2;
+	triInt[b1 + 1] = edge2;
+	const b2 = t2 * 11 + edge2 * 3;
+	triInt[b2 + 0] = t1;
+	triInt[b2 + 1] = edge1;
 }
 function createTriangle$1(state, idx1, idx2, idx3) {
-	let triangle;
+	const triInt = state.triInt;
+	const triFloat = state.triFloat;
+	let tri;
 	const freeHead = state.triangleFreeHead;
 	if (freeHead !== -1) {
-		triangle = state.triangles[freeHead];
-		state.triangleFreeHead = triangle.nextFree;
+		tri = freeHead;
+		state.triangleFreeHead = triInt[tri * 11 + 10];
 	} else {
 		const index = state.triangleHighWatermark;
-		if (index >= EPA_MAX_TRIANGLES) return null;
+		if (index >= EPA_MAX_TRIANGLES) return -1;
 		state.triangleHighWatermark = index + 1;
-		triangle = state.triangles[index];
+		tri = index;
 	}
-	triangle.closestLengthSq = Infinity;
-	triangle.lambda0 = 0;
-	triangle.lambda1 = 0;
-	triangle.lambdaRelativeTo0 = false;
-	triangle.closestPointInterior = false;
-	triangle.removed = false;
-	triangle.inQueue = false;
-	triangle.e0StartIndex = idx1;
-	triangle.e1StartIndex = idx2;
-	triangle.e2StartIndex = idx3;
-	triangle.e0NeighbourTriangle = null;
-	triangle.e1NeighbourTriangle = null;
-	triangle.e2NeighbourTriangle = null;
+	const fBase = tri * 9;
+	const iBase = tri * 11;
+	triFloat[fBase + 6] = Infinity;
+	triFloat[fBase + 7] = 0;
+	triFloat[fBase + 8] = 0;
+	triInt[iBase + 9] = 0;
+	triInt[iBase + 0 + 2] = idx1;
+	triInt[iBase + 3 + 2] = idx2;
+	triInt[iBase + 6 + 2] = idx3;
+	triInt[iBase + 0 + 0] = -1;
+	triInt[iBase + 3 + 0] = -1;
+	triInt[iBase + 6 + 0] = -1;
 	const positions = state.positions;
-	const y0 = positions[idx1];
-	const y1 = positions[idx2];
-	const y2 = positions[idx3];
-	const cx = (y0[0] + y1[0] + y2[0]) / 3;
-	const cy = (y0[1] + y1[1] + y2[1]) / 3;
-	const cz = (y0[2] + y1[2] + y2[2]) / 3;
-	triangle.centroidX = cx;
-	triangle.centroidY = cy;
-	triangle.centroidZ = cz;
-	const y10x = y1[0] - y0[0];
-	const y10y = y1[1] - y0[1];
-	const y10z = y1[2] - y0[2];
-	const y20x = y2[0] - y0[0];
-	const y20y = y2[1] - y0[1];
-	const y20z = y2[2] - y0[2];
-	const y21x = y2[0] - y1[0];
-	const y21y = y2[1] - y1[1];
-	const y21z = y2[2] - y1[2];
+	const o0 = idx1 * 3;
+	const o1 = idx2 * 3;
+	const o2 = idx3 * 3;
+	const y0x = positions[o0];
+	const y0y = positions[o0 + 1];
+	const y0z = positions[o0 + 2];
+	const y1x = positions[o1];
+	const y1y = positions[o1 + 1];
+	const y1z = positions[o1 + 2];
+	const y2x = positions[o2];
+	const y2y = positions[o2 + 1];
+	const y2z = positions[o2 + 2];
+	const cx = (y0x + y1x + y2x) / 3;
+	const cy = (y0y + y1y + y2y) / 3;
+	const cz = (y0z + y1z + y2z) / 3;
+	triFloat[fBase + 3] = cx;
+	triFloat[fBase + 3 + 1] = cy;
+	triFloat[fBase + 3 + 2] = cz;
+	const y10x = y1x - y0x;
+	const y10y = y1y - y0y;
+	const y10z = y1z - y0z;
+	const y20x = y2x - y0x;
+	const y20y = y2y - y0y;
+	const y20z = y2z - y0z;
+	const y21x = y2x - y1x;
+	const y21y = y2y - y1y;
+	const y21z = y2z - y1z;
 	const y20DotY20 = y20x * y20x + y20y * y20y + y20z * y20z;
 	const y21DotY21 = y21x * y21x + y21y * y21y + y21z * y21z;
 	if (y20DotY20 < y21DotY21) {
 		const nx = y10y * y20z - y10z * y20y;
 		const ny = y10z * y20x - y10x * y20z;
 		const nz = y10x * y20y - y10y * y20x;
-		triangle.normalX = nx;
-		triangle.normalY = ny;
-		triangle.normalZ = nz;
+		triFloat[fBase + 0] = nx;
+		triFloat[fBase + 0 + 1] = ny;
+		triFloat[fBase + 0 + 2] = nz;
 		const normalLenSq = nx * nx + ny * ny + nz * nz;
 		if (normalLenSq > EPA_MIN_TRIANGLE_AREA) {
 			const cDotN = cx * nx + cy * ny + cz * nz;
-			triangle.closestLengthSq = Math.abs(cDotN) * cDotN / normalLenSq;
+			triFloat[fBase + 6] = Math.abs(cDotN) * cDotN / normalLenSq;
 			const y10DotY10 = y10x * y10x + y10y * y10y + y10z * y10z;
 			const y10DotY20 = y10x * y20x + y10y * y20y + y10z * y20z;
 			const determinant = y10DotY10 * y20DotY20 - y10DotY20 * y10DotY20;
 			if (determinant > 0) {
-				const y0DotY10 = y0[0] * y10x + y0[1] * y10y + y0[2] * y10z;
-				const y0DotY20 = y0[0] * y20x + y0[1] * y20y + y0[2] * y20z;
+				const y0DotY10 = y0x * y10x + y0y * y10y + y0z * y10z;
+				const y0DotY20 = y0x * y20x + y0y * y20y + y0z * y20z;
 				const l0 = (y10DotY20 * y0DotY20 - y20DotY20 * y0DotY10) / determinant;
 				const l1 = (y10DotY20 * y0DotY10 - y10DotY10 * y0DotY20) / determinant;
-				triangle.lambda0 = l0;
-				triangle.lambda1 = l1;
-				triangle.lambdaRelativeTo0 = true;
-				if (l0 > -.001 && l1 > -.001 && l0 + l1 < 1.001) triangle.closestPointInterior = true;
+				triFloat[fBase + 7] = l0;
+				triFloat[fBase + 8] = l1;
+				triInt[iBase + 9] |= 4;
+				if (l0 > -.001 && l1 > -.001 && l0 + l1 < 1.001) triInt[iBase + 9] |= 8;
 			}
 		}
 	} else {
 		const nx = y10y * y21z - y10z * y21y;
 		const ny = y10z * y21x - y10x * y21z;
 		const nz = y10x * y21y - y10y * y21x;
-		triangle.normalX = nx;
-		triangle.normalY = ny;
-		triangle.normalZ = nz;
+		triFloat[fBase + 0] = nx;
+		triFloat[fBase + 0 + 1] = ny;
+		triFloat[fBase + 0 + 2] = nz;
 		const normalLenSq = nx * nx + ny * ny + nz * nz;
 		if (normalLenSq > EPA_MIN_TRIANGLE_AREA) {
 			const cDotN = cx * nx + cy * ny + cz * nz;
-			triangle.closestLengthSq = Math.abs(cDotN) * cDotN / normalLenSq;
+			triFloat[fBase + 6] = Math.abs(cDotN) * cDotN / normalLenSq;
 			const y10DotY10 = y10x * y10x + y10y * y10y + y10z * y10z;
 			const y10DotY21 = y10x * y21x + y10y * y21y + y10z * y21z;
 			const determinant = y10DotY10 * y21DotY21 - y10DotY21 * y10DotY21;
 			if (determinant > 0) {
-				const y1DotY10 = y1[0] * y10x + y1[1] * y10y + y1[2] * y10z;
-				const y1DotY21 = y1[0] * y21x + y1[1] * y21y + y1[2] * y21z;
+				const y1DotY10 = y1x * y10x + y1y * y10y + y1z * y10z;
+				const y1DotY21 = y1x * y21x + y1y * y21y + y1z * y21z;
 				const l0 = (y21DotY21 * y1DotY10 - y10DotY21 * y1DotY21) / determinant;
 				const l1 = (y10DotY21 * y1DotY10 - y10DotY10 * y1DotY21) / determinant;
-				triangle.lambda0 = l0;
-				triangle.lambda1 = l1;
-				triangle.lambdaRelativeTo0 = false;
-				if (l0 > -.001 && l1 > -.001 && l0 + l1 < 1.001) triangle.closestPointInterior = true;
+				triFloat[fBase + 7] = l0;
+				triFloat[fBase + 8] = l1;
+				if (l0 > -.001 && l1 > -.001 && l0 + l1 < 1.001) triInt[iBase + 9] |= 8;
 			}
 		}
 	}
-	return triangle;
+	return tri;
 }
 function initialize$2(state, idx1, idx2, idx3) {
 	state.triangleHighWatermark = 0;
@@ -15981,10 +15912,10 @@ function initialize$2(state, idx1, idx2, idx3) {
 	state.queue.length = 0;
 	const t1 = createTriangle$1(state, idx1, idx2, idx3);
 	const t2 = createTriangle$1(state, idx1, idx3, idx2);
-	if (!t1 || !t2) throw new Error("Failed to create triangles");
-	linkTriangle(t1, 0, t2, 2);
-	linkTriangle(t1, 1, t2, 1);
-	linkTriangle(t1, 2, t2, 0);
+	if (t1 === -1 || t2 === -1) throw new Error("Failed to create triangles");
+	linkTriangle(state, t1, 0, t2, 2);
+	linkTriangle(state, t1, 1, t2, 1);
+	linkTriangle(state, t1, 2, t2, 0);
 	pushTriangleToQueue(state, t1);
 	pushTriangleToQueue(state, t2);
 }
@@ -15992,11 +15923,12 @@ function hasNextTriangle(state) {
 	return state.queue.length > 0;
 }
 function peekClosestTriangleInQueue(state) {
-	return state.queue.length === 0 ? null : state.queue[0];
+	return state.queue.length === 0 ? -1 : state.queue[0];
 }
 function popClosestTriangleFromQueue(state) {
 	const queue = state.queue;
-	if (queue.length === 0) return null;
+	if (queue.length === 0) return -1;
+	const triFloat = state.triFloat;
 	const temp = queue[queue.length - 1];
 	queue[queue.length - 1] = queue[0];
 	queue[0] = temp;
@@ -16006,9 +15938,9 @@ function popClosestTriangleFromQueue(state) {
 		let child = (largest << 1) + 1;
 		if (child >= count) break;
 		const prevLargest = largest;
-		if (queue[largest].closestLengthSq > queue[child].closestLengthSq) largest = child;
+		if (triFloat[queue[largest] * 9 + 6] > triFloat[queue[child] * 9 + 6]) largest = child;
 		++child;
-		if (child < count && queue[largest].closestLengthSq > queue[child].closestLengthSq) largest = child;
+		if (child < count && triFloat[queue[largest] * 9 + 6] > triFloat[queue[child] * 9 + 6]) largest = child;
 		if (prevLargest === largest) break;
 		const tempElement = queue[prevLargest];
 		queue[prevLargest] = queue[largest];
@@ -16016,18 +15948,24 @@ function popClosestTriangleFromQueue(state) {
 	}
 	return queue.pop();
 }
-function findFacingTriangle(state, position, outBestDistSq) {
-	let best = null;
+function findFacingTriangle(state, points, offset, outBestDistSq) {
+	let best = -1;
 	let bestDistSq = 0;
+	const triFloat = state.triFloat;
+	const triInt = state.triInt;
 	for (let i = 0; i < state.queue.length; i++) {
 		const t = state.queue[i];
-		if (!t || t.removed) continue;
-		const abx = position[0] - t.centroidX;
-		const aby = position[1] - t.centroidY;
-		const abz = position[2] - t.centroidZ;
-		const dot = t.normalX * abx + t.normalY * aby + t.normalZ * abz;
+		if ((triInt[t * 11 + 9] & 1) !== 0) continue;
+		const fBase = t * 9;
+		const abx = points[offset] - triFloat[fBase + 3];
+		const aby = points[offset + 1] - triFloat[fBase + 3 + 1];
+		const abz = points[offset + 2] - triFloat[fBase + 3 + 2];
+		const nx = triFloat[fBase + 0];
+		const ny = triFloat[fBase + 0 + 1];
+		const nz = triFloat[fBase + 0 + 2];
+		const dot = nx * abx + ny * aby + nz * abz;
 		if (dot > 0) {
-			const normalLenSq = t.normalX * t.normalX + t.normalY * t.normalY + t.normalZ * t.normalZ;
+			const normalLenSq = nx * nx + ny * ny + nz * nz;
 			const distSq = dot * dot / normalLenSq;
 			if (distSq > bestDistSq) {
 				best = t;
@@ -16038,90 +15976,106 @@ function findFacingTriangle(state, position, outBestDistSq) {
 	outBestDistSq.value = bestDistSq;
 	return best;
 }
-function freeTriangle(state, triangle) {
-	triangle.nextFree = state.triangleFreeHead;
-	state.triangleFreeHead = triangle.index;
+function freeTriangle(state, tri) {
+	state.triInt[tri * 11 + 10] = state.triangleFreeHead;
+	state.triangleFreeHead = tri;
 }
-function unlinkTriangle(state, triangle) {
-	if (triangle.e0NeighbourTriangle !== null) {
-		clearNeighbour(triangle.e0NeighbourTriangle, triangle.e0NeighbourEdge);
-		triangle.e0NeighbourTriangle = null;
+function unlinkTriangle(state, tri) {
+	const triInt = state.triInt;
+	const base = tri * 11;
+	const n0 = triInt[base + 0 + 0];
+	if (n0 !== -1) {
+		const ne0 = triInt[base + 0 + 1];
+		triInt[n0 * 11 + ne0 * 3 + 0] = -1;
+		triInt[base + 0 + 0] = -1;
 	}
-	if (triangle.e1NeighbourTriangle !== null) {
-		clearNeighbour(triangle.e1NeighbourTriangle, triangle.e1NeighbourEdge);
-		triangle.e1NeighbourTriangle = null;
+	const n1 = triInt[base + 3 + 0];
+	if (n1 !== -1) {
+		const ne1 = triInt[base + 3 + 1];
+		triInt[n1 * 11 + ne1 * 3 + 0] = -1;
+		triInt[base + 3 + 0] = -1;
 	}
-	if (triangle.e2NeighbourTriangle !== null) {
-		clearNeighbour(triangle.e2NeighbourTriangle, triangle.e2NeighbourEdge);
-		triangle.e2NeighbourTriangle = null;
+	const n2 = triInt[base + 6 + 0];
+	if (n2 !== -1) {
+		const ne2 = triInt[base + 6 + 1];
+		triInt[n2 * 11 + ne2 * 3 + 0] = -1;
+		triInt[base + 6 + 0] = -1;
 	}
-	if (!triangle.inQueue) freeTriangle(state, triangle);
+	if ((triInt[base + 9] & 2) === 0) freeTriangle(state, tri);
 }
-function findEdge$1(state, facingTriangle, vertex, outEdges) {
-	outEdges.size = 0;
-	facingTriangle.removed = true;
+function findEdge$1(state, facingTriangle, pointOffset) {
+	const triInt = state.triInt;
+	const positions = state.positions;
+	const edges = state.edges;
+	state.edgesSize = 0;
+	triInt[facingTriangle * 11 + 9] |= 1;
 	const stack = state.stack;
 	let curStackPos = 0;
-	stack[0].triangle = facingTriangle;
-	stack[0].edge = 0;
-	stack[0].iter = -1;
+	stack[0] = facingTriangle;
+	stack[1] = 0;
+	stack[2] = -1;
 	let nextExpectedStartIdx = -1;
 	while (true) {
-		const curEntry = stack[curStackPos];
-		if (++curEntry.iter >= 3) {
-			unlinkTriangle(state, curEntry.triangle);
+		const sBase = curStackPos * STACK_STRIDE;
+		const curTriangle = stack[sBase];
+		const curEdge = stack[sBase + 1];
+		const curIter = stack[sBase + 2] + 1;
+		stack[sBase + 2] = curIter;
+		if (curIter >= 3) {
+			unlinkTriangle(state, curTriangle);
 			if (--curStackPos < 0) break;
 		} else {
-			const edgeSum = curEntry.edge + curEntry.iter;
+			const edgeSum = curEdge + curIter;
 			const edgeIdx = edgeSum >= 3 ? edgeSum - 3 : edgeSum;
-			const curTriangle = curEntry.triangle;
-			const n = getNeighbourTriangle(curTriangle, edgeIdx);
-			const nEdge = getNeighbourEdge(curTriangle, edgeIdx);
-			const eStartIndex = getStartIndex(curTriangle, edgeIdx);
-			if (n !== null && !n.removed) if (triangleIsFacing(n, vertex)) {
-				n.removed = true;
+			const eBase = curTriangle * 11 + edgeIdx * 3;
+			const n = triInt[eBase + 0];
+			const nEdge = triInt[eBase + 1];
+			const eStartIndex = triInt[eBase + 2];
+			if (n !== -1 && (triInt[n * 11 + 9] & 1) === 0) if (triangleIsFacing(state, n, positions, pointOffset)) {
+				triInt[n * 11 + 9] |= 1;
 				curStackPos++;
-				const newEntry = stack[curStackPos];
-				newEntry.triangle = n;
-				newEntry.edge = nEdge;
-				newEntry.iter = 0;
+				const nBase = curStackPos * STACK_STRIDE;
+				stack[nBase] = n;
+				stack[nBase + 1] = nEdge;
+				stack[nBase + 2] = 0;
 			} else {
 				if (eStartIndex !== nextExpectedStartIdx && nextExpectedStartIdx !== -1) return false;
-				nextExpectedStartIdx = getStartIndex(n, nEdge);
-				const outEdge = outEdges.values[outEdges.size++];
-				outEdge.neighbourTriangle = n;
-				outEdge.neighbourEdge = nEdge;
-				outEdge.startIndex = eStartIndex;
+				nextExpectedStartIdx = triInt[n * 11 + nEdge * 3 + 2];
+				const oBase = state.edgesSize * 3;
+				edges[oBase + 0] = n;
+				edges[oBase + 1] = nEdge;
+				edges[oBase + 2] = eStartIndex;
+				state.edgesSize++;
 			}
 		}
 	}
-	const front = outEdges.size === 0 ? null : outEdges.values[0];
-	if (front && front.startIndex !== nextExpectedStartIdx) return false;
-	return outEdges.size >= 3;
+	if (state.edgesSize !== 0 && edges[2] !== nextExpectedStartIdx) return false;
+	return state.edgesSize >= 3;
 }
 function addPoint$1(state, facingTriangle, idx, closestDistSq, outTriangles) {
-	const pos = state.positions[idx];
+	const triFloat = state.triFloat;
+	const triInt = state.triInt;
+	state.edgesSize = 0;
+	if (!findEdge$1(state, facingTriangle, idx * 3)) return false;
+	const numEdges = state.edgesSize;
 	const edges = state.edges;
-	edges.size = 0;
-	if (!findEdge$1(state, facingTriangle, pos, edges)) return false;
-	const numEdges = edges.size;
-	const edgesValues = edges.values;
 	for (let i = 0; i < numEdges; i++) {
 		const iNext = i + 1 < numEdges ? i + 1 : 0;
-		const edge = edgesValues[i];
-		const edgeNext = edgesValues[iNext];
-		const nt = createTriangle$1(state, edge.startIndex, edgeNext.startIndex, idx);
-		if (!nt) return false;
+		const startIndex = edges[i * 3 + 2];
+		const startIndexNext = edges[iNext * 3 + 2];
+		const nt = createTriangle$1(state, startIndex, startIndexNext, idx);
+		if (nt === -1) return false;
 		outTriangles.push(nt);
-		if (nt.closestPointInterior && nt.closestLengthSq < closestDistSq || nt.closestLengthSq < 0) pushTriangleToQueue(state, nt);
+		const closestLengthSq = triFloat[nt * 9 + 6];
+		if ((triInt[nt * 11 + 9] & 8) !== 0 && closestLengthSq < closestDistSq || closestLengthSq < 0) pushTriangleToQueue(state, nt);
 	}
 	for (let i = 0; i < numEdges; i++) {
 		const iNext = i + 1 < numEdges ? i + 1 : 0;
 		const t1 = outTriangles[i];
 		const t2 = outTriangles[iNext];
-		const edge = edgesValues[i];
-		linkTriangle(t1, 0, edge.neighbourTriangle, edge.neighbourEdge);
-		linkTriangle(t1, 1, t2, 2);
+		const eBase = i * 3;
+		linkTriangle(state, t1, 0, edges[eBase + 0], edges[eBase + 1]);
+		linkTriangle(state, t1, 1, t2, 2);
 	}
 	return true;
 }
@@ -16215,18 +16169,19 @@ const addEpaSupportPoint = (points, supportA, supportB, direction) => {
 	getSupport(_epa_p, supportA, direction);
 	getSupport(_epa_q, supportB, _epa_negatedDirection);
 	const idx = points.y.size;
-	const yOut = points.y.values[idx];
-	const pOut = points.p.values[idx];
-	const qOut = points.q.values[idx];
-	yOut[0] = _epa_p[0] - _epa_q[0];
-	yOut[1] = _epa_p[1] - _epa_q[1];
-	yOut[2] = _epa_p[2] - _epa_q[2];
-	pOut[0] = _epa_p[0];
-	pOut[1] = _epa_p[1];
-	pOut[2] = _epa_p[2];
-	qOut[0] = _epa_q[0];
-	qOut[1] = _epa_q[1];
-	qOut[2] = _epa_q[2];
+	const off = idx * 3;
+	const yValues = points.y.values;
+	const pValues = points.p.values;
+	const qValues = points.q.values;
+	yValues[off] = _epa_p[0] - _epa_q[0];
+	yValues[off + 1] = _epa_p[1] - _epa_q[1];
+	yValues[off + 2] = _epa_p[2] - _epa_q[2];
+	pValues[off] = _epa_p[0];
+	pValues[off + 1] = _epa_p[1];
+	pValues[off + 2] = _epa_p[2];
+	qValues[off] = _epa_q[0];
+	qValues[off + 1] = _epa_q[1];
+	qValues[off + 2] = _epa_q[2];
 	points.y.size++;
 	points.p.size++;
 	points.q.size++;
@@ -16259,18 +16214,15 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 	clearEpaSupportPoints(supportPoints);
 	for (let i = 0; i < simplex.size; i++) {
 		const off = i * 3;
-		const yOut = supportPoints.y.values[i];
-		const pOut = supportPoints.p.values[i];
-		const qOut = supportPoints.q.values[i];
-		yOut[0] = simplex.y[off];
-		yOut[1] = simplex.y[off + 1];
-		yOut[2] = simplex.y[off + 2];
-		pOut[0] = simplex.p[off];
-		pOut[1] = simplex.p[off + 1];
-		pOut[2] = simplex.p[off + 2];
-		qOut[0] = simplex.q[off];
-		qOut[1] = simplex.q[off + 1];
-		qOut[2] = simplex.q[off + 2];
+		supportPoints.y.values[off] = simplex.y[off];
+		supportPoints.y.values[off + 1] = simplex.y[off + 1];
+		supportPoints.y.values[off + 2] = simplex.y[off + 2];
+		supportPoints.p.values[off] = simplex.p[off];
+		supportPoints.p.values[off + 1] = simplex.p[off + 1];
+		supportPoints.p.values[off + 2] = simplex.p[off + 2];
+		supportPoints.q.values[off] = simplex.q[off];
+		supportPoints.q.values[off + 1] = simplex.q[off + 1];
+		supportPoints.q.values[off + 2] = simplex.q[off + 2];
 	}
 	supportPoints.y.size = simplex.size;
 	supportPoints.p.size = simplex.size;
@@ -16284,11 +16236,10 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 			addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_d4);
 			break;
 		case 2: {
-			const y0 = supportPoints.y.values[0];
-			const y1 = supportPoints.y.values[1];
-			const axisx = y1[0] - y0[0];
-			const axisy = y1[1] - y0[1];
-			const axisz = y1[2] - y0[2];
+			const yValues = supportPoints.y.values;
+			const axisx = yValues[3] - yValues[0];
+			const axisy = yValues[4] - yValues[1];
+			const axisz = yValues[5] - yValues[2];
 			const axisLen = Math.sqrt(axisx * axisx + axisy * axisy + axisz * axisz);
 			const axisNormx = axisx / axisLen;
 			const axisNormy = axisy / axisLen;
@@ -16342,12 +16293,14 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 		case 4: break;
 	}
 	const hullState = _epa_hullState;
+	const triFloat = hullState.triFloat;
+	const triInt = hullState.triInt;
 	initialize$2(hullState, 0, 1, 2);
 	for (let i = 3; i < supportPoints.y.size; i++) {
 		const distSq = _epa_bestDistSq;
 		distSq.value = -1;
-		const t = findFacingTriangle(hullState, supportPoints.y.values[i], distSq);
-		if (t !== null) {
+		const t = findFacingTriangle(hullState, supportPoints.y.values, i * 3, distSq);
+		if (t !== -1) {
 			const newTriangles = _epa_newTriangles;
 			newTriangles.length = 0;
 			if (!addPoint$1(hullState, t, i, Number.MAX_VALUE, newTriangles)) {
@@ -16358,11 +16311,11 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 	}
 	while (true) {
 		const triangle = peekClosestTriangleInQueue(hullState);
-		if (!triangle) {
+		if (triangle === -1) {
 			out.status = 0;
 			return false;
 		}
-		if (triangle.removed) {
+		if ((triInt[triangle * 11 + 9] & 1) !== 0) {
 			popClosestTriangleFromQueue(hullState);
 			if (!hasNextTriangle(hullState)) {
 				out.status = 0;
@@ -16371,15 +16324,15 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 			freeTriangle(hullState, triangle);
 			continue;
 		}
-		if (triangle.closestLengthSq >= 0) break;
+		if (triFloat[triangle * 9 + 6] >= 0) break;
 		popClosestTriangleFromQueue(hullState);
-		_epa_triangleNormal[0] = triangle.normalX;
-		_epa_triangleNormal[1] = triangle.normalY;
-		_epa_triangleNormal[2] = triangle.normalZ;
+		const fBase = triangle * 9;
+		_epa_triangleNormal[0] = triFloat[fBase + 0];
+		_epa_triangleNormal[1] = triFloat[fBase + 0 + 1];
+		_epa_triangleNormal[2] = triFloat[fBase + 0 + 2];
 		const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_triangleNormal);
-		const w = supportPoints.y.values[newIndex];
 		_epa_newTriangles.length = 0;
-		if (!triangleIsFacing(triangle, w) || !addPoint$1(hullState, triangle, newIndex, Number.MAX_VALUE, _epa_newTriangles)) {
+		if (!triangleIsFacing(hullState, triangle, supportPoints.y.values, newIndex * 3) || !addPoint$1(hullState, triangle, newIndex, Number.MAX_VALUE, _epa_newTriangles)) {
 			out.status = 0;
 			return false;
 		}
@@ -16390,55 +16343,64 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 		}
 	}
 	let closestDistSq = Number.MAX_VALUE;
-	let last = null;
+	let last = -1;
 	let flipVSign = false;
 	do {
 		const triangle = popClosestTriangleFromQueue(hullState);
-		if (!triangle) {
+		if (triangle === -1) {
 			out.status = 0;
 			return false;
 		}
-		if (triangle.removed) {
+		if ((triInt[triangle * 11 + 9] & 1) !== 0) {
 			freeTriangle(hullState, triangle);
 			continue;
 		}
-		if (triangle.closestLengthSq >= closestDistSq) break;
-		if (last !== null) freeTriangle(hullState, last);
+		const fBase = triangle * 9;
+		const closestLengthSq = triFloat[fBase + 6];
+		if (closestLengthSq >= closestDistSq) break;
+		if (last !== -1) freeTriangle(hullState, last);
 		last = triangle;
-		_epa_triangleNormal[0] = triangle.normalX;
-		_epa_triangleNormal[1] = triangle.normalY;
-		_epa_triangleNormal[2] = triangle.normalZ;
+		const nX = triFloat[fBase + 0];
+		const nY = triFloat[fBase + 0 + 1];
+		const nZ = triFloat[fBase + 0 + 2];
+		_epa_triangleNormal[0] = nX;
+		_epa_triangleNormal[1] = nY;
+		_epa_triangleNormal[2] = nZ;
 		const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_triangleNormal);
-		const w = supportPoints.y.values[newIndex];
-		const dot = triangle.normalX * w[0] + triangle.normalY * w[1] + triangle.normalZ * w[2];
+		const wOff = newIndex * 3;
+		const yValues = supportPoints.y.values;
+		const wx = yValues[wOff];
+		const wy = yValues[wOff + 1];
+		const wz = yValues[wOff + 2];
+		const dot = nX * wx + nY * wy + nZ * wz;
 		if (dot < 0) {
 			out.status = 0;
 			return false;
 		}
-		const normalLenSq = triangle.normalX * triangle.normalX + triangle.normalY * triangle.normalY + triangle.normalZ * triangle.normalZ;
+		const normalLenSq = nX * nX + nY * nY + nZ * nZ;
 		const distSq = dot * dot / normalLenSq;
-		if (distSq - triangle.closestLengthSq < triangle.closestLengthSq * tolerance) break;
+		if (distSq - closestLengthSq < closestLengthSq * tolerance) break;
 		closestDistSq = Math.min(closestDistSq, distSq);
-		if (!triangleIsFacing(triangle, w)) break;
+		if (!triangleIsFacing(hullState, triangle, yValues, wOff)) break;
 		const newTriangles = _epa_newTriangles;
 		newTriangles.length = 0;
 		if (!addPoint$1(hullState, triangle, newIndex, closestDistSq, newTriangles)) break;
 		let hasDefect = false;
 		for (let i = 0; i < newTriangles.length; i++) {
-			const nt = newTriangles[i];
-			if (nt && nt.normalX * nt.centroidX + nt.normalY * nt.centroidY + nt.normalZ * nt.centroidZ < 0) {
+			const ntBase = newTriangles[i] * 9;
+			if (triFloat[ntBase + 0] * triFloat[ntBase + 3] + triFloat[ntBase + 0 + 1] * triFloat[ntBase + 3 + 1] + triFloat[ntBase + 0 + 2] * triFloat[ntBase + 3 + 2] < 0) {
 				hasDefect = true;
 				break;
 			}
 		}
 		if (hasDefect) {
-			_epa_negatedNormal[0] = -triangle.normalX;
-			_epa_negatedNormal[1] = -triangle.normalY;
-			_epa_negatedNormal[2] = -triangle.normalZ;
+			_epa_negatedNormal[0] = -nX;
+			_epa_negatedNormal[1] = -nY;
+			_epa_negatedNormal[2] = -nZ;
 			getSupport(_epa_p2, supportAIncludingRadius, _epa_negatedNormal);
-			_epa_triangleNormal[0] = triangle.normalX;
-			_epa_triangleNormal[1] = triangle.normalY;
-			_epa_triangleNormal[2] = triangle.normalZ;
+			_epa_triangleNormal[0] = nX;
+			_epa_triangleNormal[1] = nY;
+			_epa_triangleNormal[2] = nZ;
 			getSupport(_epa_q2, supportBIncludingRadius, _epa_triangleNormal);
 			const w2x = _epa_p2[0] - _epa_q2[0];
 			const w2y = _epa_p2[1] - _epa_q2[1];
@@ -16447,17 +16409,24 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 			break;
 		}
 	} while (hasNextTriangle(hullState) && supportPoints.y.size < EPA_MAX_POINTS);
-	if (last === null) {
+	if (last === -1) {
 		out.status = 0;
 		return false;
 	}
-	const normalLengthSq = last.normalX * last.normalX + last.normalY * last.normalY + last.normalZ * last.normalZ;
-	const centroidDotNormal = last.centroidX * last.normalX + last.centroidY * last.normalY + last.centroidZ * last.normalZ;
+	const lastFBase = last * 9;
+	const lastNX = triFloat[lastFBase + 0];
+	const lastNY = triFloat[lastFBase + 0 + 1];
+	const lastNZ = triFloat[lastFBase + 0 + 2];
+	const lastCX = triFloat[lastFBase + 3];
+	const lastCY = triFloat[lastFBase + 3 + 1];
+	const lastCZ = triFloat[lastFBase + 3 + 2];
+	const normalLengthSq = lastNX * lastNX + lastNY * lastNY + lastNZ * lastNZ;
+	const centroidDotNormal = lastCX * lastNX + lastCY * lastNY + lastCZ * lastNZ;
 	const penetrationNormal = _epa_penetrationNormal;
 	const penetrationNormalScale = centroidDotNormal / normalLengthSq;
-	penetrationNormal[0] = last.normalX * penetrationNormalScale;
-	penetrationNormal[1] = last.normalY * penetrationNormalScale;
-	penetrationNormal[2] = last.normalZ * penetrationNormalScale;
+	penetrationNormal[0] = lastNX * penetrationNormalScale;
+	penetrationNormal[1] = lastNY * penetrationNormalScale;
+	penetrationNormal[2] = lastNZ * penetrationNormalScale;
 	if (penetrationNormal[0] * penetrationNormal[0] + penetrationNormal[1] * penetrationNormal[1] + penetrationNormal[2] * penetrationNormal[2] < 1e-10) {
 		out.status = 0;
 		return false;
@@ -16467,23 +16436,35 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 		penetrationNormal[1] = -penetrationNormal[1];
 		penetrationNormal[2] = -penetrationNormal[2];
 	}
-	const xp0 = supportPoints.p.values[last.e0StartIndex];
-	const xp1 = supportPoints.p.values[last.e1StartIndex];
-	const xp2 = supportPoints.p.values[last.e2StartIndex];
-	const xq0 = supportPoints.q.values[last.e0StartIndex];
-	const xq1 = supportPoints.q.values[last.e1StartIndex];
-	const xq2 = supportPoints.q.values[last.e2StartIndex];
+	const lastIBase = last * 11;
+	const s0 = triInt[lastIBase + 0 + 2] * 3;
+	const s1 = triInt[lastIBase + 3 + 2] * 3;
+	const s2 = triInt[lastIBase + 6 + 2] * 3;
+	const pValues = supportPoints.p.values;
+	const qValues = supportPoints.q.values;
 	const contactPointA = _epa_contactPointA;
 	const contactPointB = _epa_contactPointB;
-	if (last.lambdaRelativeTo0) {
-		const [xp0x, xp0y, xp0z] = xp0;
-		const [xp1x, xp1y, xp1z] = xp1;
-		const [xp2x, xp2y, xp2z] = xp2;
-		const [xq0x, xq0y, xq0z] = xq0;
-		const [xq1x, xq1y, xq1z] = xq1;
-		const [xq2x, xq2y, xq2z] = xq2;
-		const lambda0 = last.lambda0;
-		const lambda1 = last.lambda1;
+	if ((triInt[lastIBase + 9] & 4) !== 0) {
+		const xp0x = pValues[s0];
+		const xp0y = pValues[s0 + 1];
+		const xp0z = pValues[s0 + 2];
+		const xp1x = pValues[s1];
+		const xp1y = pValues[s1 + 1];
+		const xp1z = pValues[s1 + 2];
+		const xp2x = pValues[s2];
+		const xp2y = pValues[s2 + 1];
+		const xp2z = pValues[s2 + 2];
+		const xq0x = qValues[s0];
+		const xq0y = qValues[s0 + 1];
+		const xq0z = qValues[s0 + 2];
+		const xq1x = qValues[s1];
+		const xq1y = qValues[s1 + 1];
+		const xq1z = qValues[s1 + 2];
+		const xq2x = qValues[s2];
+		const xq2y = qValues[s2 + 1];
+		const xq2z = qValues[s2 + 2];
+		const lambda0 = triFloat[lastFBase + 7];
+		const lambda1 = triFloat[lastFBase + 8];
 		contactPointA[0] = xp0x + (xp1x - xp0x) * lambda0 + (xp2x - xp0x) * lambda1;
 		contactPointA[1] = xp0y + (xp1y - xp0y) * lambda0 + (xp2y - xp0y) * lambda1;
 		contactPointA[2] = xp0z + (xp1z - xp0z) * lambda0 + (xp2z - xp0z) * lambda1;
@@ -16491,14 +16472,26 @@ function penetrationDepthStepEPA(out, supportAIncludingRadius, supportBIncluding
 		contactPointB[1] = xq0y + (xq1y - xq0y) * lambda0 + (xq2y - xq0y) * lambda1;
 		contactPointB[2] = xq0z + (xq1z - xq0z) * lambda0 + (xq2z - xq0z) * lambda1;
 	} else {
-		const [xp0x, xp0y, xp0z] = xp0;
-		const [xp1x, xp1y, xp1z] = xp1;
-		const [xp2x, xp2y, xp2z] = xp2;
-		const [xq0x, xq0y, xq0z] = xq0;
-		const [xq1x, xq1y, xq1z] = xq1;
-		const [xq2x, xq2y, xq2z] = xq2;
-		const lambda0 = last.lambda0;
-		const lambda1 = last.lambda1;
+		const xp0x = pValues[s0];
+		const xp0y = pValues[s0 + 1];
+		const xp0z = pValues[s0 + 2];
+		const xp1x = pValues[s1];
+		const xp1y = pValues[s1 + 1];
+		const xp1z = pValues[s1 + 2];
+		const xp2x = pValues[s2];
+		const xp2y = pValues[s2 + 1];
+		const xp2z = pValues[s2 + 2];
+		const xq0x = qValues[s0];
+		const xq0y = qValues[s0 + 1];
+		const xq0z = qValues[s0 + 2];
+		const xq1x = qValues[s1];
+		const xq1y = qValues[s1 + 1];
+		const xq1z = qValues[s1 + 2];
+		const xq2x = qValues[s2];
+		const xq2y = qValues[s2 + 1];
+		const xq2z = qValues[s2 + 2];
+		const lambda0 = triFloat[lastFBase + 7];
+		const lambda1 = triFloat[lastFBase + 8];
 		contactPointA[0] = xp1x + (xp0x - xp1x) * lambda0 + (xp2x - xp1x) * lambda1;
 		contactPointA[1] = xp1y + (xp0y - xp1y) * lambda0 + (xp2y - xp1y) * lambda1;
 		contactPointA[2] = xp1z + (xp0z - xp1z) * lambda0 + (xp2z - xp1z) * lambda1;
