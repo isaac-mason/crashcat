@@ -340,6 +340,28 @@ describe('DBVT', () => {
             expect(found).toContain(body1);
             expect(found).toContain(body2);
         });
+
+        it('should find a body within a short sweep (castLen < 1)', () => {
+            // regression: the entry distance is a fraction in [0,1] of the cast length, so a cutoff
+            // against the world-space castLen spuriously pruned in-range nodes when castLen < 1.
+            const { world } = createTestWorld();
+            const tree = dbvt.create();
+            const target = makeBody(world, 0.5, 0, 0, 0.7, 0.2, 0.2);
+            const decoy = makeBody(world, 10, 10, 10, 11, 11, 11); // forces an internal root
+            target.dbvtNode = dbvt.add(tree, target);
+            decoy.dbvtNode = dbvt.add(tree, decoy);
+
+            // cast box [0,0.2]^3 swept +X by 0.5 → castLen 0.5. target's expanded entry is at
+            // world-t 0.3 (within the sweep) but fraction 0.6 > castLen 0.5.
+            const bounds = box3.set(box3.create(), 0, 0, 0, 0.2, 0.2, 0.2);
+            const displacement = vec3.fromValues(0.5, 0, 0);
+
+            const found: RigidBody[] = [];
+            const visitor: BodyVisitor = { shouldExit: false, visit: (b: RigidBody) => found.push(b) };
+            dbvt.castAABB(world, tree, bounds, displacement, filter.create(world.settings.layers), visitor);
+
+            expect(found).toContain(target);
+        });
     });
 
     describe('rebuild', () => {
@@ -521,7 +543,11 @@ function treeHeight(tree: dbvt.DBVT): number {
 
 function snapshotSubtree(tree: dbvt.DBVT, idx: number): unknown {
     if (dbvt.nodeLeft(tree, idx) === -1) return { idx, body: dbvt.nodeBodyIndex(tree, idx) };
-    return { idx, left: snapshotSubtree(tree, dbvt.nodeLeft(tree, idx)), right: snapshotSubtree(tree, dbvt.nodeRight(tree, idx)) };
+    return {
+        idx,
+        left: snapshotSubtree(tree, dbvt.nodeLeft(tree, idx)),
+        right: snapshotSubtree(tree, dbvt.nodeRight(tree, idx)),
+    };
 }
 
 // structural invariants: pointer consistency, aabb containment, changed⇒parent.changed,

@@ -4605,328 +4605,325 @@ function castAABB$1(world, dbvt, castBounds, displacement, queryFilter, visitor)
 		const dirX = castLen > 0 ? displacement[0] / castLen : 0;
 		const dirY = castLen > 0 ? displacement[1] / castLen : 0;
 		const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
+		let bestFraction = visitor.earlyOutFraction ?? Infinity;
 		let stackSize = 0;
 		_castStackNode[stackSize] = dbvt.root;
-		_castStackDist[stackSize] = -Infinity;
+		const rootBase = dbvt.root * 6;
+		let _rayDistanceToBox3__result_3000009;
+		_compilecat_inline_label_3000009: {
+			let minX = bounds[rootBase] - halfX;
+			let minY = bounds[rootBase + 1] - halfY;
+			let minZ = bounds[rootBase + 2] - halfZ;
+			let maxX = bounds[rootBase + 3] + halfX;
+			let maxY = bounds[rootBase + 4] + halfY;
+			let maxZ = bounds[rootBase + 5] + halfZ;
+			let tMin = 0;
+			let tMax = castLen;
+			if (Math.abs(dirX) < 1e-10) {
+				if (originX < minX || originX > maxX) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			} else {
+				const invD = 1 / dirX;
+				const t0 = (minX - originX) * invD;
+				const t1 = (maxX - originX) * invD;
+				const tNear = t0 < t1 ? t0 : t1;
+				const tFar = t0 < t1 ? t1 : t0;
+				tMin = tNear > tMin ? tNear : tMin;
+				tMax = tFar < tMax ? tFar : tMax;
+				if (tMax < tMin) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			}
+			if (Math.abs(dirY) < 1e-10) {
+				if (originY < minY || originY > maxY) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			} else {
+				const invD = 1 / dirY;
+				const t0 = (minY - originY) * invD;
+				const t1 = (maxY - originY) * invD;
+				const tNear = t0 < t1 ? t0 : t1;
+				const tFar = t0 < t1 ? t1 : t0;
+				tMin = tNear > tMin ? tNear : tMin;
+				tMax = tFar < tMax ? tFar : tMax;
+				if (tMax < tMin) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			}
+			if (Math.abs(dirZ) < 1e-10) {
+				if (originZ < minZ || originZ > maxZ) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			} else {
+				const invD = 1 / dirZ;
+				const t0 = (minZ - originZ) * invD;
+				const t1 = (maxZ - originZ) * invD;
+				const tNear = t0 < t1 ? t0 : t1;
+				const tFar = t0 < t1 ? t1 : t0;
+				tMin = tNear > tMin ? tNear : tMin;
+				if ((tFar < tMax ? tFar : tMax) < tMin) {
+					_rayDistanceToBox3__result_3000009 = Infinity;
+					break _compilecat_inline_label_3000009;
+				}
+			}
+			_rayDistanceToBox3__result_3000009 = tMin >= 0 ? tMin / castLen : Infinity;
+		}
+		_castStackDist[stackSize] = _rayDistanceToBox3__result_3000009;
 		stackSize++;
 		while (stackSize > 0) {
 			stackSize--;
 			const nodeIndex = _castStackNode[stackSize];
-			const nodeDistance = _castStackDist[stackSize];
-			const nb = nodeIndex * 6;
-			if (!(nodeDistance > castLen)) {
-				let _rayHitsBox3__result_3000007;
-				_compilecat_inline_label_3000007: {
-					let minX = bounds[nb] - halfX;
-					let minY = bounds[nb + 1] - halfY;
-					let minZ = bounds[nb + 2] - halfZ;
-					let maxX = bounds[nb + 3] + halfX;
-					let maxY = bounds[nb + 4] + halfY;
-					let maxZ = bounds[nb + 5] + halfZ;
-					let tNear = 0;
-					let tFar = castLen;
-					if (Math.abs(dirX) < 1e-10) {
-						if (originX < minX || originX > maxX) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					} else {
-						const invX = 1 / dirX;
-						let tEnterX = (minX - originX) * invX;
-						let tExitX = (maxX - originX) * invX;
-						if (invX < 0) {
-							const tmp = tEnterX;
-							tEnterX = tExitX;
-							tExitX = tmp;
-						}
-						if (tEnterX > tNear) tNear = tEnterX;
-						if (tExitX < tFar) tFar = tExitX;
-						if (tFar < tNear) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					}
-					if (Math.abs(dirY) < 1e-10) {
-						if (originY < minY || originY > maxY) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					} else {
-						const invY = 1 / dirY;
-						let tEnterY = (minY - originY) * invY;
-						let tExitY = (maxY - originY) * invY;
-						if (invY < 0) {
-							const tmp = tEnterY;
-							tEnterY = tExitY;
-							tExitY = tmp;
-						}
-						if (tEnterY > tNear) tNear = tEnterY;
-						if (tExitY < tFar) tFar = tExitY;
-						if (tFar < tNear) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					}
-					if (Math.abs(dirZ) < 1e-10) {
-						if (originZ < minZ || originZ > maxZ) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					} else {
-						const invZ = 1 / dirZ;
-						let tEnterZ = (minZ - originZ) * invZ;
-						let tExitZ = (maxZ - originZ) * invZ;
-						if (invZ < 0) {
-							const tmp = tEnterZ;
-							tEnterZ = tExitZ;
-							tExitZ = tmp;
-						}
-						if (tEnterZ > tNear) tNear = tEnterZ;
-						if (tExitZ < tFar) tFar = tExitZ;
-						if (tFar < tNear) {
-							_rayHitsBox3__result_3000007 = false;
-							break _compilecat_inline_label_3000007;
-						}
-					}
-					_rayHitsBox3__result_3000007 = true;
-				}
-				if (_rayHitsBox3__result_3000007) {
-					const left = topo[nodeIndex * 5 + 1];
-					if (left !== -1) {
-						const right = topo[nodeIndex * 5 + 2];
-						const lb = left * 6;
-						const rb = right * 6;
-						let _rayDistanceToBox3__result_3000005;
-						_compilecat_inline_label_3000005: {
-							let minX = bounds[lb] - halfX;
-							let minY = bounds[lb + 1] - halfY;
-							let minZ = bounds[lb + 2] - halfZ;
-							let maxX = bounds[lb + 3] + halfX;
-							let maxY = bounds[lb + 4] + halfY;
-							let maxZ = bounds[lb + 5] + halfZ;
-							let tMin = 0;
-							let tMax = castLen;
-							if (Math.abs(dirX) < 1e-10) {
-								if (originX < minX || originX > maxX) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
-							} else {
-								const invD = 1 / dirX;
-								const t0 = (minX - originX) * invD;
-								const t1 = (maxX - originX) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
+			if (!(_castStackDist[stackSize] >= bestFraction)) {
+				const left = topo[nodeIndex * 5 + 1];
+				if (left !== -1) {
+					const right = topo[nodeIndex * 5 + 2];
+					const lb = left * 6;
+					const rb = right * 6;
+					let _rayDistanceToBox3__result_3000005;
+					_compilecat_inline_label_3000005: {
+						let minX = bounds[lb] - halfX;
+						let minY = bounds[lb + 1] - halfY;
+						let minZ = bounds[lb + 2] - halfZ;
+						let maxX = bounds[lb + 3] + halfX;
+						let maxY = bounds[lb + 4] + halfY;
+						let maxZ = bounds[lb + 5] + halfZ;
+						let tMin = 0;
+						let tMax = castLen;
+						if (Math.abs(dirX) < 1e-10) {
+							if (originX < minX || originX > maxX) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
 							}
-							if (Math.abs(dirY) < 1e-10) {
-								if (originY < minY || originY > maxY) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
-							} else {
-								const invD = 1 / dirY;
-								const t0 = (minY - originY) * invD;
-								const t1 = (maxY - originY) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
-							}
-							if (Math.abs(dirZ) < 1e-10) {
-								if (originZ < minZ || originZ > maxZ) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
-							} else {
-								const invD = 1 / dirZ;
-								const t0 = (minZ - originZ) * invD;
-								const t1 = (maxZ - originZ) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000005 = Infinity;
-									break _compilecat_inline_label_3000005;
-								}
-							}
-							_rayDistanceToBox3__result_3000005 = tMin >= 0 ? tMin / castLen : Infinity;
-						}
-						const leftDist = _rayDistanceToBox3__result_3000005;
-						let _rayDistanceToBox3__result_3000006;
-						_compilecat_inline_label_3000006: {
-							let minX = bounds[rb] - halfX;
-							let minY = bounds[rb + 1] - halfY;
-							let minZ = bounds[rb + 2] - halfZ;
-							let maxX = bounds[rb + 3] + halfX;
-							let maxY = bounds[rb + 4] + halfY;
-							let maxZ = bounds[rb + 5] + halfZ;
-							let tMin = 0;
-							let tMax = castLen;
-							if (Math.abs(dirX) < 1e-10) {
-								if (originX < minX || originX > maxX) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							} else {
-								const invD = 1 / dirX;
-								const t0 = (minX - originX) * invD;
-								const t1 = (maxX - originX) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							}
-							if (Math.abs(dirY) < 1e-10) {
-								if (originY < minY || originY > maxY) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							} else {
-								const invD = 1 / dirY;
-								const t0 = (minY - originY) * invD;
-								const t1 = (maxY - originY) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							}
-							if (Math.abs(dirZ) < 1e-10) {
-								if (originZ < minZ || originZ > maxZ) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							} else {
-								const invD = 1 / dirZ;
-								const t0 = (minZ - originZ) * invD;
-								const t1 = (maxZ - originZ) * invD;
-								const tNear = t0 < t1 ? t0 : t1;
-								const tFar = t0 < t1 ? t1 : t0;
-								tMin = tNear > tMin ? tNear : tMin;
-								tMax = tFar < tMax ? tFar : tMax;
-								if (tMax < tMin) {
-									_rayDistanceToBox3__result_3000006 = Infinity;
-									break _compilecat_inline_label_3000006;
-								}
-							}
-							_rayDistanceToBox3__result_3000006 = tMin >= 0 ? tMin / castLen : Infinity;
-						}
-						const rightDist = _rayDistanceToBox3__result_3000006;
-						if (leftDist < rightDist) {
-							_castStackNode[stackSize] = right;
-							_castStackDist[stackSize] = rightDist;
-							stackSize++;
-							_castStackNode[stackSize] = left;
-							_castStackDist[stackSize] = leftDist;
-							stackSize++;
 						} else {
-							_castStackNode[stackSize] = left;
-							_castStackDist[stackSize] = leftDist;
-							stackSize++;
+							const invD = 1 / dirX;
+							const t0 = (minX - originX) * invD;
+							const t1 = (maxX - originX) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
+							}
+						}
+						if (Math.abs(dirY) < 1e-10) {
+							if (originY < minY || originY > maxY) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
+							}
+						} else {
+							const invD = 1 / dirY;
+							const t0 = (minY - originY) * invD;
+							const t1 = (maxY - originY) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
+							}
+						}
+						if (Math.abs(dirZ) < 1e-10) {
+							if (originZ < minZ || originZ > maxZ) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
+							}
+						} else {
+							const invD = 1 / dirZ;
+							const t0 = (minZ - originZ) * invD;
+							const t1 = (maxZ - originZ) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000005 = Infinity;
+								break _compilecat_inline_label_3000005;
+							}
+						}
+						_rayDistanceToBox3__result_3000005 = tMin >= 0 ? tMin / castLen : Infinity;
+					}
+					const leftDist = _rayDistanceToBox3__result_3000005;
+					let _rayDistanceToBox3__result_3000006;
+					_compilecat_inline_label_3000006: {
+						let minX = bounds[rb] - halfX;
+						let minY = bounds[rb + 1] - halfY;
+						let minZ = bounds[rb + 2] - halfZ;
+						let maxX = bounds[rb + 3] + halfX;
+						let maxY = bounds[rb + 4] + halfY;
+						let maxZ = bounds[rb + 5] + halfZ;
+						let tMin = 0;
+						let tMax = castLen;
+						if (Math.abs(dirX) < 1e-10) {
+							if (originX < minX || originX > maxX) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						} else {
+							const invD = 1 / dirX;
+							const t0 = (minX - originX) * invD;
+							const t1 = (maxX - originX) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						}
+						if (Math.abs(dirY) < 1e-10) {
+							if (originY < minY || originY > maxY) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						} else {
+							const invD = 1 / dirY;
+							const t0 = (minY - originY) * invD;
+							const t1 = (maxY - originY) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						}
+						if (Math.abs(dirZ) < 1e-10) {
+							if (originZ < minZ || originZ > maxZ) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						} else {
+							const invD = 1 / dirZ;
+							const t0 = (minZ - originZ) * invD;
+							const t1 = (maxZ - originZ) * invD;
+							const tNear = t0 < t1 ? t0 : t1;
+							const tFar = t0 < t1 ? t1 : t0;
+							tMin = tNear > tMin ? tNear : tMin;
+							tMax = tFar < tMax ? tFar : tMax;
+							if (tMax < tMin) {
+								_rayDistanceToBox3__result_3000006 = Infinity;
+								break _compilecat_inline_label_3000006;
+							}
+						}
+						_rayDistanceToBox3__result_3000006 = tMin >= 0 ? tMin / castLen : Infinity;
+					}
+					const rightDist = _rayDistanceToBox3__result_3000006;
+					if (leftDist < rightDist) {
+						if (rightDist < bestFraction) {
 							_castStackNode[stackSize] = right;
 							_castStackDist[stackSize] = rightDist;
 							stackSize++;
 						}
+						if (leftDist < bestFraction) {
+							_castStackNode[stackSize] = left;
+							_castStackDist[stackSize] = leftDist;
+							stackSize++;
+						}
 					} else {
-						const body = world.bodies.pool[topo[nodeIndex * 5 + 3]];
-						if (body && !body._pooled && (queryFilter.collisionGroups & body.collisionMask) !== 0 && (body.collisionGroups & queryFilter.collisionMask) !== 0 && queryFilter.enabledObjectLayers[body.objectLayer] === 1 && (!queryFilter.bodyFilter || queryFilter.bodyFilter(body))) {
-							let _rayHitsBox3__result_3000008;
-							_compilecat_inline_label_3000008: {
-								let minX = body.aabb[0] - halfX;
-								let minY = body.aabb[1] - halfY;
-								let minZ = body.aabb[2] - halfZ;
-								let maxX = body.aabb[3] + halfX;
-								let maxY = body.aabb[4] + halfY;
-								let maxZ = body.aabb[5] + halfZ;
-								let tNear = 0;
-								let tFar = castLen;
-								if (Math.abs(dirX) < 1e-10) {
-									if (originX < minX || originX > maxX) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
-								} else {
-									const invX = 1 / dirX;
-									let tEnterX = (minX - originX) * invX;
-									let tExitX = (maxX - originX) * invX;
-									if (invX < 0) {
-										const tmp = tEnterX;
-										tEnterX = tExitX;
-										tExitX = tmp;
-									}
-									if (tEnterX > tNear) tNear = tEnterX;
-									if (tExitX < tFar) tFar = tExitX;
-									if (tFar < tNear) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
+						if (leftDist < bestFraction) {
+							_castStackNode[stackSize] = left;
+							_castStackDist[stackSize] = leftDist;
+							stackSize++;
+						}
+						if (rightDist < bestFraction) {
+							_castStackNode[stackSize] = right;
+							_castStackDist[stackSize] = rightDist;
+							stackSize++;
+						}
+					}
+				} else {
+					const body = world.bodies.pool[topo[nodeIndex * 5 + 3]];
+					if (body && !body._pooled && (queryFilter.collisionGroups & body.collisionMask) !== 0 && (body.collisionGroups & queryFilter.collisionMask) !== 0 && queryFilter.enabledObjectLayers[body.objectLayer] === 1 && (!queryFilter.bodyFilter || queryFilter.bodyFilter(body))) {
+						let _rayHitsBox3__result_3000007;
+						_compilecat_inline_label_3000007: {
+							let minX = body.aabb[0] - halfX;
+							let minY = body.aabb[1] - halfY;
+							let minZ = body.aabb[2] - halfZ;
+							let maxX = body.aabb[3] + halfX;
+							let maxY = body.aabb[4] + halfY;
+							let maxZ = body.aabb[5] + halfZ;
+							let tNear = 0;
+							let tFar = castLen;
+							if (Math.abs(dirX) < 1e-10) {
+								if (originX < minX || originX > maxX) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
 								}
-								if (Math.abs(dirY) < 1e-10) {
-									if (originY < minY || originY > maxY) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
-								} else {
-									const invY = 1 / dirY;
-									let tEnterY = (minY - originY) * invY;
-									let tExitY = (maxY - originY) * invY;
-									if (invY < 0) {
-										const tmp = tEnterY;
-										tEnterY = tExitY;
-										tExitY = tmp;
-									}
-									if (tEnterY > tNear) tNear = tEnterY;
-									if (tExitY < tFar) tFar = tExitY;
-									if (tFar < tNear) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
+							} else {
+								const invX = 1 / dirX;
+								let tEnterX = (minX - originX) * invX;
+								let tExitX = (maxX - originX) * invX;
+								if (invX < 0) {
+									const tmp = tEnterX;
+									tEnterX = tExitX;
+									tExitX = tmp;
 								}
-								if (Math.abs(dirZ) < 1e-10) {
-									if (originZ < minZ || originZ > maxZ) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
-								} else {
-									const invZ = 1 / dirZ;
-									let tEnterZ = (minZ - originZ) * invZ;
-									let tExitZ = (maxZ - originZ) * invZ;
-									if (invZ < 0) {
-										const tmp = tEnterZ;
-										tEnterZ = tExitZ;
-										tExitZ = tmp;
-									}
-									if (tEnterZ > tNear) tNear = tEnterZ;
-									if (tExitZ < tFar) tFar = tExitZ;
-									if (tFar < tNear) {
-										_rayHitsBox3__result_3000008 = false;
-										break _compilecat_inline_label_3000008;
-									}
+								if (tEnterX > tNear) tNear = tEnterX;
+								if (tExitX < tFar) tFar = tExitX;
+								if (tFar < tNear) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
 								}
-								_rayHitsBox3__result_3000008 = true;
 							}
-							if (_rayHitsBox3__result_3000008) {
-								visitor.visit(body);
-								if (visitor.shouldExit) return;
+							if (Math.abs(dirY) < 1e-10) {
+								if (originY < minY || originY > maxY) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
+								}
+							} else {
+								const invY = 1 / dirY;
+								let tEnterY = (minY - originY) * invY;
+								let tExitY = (maxY - originY) * invY;
+								if (invY < 0) {
+									const tmp = tEnterY;
+									tEnterY = tExitY;
+									tExitY = tmp;
+								}
+								if (tEnterY > tNear) tNear = tEnterY;
+								if (tExitY < tFar) tFar = tExitY;
+								if (tFar < tNear) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
+								}
 							}
+							if (Math.abs(dirZ) < 1e-10) {
+								if (originZ < minZ || originZ > maxZ) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
+								}
+							} else {
+								const invZ = 1 / dirZ;
+								let tEnterZ = (minZ - originZ) * invZ;
+								let tExitZ = (maxZ - originZ) * invZ;
+								if (invZ < 0) {
+									const tmp = tEnterZ;
+									tEnterZ = tExitZ;
+									tExitZ = tmp;
+								}
+								if (tEnterZ > tNear) tNear = tEnterZ;
+								if (tExitZ < tFar) tFar = tExitZ;
+								if (tFar < tNear) {
+									_rayHitsBox3__result_3000007 = false;
+									break _compilecat_inline_label_3000007;
+								}
+							}
+							_rayHitsBox3__result_3000007 = true;
+						}
+						if (_rayHitsBox3__result_3000007) {
+							visitor.visit(body);
+							if (visitor.shouldExit) return;
+							bestFraction = visitor.earlyOutFraction ?? Infinity;
 						}
 					}
 				}
@@ -6189,10 +6186,10 @@ const _sweep_fatB = /* @__PURE__ */ create$41();
 /**
 * find potentially colliding body pairs, updates world.pairs.collidingPairs.
 *
-* moved-only persistent-pair broadphase (box2d-v3 / bullet architecture): a persistent pair set is
-* populated by fat-AABB queries from bodies that moved (escaped their fat leaf) or were added, then
-* swept every frame. the emitted pairs array is semantically identical to the old per-active-body
-* scan (same pair set each frame; intra-pair/record order may differ).
+* moved-only persistent-pair broadphase: a persistent pair set is populated by fat-AABB queries from
+* bodies that moved (escaped their fat leaf) or were added, then swept every frame. the emitted pairs
+* array is semantically identical to the old per-active-body scan (same pair set each frame;
+* intra-pair/record order may differ).
 */
 function findCollidingPairs(world, speculativeContactDistance, listener) {
 	const layers = world.settings.layers;
@@ -13641,6 +13638,7 @@ const _castShape_aabb = /* @__PURE__ */ create$41();
 const _castShape_mat4 = /* @__PURE__ */ create$46();
 const CastShapeBodyVisitor = {
 	shouldExit: false,
+	earlyOutFraction: 0,
 	collector: null,
 	settings: null,
 	shape: null,
@@ -13654,10 +13652,12 @@ const CastShapeBodyVisitor = {
 		collector.bodyIdB = body.id;
 		castShapeVsShape(collector, settings, shape, EMPTY_SUB_SHAPE_ID, 0, position[0], position[1], position[2], quaternion[0], quaternion[1], quaternion[2], quaternion[3], scale[0], scale[1], scale[2], displacement[0], displacement[1], displacement[2], body.shape, EMPTY_SUB_SHAPE_ID, 0, body.position[0], body.position[1], body.position[2], body.quaternion[0], body.quaternion[1], body.quaternion[2], body.quaternion[3], 1, 1, 1);
 		this.shouldExit = collector.shouldEarlyOut();
+		this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
 	},
 	set(collector, settings, shape, position, quaternion, scale, displacement) {
 		this.collector = collector;
 		this.settings = settings;
+		this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
 		this.shape = shape;
 		this.position[0] = position[0];
 		this.position[1] = position[1];
@@ -24186,8 +24186,7 @@ const _castRayVsBox_origin = /* @__PURE__ */ create$48();
 const _castRayVsBox_dir = /* @__PURE__ */ create$48();
 const _castRayVsBox_hit = /* @__PURE__ */ createCastRayHit();
 /**
-* Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes — the same
-* specialization jolt (BoxShape::CastRay → RayAABox) and meep (ray_box_local) ship. This is not an
+* Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes. Not an
 * approximation: the gjk path already casts against a sharp box of |scale|·halfExtents with zero
 * convex radius (setBoxSupport under INCLUDE_CONVEX_RADIUS), so this is bit-equivalent geometry,
 * exact rather than iterated to a 1e-3 tolerance. Reporting matches castRayVsConvex (entry hit,

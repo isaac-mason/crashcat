@@ -1066,40 +1066,39 @@ export function castAABB(
     const dirY = castLen > 0 ? displacement[1] / castLen : 0;
     const dirZ = castLen > 0 ? displacement[2] / castLen : 0;
 
+    // closest-hit fraction so far (positive early-out for shape casts). a node whose expanded-AABB
+    // entry fraction is >= this can't hold a closer impact and is pruned. distances are normalized
+    // to [0, 1] of the cast length. visitors that don't cast omit it → Infinity → only misses rejected.
+    let bestFraction = visitor.earlyOutFraction ?? Infinity;
+
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
-    _castStackDist[stackSize] = -Infinity; // root always visited
+    const rootBase = dbvt.root * STRIDE_BOUNDS;
+    _castStackDist[stackSize] = rayDistanceToBox3(
+        originX,
+        originY,
+        originZ,
+        dirX,
+        dirY,
+        dirZ,
+        castLen,
+        bounds[rootBase] - halfX,
+        bounds[rootBase + 1] - halfY,
+        bounds[rootBase + 2] - halfZ,
+        bounds[rootBase + 3] + halfX,
+        bounds[rootBase + 4] + halfY,
+        bounds[rootBase + 5] + halfZ,
+    );
     stackSize++;
 
     while (stackSize > 0) {
         stackSize--;
         const nodeIndex = _castStackNode[stackSize];
         const nodeDistance = _castStackDist[stackSize];
-        const nb = nodeIndex * STRIDE_BOUNDS;
 
-        // early-out: skip nodes beyond cast length
-        if (nodeDistance > castLen) {
-            continue;
-        }
-
-        // ray-slab test against node aabb expanded by the shape's half extents (minkowski sum)
-        if (
-            !rayHitsBox3(
-                originX,
-                originY,
-                originZ,
-                dirX,
-                dirY,
-                dirZ,
-                castLen,
-                bounds[nb] - halfX,
-                bounds[nb + 1] - halfY,
-                bounds[nb + 2] - halfZ,
-                bounds[nb + 3] + halfX,
-                bounds[nb + 4] + halfY,
-                bounds[nb + 5] + halfZ,
-            )
-        ) {
+        // prune misses (Infinity) and nodes past the closest impact so far (best-t). the expanded
+        // node was already slab-tested when its parent pushed it, so no re-test here.
+        if (nodeDistance >= bestFraction) {
             continue;
         }
 
@@ -1143,21 +1142,29 @@ export function castAABB(
                 bounds[rb + 5] + halfZ,
             );
 
-            // push in reverse order (furthest first) so closest is popped first
+            // push furthest first (closest popped first), culling children past best-t
             if (leftDist < rightDist) {
-                _castStackNode[stackSize] = right;
-                _castStackDist[stackSize] = rightDist;
-                stackSize++;
-                _castStackNode[stackSize] = left;
-                _castStackDist[stackSize] = leftDist;
-                stackSize++;
+                if (rightDist < bestFraction) {
+                    _castStackNode[stackSize] = right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
+                if (leftDist < bestFraction) {
+                    _castStackNode[stackSize] = left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
             } else {
-                _castStackNode[stackSize] = left;
-                _castStackDist[stackSize] = leftDist;
-                stackSize++;
-                _castStackNode[stackSize] = right;
-                _castStackDist[stackSize] = rightDist;
-                stackSize++;
+                if (leftDist < bestFraction) {
+                    _castStackNode[stackSize] = left;
+                    _castStackDist[stackSize] = leftDist;
+                    stackSize++;
+                }
+                if (rightDist < bestFraction) {
+                    _castStackNode[stackSize] = right;
+                    _castStackDist[stackSize] = rightDist;
+                    stackSize++;
+                }
             }
             continue;
         }
@@ -1214,6 +1221,9 @@ export function castAABB(
         if (visitor.shouldExit) {
             return;
         }
+
+        // a hit may have shrunk the collector's early-out fraction — tighten the pruning bound
+        bestFraction = visitor.earlyOutFraction ?? Infinity;
     }
 }
 

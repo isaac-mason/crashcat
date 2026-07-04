@@ -29,6 +29,7 @@ import type { AxisConstraintPart } from './axis-constraint-part.js';
  * @returns new total lambda (unclamped)
  *
  * @inline
+ * @optimize
  */
 export declare function getTotalLambda(part: AxisConstraintPart, linVelA: Vec3, angVelA: Vec3, linVelB: Vec3, angVelB: Vec3, movingA: boolean, movingB: boolean, axis: Vec3): number;
 /**
@@ -50,6 +51,7 @@ export declare function getTotalLambda(part: AxisConstraintPart, linVelA: Vec3, 
  * @returns true if impulse was applied
  *
  * @inline
+ * @optimize
  */
 export declare function applyLambda(part: AxisConstraintPart, linVelA: Vec3, angVelA: Vec3, linVelB: Vec3, angVelB: Vec3, isDynamicA: boolean, isDynamicB: boolean, invMassA: number, invMassB: number, axis: Vec3, totalLambda: number): boolean;
 /**
@@ -71,5 +73,6 @@ export declare function applyLambda(part: AxisConstraintPart, linVelA: Vec3, ang
  * @returns true if impulse was applied
  *
  * @inline
+ * @optimize
  */
 export declare function warmStart(part: AxisConstraintPart, linVelA: Vec3, angVelA: Vec3, linVelB: Vec3, angVelB: Vec3, isDynamicA: boolean, isDynamicB: boolean, invMassA: number, invMassB: number, axis: Vec3, warmStartRatio: number): boolean;

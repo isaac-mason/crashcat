@@ -103,6 +103,7 @@ const _castShape_mat4 = /* @__PURE__ */ mat4.create();
 
 const CastShapeBodyVisitor = {
     shouldExit: false,
+    earlyOutFraction: 0,
     collector: null! as CastShapeCollector,
     settings: null! as CastShapeSettings,
     shape: null! as Shape,
@@ -152,6 +153,9 @@ const CastShapeBodyVisitor = {
         );
 
         this.shouldExit = collector.shouldEarlyOut();
+        // positive early-out fraction (floored at 0, since a shape cast may hit at fraction 0) so
+        // castAABB can prune nodes past the closest impact so far
+        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
     },
     set(
         collector: CastShapeCollector,
@@ -164,6 +168,7 @@ const CastShapeBodyVisitor = {
     ) {
         this.collector = collector;
         this.settings = settings;
+        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
         this.shape = shape;
         this.position[0] = position[0];
         this.position[1] = position[1];

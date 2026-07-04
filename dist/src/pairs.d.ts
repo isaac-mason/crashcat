@@ -106,9 +106,9 @@ export declare function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: R
 /**
  * find potentially colliding body pairs, updates world.pairs.collidingPairs.
  *
- * moved-only persistent-pair broadphase (box2d-v3 / bullet architecture): a persistent pair set is
- * populated by fat-AABB queries from bodies that moved (escaped their fat leaf) or were added, then
- * swept every frame. the emitted pairs array is semantically identical to the old per-active-body
- * scan (same pair set each frame; intra-pair/record order may differ).
+ * moved-only persistent-pair broadphase: a persistent pair set is populated by fat-AABB queries from
+ * bodies that moved (escaped their fat leaf) or were added, then swept every frame. the emitted pairs
+ * array is semantically identical to the old per-active-body scan (same pair set each frame;
+ * intra-pair/record order may differ).
  */
 export declare function findCollidingPairs(world: World, speculativeContactDistance: number, listener: Listener | undefined): void;
