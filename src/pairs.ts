@@ -164,9 +164,8 @@ function shouldReportPair(layers: Layers, activeBody: RigidBody, otherBody: Rigi
     // self-collision + deduplication: report only when activeBody.activeIndex < otherBody.activeIndex.
     // sleeping and static bodies have activeIndex = INACTIVE_BODY_INDEX (the max value), so an
     // active body always reports pairs with them; two active bodies report exactly once. bodies
-    // are woken only AFTER the pair loop, so the active list is frozen while querying — no
-    // mid-step activation ordering cases exist (unlike jolt, which relies on activating bodies
-    // appending to the end of the active list).
+    // are woken only AFTER the pair loop, so the active list is frozen while querying — there are
+    // no mid-step activation ordering cases to handle.
     if (activeBody.activeIndex >= otherBody.activeIndex) {
         return false;
     }
@@ -412,10 +411,10 @@ const _sweep_fatB = /* @__PURE__ */ box3.create();
 /**
  * find potentially colliding body pairs, updates world.pairs.collidingPairs.
  *
- * moved-only persistent-pair broadphase (box2d-v3 / bullet architecture): a persistent pair set is
- * populated by fat-AABB queries from bodies that moved (escaped their fat leaf) or were added, then
- * swept every frame. the emitted pairs array is semantically identical to the old per-active-body
- * scan (same pair set each frame; intra-pair/record order may differ).
+ * moved-only persistent-pair broadphase: a persistent pair set is populated by fat-AABB queries from
+ * bodies that moved (escaped their fat leaf) or were added, then swept every frame. the emitted pairs
+ * array is semantically identical to the old per-active-body scan (same pair set each frame;
+ * intra-pair/record order may differ).
  */
 export function findCollidingPairs(world: World, speculativeContactDistance: number, listener: Listener | undefined): void {
     const layers = world.settings.layers;
