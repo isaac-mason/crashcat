@@ -26,6 +26,9 @@ export type DBVT = {
     /** the fat-leaf expansion margin (in world units) applied to each leaf AABB */
     expansionMargin: number;
 
+    /** rebuild marks the top N levels `changed` so they always re-partition */
+    maxDepthMarkChanged: number;
+
     /**
      * any structural change (add / remove / fat-leaf escape) since the last rebuild. gates
      * the dirty-gated rebuild in broadphase.optimize — a tree that no body has disturbed
@@ -63,6 +66,7 @@ export function create(): DBVT {
         freeNodeIndices: [],
         root: -1,
         expansionMargin: 0.05,
+        maxDepthMarkChanged: MAX_DEPTH_MARK_CHANGED,
         dirty: false,
     };
 
@@ -553,12 +557,13 @@ function buildTree(dbvt: DBVT, begin: number, end: number, maxDepthMarkChanged: 
  * partial: unchanged internal subtrees graft in whole (indices untouched); only changed internals
  * are recycled. O(m log m) in the changed unit count m, not the body count.
  */
-export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED): void {
+export function rebuild(dbvt: DBVT): void {
     dbvt.dirty = false;
     if (dbvt.root === -1) return;
 
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
+    const maxDepthMarkChanged = dbvt.maxDepthMarkChanged;
 
     // phase 1: collect units (leaves + unchanged-internal subtree roots) and free changed internals
     _buildUnits.length = 0;

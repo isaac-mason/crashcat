@@ -432,7 +432,8 @@ describe('DBVT', () => {
             for (let i = 0; i < 64; i++) bodies.push(makeBody(world, i, 0, 0, i + 1, 1, 1));
             for (const b of bodies) b.dbvtNode = dbvt.add(tree, b);
             // shallow always-rebuild depth so most of the tree is eligible to graft
-            dbvt.rebuild(tree, 1);
+            tree.maxDepthMarkChanged = 1;
+            dbvt.rebuild(tree);
 
             // snapshot a settled (unchanged) internal subtree's structure
             const someLeaf = bodies[10].dbvtNode;
@@ -445,7 +446,7 @@ describe('DBVT', () => {
             const far = bodies[63];
             box3.set(far.aabb, 500, 0, 0, 501, 1, 1);
             dbvt.update(tree, far);
-            dbvt.rebuild(tree, 1);
+            dbvt.rebuild(tree);
 
             // the untouched subtree grafted in unchanged (same node indices + structure)
             expect(snapshotSubtree(tree, subtreeRoot)).toEqual(before);
