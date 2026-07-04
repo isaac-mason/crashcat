@@ -1,0 +1,438 @@
+{
+  "scenario": "sea-of-static-boxes",
+  "date": "2026-07-04T10:41:56.254Z",
+  "git": {
+    "rev": "845e848",
+    "dirty": true
+  },
+  "node": "v24.10.0",
+  "cpu": "Apple M1 Pro",
+  "wallMs": 4098.8,
+  "attributedMs": 3916.6,
+  "startupExcludedMs": 181.8,
+  "sampleCount": 3284,
+  "categories": [
+    {
+      "category": "narrowphase",
+      "ms": 1997,
+      "pct": 51
+    },
+    {
+      "category": "broadphase",
+      "ms": 1210.2,
+      "pct": 30.9
+    },
+    {
+      "category": "shapes",
+      "ms": 389.2,
+      "pct": 9.9
+    },
+    {
+      "category": "crashcat-util",
+      "ms": 199.6,
+      "pct": 5.1
+    },
+    {
+      "category": "bench-harness",
+      "ms": 47.2,
+      "pct": 1.2
+    },
+    {
+      "category": "ccd",
+      "ms": 21.4,
+      "pct": 0.5
+    },
+    {
+      "category": "runtime",
+      "ms": 21.2,
+      "pct": 0.5
+    },
+    {
+      "category": "solver",
+      "ms": 11,
+      "pct": 0.3
+    },
+    {
+      "category": "math",
+      "ms": 10.4,
+      "pct": 0.3
+    },
+    {
+      "category": "step",
+      "ms": 4.3,
+      "pct": 0.1
+    },
+    {
+      "category": "other",
+      "ms": 2.5,
+      "pct": 0.1
+    },
+    {
+      "category": "body",
+      "ms": 2.5,
+      "pct": 0.1
+    }
+  ],
+  "hotspots": [
+    {
+      "name": "castRay$3",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 781,
+      "location": "src/broadphase/dbvt.ts:781",
+      "ms": 1178,
+      "pct": 30.1
+    },
+    {
+      "name": "rayDistanceToBox3",
+      "file": "src/collision/cast-utils.ts",
+      "line": 20,
+      "location": "src/collision/cast-utils.ts:20",
+      "ms": 967.4,
+      "pct": 24.7
+    },
+    {
+      "name": "gjkCastRay",
+      "file": "src/collision/gjk.ts",
+      "line": 729,
+      "location": "src/collision/gjk.ts:729",
+      "ms": 765.9,
+      "pct": 19.6
+    },
+    {
+      "name": "castRayVsConvex",
+      "file": "src/shapes/convex.ts",
+      "line": 43,
+      "location": "src/shapes/convex.ts:43",
+      "ms": 388,
+      "pct": 9.9
+    },
+    {
+      "name": "findCollidingPairs",
+      "file": "src/pairs.ts",
+      "line": 409,
+      "location": "src/pairs.ts:409",
+      "ms": 191,
+      "pct": 4.9
+    },
+    {
+      "name": "getSupport",
+      "file": "src/collision/support.ts",
+      "line": 139,
+      "location": "src/collision/support.ts:139",
+      "ms": 177,
+      "pct": 4.5
+    },
+    {
+      "name": "setBoxSupport",
+      "file": "src/collision/support.ts",
+      "line": 353,
+      "location": "src/collision/support.ts:353",
+      "ms": 69,
+      "pct": 1.8
+    },
+    {
+      "name": "(anonymous)",
+      "file": "bench/sea-of-static-boxes.bench.ts",
+      "line": null,
+      "location": "bench/sea-of-static-boxes.bench.ts",
+      "ms": 43,
+      "pct": 1.1
+    },
+    {
+      "name": "clear",
+      "file": "src/ccd.ts",
+      "line": 107,
+      "location": "src/ccd.ts:107",
+      "ms": 21.4,
+      "pct": 0.5
+    },
+    {
+      "name": "(garbage collector)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 14.9,
+      "pct": 0.4
+    },
+    {
+      "name": "addHit",
+      "file": "src/collision/cast-ray-vs-shape.ts",
+      "line": 131,
+      "location": "src/collision/cast-ray-vs-shape.ts:131",
+      "ms": 13.9,
+      "pct": 0.4
+    },
+    {
+      "name": "intersectAABBFatLeaves",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 546,
+      "location": "src/broadphase/dbvt.ts:546",
+      "ms": 13.5,
+      "pct": 0.3
+    },
+    {
+      "name": "prepare",
+      "file": "src/islands.ts",
+      "line": 64,
+      "location": "src/islands.ts:64",
+      "ms": 11,
+      "pct": 0.3
+    },
+    {
+      "name": "insertLeaf",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 132,
+      "location": "src/broadphase/dbvt.ts:132",
+      "ms": 9.9,
+      "pct": 0.3
+    },
+    {
+      "name": "set",
+      "file": "…/node_modules/mathcat/dist/raycast3.js",
+      "line": 36,
+      "location": "…/node_modules/mathcat/dist/raycast3.js:36",
+      "ms": 6.3,
+      "pct": 0.2
+    },
+    {
+      "name": "updateWorld",
+      "file": "src/update.ts",
+      "line": 46,
+      "location": "src/update.ts:46",
+      "ms": 4.3,
+      "pct": 0.1
+    },
+    {
+      "name": "(idle)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 3.8,
+      "pct": 0.1
+    },
+    {
+      "name": "add$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 284,
+      "location": "src/broadphase/dbvt.ts:284",
+      "ms": 3.7,
+      "pct": 0.1
+    },
+    {
+      "name": "rayHitsBox3",
+      "file": "src/collision/cast-utils.ts",
+      "line": 114,
+      "location": "src/collision/cast-utils.ts:114",
+      "ms": 2.5,
+      "pct": 0.1
+    },
+    {
+      "name": "linkPairEdge",
+      "file": "src/pairs.ts",
+      "line": 274,
+      "location": "src/pairs.ts:274",
+      "ms": 2.5,
+      "pct": 0.1
+    },
+    {
+      "name": "sPartition",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 360,
+      "location": "src/broadphase/dbvt.ts:360",
+      "ms": 2.2,
+      "pct": 0.1
+    },
+    {
+      "name": "buildField",
+      "file": "bench/sea-of-static-boxes.bench.ts",
+      "line": null,
+      "location": "bench/sea-of-static-boxes.bench.ts",
+      "ms": 1.6,
+      "pct": 0
+    },
+    {
+      "name": "Event",
+      "file": "node:internal/event_target",
+      "line": null,
+      "location": "node:internal/event_target",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "__exportAll",
+      "file": "file:///Users/isaacmason/Development/crashcat/dist/index.js",
+      "line": 3,
+      "location": "file:///Users/isaacmason/Development/crashcat/dist/index.js:3",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "create$32",
+      "file": "src/body/rigid-body.ts",
+      "line": 390,
+      "location": "src/body/rigid-body.ts:390",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "addPairRecord",
+      "file": "src/pairs.ts",
+      "line": 248,
+      "location": "src/pairs.ts:248",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "(anonymous)",
+      "file": "file:///Users/isaacmason/Development/crashcat/dist/index.js",
+      "line": 1,
+      "location": "file:///Users/isaacmason/Development/crashcat/dist/index.js:1",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "create$41",
+      "file": "…/node_modules/mathcat/dist/box3.js",
+      "line": 8,
+      "location": "…/node_modules/mathcat/dist/box3.js:8",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "makeRigidBody",
+      "file": "src/body/rigid-body.ts",
+      "line": 255,
+      "location": "src/body/rigid-body.ts:255",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "create$13",
+      "file": "src/shapes/box.ts",
+      "line": 48,
+      "location": "src/shapes/box.ts:48",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "(program)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "rand01",
+      "file": "bench/sea-of-static-boxes.bench.ts",
+      "line": null,
+      "location": "bench/sea-of-static-boxes.bench.ts",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "castRay",
+      "file": "src/query.ts",
+      "line": 80,
+      "location": "src/query.ts:80",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "optimize",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 82,
+      "location": "src/broadphase/broadphase.ts:82",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "union",
+      "file": "…/node_modules/mathcat/dist/box3.js",
+      "line": 231,
+      "location": "…/node_modules/mathcat/dist/box3.js:231",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "getPairEdgeRecord",
+      "file": "src/pairs.ts",
+      "line": 129,
+      "location": "src/pairs.ts:129",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "expandByMargin",
+      "file": "…/node_modules/mathcat/dist/box3.js",
+      "line": 214,
+      "location": "…/node_modules/mathcat/dist/box3.js:214",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "(anonymous)",
+      "file": "bench/run-scenario.ts",
+      "line": null,
+      "location": "bench/run-scenario.ts",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "name": "castRay$2",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 112,
+      "location": "src/broadphase/broadphase.ts:112",
+      "ms": 1.2,
+      "pct": 0
+    },
+    {
+      "name": "createInvertedCollector",
+      "file": "src/collision/collide-shape-vs-shape.ts",
+      "line": 223,
+      "location": "src/collision/collide-shape-vs-shape.ts:223",
+      "ms": 1.2,
+      "pct": 0
+    },
+    {
+      "name": "visit",
+      "file": "src/pairs.ts",
+      "line": 224,
+      "location": "src/pairs.ts:224",
+      "ms": 1.2,
+      "pct": 0
+    },
+    {
+      "name": "visit",
+      "file": "src/query.ts",
+      "line": 28,
+      "location": "src/query.ts:28",
+      "ms": 1.1,
+      "pct": 0
+    },
+    {
+      "name": "transformQuat",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 567,
+      "location": "…/node_modules/mathcat/dist/vec3.js:567",
+      "ms": 0.3,
+      "pct": 0
+    },
+    {
+      "name": "buildTree",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 412,
+      "location": "src/broadphase/dbvt.ts:412",
+      "ms": 0.3,
+      "pct": 0
+    },
+    {
+      "name": "rebuild",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 497,
+      "location": "src/broadphase/dbvt.ts:497",
+      "ms": 0.1,
+      "pct": 0
+    }
+  ]
+}
