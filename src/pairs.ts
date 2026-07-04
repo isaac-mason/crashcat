@@ -394,9 +394,12 @@ export function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: RigidBody
     }
 }
 
+const _discovery_fatLeaf = /* @__PURE__ */ box3.create();
 const _discovery_expandedFatAABB = /* @__PURE__ */ box3.create();
 const _sweep_expandedAABB = /* @__PURE__ */ box3.create();
 const _sweep_expandedFatAABB = /* @__PURE__ */ box3.create();
+const _sweep_fatA = /* @__PURE__ */ box3.create();
+const _sweep_fatB = /* @__PURE__ */ box3.create();
 
 /**
  * find potentially colliding body pairs, updates world.pairs.collidingPairs.
@@ -429,7 +432,7 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         const bodyBroadphaseLayer = body.broadphaseLayer;
 
         // fat leaf AABB expanded by the speculative distance — the discovery reach
-        const fatLeaf = broadphase.dbvts[bodyBroadphaseLayer].nodes[body.dbvtNode].aabb;
+        const fatLeaf = dbvt.readNodeAabb(_discovery_fatLeaf, broadphase.dbvts[bodyBroadphaseLayer], body.dbvtNode);
         box3.expandByMargin(_discovery_expandedFatAABB, fatLeaf, speculativeContactDistance);
 
         for (let otherBroadphaseLayer = 0; otherBroadphaseLayer < broadphase.dbvts.length; otherBroadphaseLayer++) {
@@ -486,8 +489,8 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
             removePairRecordAt(pairs, contacts, pool, rec, listener, false);
             continue;
         }
-        const fatA = broadphase.dbvts[bodyA.broadphaseLayer].nodes[bodyA.dbvtNode].aabb;
-        const fatB = broadphase.dbvts[bodyB.broadphaseLayer].nodes[bodyB.dbvtNode].aabb;
+        const fatA = dbvt.readNodeAabb(_sweep_fatA, broadphase.dbvts[bodyA.broadphaseLayer], bodyA.dbvtNode);
+        const fatB = dbvt.readNodeAabb(_sweep_fatB, broadphase.dbvts[bodyB.broadphaseLayer], bodyB.dbvtNode);
         // keep-condition mirrors the discovery reach (fat + speculative distance vs fat) so a
         // just-discovered pair always survives the same-frame sweep, with no dependence on the
         // relative sizes of expansionMargin and the speculative distance

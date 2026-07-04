@@ -168,6 +168,8 @@ export function castAABB(world: World, bounds: Box3, displacement: Vec3, queryFi
     }
 }
 
+const _bounds = /* @__PURE__ */ box3.create();
+
 /** get the bounds of all DBVTs in the broadphase */
 export function bounds(out: Box3, broadphase: Broadphase): Box3 {
     box3.empty(out);
@@ -175,8 +177,7 @@ export function bounds(out: Box3, broadphase: Broadphase): Box3 {
     for (const tree of broadphase.dbvts) {
         if (tree.root === -1) continue;
 
-        const rootNode = tree.nodes[tree.root];
-        box3.union(out, out, rootNode.aabb);
+        box3.union(out, out, dbvt.readNodeAabb(_bounds, tree, tree.root));
     }
 
     return out;

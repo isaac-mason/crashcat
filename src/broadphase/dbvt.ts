@@ -1,40 +1,37 @@
 import { type Box3, box3, raycast3, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from '../body/rigid-body';
-import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayDistanceToBox3Flat, rayHitsBox3 } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
 
+const STRIDE_BOUNDS = 6;
+const STRIDE_TOPO = 5;
+const T_PARENT = 0;
+const T_LEFT = 1;
+const T_RIGHT = 2;
+const T_BODY = 3;
+const T_CHANGED = 4;
+
 export type DBVT = {
-    nodes: DBVTNode[];
+    /** packed-double node bounds, stride 6 (see file header) */
+    bounds: number[];
+
+    /** packed-SMI node topology, stride 5 (see file header) */
+    topo: number[];
     freeNodeIndices: number[];
     root: number;
 
+    /** the fat-leaf expansion margin (in world units) applied to each leaf AABB */
     expansionMargin: number;
 
-    // any structural change (add / remove / fat-leaf escape) since the last rebuild. gates
-    // the dirty-gated rebuild in broadphase.optimize — a tree that no body has disturbed
-    // (e.g. a settled static field) stays clean and is never rebuilt. jolt's IsDirty().
+    /**
+     * any structural change (add / remove / fat-leaf escape) since the last rebuild. gates
+     * the dirty-gated rebuild in broadphase.optimize — a tree that no body has disturbed
+     * (e.g. a settled static field) stays clean and is never rebuilt.
+     */
     dirty: boolean;
-};
-
-export type DBVTNode = {
-    index: number;
-
-    parent: number;
-    left: number;
-    right: number;
-
-    aabb: Box3;
-
-    // internal nodes only (meaningless on leaves — mark/widen starts at a leaf's parent).
-    // invariant: changed ⇒ parent.changed. set when a descendant leaf's fat aabb widens or
-    // the local structure changes; a rebuild keeps every !changed subtree whole and only
-    // re-partitions the changed region + the always-rebuilt top levels. jolt's Node::mIsChanged.
-    changed: boolean;
-
-    bodyIndex: number;
 };
 
 // flat SMI stack of node indices for overlap traversals (intersectAABB / intersectPoint /
@@ -61,7 +58,8 @@ const _buildCenters: number[] = []; // unit aabb centers, xyz interleaved, swapp
 
 export function create(): DBVT {
     const dbvt: DBVT = {
-        nodes: [],
+        bounds: [],
+        topo: [],
         freeNodeIndices: [],
         root: -1,
         expansionMargin: 0.05,
@@ -71,211 +69,261 @@ export function create(): DBVT {
     return dbvt;
 }
 
-function requestNode(bvh: DBVT): number {
-    let nodeIndex: number;
-    if (bvh.freeNodeIndices.length > 0) {
-        nodeIndex = bvh.freeNodeIndices.pop()!;
-        const node = bvh.nodes[nodeIndex];
-        node.parent = -1;
-        node.left = -1;
-        node.right = -1;
-        box3.empty(node.aabb);
-        node.changed = false;
-        node.bodyIndex = -1;
-    } else {
-        nodeIndex = bvh.nodes.length;
-        bvh.nodes.push({
-            index: nodeIndex,
-            parent: -1,
-            left: -1,
-            right: -1,
-            aabb: box3.create(),
-            changed: false,
-            bodyIndex: -1,
-        });
+function requestNode(dbvt: DBVT): number {
+    if (dbvt.freeNodeIndices.length > 0) {
+        const n = dbvt.freeNodeIndices.pop()!;
+        const t = n * STRIDE_TOPO;
+        dbvt.topo[t] = -1;
+        dbvt.topo[t + 1] = -1;
+        dbvt.topo[t + 2] = -1;
+        dbvt.topo[t + 3] = -1;
+        dbvt.topo[t + 4] = 0;
+        bEmpty(dbvt.bounds, n);
+        return n;
     }
-    return nodeIndex;
+    const n = dbvt.bounds.length / STRIDE_BOUNDS;
+    dbvt.topo.push(-1, -1, -1, -1, 0);
+    dbvt.bounds.push(Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity);
+    return n;
 }
 
-function releaseNode(bvh: DBVT, nodeIndex: number): void {
-    const node = bvh.nodes[nodeIndex];
-    node.parent = -1;
-    node.left = -1;
-    node.right = -1;
-    node.changed = false;
-    node.bodyIndex = -1;
-    bvh.freeNodeIndices.push(nodeIndex);
+function releaseNode(dbvt: DBVT, n: number): void {
+    const t = n * STRIDE_TOPO;
+    dbvt.topo[t] = -1;
+    dbvt.topo[t + 1] = -1;
+    dbvt.topo[t + 2] = -1;
+    dbvt.topo[t + 3] = -1;
+    dbvt.topo[t + 4] = 0;
+    dbvt.freeNodeIndices.push(n);
 }
 
-function isLeaf(node: DBVTNode): boolean {
-    return node.left === -1 && node.right === -1;
+// ---- flat-bounds helpers (node-index args; @optimize call sites flatten them inline) ----------
+
+function bEmpty(B: number[], n: number): void {
+    const b = n * STRIDE_BOUNDS;
+    B[b] = Infinity;
+    B[b + 1] = Infinity;
+    B[b + 2] = Infinity;
+    B[b + 3] = -Infinity;
+    B[b + 4] = -Infinity;
+    B[b + 5] = -Infinity;
 }
 
-function proximity(a: Box3, b: Box3): number {
-    const dx = a[0] + a[3] - (b[0] + b[3]);
-    const dy = a[1] + a[4] - (b[1] + b[4]);
-    const dz = a[2] + a[5] - (b[2] + b[5]);
+// d = a ∪ c (node indices). d may alias a or c.
+function bUnionNodes(B: number[], d: number, a: number, c: number): void {
+    const db = d * STRIDE_BOUNDS;
+    const ab = a * STRIDE_BOUNDS;
+    const cb = c * STRIDE_BOUNDS;
+    const minX = B[ab] < B[cb] ? B[ab] : B[cb];
+    const minY = B[ab + 1] < B[cb + 1] ? B[ab + 1] : B[cb + 1];
+    const minZ = B[ab + 2] < B[cb + 2] ? B[ab + 2] : B[cb + 2];
+    const maxX = B[ab + 3] > B[cb + 3] ? B[ab + 3] : B[cb + 3];
+    const maxY = B[ab + 4] > B[cb + 4] ? B[ab + 4] : B[cb + 4];
+    const maxZ = B[ab + 5] > B[cb + 5] ? B[ab + 5] : B[cb + 5];
+    B[db] = minX;
+    B[db + 1] = minY;
+    B[db + 2] = minZ;
+    B[db + 3] = maxX;
+    B[db + 4] = maxY;
+    B[db + 5] = maxZ;
+}
+
+// does node `o` fully contain node `i`?
+function bContainsNode(B: number[], o: number, i: number): boolean {
+    const ob = o * STRIDE_BOUNDS;
+    const ib = i * STRIDE_BOUNDS;
+    return (
+        B[ob] <= B[ib] &&
+        B[ob + 1] <= B[ib + 1] &&
+        B[ob + 2] <= B[ib + 2] &&
+        B[ob + 3] >= B[ib + 3] &&
+        B[ob + 4] >= B[ib + 4] &&
+        B[ob + 5] >= B[ib + 5]
+    );
+}
+
+// does node `n` fully contain the standalone Box3 `box`?
+function bContainsBox(B: number[], n: number, box: Box3): boolean {
+    const nb = n * STRIDE_BOUNDS;
+    return (
+        B[nb] <= box[0] &&
+        B[nb + 1] <= box[1] &&
+        B[nb + 2] <= box[2] &&
+        B[nb + 3] >= box[3] &&
+        B[nb + 4] >= box[4] &&
+        B[nb + 5] >= box[5]
+    );
+}
+
+// node `n` bounds = `box` expanded outward by margin `m` on all sides.
+function bSetExpandBox(B: number[], n: number, box: Box3, m: number): void {
+    const nb = n * STRIDE_BOUNDS;
+    B[nb] = box[0] - m;
+    B[nb + 1] = box[1] - m;
+    B[nb + 2] = box[2] - m;
+    B[nb + 3] = box[3] + m;
+    B[nb + 4] = box[4] + m;
+    B[nb + 5] = box[5] + m;
+}
+
+// manhattan distance between the centers of node a and node b (bullet's btDbvt proximity).
+function proximity(B: number[], a: number, b: number): number {
+    const ab = a * STRIDE_BOUNDS;
+    const bb = b * STRIDE_BOUNDS;
+    const dx = B[ab] + B[ab + 3] - (B[bb] + B[bb + 3]);
+    const dy = B[ab + 1] + B[ab + 4] - (B[bb + 1] + B[bb + 4]);
+    const dz = B[ab + 2] + B[ab + 5] - (B[bb + 2] + B[bb + 5]);
     return Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
 }
 
-function select(o: Box3, a: Box3, b: Box3): number {
-    return proximity(o, a) < proximity(o, b) ? 0 : 1;
+function select(B: number[], o: number, a: number, b: number): number {
+    return proximity(B, o, a) < proximity(B, o, b) ? 0 : 1;
 }
 
-function indexof(dbvt: DBVT, nodeIndex: number): number {
-    const node = dbvt.nodes[nodeIndex];
-    const parent = dbvt.nodes[node.parent];
-    return parent.right === nodeIndex ? 1 : 0;
+function indexof(dbvt: DBVT, n: number): number {
+    const parent = dbvt.topo[n * STRIDE_TOPO + T_PARENT];
+    return dbvt.topo[parent * STRIDE_TOPO + T_RIGHT] === n ? 1 : 0;
 }
 
 /** @optimize */
 function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
-    const leaf = dbvt.nodes[leafIndex];
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
 
     if (dbvt.root === -1) {
         dbvt.root = leafIndex;
-        leaf.parent = -1;
+        T[leafIndex * STRIDE_TOPO + T_PARENT] = -1;
         return;
     }
 
     // descend to find best leaf position
     let root = rootIndex;
-    let rootNode = dbvt.nodes[root];
-    while (!isLeaf(rootNode)) {
-        const leftNode = dbvt.nodes[rootNode.left];
-        const rightNode = dbvt.nodes[rootNode.right];
-        const child = select(leaf.aabb, leftNode.aabb, rightNode.aabb);
-        root = child === 0 ? rootNode.left : rootNode.right;
-        rootNode = dbvt.nodes[root];
+    while (T[root * STRIDE_TOPO + T_LEFT] !== -1) {
+        const child = select(B, leafIndex, T[root * STRIDE_TOPO + T_LEFT], T[root * STRIDE_TOPO + T_RIGHT]);
+        root = child === 0 ? T[root * STRIDE_TOPO + T_LEFT] : T[root * STRIDE_TOPO + T_RIGHT];
     }
 
-    const prev = rootNode.parent;
-    const newParentIndex = requestNode(dbvt);
-    const newParent = dbvt.nodes[newParentIndex];
+    const prev = T[root * STRIDE_TOPO + T_PARENT];
+    const newParent = requestNode(dbvt);
 
-    newParent.parent = prev;
-    box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
+    T[newParent * STRIDE_TOPO + T_PARENT] = prev;
+    bUnionNodes(B, newParent, leafIndex, root);
 
     if (prev !== -1) {
-        const prevNode = dbvt.nodes[prev];
         if (indexof(dbvt, root) === 0) {
-            prevNode.left = newParentIndex;
+            T[prev * STRIDE_TOPO + T_LEFT] = newParent;
         } else {
-            prevNode.right = newParentIndex;
+            T[prev * STRIDE_TOPO + T_RIGHT] = newParent;
         }
-        newParent.left = root;
-        rootNode.parent = newParentIndex;
-        newParent.right = leafIndex;
-        leaf.parent = newParentIndex;
+        T[newParent * STRIDE_TOPO + T_LEFT] = root;
+        T[root * STRIDE_TOPO + T_PARENT] = newParent;
+        T[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
+        T[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
 
         // refit: walk up the tree, checking if parent contains child
         let childNode = newParent;
         let parentIndex = prev;
         while (parentIndex !== -1) {
-            const parentNode = dbvt.nodes[parentIndex];
-            if (!box3.containsBox3(parentNode.aabb, childNode.aabb)) {
-                const leftNode = dbvt.nodes[parentNode.left];
-                const rightNode = dbvt.nodes[parentNode.right];
-                box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
+            if (!bContainsNode(B, parentIndex, childNode)) {
+                bUnionNodes(B, parentIndex, T[parentIndex * STRIDE_TOPO + T_LEFT], T[parentIndex * STRIDE_TOPO + T_RIGHT]);
             } else {
                 break;
             }
-            childNode = parentNode;
-            parentIndex = parentNode.parent;
+            childNode = parentIndex;
+            parentIndex = T[parentIndex * STRIDE_TOPO + T_PARENT];
         }
     } else {
-        newParent.left = root;
-        rootNode.parent = newParentIndex;
-        newParent.right = leafIndex;
-        leaf.parent = newParentIndex;
-        dbvt.root = newParentIndex;
+        T[newParent * STRIDE_TOPO + T_LEFT] = root;
+        T[root * STRIDE_TOPO + T_PARENT] = newParent;
+        T[newParent * STRIDE_TOPO + T_RIGHT] = leafIndex;
+        T[leafIndex * STRIDE_TOPO + T_PARENT] = newParent;
+        dbvt.root = newParent;
     }
 }
-
-const _prevAabb = /* @__PURE__ */ box3.create();
 
 // walk up from a changed node marking ancestors changed. stops at the first already-changed
 // ancestor (the invariant changed ⇒ parent.changed guarantees everything above is done).
 // jolt's MarkNodeAndParentsChanged.
 function markNodeAndParentsChanged(dbvt: DBVT, nodeIndex: number): void {
+    const T = dbvt.topo;
     let idx = nodeIndex;
     while (idx !== -1) {
-        const node = dbvt.nodes[idx];
-        if (node.changed) break;
-        node.changed = true;
-        idx = node.parent;
+        if (T[idx * STRIDE_TOPO + T_CHANGED] !== 0) break;
+        T[idx * STRIDE_TOPO + T_CHANGED] = 1;
+        idx = T[idx * STRIDE_TOPO + T_PARENT];
     }
 }
 
-// walk up from a leaf's parent widening each ancestor's aabb to encapsulate the (grown) leaf
-// bounds and marking it changed. bounds only grow between rebuilds so containment holds at
-// every instant (queries never miss); the next rebuild recomputes exact unions. once an
-// ancestor already contains the new bounds, only the changed-marking remains. jolt's
-// WidenAndMarkNodeAndParentsChanged, adapted to bounds-on-node.
-function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, newBounds: Box3): void {
+// walk up from a leaf's parent widening each ancestor's aabb to encapsulate the (grown) source-node
+// bounds and marking it changed. bounds only grow between rebuilds so containment holds at every
+// instant (queries never miss); the next rebuild recomputes exact unions. once an ancestor already
+// contains the source, only the changed-marking remains. jolt's WidenAndMarkNodeAndParentsChanged.
+function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, srcNode: number): void {
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
     let idx = parentIndex;
     while (idx !== -1) {
-        const node = dbvt.nodes[idx];
-        node.changed = true;
-        if (box3.containsBox3(node.aabb, newBounds)) {
+        T[idx * STRIDE_TOPO + T_CHANGED] = 1;
+        if (bContainsNode(B, idx, srcNode)) {
             // containment is monotone up the tree — nothing above needs widening, only marking
-            markNodeAndParentsChanged(dbvt, node.parent);
+            markNodeAndParentsChanged(dbvt, T[idx * STRIDE_TOPO + T_PARENT]);
             break;
         }
-        box3.union(node.aabb, node.aabb, newBounds);
-        idx = node.parent;
+        bUnionNodes(B, idx, idx, srcNode);
+        idx = T[idx * STRIDE_TOPO + T_PARENT];
     }
 }
 
 /* @optimize */
 function removeLeaf(dbvt: DBVT, leafIndex: number): number {
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     if (leafIndex === dbvt.root) {
         dbvt.root = -1;
         return -1;
     }
 
-    const leaf = dbvt.nodes[leafIndex];
-    const parentIndex = leaf.parent;
-    const parent = dbvt.nodes[parentIndex];
-    const prevIndex = parent.parent;
-    const siblingIndex = parent.left === leafIndex ? parent.right : parent.left;
-    const sibling = dbvt.nodes[siblingIndex];
+    const parentIndex = T[leafIndex * STRIDE_TOPO + T_PARENT];
+    const prevIndex = T[parentIndex * STRIDE_TOPO + T_PARENT];
+    const siblingIndex =
+        T[parentIndex * STRIDE_TOPO + T_LEFT] === leafIndex ? T[parentIndex * STRIDE_TOPO + T_RIGHT] : T[parentIndex * STRIDE_TOPO + T_LEFT];
 
     if (prevIndex !== -1) {
-        const prev = dbvt.nodes[prevIndex];
         if (indexof(dbvt, parentIndex) === 0) {
-            prev.left = siblingIndex;
+            T[prevIndex * STRIDE_TOPO + T_LEFT] = siblingIndex;
         } else {
-            prev.right = siblingIndex;
+            T[prevIndex * STRIDE_TOPO + T_RIGHT] = siblingIndex;
         }
-        sibling.parent = prevIndex;
+        T[siblingIndex * STRIDE_TOPO + T_PARENT] = prevIndex;
         releaseNode(dbvt, parentIndex);
 
         // the collapse restructured prev's children — mark it and its ancestors changed so the
         // next rebuild re-partitions this region (invariant: changed ⇒ parent.changed).
         markNodeAndParentsChanged(dbvt, prevIndex);
 
-        // refit
+        // refit up until a node's bounds stop changing
         let nodeIndex = prevIndex;
         while (nodeIndex !== -1) {
-            const node = dbvt.nodes[nodeIndex];
-            box3.copy(_prevAabb, node.aabb);
-
-            const leftNode = dbvt.nodes[node.left];
-            const rightNode = dbvt.nodes[node.right];
-            box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
-
-            if (!box3.exactEquals(node.aabb, _prevAabb)) {
-                nodeIndex = node.parent;
+            const nb = nodeIndex * STRIDE_BOUNDS;
+            const o0 = B[nb];
+            const o1 = B[nb + 1];
+            const o2 = B[nb + 2];
+            const o3 = B[nb + 3];
+            const o4 = B[nb + 4];
+            const o5 = B[nb + 5];
+            bUnionNodes(B, nodeIndex, T[nodeIndex * STRIDE_TOPO + T_LEFT], T[nodeIndex * STRIDE_TOPO + T_RIGHT]);
+            if (B[nb] !== o0 || B[nb + 1] !== o1 || B[nb + 2] !== o2 || B[nb + 3] !== o3 || B[nb + 4] !== o4 || B[nb + 5] !== o5) {
+                nodeIndex = T[nodeIndex * STRIDE_TOPO + T_PARENT];
             } else {
                 break;
             }
         }
 
-        return prevIndex !== -1 ? prevIndex : dbvt.root;
+        return prevIndex;
     } else {
         dbvt.root = siblingIndex;
-        sibling.parent = -1;
+        T[siblingIndex * STRIDE_TOPO + T_PARENT] = -1;
         releaseNode(dbvt, parentIndex);
         return dbvt.root;
     }
@@ -284,16 +332,15 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
 export function add(dbvt: DBVT, body: RigidBody): number {
     // create leaf node with fat (margin-expanded) bounds
     const leafIndex = requestNode(dbvt);
-    const leaf = dbvt.nodes[leafIndex];
-    box3.expandByMargin(leaf.aabb, body.aabb, dbvt.expansionMargin);
-    leaf.bodyIndex = body.index;
+    bSetExpandBox(dbvt.bounds, leafIndex, body.aabb, dbvt.expansionMargin);
+    dbvt.topo[leafIndex * STRIDE_TOPO + T_BODY] = body.index;
 
     // greedy insert so the body is immediately queryable (a rebuild only happens at the next
     // step); the balanced re-partition is deferred to the dirty-gated rebuild.
     insertLeaf(dbvt, dbvt.root, leafIndex);
 
     // mark the new leaf's ancestor chain changed + flag the tree for rebuild
-    const parent = dbvt.nodes[leafIndex].parent;
+    const parent = dbvt.topo[leafIndex * STRIDE_TOPO + T_PARENT];
     if (parent !== -1) markNodeAndParentsChanged(dbvt, parent);
     dbvt.dirty = true;
 
@@ -325,19 +372,20 @@ export function update(dbvt: DBVT, body: RigidBody): boolean {
     const leafIndex = body.dbvtNode;
     if (leafIndex === -1) return false;
 
-    const leaf = dbvt.nodes[leafIndex];
+    const B = dbvt.bounds;
 
     // early exit: if body still fits in the fat AABB, nothing to do
-    if (box3.containsBox3(leaf.aabb, body.aabb)) {
+    if (bContainsBox(B, leafIndex, body.aabb)) {
         return false;
     }
 
     // replace the leaf fat box in place — bit-identical values, at the identical escape moments,
     // as the old remove+reinsert path, so persistent-pair discovery/sweep see unchanged fat-leaf data
-    box3.expandByMargin(leaf.aabb, body.aabb, dbvt.expansionMargin);
+    bSetExpandBox(B, leafIndex, body.aabb, dbvt.expansionMargin);
 
     // widen ancestors to keep containment (grow-only until rebuild) and mark the path changed
-    if (leaf.parent !== -1) widenAndMarkNodeAndParentsChanged(dbvt, leaf.parent, leaf.aabb);
+    const parent = dbvt.topo[leafIndex * STRIDE_TOPO + T_PARENT];
+    if (parent !== -1) widenAndMarkNodeAndParentsChanged(dbvt, parent, leafIndex);
     dbvt.dirty = true;
 
     return true;
@@ -350,7 +398,7 @@ export function update(dbvt: DBVT, body: RigidBody): boolean {
 // (so body.dbvtNode stays valid — no SetBodyLocation equivalent needed); only `changed` internals
 // are recycled and re-partitioned, plus the always-rebuilt top MAX_DEPTH_MARK_CHANGED levels.
 // because changed ⇒ parent.changed, the freed set is one root-connected subtree of f internals whose
-// frontier is f+1 units and the build allocates exactly f internals → nodes.length is invariant
+// frontier is f+1 units and the build allocates exactly f internals → the node pool is invariant
 // across rebuilds (the old optimizeTopDown leaked every internal on every call).
 // -----------------------------------------------------------------------------------------------
 
@@ -468,15 +516,12 @@ function buildTree(dbvt: DBVT, begin: number, end: number, maxDepthMarkChanged: 
             const ri = resultIndex;
             const li = frameSplit[top];
             const p = requestNode(dbvt);
-            const parent = dbvt.nodes[p];
-            const left = dbvt.nodes[li];
-            const right = dbvt.nodes[ri];
-            parent.left = li;
-            parent.right = ri;
-            left.parent = p;
-            right.parent = p;
-            box3.union(parent.aabb, left.aabb, right.aabb);
-            parent.changed = depth < maxDepthMarkChanged;
+            dbvt.topo[p * STRIDE_TOPO + T_LEFT] = li;
+            dbvt.topo[p * STRIDE_TOPO + T_RIGHT] = ri;
+            dbvt.topo[li * STRIDE_TOPO + T_PARENT] = p;
+            dbvt.topo[ri * STRIDE_TOPO + T_PARENT] = p;
+            bUnionNodes(dbvt.bounds, p, li, ri);
+            dbvt.topo[p * STRIDE_TOPO + T_CHANGED] = depth < maxDepthMarkChanged ? 1 : 0;
             resultIndex = p;
             frameBegin.pop();
             frameEnd.pop();
@@ -498,20 +543,22 @@ export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED
     dbvt.dirty = false;
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     // phase 1: collect units (leaves + unchanged-internal subtree roots) and free changed internals
     _buildUnits.length = 0;
     _collectStack.length = 0;
     _collectStack.push(dbvt.root);
     while (_collectStack.length > 0) {
         const idx = _collectStack.pop()!;
-        const node = dbvt.nodes[idx];
         // leaf-ness tested BEFORE changed: leaves are always kept as units (never freed), preserving
         // body.dbvtNode; an unchanged internal grafts whole; a changed internal is opened + recycled
-        if (node.left === -1 || !node.changed) {
+        if (T[idx * STRIDE_TOPO + T_LEFT] === -1 || T[idx * STRIDE_TOPO + T_CHANGED] === 0) {
             _buildUnits.push(idx);
         } else {
-            _collectStack.push(node.left);
-            _collectStack.push(node.right);
+            _collectStack.push(T[idx * STRIDE_TOPO + T_LEFT]);
+            _collectStack.push(T[idx * STRIDE_TOPO + T_RIGHT]);
             releaseNode(dbvt, idx);
         }
     }
@@ -520,21 +567,21 @@ export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED
     if (m === 1) {
         // lone leaf, or the whole tree was unchanged — graft as root
         dbvt.root = _buildUnits[0];
-        dbvt.nodes[dbvt.root].parent = -1;
+        T[dbvt.root * STRIDE_TOPO + T_PARENT] = -1;
         return;
     }
 
     // phase 2: unit centers (interleaved xyz), consumed + reordered in place by the build
     for (let k = 0; k < m; k++) {
-        const aabb = dbvt.nodes[_buildUnits[k]].aabb;
-        _buildCenters[k * 3] = (aabb[0] + aabb[3]) * 0.5;
-        _buildCenters[k * 3 + 1] = (aabb[1] + aabb[4]) * 0.5;
-        _buildCenters[k * 3 + 2] = (aabb[2] + aabb[5]) * 0.5;
+        const ub = _buildUnits[k] * STRIDE_BOUNDS;
+        _buildCenters[k * 3] = (B[ub] + B[ub + 3]) * 0.5;
+        _buildCenters[k * 3 + 1] = (B[ub + 1] + B[ub + 4]) * 0.5;
+        _buildCenters[k * 3 + 2] = (B[ub + 2] + B[ub + 5]) * 0.5;
     }
 
     // phase 3: median-split build over the units
     dbvt.root = buildTree(dbvt, 0, m, maxDepthMarkChanged);
-    dbvt.nodes[dbvt.root].parent = -1;
+    T[dbvt.root * STRIDE_TOPO + T_PARENT] = -1;
 }
 
 /**
@@ -546,6 +593,9 @@ export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED
 export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     const qMinX = aabb[0];
     const qMinY = aabb[1];
     const qMinZ = aabb[2];
@@ -558,27 +608,20 @@ export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, vis
 
     while (stackSize > 0) {
         const nodeIndex = _flatStack[--stackSize];
-        const node = dbvt.nodes[nodeIndex];
+        const nb = nodeIndex * STRIDE_BOUNDS;
 
         // node aabb test (for a leaf this IS the fat leaf test)
-        if (
-            node.aabb[0] > qMaxX ||
-            node.aabb[3] < qMinX ||
-            node.aabb[1] > qMaxY ||
-            node.aabb[4] < qMinY ||
-            node.aabb[2] > qMaxZ ||
-            node.aabb[5] < qMinZ
-        ) {
+        if (B[nb] > qMaxX || B[nb + 3] < qMinX || B[nb + 1] > qMaxY || B[nb + 4] < qMinY || B[nb + 2] > qMaxZ || B[nb + 5] < qMinZ) {
             continue;
         }
 
-        if (!isLeaf(node)) {
-            if (node.left !== -1) _flatStack[stackSize++] = node.left;
-            if (node.right !== -1) _flatStack[stackSize++] = node.right;
+        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
-        visitor.visit(world.bodies.pool[node.bodyIndex]);
+        visitor.visit(world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]]);
 
         if (visitor.shouldExit) {
             return;
@@ -589,6 +632,9 @@ export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, vis
 export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     const qMinX = aabb[0];
     const qMinY = aabb[1];
     const qMinZ = aabb[2];
@@ -601,29 +647,22 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 
     while (stackSize > 0) {
         const nodeIndex = _flatStack[--stackSize];
-        const node = dbvt.nodes[nodeIndex];
+        const nb = nodeIndex * STRIDE_BOUNDS;
 
         // node aabb test
-        if (
-            node.aabb[0] > qMaxX ||
-            node.aabb[3] < qMinX ||
-            node.aabb[1] > qMaxY ||
-            node.aabb[4] < qMinY ||
-            node.aabb[2] > qMaxZ ||
-            node.aabb[5] < qMinZ
-        ) {
+        if (B[nb] > qMaxX || B[nb + 3] < qMinX || B[nb + 1] > qMaxY || B[nb + 4] < qMinY || B[nb + 2] > qMaxZ || B[nb + 5] < qMinZ) {
             continue;
         }
 
         // if internal node, push children
-        if (!isLeaf(node)) {
-            if (node.left !== -1) _flatStack[stackSize++] = node.left;
-            if (node.right !== -1) _flatStack[stackSize++] = node.right;
+        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[node.bodyIndex];
+        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
 
         // collision group/mask filtering
         if (
@@ -672,6 +711,9 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     const px = point[0];
     const py = point[1];
     const pz = point[2];
@@ -681,29 +723,22 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
 
     while (stackSize > 0) {
         const nodeIndex = _flatStack[--stackSize];
-        const node = dbvt.nodes[nodeIndex];
+        const nb = nodeIndex * STRIDE_BOUNDS;
 
         // skip if point is not inside node's AABB
-        if (
-            px < node.aabb[0] ||
-            px > node.aabb[3] ||
-            py < node.aabb[1] ||
-            py > node.aabb[4] ||
-            pz < node.aabb[2] ||
-            pz > node.aabb[5]
-        ) {
+        if (px < B[nb] || px > B[nb + 3] || py < B[nb + 1] || py > B[nb + 4] || pz < B[nb + 2] || pz > B[nb + 5]) {
             continue;
         }
 
         // if internal node, push children
-        if (!isLeaf(node)) {
-            if (node.left !== -1) _flatStack[stackSize++] = node.left;
-            if (node.right !== -1) _flatStack[stackSize++] = node.right;
+        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[node.bodyIndex];
+        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         // collision group/mask filtering
@@ -751,20 +786,21 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
 export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+
     let stackSize = 0;
     _flatStack[stackSize++] = dbvt.root;
 
     while (stackSize > 0) {
         const nodeIndex = _flatStack[--stackSize];
-        const node = dbvt.nodes[nodeIndex];
 
-        if (!isLeaf(node)) {
-            if (node.left !== -1) _flatStack[stackSize++] = node.left;
-            if (node.right !== -1) _flatStack[stackSize++] = node.right;
+        if (T[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
             continue;
         }
 
-        const body = world.bodies.pool[node.bodyIndex];
+        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         visitor.visit(body);
@@ -790,6 +826,9 @@ export function castRay(
 ): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     raycast3.set(_ray, origin, direction, length);
 
     const originX = _ray.origin[0];
@@ -802,20 +841,19 @@ export function castRay(
 
     // closest-hit fraction so far (jolt's GetEarlyOutFraction); any node whose fat-AABB entry
     // fraction is >= this can't hold a closer hit and is pruned. distances are normalized to
-    // [0, 1] of the ray length (rayDistanceToBox3), matching the collector's fraction. visitors
+    // [0, 1] of the ray length (rayDistanceToBox3Flat), matching the collector's fraction. visitors
     // that don't cast omit it → Infinity → distance pruning off (only misses rejected).
     let bestFraction = visitor.earlyOutFraction ?? Infinity;
 
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
-    _castStackDist[stackSize] = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, dbvt.nodes[dbvt.root].aabb);
+    _castStackDist[stackSize] = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, dbvt.root * STRIDE_BOUNDS);
     stackSize++;
 
     while (stackSize > 0) {
         stackSize--;
         const nodeIndex = _castStackNode[stackSize];
         const nodeDistance = _castStackDist[stackSize];
-        const node = dbvt.nodes[nodeIndex];
 
         // prune: skip misses (Infinity distance) and nodes whose entry is beyond the closest hit
         // found so far (best-t). the node's own aabb was already ray-tested when its parent pushed
@@ -824,34 +862,35 @@ export function castRay(
             continue;
         }
 
-        // if internal node, push children sorted by distance, culling any beyond best-t
-        if (!isLeaf(node)) {
-            const leftNode = dbvt.nodes[node.left];
-            const rightNode = dbvt.nodes[node.right];
+        const left = T[nodeIndex * STRIDE_TOPO + T_LEFT];
 
-            const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, leftNode.aabb);
-            const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, rightNode.aabb);
+        // if internal node, push children sorted by distance, culling any beyond best-t
+        if (left !== -1) {
+            const right = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+
+            const leftDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, left * STRIDE_BOUNDS);
+            const rightDist = rayDistanceToBox3Flat(originX, originY, originZ, dirX, dirY, dirZ, rayLen, B, right * STRIDE_BOUNDS);
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
                 if (rightDist < bestFraction) {
-                    _castStackNode[stackSize] = node.right;
+                    _castStackNode[stackSize] = right;
                     _castStackDist[stackSize] = rightDist;
                     stackSize++;
                 }
                 if (leftDist < bestFraction) {
-                    _castStackNode[stackSize] = node.left;
+                    _castStackNode[stackSize] = left;
                     _castStackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 if (leftDist < bestFraction) {
-                    _castStackNode[stackSize] = node.left;
+                    _castStackNode[stackSize] = left;
                     _castStackDist[stackSize] = leftDist;
                     stackSize++;
                 }
                 if (rightDist < bestFraction) {
-                    _castStackNode[stackSize] = node.right;
+                    _castStackNode[stackSize] = right;
                     _castStackDist[stackSize] = rightDist;
                     stackSize++;
                 }
@@ -860,7 +899,7 @@ export function castRay(
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[node.bodyIndex];
+        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
 
         // early out: collision group/mask filtering
         if (
@@ -927,6 +966,9 @@ export function castAABB(
 ): void {
     if (dbvt.root === -1) return;
 
+    const T = dbvt.topo;
+    const B = dbvt.bounds;
+
     // AABB cast is done by:
     // 1. Shrink the shape aabb by its own extents down to a point (compute ray origin from AABB center)
     // 2. Expand each node aabb by the shape's half extents
@@ -954,7 +996,7 @@ export function castAABB(
         stackSize--;
         const nodeIndex = _castStackNode[stackSize];
         const nodeDistance = _castStackDist[stackSize];
-        const node = dbvt.nodes[nodeIndex];
+        const nb = nodeIndex * STRIDE_BOUNDS;
 
         // early-out: skip nodes beyond cast length
         if (nodeDistance > castLen) {
@@ -971,67 +1013,62 @@ export function castAABB(
                 dirY,
                 dirZ,
                 castLen,
-                node.aabb[0] - halfX,
-                node.aabb[1] - halfY,
-                node.aabb[2] - halfZ,
-                node.aabb[3] + halfX,
-                node.aabb[4] + halfY,
-                node.aabb[5] + halfZ,
+                B[nb] - halfX,
+                B[nb + 1] - halfY,
+                B[nb + 2] - halfZ,
+                B[nb + 3] + halfX,
+                B[nb + 4] + halfY,
+                B[nb + 5] + halfZ,
             )
         ) {
             continue;
         }
 
-        // if internal node, push children sorted by distance
-        if (!isLeaf(node)) {
-            const leftNode = dbvt.nodes[node.left];
-            const rightNode = dbvt.nodes[node.right];
+        const left = T[nodeIndex * STRIDE_TOPO + T_LEFT];
 
-            _nodeBounds[0] = leftNode.aabb[0] - halfX;
-            _nodeBounds[1] = leftNode.aabb[1] - halfY;
-            _nodeBounds[2] = leftNode.aabb[2] - halfZ;
-            _nodeBounds[3] = leftNode.aabb[3] + halfX;
-            _nodeBounds[4] = leftNode.aabb[4] + halfY;
-            _nodeBounds[5] = leftNode.aabb[5] + halfZ;
+        // if internal node, push children sorted by distance
+        if (left !== -1) {
+            const right = T[nodeIndex * STRIDE_TOPO + T_RIGHT];
+            const lb = left * STRIDE_BOUNDS;
+            const rb = right * STRIDE_BOUNDS;
+
+            _nodeBounds[0] = B[lb] - halfX;
+            _nodeBounds[1] = B[lb + 1] - halfY;
+            _nodeBounds[2] = B[lb + 2] - halfZ;
+            _nodeBounds[3] = B[lb + 3] + halfX;
+            _nodeBounds[4] = B[lb + 4] + halfY;
+            _nodeBounds[5] = B[lb + 5] + halfZ;
             const leftDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
-            _nodeBounds[0] = rightNode.aabb[0] - halfX;
-            _nodeBounds[1] = rightNode.aabb[1] - halfY;
-            _nodeBounds[2] = rightNode.aabb[2] - halfZ;
-            _nodeBounds[3] = rightNode.aabb[3] + halfX;
-            _nodeBounds[4] = rightNode.aabb[4] + halfY;
-            _nodeBounds[5] = rightNode.aabb[5] + halfZ;
+            _nodeBounds[0] = B[rb] - halfX;
+            _nodeBounds[1] = B[rb + 1] - halfY;
+            _nodeBounds[2] = B[rb + 2] - halfZ;
+            _nodeBounds[3] = B[rb + 3] + halfX;
+            _nodeBounds[4] = B[rb + 4] + halfY;
+            _nodeBounds[5] = B[rb + 5] + halfZ;
             const rightDist = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, _nodeBounds);
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
-                if (node.right !== -1) {
-                    _castStackNode[stackSize] = node.right;
-                    _castStackDist[stackSize] = rightDist;
-                    stackSize++;
-                }
-                if (node.left !== -1) {
-                    _castStackNode[stackSize] = node.left;
-                    _castStackDist[stackSize] = leftDist;
-                    stackSize++;
-                }
+                _castStackNode[stackSize] = right;
+                _castStackDist[stackSize] = rightDist;
+                stackSize++;
+                _castStackNode[stackSize] = left;
+                _castStackDist[stackSize] = leftDist;
+                stackSize++;
             } else {
-                if (node.left !== -1) {
-                    _castStackNode[stackSize] = node.left;
-                    _castStackDist[stackSize] = leftDist;
-                    stackSize++;
-                }
-                if (node.right !== -1) {
-                    _castStackNode[stackSize] = node.right;
-                    _castStackDist[stackSize] = rightDist;
-                    stackSize++;
-                }
+                _castStackNode[stackSize] = left;
+                _castStackDist[stackSize] = leftDist;
+                stackSize++;
+                _castStackNode[stackSize] = right;
+                _castStackDist[stackSize] = rightDist;
+                stackSize++;
             }
             continue;
         }
 
         // leaf node - check body
-        const body = world.bodies.pool[node.bodyIndex];
+        const body = world.bodies.pool[T[nodeIndex * STRIDE_TOPO + T_BODY]];
         if (!body || body._pooled) continue;
 
         // collision group/mask filtering
@@ -1090,7 +1127,44 @@ export function bounds(out: Box3, dbvt: DBVT): Box3 {
     if (dbvt.root === -1) {
         return box3.empty(out);
     }
+    return readNodeAabb(out, dbvt, dbvt.root);
+}
 
-    const rootNode = dbvt.nodes[dbvt.root];
-    return box3.copy(out, rootNode.aabb);
+// ---- accessors (keep external callers — pairs.ts, broadphase.ts, tests — layout-agnostic) -----
+
+/** number of allocated node rows (including free-listed rows), i.e. the node pool high-water mark */
+export function nodeCount(dbvt: DBVT): number {
+    return dbvt.bounds.length / STRIDE_BOUNDS;
+}
+
+/** copy node `n`'s fat AABB into `out` (out param first) */
+export function readNodeAabb(out: Box3, dbvt: DBVT, n: number): Box3 {
+    const b = n * STRIDE_BOUNDS;
+    out[0] = dbvt.bounds[b];
+    out[1] = dbvt.bounds[b + 1];
+    out[2] = dbvt.bounds[b + 2];
+    out[3] = dbvt.bounds[b + 3];
+    out[4] = dbvt.bounds[b + 4];
+    out[5] = dbvt.bounds[b + 5];
+    return out;
+}
+
+export function nodeParent(dbvt: DBVT, n: number): number {
+    return dbvt.topo[n * STRIDE_TOPO + T_PARENT];
+}
+
+export function nodeLeft(dbvt: DBVT, n: number): number {
+    return dbvt.topo[n * STRIDE_TOPO + T_LEFT];
+}
+
+export function nodeRight(dbvt: DBVT, n: number): number {
+    return dbvt.topo[n * STRIDE_TOPO + T_RIGHT];
+}
+
+export function nodeBodyIndex(dbvt: DBVT, n: number): number {
+    return dbvt.topo[n * STRIDE_TOPO + T_BODY];
+}
+
+export function nodeChanged(dbvt: DBVT, n: number): boolean {
+    return dbvt.topo[n * STRIDE_TOPO + T_CHANGED] !== 0;
 }

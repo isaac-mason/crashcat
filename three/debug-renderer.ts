@@ -11,7 +11,7 @@ import type {
     SwingTwistConstraint,
     World,
 } from 'crashcat';
-import { bvh, ConstraintType, MotionType, rigidBody, ShapeType } from 'crashcat';
+import { bvh, ConstraintType, dbvt as dbvtNs, MotionType, rigidBody, ShapeType } from 'crashcat';
 import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import * as THREE from 'three';
 
@@ -2080,27 +2080,28 @@ function updateBroadphaseDbvt(state: State, world: World): void {
 
     // Iterate through all broadphase layers
     for (let layerIndex = 0; layerIndex < world.broadphase.dbvts.length; layerIndex++) {
-        const dbvt = world.broadphase.dbvts[layerIndex];
-        if (dbvt.root === -1) continue;
+        const tree = world.broadphase.dbvts[layerIndex];
+        if (tree.root === -1) continue;
 
         // Traverse DBVT and collect AABBs
-        const stack: number[] = [dbvt.root];
+        const stack: number[] = [tree.root];
         while (stack.length > 0) {
             const nodeIndex = stack.pop()!;
-            const node = dbvt.nodes[nodeIndex];
+            const left = dbvtNs.nodeLeft(tree, nodeIndex);
+            const right = dbvtNs.nodeRight(tree, nodeIndex);
 
             // Check if this is a leaf node (both left and right are -1)
-            const isLeaf = node.left === -1 && node.right === -1;
+            const isLeaf = left === -1 && right === -1;
 
             // Skip this node if it's filtered out by the options
             if (isLeaf && !state.options.broadphaseDbvt.showLeafNodes) {
-                if (node.left !== -1) stack.push(node.left);
-                if (node.right !== -1) stack.push(node.right);
+                if (left !== -1) stack.push(left);
+                if (right !== -1) stack.push(right);
                 continue;
             }
             if (!isLeaf && !state.options.broadphaseDbvt.showNonLeafNodes) {
-                if (node.left !== -1) stack.push(node.left);
-                if (node.right !== -1) stack.push(node.right);
+                if (left !== -1) stack.push(left);
+                if (right !== -1) stack.push(right);
                 continue;
             }
 
@@ -2109,12 +2110,13 @@ function updateBroadphaseDbvt(state: State, world: World): void {
                 : layerColorsNonLeaf[layerIndex % layerColorsNonLeaf.length];
 
             // Add box wireframe for this node
-            const minX = node.aabb[0],
-                minY = node.aabb[1],
-                minZ = node.aabb[2];
-            const maxX = node.aabb[3],
-                maxY = node.aabb[4],
-                maxZ = node.aabb[5];
+            const _aabb = dbvtNs.readNodeAabb([0, 0, 0, 0, 0, 0], tree, nodeIndex);
+            const minX = _aabb[0],
+                minY = _aabb[1],
+                minZ = _aabb[2];
+            const maxX = _aabb[3],
+                maxY = _aabb[4],
+                maxZ = _aabb[5];
 
             // Bottom face (4 edges)
             positions.push(minX, minY, minZ, maxX, minY, minZ);
@@ -2147,8 +2149,8 @@ function updateBroadphaseDbvt(state: State, world: World): void {
             colors.push(...color, ...color);
 
             // Continue traversal
-            if (node.left !== -1) stack.push(node.left);
-            if (node.right !== -1) stack.push(node.right);
+            if (left !== -1) stack.push(left);
+            if (right !== -1) stack.push(right);
         }
     }
 

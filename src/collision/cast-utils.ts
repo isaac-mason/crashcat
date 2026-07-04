@@ -105,6 +105,87 @@ export function rayDistanceToBox3(
 }
 
 /**
+ * Flat-storage variant of {@link rayDistanceToBox3}: reads the six box components from
+ * `bounds[base + 0..5]` (a packed-double node-bounds array) instead of a standalone Box3, so the
+ * DBVT cast traversal needs no scratch copy per child. Same result: normalized entry distance in
+ * [0, 1] of the ray length, or Infinity on a miss.
+ */
+export function rayDistanceToBox3Flat(
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
+    bounds: number[],
+    base: number,
+): number {
+    const boxMinX = bounds[base];
+    const boxMinY = bounds[base + 1];
+    const boxMinZ = bounds[base + 2];
+    const boxMaxX = bounds[base + 3];
+    const boxMaxY = bounds[base + 4];
+    const boxMaxZ = bounds[base + 5];
+
+    let tMin = 0;
+    let tMax = length;
+
+    if (Math.abs(directionX) < 1e-10) {
+        if (originX < boxMinX || originX > boxMaxX) {
+            return Infinity;
+        }
+    } else {
+        const invD = 1.0 / directionX;
+        const t0 = (boxMinX - originX) * invD;
+        const t1 = (boxMaxX - originX) * invD;
+        const tNear = t0 < t1 ? t0 : t1;
+        const tFar = t0 < t1 ? t1 : t0;
+        tMin = tNear > tMin ? tNear : tMin;
+        tMax = tFar < tMax ? tFar : tMax;
+        if (tMax < tMin) {
+            return Infinity;
+        }
+    }
+
+    if (Math.abs(directionY) < 1e-10) {
+        if (originY < boxMinY || originY > boxMaxY) {
+            return Infinity;
+        }
+    } else {
+        const invD = 1.0 / directionY;
+        const t0 = (boxMinY - originY) * invD;
+        const t1 = (boxMaxY - originY) * invD;
+        const tNear = t0 < t1 ? t0 : t1;
+        const tFar = t0 < t1 ? t1 : t0;
+        tMin = tNear > tMin ? tNear : tMin;
+        tMax = tFar < tMax ? tFar : tMax;
+        if (tMax < tMin) {
+            return Infinity;
+        }
+    }
+
+    if (Math.abs(directionZ) < 1e-10) {
+        if (originZ < boxMinZ || originZ > boxMaxZ) {
+            return Infinity;
+        }
+    } else {
+        const invD = 1.0 / directionZ;
+        const t0 = (boxMinZ - originZ) * invD;
+        const t1 = (boxMaxZ - originZ) * invD;
+        const tNear = t0 < t1 ? t0 : t1;
+        const tFar = t0 < t1 ? t1 : t0;
+        tMin = tNear > tMin ? tNear : tMin;
+        tMax = tFar < tMax ? tFar : tMax;
+        if (tMax < tMin) {
+            return Infinity;
+        }
+    }
+
+    return tMin >= 0 ? tMin / length : Infinity;
+}
+
+/**
  * Ray-AABB slab test. Returns true iff the ray segment intersects the box.
  *
  * Authored in early-return form — clearer to read and the natural shape for

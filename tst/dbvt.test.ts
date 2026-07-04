@@ -35,7 +35,7 @@ describe('DBVT', () => {
         it('should create an empty DBVT', () => {
             const tree = dbvt.create();
             expect(tree.root).toBe(-1);
-            expect(tree.nodes).toEqual([]);
+            expect(dbvt.nodeCount(tree)).toBe(0);
             expect(tree.dirty).toBe(false);
         });
     });
@@ -50,9 +50,9 @@ describe('DBVT', () => {
 
             expect(leafIndex).toBe(0);
             expect(tree.root).toBe(0);
-            expect(tree.nodes[leafIndex].bodyIndex).toBe(body.index);
-            expect(tree.nodes[leafIndex].left).toBe(-1);
-            expect(tree.nodes[leafIndex].right).toBe(-1);
+            expect(dbvt.nodeBodyIndex(tree, leafIndex)).toBe(body.index);
+            expect(dbvt.nodeLeft(tree, leafIndex)).toBe(-1);
+            expect(dbvt.nodeRight(tree, leafIndex)).toBe(-1);
             expect(tree.dirty).toBe(true);
         });
 
@@ -65,10 +65,9 @@ describe('DBVT', () => {
             dbvt.add(tree, body1);
             dbvt.add(tree, body2);
 
-            expect(tree.nodes.length).toBe(3); // 2 leaves + 1 internal node
-            const root = tree.nodes[tree.root];
-            expect(root.left).not.toBe(-1);
-            expect(root.right).not.toBe(-1);
+            expect(dbvt.nodeCount(tree)).toBe(3); // 2 leaves + 1 internal node
+            expect(dbvt.nodeLeft(tree, tree.root)).not.toBe(-1);
+            expect(dbvt.nodeRight(tree, tree.root)).not.toBe(-1);
         });
 
         it('should expand body AABB by margin', () => {
@@ -77,11 +76,11 @@ describe('DBVT', () => {
             const body = makeBody(world, 0, 0, 0, 1, 1, 1);
 
             const leafIndex = dbvt.add(tree, body);
-            const leaf = tree.nodes[leafIndex];
+            const leaf = dbvt.readNodeAabb(box3.create(), tree, leafIndex);
 
             // leaf AABB should be larger than body AABB due to margin
-            expect(leaf.aabb[0]).toBeLessThan(body.aabb[0]);
-            expect(leaf.aabb[3]).toBeGreaterThan(body.aabb[3]);
+            expect(leaf[0]).toBeLessThan(body.aabb[0]);
+            expect(leaf[3]).toBeGreaterThan(body.aabb[3]);
         });
     });
 
@@ -126,14 +125,14 @@ describe('DBVT', () => {
             const body = makeBody(world, 0, 0, 0, 1, 1, 1);
 
             const leafIndex = dbvt.add(tree, body);
-            const originalAABB = box3.clone(tree.nodes[leafIndex].aabb);
+            const originalAABB = dbvt.readNodeAabb(box3.create(), tree, leafIndex);
 
             // Move body slightly (still within fat AABB)
             body.position[0] += 0.05;
             dbvt.update(tree, body);
 
             // AABB should not have changed
-            expect(box3.equals(tree.nodes[leafIndex].aabb, originalAABB)).toBe(true);
+            expect(box3.equals(dbvt.readNodeAabb(box3.create(), tree, leafIndex), originalAABB)).toBe(true);
         });
 
         it('should update when body moves outside fat AABB', () => {
@@ -148,10 +147,9 @@ describe('DBVT', () => {
             box3.set(body.aabb, 4.5, -0.5, -0.5, 5.5, 0.5, 0.5);
             dbvt.update(tree, body);
 
-            const leaf = tree.nodes[body.dbvtNode];
-            expect(leaf.bodyIndex).toBe(body.index);
+            expect(dbvt.nodeBodyIndex(tree, body.dbvtNode)).toBe(body.index);
             // New AABB should contain the new position
-            expect(box3.containsBox3(leaf.aabb, body.aabb)).toBe(true);
+            expect(box3.containsBox3(dbvt.readNodeAabb(box3.create(), tree, body.dbvtNode), body.aabb)).toBe(true);
         });
     });
 
@@ -373,13 +371,13 @@ describe('DBVT', () => {
             for (const b of bodies) b.dbvtNode = dbvt.add(tree, b);
 
             const nodeBefore = bodies.map((b) => b.dbvtNode);
-            const aabbBefore = bodies.map((b) => box3.clone(tree.nodes[b.dbvtNode].aabb));
+            const aabbBefore = bodies.map((b) => dbvt.readNodeAabb(box3.create(), tree, b.dbvtNode));
 
             dbvt.rebuild(tree);
 
             for (let i = 0; i < bodies.length; i++) {
                 expect(bodies[i].dbvtNode).toBe(nodeBefore[i]); // leaf index unchanged
-                expect(box3.equals(tree.nodes[bodies[i].dbvtNode].aabb, aabbBefore[i])).toBe(true);
+                expect(box3.equals(dbvt.readNodeAabb(box3.create(), tree, bodies[i].dbvtNode), aabbBefore[i])).toBe(true);
             }
             expectInvariants(tree, bodies);
         });
@@ -392,7 +390,7 @@ describe('DBVT', () => {
             for (const b of bodies) b.dbvtNode = dbvt.add(tree, b);
             dbvt.rebuild(tree); // warm up: one rebuild settles the pool
 
-            const nodesLen = tree.nodes.length;
+            const nodesLen = dbvt.nodeCount(tree);
             const freeLen = tree.freeNodeIndices.length;
 
             for (let cycle = 0; cycle < 5; cycle++) {
@@ -403,7 +401,7 @@ describe('DBVT', () => {
                     dbvt.update(tree, b);
                 }
                 dbvt.rebuild(tree);
-                expect(tree.nodes.length).toBe(nodesLen);
+                expect(dbvt.nodeCount(tree)).toBe(nodesLen);
                 expect(tree.freeNodeIndices.length).toBe(freeLen);
             }
         });
@@ -438,8 +436,8 @@ describe('DBVT', () => {
 
             // snapshot a settled (unchanged) internal subtree's structure
             const someLeaf = bodies[10].dbvtNode;
-            let subtreeRoot = tree.nodes[someLeaf].parent;
-            while (subtreeRoot !== -1 && tree.nodes[subtreeRoot].changed) subtreeRoot = tree.nodes[subtreeRoot].parent;
+            let subtreeRoot = dbvt.nodeParent(tree, someLeaf);
+            while (subtreeRoot !== -1 && dbvt.nodeChanged(tree, subtreeRoot)) subtreeRoot = dbvt.nodeParent(tree, subtreeRoot);
             expect(subtreeRoot).not.toBe(-1);
             const before = snapshotSubtree(tree, subtreeRoot);
 
@@ -466,7 +464,7 @@ describe('DBVT', () => {
             b.dbvtNode = dbvt.add(tree, b);
             dbvt.rebuild(tree);
             expect(tree.root).toBe(b.dbvtNode);
-            expect(tree.nodes[tree.root].parent).toBe(-1);
+            expect(dbvt.nodeParent(tree, tree.root)).toBe(-1);
         });
     });
 
@@ -486,17 +484,18 @@ describe('DBVT', () => {
 
             expect(escaped).toBe(true);
             expect(tree.dirty).toBe(true);
-            const leaf = tree.nodes[a.dbvtNode];
+            const leafBox = dbvt.readNodeAabb(box3.create(), tree, a.dbvtNode);
             // leaf box == margin-expanded body box (replace, not union — may shrink)
             const expected = box3.create();
             box3.expandByMargin(expected, a.aabb, tree.expansionMargin);
-            expect(box3.equals(leaf.aabb, expected)).toBe(true);
+            expect(box3.equals(leafBox, expected)).toBe(true);
             // ancestors contain the moved leaf (containment invariant holds pre-rebuild)
-            let idx = leaf.parent;
+            const _nodeBox = box3.create();
+            let idx = dbvt.nodeParent(tree, a.dbvtNode);
             while (idx !== -1) {
-                expect(box3.containsBox3(tree.nodes[idx].aabb, leaf.aabb)).toBe(true);
-                expect(tree.nodes[idx].changed).toBe(true);
-                idx = tree.nodes[idx].parent;
+                expect(box3.containsBox3(dbvt.readNodeAabb(_nodeBox, tree, idx), leafBox)).toBe(true);
+                expect(dbvt.nodeChanged(tree, idx)).toBe(true);
+                idx = dbvt.nodeParent(tree, idx);
             }
         });
     });
@@ -513,40 +512,42 @@ function walkBodies(tree: dbvt.DBVT, world: World): RigidBody[] {
 function treeHeight(tree: dbvt.DBVT): number {
     const rec = (idx: number): number => {
         if (idx === -1) return 0;
-        const n = tree.nodes[idx];
-        if (n.left === -1 && n.right === -1) return 1;
-        return 1 + Math.max(rec(n.left), rec(n.right));
+        if (dbvt.nodeLeft(tree, idx) === -1) return 1;
+        return 1 + Math.max(rec(dbvt.nodeLeft(tree, idx)), rec(dbvt.nodeRight(tree, idx)));
     };
     return rec(tree.root);
 }
 
 function snapshotSubtree(tree: dbvt.DBVT, idx: number): unknown {
-    const n = tree.nodes[idx];
-    if (n.left === -1 && n.right === -1) return { idx, body: n.bodyIndex };
-    return { idx, left: snapshotSubtree(tree, n.left), right: snapshotSubtree(tree, n.right) };
+    if (dbvt.nodeLeft(tree, idx) === -1) return { idx, body: dbvt.nodeBodyIndex(tree, idx) };
+    return { idx, left: snapshotSubtree(tree, dbvt.nodeLeft(tree, idx)), right: snapshotSubtree(tree, dbvt.nodeRight(tree, idx)) };
 }
 
 // structural invariants: pointer consistency, aabb containment, changed⇒parent.changed,
 // every live body in exactly one reachable leaf.
+const _invA = box3.create();
+const _invL = box3.create();
+const _invR = box3.create();
 function expectInvariants(tree: dbvt.DBVT, bodies: RigidBody[]): void {
     const seenBodies = new Set<number>();
     const rec = (idx: number, parent: number): void => {
-        const n = tree.nodes[idx];
-        expect(n.parent).toBe(parent);
-        if (n.left === -1 && n.right === -1) {
-            expect(seenBodies.has(n.bodyIndex)).toBe(false);
-            seenBodies.add(n.bodyIndex);
+        expect(dbvt.nodeParent(tree, idx)).toBe(parent);
+        const left = dbvt.nodeLeft(tree, idx);
+        if (left === -1) {
+            const bi = dbvt.nodeBodyIndex(tree, idx);
+            expect(seenBodies.has(bi)).toBe(false);
+            seenBodies.add(bi);
             return;
         }
-        const l = tree.nodes[n.left];
-        const r = tree.nodes[n.right];
+        const right = dbvt.nodeRight(tree, idx);
         // node aabb contains both children
-        expect(box3.containsBox3(n.aabb, l.aabb)).toBe(true);
-        expect(box3.containsBox3(n.aabb, r.aabb)).toBe(true);
+        dbvt.readNodeAabb(_invA, tree, idx);
+        expect(box3.containsBox3(_invA, dbvt.readNodeAabb(_invL, tree, left))).toBe(true);
+        expect(box3.containsBox3(_invA, dbvt.readNodeAabb(_invR, tree, right))).toBe(true);
         // changed ⇒ parent changed
-        if (parent !== -1 && n.changed) expect(tree.nodes[parent].changed).toBe(true);
-        rec(n.left, idx);
-        rec(n.right, idx);
+        if (parent !== -1 && dbvt.nodeChanged(tree, idx)) expect(dbvt.nodeChanged(tree, parent)).toBe(true);
+        rec(left, idx);
+        rec(right, idx);
     };
     if (tree.root !== -1) rec(tree.root, -1);
     for (const b of bodies) expect(seenBodies.has(b.index)).toBe(true);
