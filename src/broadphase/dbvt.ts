@@ -13,16 +13,6 @@ export type DBVT = {
 
     expansionMargin: number;
     optimizationPath: number;
-
-    /**
-     * Velocity prediction factor for AABB expansion
-     *
-     * When > 0, expands AABBs in the direction of motion to reduce update frequency.
-     * Higher values = fewer updates but larger AABBs (more false positives in broadphase).
-     *
-     * @default 0.0
-     */
-    velocityPrediction: number;
 };
 
 export type DBVTNode = {
@@ -36,8 +26,6 @@ export type DBVTNode = {
     height: number;
 
     bodyIndex: number;
-
-    previousAabb: Box3;
 };
 
 // flat SMI stack of node indices for overlap traversals (intersectAABB / intersectPoint /
@@ -58,7 +46,6 @@ export function create(): DBVT {
         root: -1,
         expansionMargin: 0.05,
         optimizationPath: 0,
-        velocityPrediction: 0.0,
     };
 
     return dbvt;
@@ -75,7 +62,6 @@ function requestNode(bvh: DBVT): number {
         box3.empty(node.aabb);
         node.height = 0;
         node.bodyIndex = -1;
-        box3.empty(node.previousAabb);
     } else {
         nodeIndex = bvh.nodes.length;
         bvh.nodes.push({
@@ -86,7 +72,6 @@ function requestNode(bvh: DBVT): number {
             aabb: box3.create(),
             height: 0,
             bodyIndex: -1,
-            previousAabb: box3.create(),
         });
     }
     return nodeIndex;
@@ -471,9 +456,6 @@ export function add(dbvt: DBVT, body: RigidBody): number {
     leaf.bodyIndex = body.index;
     leaf.height = 0;
 
-    // initialize previous AABB for velocity prediction
-    box3.copy(leaf.previousAabb, body.aabb);
-
     // insert into tree
     insertLeaf(dbvt, dbvt.root, leafIndex);
 
@@ -501,48 +483,11 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
         return;
     }
 
-    // expand body bounds by margin for fat AABB
+    // expand body bounds by margin for fat AABB.
+    // margin-only (no motion-directed padding) matches the reference consensus:
+    // bullet ships its size-based directional pad disabled, box2d v3 removed the
+    // displacement pad from the lineage, and jolt widens nodes in place instead.
     box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
-
-    // velocity-based expansion, expands AABB only in the direction of motion to reduce update frequency
-    if (dbvt.velocityPrediction > 0) {
-        // compute delta from AABB min movement
-        const deltaX = body.aabb[0] - leaf.previousAabb[0];
-        const deltaY = body.aabb[1] - leaf.previousAabb[1];
-        const deltaZ = body.aabb[2] - leaf.previousAabb[2];
-
-        // compute half extents from PREVIOUS AABB
-        const halfExtentX = (leaf.previousAabb[3] - leaf.previousAabb[0]) * 0.5;
-        const halfExtentY = (leaf.previousAabb[4] - leaf.previousAabb[1]) * 0.5;
-        const halfExtentZ = (leaf.previousAabb[5] - leaf.previousAabb[2]) * 0.5;
-
-        // velocity expansion = (half extents) * prediction factor
-        let velocityX = halfExtentX * dbvt.velocityPrediction;
-        let velocityY = halfExtentY * dbvt.velocityPrediction;
-        let velocityZ = halfExtentZ * dbvt.velocityPrediction;
-
-        // apply sign based on movement direction
-        if (deltaX < 0) velocityX = -velocityX;
-        if (deltaY < 0) velocityY = -velocityY;
-        if (deltaZ < 0) velocityZ = -velocityZ;
-
-        // expand min/max based on velocity direction
-        if (velocityX > 0) {
-            _bounds[3] += velocityX;
-        } else {
-            _bounds[0] += velocityX;
-        }
-        if (velocityY > 0) {
-            _bounds[4] += velocityY;
-        } else {
-            _bounds[1] += velocityY;
-        }
-        if (velocityZ > 0) {
-            _bounds[5] += velocityZ;
-        } else {
-            _bounds[2] += velocityZ;
-        }
-    }
 
     // remove leaf and get root for reinsertion
     let rootIndex = removeLeaf(dbvt, leafIndex);
@@ -570,9 +515,6 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
 
     // reinsert from computed root
     insertLeaf(dbvt, rootIndex, leafIndex);
-
-    // update previous AABB for next velocity prediction
-    box3.copy(leaf.previousAabb, body.aabb);
 }
 
 export function optimizeBottomUp(dbvt: DBVT): void {

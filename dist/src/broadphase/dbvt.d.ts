@@ -9,15 +9,6 @@ export type DBVT = {
     root: number;
     expansionMargin: number;
     optimizationPath: number;
-    /**
-     * Velocity prediction factor for AABB expansion
-     *
-     * When > 0, expands AABBs in the direction of motion to reduce update frequency.
-     * Higher values = fewer updates but larger AABBs (more false positives in broadphase).
-     *
-     * @default 0.0
-     */
-    velocityPrediction: number;
 };
 export type DBVTNode = {
     index: number;
@@ -27,7 +18,6 @@ export type DBVTNode = {
     aabb: Box3;
     height: number;
     bodyIndex: number;
-    previousAabb: Box3;
 };
 export declare function create(): DBVT;
 export declare function add(dbvt: DBVT, body: RigidBody): number;

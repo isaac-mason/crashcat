@@ -24173,8 +24173,7 @@ function create$3() {
 		freeNodeIndices: [],
 		root: -1,
 		expansionMargin: .05,
-		optimizationPath: 0,
-		velocityPrediction: 0
+		optimizationPath: 0
 	};
 }
 function requestNode(bvh) {
@@ -24188,7 +24187,6 @@ function requestNode(bvh) {
 		empty(node.aabb);
 		node.height = 0;
 		node.bodyIndex = -1;
-		empty(node.previousAabb);
 	} else {
 		nodeIndex = bvh.nodes.length;
 		bvh.nodes.push({
@@ -24198,8 +24196,7 @@ function requestNode(bvh) {
 			right: -1,
 			aabb: create$41(),
 			height: 0,
-			bodyIndex: -1,
-			previousAabb: create$41()
+			bodyIndex: -1
 		});
 	}
 	return nodeIndex;
@@ -24251,7 +24248,6 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 			empty(node.aabb);
 			node.height = 0;
 			node.bodyIndex = -1;
-			empty(node.previousAabb);
 		} else {
 			nodeIndex = dbvt.nodes.length;
 			dbvt.nodes.push({
@@ -24261,8 +24257,7 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 				right: -1,
 				aabb: create$41(),
 				height: 0,
-				bodyIndex: -1,
-				previousAabb: create$41()
+				bodyIndex: -1
 			});
 		}
 		const newParentIndex = nodeIndex;
@@ -24585,7 +24580,6 @@ function add$1(dbvt, body) {
 	copy$4(leaf.aabb, bounds);
 	leaf.bodyIndex = body.index;
 	leaf.height = 0;
-	copy$4(leaf.previousAabb, body.aabb);
 	insertLeaf(dbvt, dbvt.root, leafIndex);
 	return leafIndex;
 }
@@ -24609,26 +24603,6 @@ function update$1(dbvt, body, lookahead) {
 			_bounds[3] = box[3] + margin;
 			_bounds[4] = box[4] + margin;
 			_bounds[5] = box[5] + margin;
-			if (dbvt.velocityPrediction > 0) {
-				const deltaX = body.aabb[0] - leaf.previousAabb[0];
-				const deltaY = body.aabb[1] - leaf.previousAabb[1];
-				const deltaZ = body.aabb[2] - leaf.previousAabb[2];
-				const halfExtentX = (leaf.previousAabb[3] - leaf.previousAabb[0]) * .5;
-				const halfExtentY = (leaf.previousAabb[4] - leaf.previousAabb[1]) * .5;
-				const halfExtentZ = (leaf.previousAabb[5] - leaf.previousAabb[2]) * .5;
-				let velocityX = halfExtentX * dbvt.velocityPrediction;
-				let velocityY = halfExtentY * dbvt.velocityPrediction;
-				let velocityZ = halfExtentZ * dbvt.velocityPrediction;
-				if (deltaX < 0) velocityX = -velocityX;
-				if (deltaY < 0) velocityY = -velocityY;
-				if (deltaZ < 0) velocityZ = -velocityZ;
-				if (velocityX > 0) _bounds[3] += velocityX;
-				else _bounds[0] += velocityX;
-				if (velocityY > 0) _bounds[4] += velocityY;
-				else _bounds[1] += velocityY;
-				if (velocityZ > 0) _bounds[5] += velocityZ;
-				else _bounds[2] += velocityZ;
-			}
 			let rootIndex;
 			if (leafIndex === dbvt.root) {
 				dbvt.root = -1;
@@ -24734,7 +24708,6 @@ function update$1(dbvt, body, lookahead) {
 					empty(node.aabb);
 					node.height = 0;
 					node.bodyIndex = -1;
-					empty(node.previousAabb);
 				} else {
 					nodeIndex = dbvt.nodes.length;
 					dbvt.nodes.push({
@@ -24744,8 +24717,7 @@ function update$1(dbvt, body, lookahead) {
 						right: -1,
 						aabb: create$41(),
 						height: 0,
-						bodyIndex: -1,
-						previousAabb: create$41()
+						bodyIndex: -1
 					});
 				}
 				const newParentIndex = nodeIndex;
@@ -24798,14 +24770,6 @@ function update$1(dbvt, body, lookahead) {
 					dbvt.root = newParentIndex;
 				}
 			}
-			let out$3 = leaf$1.previousAabb;
-			let box$2 = body.aabb;
-			out$3[0] = box$2[0];
-			out$3[1] = box$2[1];
-			out$3[2] = box$2[2];
-			out$3[3] = box$2[3];
-			out$3[4] = box$2[4];
-			out$3[5] = box$2[5];
 		}
 	}
 }

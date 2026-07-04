@@ -1,78 +1,79 @@
 {
   "scenario": "cube-heap",
-  "date": "2026-07-03T04:39:50.928Z",
+  "date": "2026-07-03T15:46:30.571Z",
   "git": {
-    "rev": "58a218d",
+    "rev": "0252042",
     "dirty": true
   },
   "node": "v24.10.0",
   "cpu": "Apple M1 Pro",
-  "wallMs": 6983.8,
-  "attributedMs": 6983.2,
-  "sampleCount": 5601,
+  "wallMs": 6377.3,
+  "attributedMs": 6189,
+  "startupExcludedMs": 187.9,
+  "sampleCount": 5525,
   "categories": [
     {
       "category": "solver",
-      "ms": 3156.8,
-      "pct": 45.2
+      "ms": 2878.5,
+      "pct": 46.5
     },
     {
       "category": "narrowphase",
-      "ms": 1104.5,
-      "pct": 15.8
+      "ms": 1102.4,
+      "pct": 17.8
     },
     {
       "category": "step",
-      "ms": 669.6,
-      "pct": 9.6
+      "ms": 638.4,
+      "pct": 10.3
     },
     {
       "category": "broadphase",
-      "ms": 638.6,
-      "pct": 9.1
+      "ms": 441.6,
+      "pct": 7.1
     },
     {
       "category": "body",
-      "ms": 362,
-      "pct": 5.2
+      "ms": 346.4,
+      "pct": 5.6
     },
     {
       "category": "shapes",
-      "ms": 302,
+      "ms": 267.6,
       "pct": 4.3
     },
     {
       "category": "math",
-      "ms": 276.8,
-      "pct": 4
-    },
-    {
-      "category": "runtime",
-      "ms": 231.3,
-      "pct": 3.3
+      "ms": 241.5,
+      "pct": 3.9
     },
     {
       "category": "manifold",
-      "ms": 225.5,
-      "pct": 3.2
+      "ms": 218,
+      "pct": 3.5
     },
     {
-      "category": "ccd",
-      "ms": 6.1,
-      "pct": 0.1
+      "category": "runtime",
+      "ms": 47,
+      "pct": 0.8
     },
     {
       "category": "bench-harness",
-      "ms": 5.1,
-      "pct": 0.1
-    },
-    {
-      "category": "crashcat-util",
       "ms": 3.8,
       "pct": 0.1
     },
     {
       "category": "other",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "category": "ccd",
+      "ms": 1.3,
+      "pct": 0
+    },
+    {
+      "category": "crashcat-util",
       "ms": 1.3,
       "pct": 0
     }
@@ -83,39 +84,39 @@
       "file": "src/constraints/contact-constraints.ts",
       "line": 1121,
       "location": "src/constraints/contact-constraints.ts:1121",
-      "ms": 1297.7,
-      "pct": 18.6
-    },
-    {
-      "name": "intersectAABB$1",
-      "file": "src/broadphase/dbvt.ts",
-      "line": 627,
-      "location": "src/broadphase/dbvt.ts:627",
-      "ms": 541,
-      "pct": 7.7
-    },
-    {
-      "name": "addContactConstraint",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 582,
-      "location": "src/constraints/contact-constraints.ts:582",
-      "ms": 459.4,
-      "pct": 6.6
+      "ms": 1261.1,
+      "pct": 20.4
     },
     {
       "name": "gjkClosestPoints",
       "file": "src/collision/gjk.ts",
       "line": 1225,
       "location": "src/collision/gjk.ts:1225",
-      "ms": 382.7,
-      "pct": 5.5
+      "ms": 394.3,
+      "pct": 6.4
+    },
+    {
+      "name": "intersectAABB$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 577,
+      "location": "src/broadphase/dbvt.ts:577",
+      "ms": 386.4,
+      "pct": 6.2
+    },
+    {
+      "name": "addContactConstraint",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 582,
+      "location": "src/constraints/contact-constraints.ts:582",
+      "ms": 337,
+      "pct": 5.4
     },
     {
       "name": "solvePositionConstraintsForIsland",
       "file": "src/constraints/contact-constraints.ts",
       "line": 1399,
       "location": "src/constraints/contact-constraints.ts:1399",
-      "ms": 348.5,
+      "ms": 306.9,
       "pct": 5
     },
     {
@@ -123,79 +124,87 @@
       "file": "src/collision/support.ts",
       "line": 125,
       "location": "src/collision/support.ts:125",
-      "ms": 316.8,
-      "pct": 4.5
+      "ms": 300.2,
+      "pct": 4.9
     },
     {
       "name": "updateWorld",
       "file": "src/update.ts",
       "line": 45,
       "location": "src/update.ts:45",
-      "ms": 247.7,
-      "pct": 3.5
+      "ms": 256.4,
+      "pct": 4.1
     },
     {
       "name": "getInverseInertiaForRotation",
       "file": "src/body/motion-properties.ts",
       "line": 500,
       "location": "src/body/motion-properties.ts:500",
-      "ms": 171.8,
+      "ms": 156.4,
       "pct": 2.5
-    },
-    {
-      "name": "getContactsFromCache",
-      "file": "src/update.ts",
-      "line": 868,
-      "location": "src/update.ts:868",
-      "ms": 159.4,
-      "pct": 2.3
     },
     {
       "name": "warmStartVelocityConstraints",
       "file": "src/constraints/contact-constraints.ts",
       "line": 971,
       "location": "src/constraints/contact-constraints.ts:971",
-      "ms": 148.2,
-      "pct": 2.1
+      "ms": 149.7,
+      "pct": 2.4
+    },
+    {
+      "name": "getContactsFromCache",
+      "file": "src/update.ts",
+      "line": 871,
+      "location": "src/update.ts:871",
+      "ms": 138.1,
+      "pct": 2.2
+    },
+    {
+      "name": "narrowphase",
+      "file": "src/update.ts",
+      "line": 952,
+      "location": "src/update.ts:952",
+      "ms": 118.4,
+      "pct": 1.9
     },
     {
       "name": "clipPolyVsPlane",
       "file": "src/manifold/clip.ts",
       "line": 13,
       "location": "src/manifold/clip.ts:13",
-      "ms": 129,
+      "ms": 112.3,
       "pct": 1.8
     },
     {
       "name": "getVelocityAtPointCOM",
       "file": "src/body/rigid-body.ts",
-      "line": 1007,
-      "location": "src/body/rigid-body.ts:1007",
-      "ms": 125,
+      "line": 1011,
+      "location": "src/body/rigid-body.ts:1011",
+      "ms": 110.2,
       "pct": 1.8
-    },
-    {
-      "name": "narrowphase",
-      "file": "src/update.ts",
-      "line": 949,
-      "location": "src/update.ts:949",
-      "ms": 123.7,
-      "pct": 1.8
-    },
-    {
-      "name": "calculateInverseEffectiveMass",
-      "file": "src/constraints/constraint-part/axis-constraint-part.ts",
-      "line": 81,
-      "location": "src/constraints/constraint-part/axis-constraint-part.ts:81",
-      "ms": 106.9,
-      "pct": 1.5
     },
     {
       "name": "collideConvexVsConvexLocal",
       "file": "src/shapes/convex.ts",
       "line": 329,
       "location": "src/shapes/convex.ts:329",
-      "ms": 88.1,
+      "ms": 96.3,
+      "pct": 1.6
+    },
+    {
+      "name": "calculateInverseEffectiveMass",
+      "file": "src/constraints/constraint-part/axis-constraint-part.ts",
+      "line": 81,
+      "location": "src/constraints/constraint-part/axis-constraint-part.ts:81",
+      "ms": 89.8,
+      "pct": 1.5
+    },
+    {
+      "name": "addPoint$1",
+      "file": "src/collision/epa-convex-hull-builder.ts",
+      "line": 629,
+      "location": "src/collision/epa-convex-hull-builder.ts:629",
+      "ms": 79.9,
       "pct": 1.3
     },
     {
@@ -203,47 +212,15 @@
       "file": "src/constraints/contact-constraints.ts",
       "line": 1359,
       "location": "src/constraints/contact-constraints.ts:1359",
-      "ms": 86,
-      "pct": 1.2
+      "ms": 78.2,
+      "pct": 1.3
     },
     {
-      "name": "collideConvexVsConvex",
-      "file": "src/shapes/convex.ts",
-      "line": 247,
-      "location": "src/shapes/convex.ts:247",
-      "ms": 80.7,
-      "pct": 1.2
-    },
-    {
-      "name": "findEdge$1",
-      "file": "src/collision/epa-convex-hull-builder.ts",
-      "line": 548,
-      "location": "src/collision/epa-convex-hull-builder.ts:548",
-      "ms": 78.6,
-      "pct": 1.1
-    },
-    {
-      "name": "createTriangle$1",
-      "file": "src/collision/epa-convex-hull-builder.ts",
-      "line": 251,
-      "location": "src/collision/epa-convex-hull-builder.ts:251",
-      "ms": 77.3,
-      "pct": 1.1
-    },
-    {
-      "name": "findContact",
-      "file": "src/contacts.ts",
-      "line": 647,
-      "location": "src/contacts.ts:647",
-      "ms": 76.8,
-      "pct": 1.1
-    },
-    {
-      "name": "penetrationDepthStepEPA",
+      "name": "penetrationDepthStepGJK",
       "file": "src/collision/penetration.ts",
-      "line": 209,
-      "location": "src/collision/penetration.ts:209",
-      "ms": 76.2,
+      "line": 29,
+      "location": "src/collision/penetration.ts:29",
+      "ms": 70.9,
       "pct": 1.1
     },
     {
@@ -251,95 +228,135 @@
       "file": "src/constraints/constraint-part/axis-constraint-part.ts",
       "line": 810,
       "location": "src/constraints/constraint-part/axis-constraint-part.ts:810",
-      "ms": 71.9,
-      "pct": 1
+      "ms": 69.9,
+      "pct": 1.1
     },
     {
       "name": "sortContactIndices",
       "file": "src/constraints/contact-constraints.ts",
       "line": 1541,
       "location": "src/constraints/contact-constraints.ts:1541",
-      "ms": 70.8,
-      "pct": 1
+      "ms": 68.3,
+      "pct": 1.1
+    },
+    {
+      "name": "penetrationDepthStepEPA",
+      "file": "src/collision/penetration.ts",
+      "line": 209,
+      "location": "src/collision/penetration.ts:209",
+      "ms": 65.7,
+      "pct": 1.1
     },
     {
       "name": "multiply3x3TransposedVec",
       "file": "…/node_modules/mathcat/dist/mat4.js",
       "line": 603,
       "location": "…/node_modules/mathcat/dist/mat4.js:603",
-      "ms": 69.4,
+      "ms": 65.2,
+      "pct": 1.1
+    },
+    {
+      "name": "findContact",
+      "file": "src/contacts.ts",
+      "line": 680,
+      "location": "src/contacts.ts:680",
+      "ms": 64.9,
       "pct": 1
     },
     {
-      "name": "calculateNormalVelocityBias",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 309,
-      "location": "src/constraints/contact-constraints.ts:309",
-      "ms": 65.8,
-      "pct": 0.9
-    },
-    {
-      "name": "penetrationDepthStepGJK",
-      "file": "src/collision/penetration.ts",
-      "line": 29,
-      "location": "src/collision/penetration.ts:29",
-      "ms": 64.4,
-      "pct": 0.9
-    },
-    {
-      "name": "calculateFrictionConstraintProperties",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 475,
-      "location": "src/constraints/contact-constraints.ts:475",
-      "ms": 60.8,
-      "pct": 0.9
-    },
-    {
-      "name": "update$1",
-      "file": "src/broadphase/dbvt.ts",
-      "line": 485,
-      "location": "src/broadphase/dbvt.ts:485",
-      "ms": 60,
-      "pct": 0.9
-    },
-    {
-      "name": "addPoint$1",
+      "name": "createTriangle$1",
       "file": "src/collision/epa-convex-hull-builder.ts",
-      "line": 629,
-      "location": "src/collision/epa-convex-hull-builder.ts:629",
-      "ms": 57.5,
-      "pct": 0.8
+      "line": 251,
+      "location": "src/collision/epa-convex-hull-builder.ts:251",
+      "ms": 64.7,
+      "pct": 1
     },
     {
-      "name": "getSupportingFace$11",
-      "file": "src/shapes/box.ts",
-      "line": 157,
-      "location": "src/shapes/box.ts:157",
-      "ms": 54.9,
-      "pct": 0.8
+      "name": "collideConvexVsConvex",
+      "file": "src/shapes/convex.ts",
+      "line": 247,
+      "location": "src/shapes/convex.ts:247",
+      "ms": 62.1,
+      "pct": 1
     },
     {
-      "name": "setCachedBodyPair",
-      "file": "src/contacts.ts",
-      "line": 174,
-      "location": "src/contacts.ts:174",
-      "ms": 48.8,
-      "pct": 0.7
-    },
-    {
-      "name": "(garbage collector)",
-      "file": "",
-      "line": null,
-      "location": "",
-      "ms": 46.4,
-      "pct": 0.7
+      "name": "findEdge$1",
+      "file": "src/collision/epa-convex-hull-builder.ts",
+      "line": 548,
+      "location": "src/collision/epa-convex-hull-builder.ts:548",
+      "ms": 55.6,
+      "pct": 0.9
     },
     {
       "name": "manifoldBetweenTwoFaces",
       "file": "src/manifold/manifold.ts",
       "line": 394,
       "location": "src/manifold/manifold.ts:394",
-      "ms": 44.4,
+      "ms": 51.2,
+      "pct": 0.8
+    },
+    {
+      "name": "calculateFrictionConstraintProperties",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 475,
+      "location": "src/constraints/contact-constraints.ts:475",
+      "ms": 46.1,
+      "pct": 0.7
+    },
+    {
+      "name": "linkContactConstraints",
+      "file": "src/islands.ts",
+      "line": 184,
+      "location": "src/islands.ts:184",
+      "ms": 43.5,
+      "pct": 0.7
+    },
+    {
+      "name": "setBoxSupport",
+      "file": "src/collision/support.ts",
+      "line": 296,
+      "location": "src/collision/support.ts:296",
+      "ms": 43,
+      "pct": 0.7
+    },
+    {
+      "name": "addHit",
+      "file": "src/update.ts",
+      "line": 435,
+      "location": "src/update.ts:435",
+      "ms": 41.5,
+      "pct": 0.7
+    },
+    {
+      "name": "checkIslandSleep",
+      "file": "src/islands.ts",
+      "line": 378,
+      "location": "src/islands.ts:378",
+      "ms": 41.4,
+      "pct": 0.7
+    },
+    {
+      "name": "getShapeSupportingFace",
+      "file": "src/shapes/shapes.ts",
+      "line": 494,
+      "location": "src/shapes/shapes.ts:494",
+      "ms": 41.2,
+      "pct": 0.7
+    },
+    {
+      "name": "calculateNormalVelocityBias",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 309,
+      "location": "src/constraints/contact-constraints.ts:309",
+      "ms": 40.1,
+      "pct": 0.6
+    },
+    {
+      "name": "destroyContact",
+      "file": "src/contacts.ts",
+      "line": 460,
+      "location": "src/contacts.ts:460",
+      "ms": 40,
       "pct": 0.6
     },
     {
@@ -347,183 +364,135 @@
       "file": "src/constraints/contact-constraints.ts",
       "line": 1542,
       "location": "src/constraints/contact-constraints.ts:1542",
-      "ms": 42.4,
+      "ms": 38.9,
       "pct": 0.6
     },
     {
-      "name": "getShapeSupportingFace",
-      "file": "src/shapes/shapes.ts",
-      "line": 494,
-      "location": "src/shapes/shapes.ts:494",
-      "ms": 41.6,
+      "name": "update$1",
+      "file": "src/broadphase/dbvt.ts",
+      "line": 475,
+      "location": "src/broadphase/dbvt.ts:475",
+      "ms": 38.2,
       "pct": 0.6
     },
     {
-      "name": "destroyContact",
-      "file": "src/contacts.ts",
-      "line": 435,
-      "location": "src/contacts.ts:435",
-      "ms": 40.7,
+      "name": "getSupportingFace$11",
+      "file": "src/shapes/box.ts",
+      "line": 157,
+      "location": "src/shapes/box.ts:157",
+      "ms": 37.5,
       "pct": 0.6
-    },
-    {
-      "name": "addHit",
-      "file": "src/update.ts",
-      "line": 432,
-      "location": "src/update.ts:432",
-      "ms": 39,
-      "pct": 0.6
-    },
-    {
-      "name": "reconstructManifoldFromCache",
-      "file": "src/update.ts",
-      "line": 799,
-      "location": "src/update.ts:799",
-      "ms": 36,
-      "pct": 0.5
-    },
-    {
-      "name": "checkIslandSleep",
-      "file": "src/islands.ts",
-      "line": 378,
-      "location": "src/islands.ts:378",
-      "ms": 34.5,
-      "pct": 0.5
     },
     {
       "name": "clipPolyVsPoly",
       "file": "src/manifold/clip.ts",
       "line": 108,
       "location": "src/manifold/clip.ts:108",
-      "ms": 34.5,
-      "pct": 0.5
+      "ms": 35.5,
+      "pct": 0.6
     },
     {
       "name": "velocityIntegrationUpdate",
       "file": "src/update.ts",
-      "line": 1131,
-      "location": "src/update.ts:1131",
-      "ms": 34,
+      "line": 1134,
+      "location": "src/update.ts:1134",
+      "ms": 33,
       "pct": 0.5
-    },
-    {
-      "name": "linkContactConstraints",
-      "file": "src/islands.ts",
-      "line": 184,
-      "location": "src/islands.ts:184",
-      "ms": 33.9,
-      "pct": 0.5
-    },
-    {
-      "name": "fromRotationTranslation",
-      "file": "…/node_modules/mathcat/dist/mat4.js",
-      "line": 1150,
-      "location": "…/node_modules/mathcat/dist/mat4.js:1150",
-      "ms": 32.2,
-      "pct": 0.5
-    },
-    {
-      "name": "makeSyncRequest",
-      "file": "node:internal/modules/esm/hooks",
-      "line": null,
-      "location": "node:internal/modules/esm/hooks",
-      "ms": 30.8,
-      "pct": 0.4
-    },
-    {
-      "name": "(idle)",
-      "file": "",
-      "line": null,
-      "location": "",
-      "ms": 30.4,
-      "pct": 0.4
-    },
-    {
-      "name": "waitForWorker",
-      "file": "node:internal/modules/esm/hooks",
-      "line": null,
-      "location": "node:internal/modules/esm/hooks",
-      "ms": 30.2,
-      "pct": 0.4
-    },
-    {
-      "name": "addRotationStep",
-      "file": "src/body/rigid-body-step.ts",
-      "line": 55,
-      "location": "src/body/rigid-body-step.ts:55",
-      "ms": 30,
-      "pct": 0.4
-    },
-    {
-      "name": "setContactSettings",
-      "file": "src/constraints/contact-constraints.ts",
-      "line": 243,
-      "location": "src/constraints/contact-constraints.ts:243",
-      "ms": 29.6,
-      "pct": 0.4
-    },
-    {
-      "name": "findCollidingPairs",
-      "file": "src/broadphase/broadphase.ts",
-      "line": 213,
-      "location": "src/broadphase/broadphase.ts:213",
-      "ms": 27.4,
-      "pct": 0.4
-    },
-    {
-      "name": "setBoxSupport",
-      "file": "src/collision/support.ts",
-      "line": 296,
-      "location": "src/collision/support.ts:296",
-      "ms": 25.8,
-      "pct": 0.4
     },
     {
       "name": "setAxisAngle",
       "file": "…/node_modules/mathcat/dist/quat.js",
       "line": 36,
       "location": "…/node_modules/mathcat/dist/quat.js:36",
-      "ms": 25,
-      "pct": 0.4
+      "ms": 31.5,
+      "pct": 0.5
     },
     {
-      "name": "cross",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 401,
-      "location": "…/node_modules/mathcat/dist/vec3.js:401",
-      "ms": 20.6,
-      "pct": 0.3
-    },
-    {
-      "name": "finalize",
-      "file": "src/islands.ts",
-      "line": 240,
-      "location": "src/islands.ts:240",
-      "ms": 19,
-      "pct": 0.3
+      "name": "(garbage collector)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 31.5,
+      "pct": 0.5
     },
     {
       "name": "hasContactsBetweenBodyIds",
       "file": "src/contacts.ts",
-      "line": 479,
-      "location": "src/contacts.ts:479",
-      "ms": 18.8,
-      "pct": 0.3
+      "line": 504,
+      "location": "src/contacts.ts:504",
+      "ms": 30.2,
+      "pct": 0.5
     },
     {
-      "name": "destroyUnprocessedContacts",
+      "name": "normalize$1",
+      "file": "…/node_modules/mathcat/dist/vec4.js",
+      "line": 325,
+      "location": "…/node_modules/mathcat/dist/vec4.js:325",
+      "ms": 27.1,
+      "pct": 0.4
+    },
+    {
+      "name": "setCachedBodyPair",
       "file": "src/contacts.ts",
-      "line": 700,
-      "location": "src/contacts.ts:700",
-      "ms": 18.7,
+      "line": 199,
+      "location": "src/contacts.ts:199",
+      "ms": 26.3,
+      "pct": 0.4
+    },
+    {
+      "name": "subRotationStep",
+      "file": "src/body/rigid-body-step.ts",
+      "line": 83,
+      "location": "src/body/rigid-body-step.ts:83",
+      "ms": 23.1,
+      "pct": 0.4
+    },
+    {
+      "name": "getSleepTestPoints",
+      "file": "src/body/sleep.ts",
+      "line": 22,
+      "location": "src/body/sleep.ts:22",
+      "ms": 23,
+      "pct": 0.4
+    },
+    {
+      "name": "combineMaterial",
+      "file": "src/constraints/combine-material.ts",
+      "line": 40,
+      "location": "src/constraints/combine-material.ts:40",
+      "ms": 21.8,
+      "pct": 0.4
+    },
+    {
+      "name": "reconstructManifoldFromCache",
+      "file": "src/update.ts",
+      "line": 802,
+      "location": "src/update.ts:802",
+      "ms": 21.3,
       "pct": 0.3
     },
     {
-      "name": "compileSourceTextModule",
-      "file": "node:internal/modules/esm/utils",
-      "line": null,
-      "location": "node:internal/modules/esm/utils",
-      "ms": 18.5,
+      "name": "updateAABB",
+      "file": "src/body/rigid-body.ts",
+      "line": 571,
+      "location": "src/body/rigid-body.ts:571",
+      "ms": 19.6,
+      "pct": 0.3
+    },
+    {
+      "name": "accelerationIntegrationUpdate",
+      "file": "src/update.ts",
+      "line": 290,
+      "location": "src/update.ts:290",
+      "ms": 19.5,
+      "pct": 0.3
+    },
+    {
+      "name": "fromRotationTranslation",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 1150,
+      "location": "…/node_modules/mathcat/dist/mat4.js:1150",
+      "ms": 18.7,
       "pct": 0.3
     },
     {
@@ -531,23 +500,39 @@
       "file": "src/manifold/manifold.ts",
       "line": 168,
       "location": "src/manifold/manifold.ts:168",
-      "ms": 17.6,
+      "ms": 17.7,
       "pct": 0.3
     },
     {
-      "name": "fromQuat$1",
-      "file": "…/node_modules/mathcat/dist/mat4.js",
-      "line": 1518,
-      "location": "…/node_modules/mathcat/dist/mat4.js:1518",
-      "ms": 17.5,
+      "name": "setContactSettings",
+      "file": "src/constraints/contact-constraints.ts",
+      "line": 243,
+      "location": "src/constraints/contact-constraints.ts:243",
+      "ms": 17,
       "pct": 0.3
     },
     {
-      "name": "getSleepTestPoints",
-      "file": "src/body/sleep.ts",
-      "line": 22,
-      "location": "src/body/sleep.ts:22",
-      "ms": 16.3,
+      "name": "finalize",
+      "file": "src/islands.ts",
+      "line": 240,
+      "location": "src/islands.ts:240",
+      "ms": 16.8,
+      "pct": 0.3
+    },
+    {
+      "name": "destroyStaleContactsBetweenBodies",
+      "file": "src/contacts.ts",
+      "line": 603,
+      "location": "src/contacts.ts:603",
+      "ms": 16.6,
+      "pct": 0.3
+    },
+    {
+      "name": "transformQuat",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 567,
+      "location": "…/node_modules/mathcat/dist/vec3.js:567",
+      "ms": 15.3,
       "pct": 0.2
     },
     {
@@ -559,43 +544,19 @@
       "pct": 0.2
     },
     {
-      "name": "combineMaterial",
-      "file": "src/constraints/combine-material.ts",
-      "line": 40,
-      "location": "src/constraints/combine-material.ts:40",
-      "ms": 15,
+      "name": "destroyUnprocessedContacts",
+      "file": "src/contacts.ts",
+      "line": 733,
+      "location": "src/contacts.ts:733",
+      "ms": 14.9,
       "pct": 0.2
     },
     {
-      "name": "normalize$2",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 369,
-      "location": "…/node_modules/mathcat/dist/vec3.js:369",
-      "ms": 14,
-      "pct": 0.2
-    },
-    {
-      "name": "accelerationIntegrationUpdate",
-      "file": "src/update.ts",
-      "line": 287,
-      "location": "src/update.ts:287",
+      "name": "multiply$1",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 448,
+      "location": "…/node_modules/mathcat/dist/mat4.js:448",
       "ms": 13.8,
-      "pct": 0.2
-    },
-    {
-      "name": "transformQuat",
-      "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 567,
-      "location": "…/node_modules/mathcat/dist/vec3.js:567",
-      "ms": 13.8,
-      "pct": 0.2
-    },
-    {
-      "name": "normalize$1",
-      "file": "…/node_modules/mathcat/dist/vec4.js",
-      "line": 325,
-      "location": "…/node_modules/mathcat/dist/vec4.js:325",
-      "ms": 13.7,
       "pct": 0.2
     },
     {
@@ -603,47 +564,55 @@
       "file": "src/shapes/plane.ts",
       "line": 483,
       "location": "src/shapes/plane.ts:483",
-      "ms": 12.9,
+      "ms": 13.5,
+      "pct": 0.2
+    },
+    {
+      "name": "fromQuat$1",
+      "file": "…/node_modules/mathcat/dist/mat4.js",
+      "line": 1518,
+      "location": "…/node_modules/mathcat/dist/mat4.js:1518",
+      "ms": 12.2,
       "pct": 0.2
     },
     {
       "name": "createContact",
       "file": "src/contacts.ts",
-      "line": 373,
-      "location": "src/contacts.ts:373",
-      "ms": 12.7,
+      "line": 398,
+      "location": "src/contacts.ts:398",
+      "ms": 11.5,
       "pct": 0.2
     },
     {
-      "name": "multiply",
-      "file": "…/node_modules/mathcat/dist/quat.js",
-      "line": 93,
-      "location": "…/node_modules/mathcat/dist/quat.js:93",
-      "ms": 12.5,
+      "name": "findCollidingPairs",
+      "file": "src/broadphase/broadphase.ts",
+      "line": 218,
+      "location": "src/broadphase/broadphase.ts:218",
+      "ms": 10.5,
       "pct": 0.2
     },
     {
-      "name": "transformMat4$1",
+      "name": "cross",
       "file": "…/node_modules/mathcat/dist/vec3.js",
-      "line": 530,
-      "location": "…/node_modules/mathcat/dist/vec3.js:530",
-      "ms": 12.4,
+      "line": 401,
+      "location": "…/node_modules/mathcat/dist/vec3.js:401",
+      "ms": 9.9,
       "pct": 0.2
     },
     {
-      "name": "updateAABB",
-      "file": "src/body/rigid-body.ts",
-      "line": 567,
-      "location": "src/body/rigid-body.ts:567",
-      "ms": 11.4,
+      "name": "updateBodyPositions",
+      "file": "src/update.ts",
+      "line": 374,
+      "location": "src/update.ts:374",
+      "ms": 9.3,
       "pct": 0.2
     },
     {
-      "name": "(program)",
-      "file": "",
-      "line": null,
-      "location": "",
-      "ms": 11,
+      "name": "normalize$2",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 369,
+      "location": "…/node_modules/mathcat/dist/vec3.js:369",
+      "ms": 9.3,
       "pct": 0.2
     },
     {
@@ -651,47 +620,15 @@
       "file": "…/node_modules/mathcat/dist/common.js",
       "line": 69,
       "location": "…/node_modules/mathcat/dist/common.js:69",
-      "ms": 10,
+      "ms": 8.9,
       "pct": 0.1
     },
     {
-      "name": "multiply$1",
-      "file": "…/node_modules/mathcat/dist/mat4.js",
-      "line": 448,
-      "location": "…/node_modules/mathcat/dist/mat4.js:448",
-      "ms": 9.8,
-      "pct": 0.1
-    },
-    {
-      "name": "destroyStaleContactsBetweenBodies",
-      "file": "src/contacts.ts",
-      "line": 570,
-      "location": "src/contacts.ts:570",
-      "ms": 9.8,
-      "pct": 0.1
-    },
-    {
-      "name": "compileForInternalLoader",
-      "file": "node:internal/bootstrap/realm",
+      "name": "(program)",
+      "file": "",
       "line": null,
-      "location": "node:internal/bootstrap/realm",
-      "ms": 8.8,
-      "pct": 0.1
-    },
-    {
-      "name": "getOrthogonalBasis",
-      "file": "src/shapes/plane.ts",
-      "line": 211,
-      "location": "src/shapes/plane.ts:211",
-      "ms": 7.6,
-      "pct": 0.1
-    },
-    {
-      "name": "updateBodyPositions",
-      "file": "src/update.ts",
-      "line": 371,
-      "location": "src/update.ts:371",
-      "ms": 7.5,
+      "location": "",
+      "ms": 8.3,
       "pct": 0.1
     },
     {
@@ -699,7 +636,23 @@
       "file": "src/collision/closest-points.ts",
       "line": 57,
       "location": "src/collision/closest-points.ts:57",
-      "ms": 6.5,
+      "ms": 8.1,
+      "pct": 0.1
+    },
+    {
+      "name": "multiply",
+      "file": "…/node_modules/mathcat/dist/quat.js",
+      "line": 93,
+      "location": "…/node_modules/mathcat/dist/quat.js:93",
+      "ms": 7.8,
+      "pct": 0.1
+    },
+    {
+      "name": "prepare",
+      "file": "src/islands.ts",
+      "line": 64,
+      "location": "src/islands.ts:64",
+      "ms": 7.4,
       "pct": 0.1
     },
     {
@@ -707,7 +660,47 @@
       "file": "src/shapes/plane.ts",
       "line": 636,
       "location": "src/shapes/plane.ts:636",
-      "ms": 6.3,
+      "ms": 6.5,
+      "pct": 0.1
+    },
+    {
+      "name": "markAllUnprocessed",
+      "file": "src/contacts.ts",
+      "line": 715,
+      "location": "src/contacts.ts:715",
+      "ms": 6.2,
+      "pct": 0.1
+    },
+    {
+      "name": "transformMat4$1",
+      "file": "…/node_modules/mathcat/dist/vec3.js",
+      "line": 530,
+      "location": "…/node_modules/mathcat/dist/vec3.js:530",
+      "ms": 6.1,
+      "pct": 0.1
+    },
+    {
+      "name": "(idle)",
+      "file": "",
+      "line": null,
+      "location": "",
+      "ms": 5.9,
+      "pct": 0.1
+    },
+    {
+      "name": "updateSleepState",
+      "file": "src/body/sleep.ts",
+      "line": 83,
+      "location": "src/body/sleep.ts:83",
+      "ms": 5.8,
+      "pct": 0.1
+    },
+    {
+      "name": "getOrthogonalBasis",
+      "file": "src/shapes/plane.ts",
+      "line": 211,
+      "location": "src/shapes/plane.ts:211",
+      "ms": 4.8,
       "pct": 0.1
     },
     {
@@ -715,7 +708,15 @@
       "file": "src/collision/epa-convex-hull-builder.ts",
       "line": 419,
       "location": "src/collision/epa-convex-hull-builder.ts:419",
-      "ms": 6.3,
+      "ms": 4.8,
+      "pct": 0.1
+    },
+    {
+      "name": "popClosestTriangleFromQueue",
+      "file": "src/collision/epa-convex-hull-builder.ts",
+      "line": 451,
+      "location": "src/collision/epa-convex-hull-builder.ts:451",
+      "ms": 4.6,
       "pct": 0.1
     }
   ]
