@@ -1,4 +1,4 @@
-import { type Box3, box3, raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from '../body/rigid-body';
 import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { Filter } from '../filter';
@@ -846,8 +846,6 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
     }
 }
 
-const _ray = /* @__PURE__ */ raycast3.create();
-
 /** @optimize */
 export function castRay(
     world: World,
@@ -863,15 +861,12 @@ export function castRay(
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
 
-    raycast3.set(_ray, origin, direction, length);
-
-    const originX = _ray.origin[0];
-    const originY = _ray.origin[1];
-    const originZ = _ray.origin[2];
-    const dirX = _ray.direction[0];
-    const dirY = _ray.direction[1];
-    const dirZ = _ray.direction[2];
-    const rayLen = _ray.length;
+    const originX = origin[0];
+    const originY = origin[1];
+    const originZ = origin[2];
+    const dirX = direction[0];
+    const dirY = direction[1];
+    const dirZ = direction[2];
 
     // closest-hit fraction so far; any node whose fat-AABB entry fraction is >= this can't hold a
     // closer hit and is pruned. both are normalized to [0, 1] of the ray length. visitors that don't
@@ -888,7 +883,7 @@ export function castRay(
         dirX,
         dirY,
         dirZ,
-        rayLen,
+        length,
         bounds[rootB],
         bounds[rootB + 1],
         bounds[rootB + 2],
@@ -924,7 +919,7 @@ export function castRay(
                 dirX,
                 dirY,
                 dirZ,
-                rayLen,
+                length,
                 bounds[lb],
                 bounds[lb + 1],
                 bounds[lb + 2],
@@ -940,7 +935,7 @@ export function castRay(
                 dirX,
                 dirY,
                 dirZ,
-                rayLen,
+                length,
                 bounds[rb],
                 bounds[rb + 1],
                 bounds[rb + 2],
@@ -1010,7 +1005,7 @@ export function castRay(
                 dirX,
                 dirY,
                 dirZ,
-                rayLen,
+                length,
                 body.aabb[0],
                 body.aabb[1],
                 body.aabb[2],
