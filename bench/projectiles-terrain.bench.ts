@@ -24,8 +24,6 @@
 // invokes via `run-scenario.ts`.
 
 import { bench, group } from '@pmndrs/labs';
-import type { Vec3 } from 'mathcat';
-
 import {
     addBroadphaseLayer,
     addObjectLayer,
@@ -35,9 +33,9 @@ import {
     enableCollision,
     MotionQuality,
     MotionType,
+    type RigidBody,
     registerAll,
     rigidBody,
-    type RigidBody,
     type Shape,
     sphere,
     triangleMesh,
@@ -45,6 +43,7 @@ import {
     type World,
     type WorldSettings,
 } from 'crashcat';
+import type { Vec3 } from 'mathcat';
 
 registerAll();
 
@@ -120,7 +119,20 @@ function makeTerrainShape(): Shape {
     const indices: number[] = [];
 
     // v0,v1,v2,v3 must be wound CCW as seen from the outward-normal side
-    const quad = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, cx: number, cy: number, cz: number, dx: number, dy: number, dz: number) => {
+    const quad = (
+        ax: number,
+        ay: number,
+        az: number,
+        bx: number,
+        by: number,
+        bz: number,
+        cx: number,
+        cy: number,
+        cz: number,
+        dx: number,
+        dy: number,
+        dz: number,
+    ) => {
         const base = positions.length / 3;
         positions.push(ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz);
         indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -255,9 +267,27 @@ function populate(world: World, rng: () => number): State {
     return { world, projectiles };
 }
 
-function runSim(state: State, rng: () => number, steps: number): void {
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` runs the
+ * settle/relaunch check over every projectile (relaunching with a fresh seeded
+ * velocity) then advances the sim. Warmup uses WARMUP_SEED; the op rng is
+ * re-seeded with the FIXED OP_SEED at each op boundary (labs and profiling both
+ * use OP_SEED) so repeated ops replay the identical launches. World-state drift
+ * is fine.
+ */
+function build(): { scenario: Scenario; projectiles: Projectile[] } {
+    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
     const { world, projectiles } = state;
-    for (let i = 0; i < steps; i++) {
+    const warmupRng = makeRng(WARMUP_SEED);
+    let opRng = makeRng(OP_SEED);
+
+    const stepAll = (rng: () => number): void => {
         for (const p of projectiles) {
             const v = p.body.motionProperties.linearVelocity;
             const speedSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
@@ -272,53 +302,61 @@ function runSim(state: State, rng: () => number, steps: number): void {
             }
         }
         updateWorld(world, undefined, TIME_STEP);
-    }
+    };
+
+    const scenario: Scenario = {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(stepIndex: number): void {
+            if (stepIndex < STEADY_WARMUP_STEPS) {
+                stepAll(warmupRng);
+            } else {
+                const g = stepIndex - STEADY_WARMUP_STEPS;
+                if (g % STEPS_PER_OP === 0) opRng = makeRng(OP_SEED);
+                stepAll(opRng);
+            }
+        },
+    };
+    return { scenario, projectiles };
+}
+
+export function createScenario(): Scenario {
+    return build().scenario;
 }
 
 group('projectiles-terrain', () => {
     bench('projectiles-terrain', function* () {
-        const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-        runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
 
 export function runForProfiling(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }
 
 // TEMP sanity
 export function __sanity(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
+    const { scenario: s, projectiles } = build();
     const t0 = performance.now();
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
     const t1 = performance.now();
 
-    // step one op manually, sampling per-step CCD activity + tunnelling
-    const rng = makeRng(OP_SEED);
+    // step one op, sampling per-step CCD activity + tunnelling
     let ccdActiveSum = 0;
     let belowFloor = 0;
     let minY = Infinity;
     const a = performance.now();
     for (let i = 0; i < STEPS_PER_OP; i++) {
-        for (const p of state.projectiles) {
-            const v = p.body.motionProperties.linearVelocity;
-            const speedSq = v[0] * v[0] + v[1] * v[1] + v[2] * v[2];
-            const y = p.body.position[1];
-            if (speedSq < SETTLE_SPEED * SETTLE_SPEED) p.slowSteps++;
-            else p.slowSteps = 0;
-            if (p.slowSteps >= SETTLE_STEPS || y < FLOOR_Y) launch(state.world, p, rng);
-        }
-        updateWorld(state.world, undefined, TIME_STEP);
+        s.stepOnce(s.warmupSteps + i);
         // after the step, ccdBodyIndex reflects which bodies did a CCD cast this step
         let active = 0;
-        for (const p of state.projectiles) {
+        for (const p of projectiles) {
             if (p.body.ccdBodyIndex >= 0) active++;
             const y = p.body.position[1];
             if (y < minY) minY = y;

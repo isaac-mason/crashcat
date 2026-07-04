@@ -15,13 +15,11 @@
 // invokes via `run-scenario.ts`.
 
 import { bench, group } from '@pmndrs/labs';
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
-
 import {
     addBroadphaseLayer,
     addObjectLayer,
-    capsule,
     ConstraintSpace,
+    capsule,
     createWorld,
     createWorldSettings,
     enableCollision,
@@ -30,15 +28,16 @@ import {
     MotionType,
     plane,
     pointConstraint,
+    type RigidBody,
     registerAll,
     rigidBody,
-    type RigidBody,
     type Shape,
     swingTwistConstraint,
     updateWorld,
     type World,
     type WorldSettings,
 } from 'crashcat';
+import { quat, type Vec3, vec3 } from 'mathcat';
 
 registerAll();
 
@@ -225,50 +224,90 @@ function teleportChain(world: World, chain: Chain, newBaseY: number): void {
     }
 }
 
-function runSim(state: State, rng: () => number, steps: number): void {
-    const { world, chains } = state;
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` runs the
+ * churn (teleport one chain back up every CHURN_INTERVAL steps) then advances
+ * the sim with the collision listener. Warmup uses WARMUP_SEED; the op rng is
+ * re-seeded with the FIXED OP_SEED at each op boundary (labs and profiling both
+ * use OP_SEED), and the round-robin cursor resets at each phase boundary so
+ * repeated ops replay the identical churn. World-state drift is fine.
+ */
+function build(): { scenario: Scenario; chains: Chain[] } {
+    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
+    const { world, chains, listener } = state;
+    const warmupRng = makeRng(WARMUP_SEED);
+    let opRng = makeRng(OP_SEED);
     let cursor = 0;
-    for (let i = 0; i < steps; i++) {
-        if (i % CHURN_INTERVAL === 0) {
+
+    const churnStep = (rng: () => number, localIndex: number): void => {
+        if (localIndex % CHURN_INTERVAL === 0) {
             const chain = chains[cursor % chains.length];
             cursor++;
             // teleport chain back up with a small seeded height jitter, zero velocities
             teleportChain(world, chain, DROP_HEIGHT + rng() * 1.5);
         }
-        updateWorld(world, state.listener, TIME_STEP);
-    }
+        updateWorld(world, listener, TIME_STEP);
+    };
+
+    const scenario: Scenario = {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(stepIndex: number): void {
+            if (stepIndex < STEADY_WARMUP_STEPS) {
+                if (stepIndex === 0) cursor = 0;
+                churnStep(warmupRng, stepIndex);
+            } else {
+                const k = (stepIndex - STEADY_WARMUP_STEPS) % STEPS_PER_OP;
+                if (k === 0) {
+                    opRng = makeRng(OP_SEED);
+                    cursor = 0;
+                }
+                churnStep(opRng, k);
+            }
+        },
+    };
+    return { scenario, chains };
+}
+
+export function createScenario(): Scenario {
+    return build().scenario;
 }
 
 group('joints', () => {
     bench('joints', function* () {
-        const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-        runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
 
 export function runForProfiling(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }
 
 // TEMP sanity
 export function __sanity(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
+    const { scenario: s, chains } = build();
     const t0 = performance.now();
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
     const t1 = performance.now();
     const opTimes: number[] = [];
     for (let op = 0; op < 5; op++) {
         const a = performance.now();
-        runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
+        for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + op * STEPS_PER_OP + i);
         opTimes.push(performance.now() - a);
     }
+    const state = { chains };
     // chain integrity: max adjacent-segment centre distance vs the rest length
     let maxDist = 0;
     let maxDev = 0;

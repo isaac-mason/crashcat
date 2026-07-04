@@ -25,9 +25,9 @@ import {
     createWorldSettings,
     enableCollision,
     MotionType,
+    type RigidBody,
     registerAll,
     rigidBody,
-    type RigidBody,
     type Shape,
     sphere,
     triangleMesh,
@@ -101,9 +101,18 @@ const OL_MOVING = 1;
 function hullPositions(radius: number): number[] {
     const t = (1 + Math.sqrt(5)) / 2;
     const raw = [
-        [-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0],
-        [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t],
-        [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1],
+        [-1, t, 0],
+        [1, t, 0],
+        [-1, -t, 0],
+        [1, -t, 0],
+        [0, -1, t],
+        [0, 1, t],
+        [0, -1, -t],
+        [0, 1, -t],
+        [t, 0, -1],
+        [t, 0, 1],
+        [-t, 0, -1],
+        [-t, 0, 1],
     ];
     const norm = Math.sqrt(1 + t * t);
     const out: number[] = [];
@@ -182,10 +191,29 @@ function populate(world: World, rng: () => number): BodyInfo[] {
 
 const zero: [number, number, number] = [0, 0, 0];
 
-function runSim(world: World, bodies: BodyInfo[], rng: () => number, steps: number): void {
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` re-drops
+ * one body every CHURN_INTERVAL steps (round-robin, seeded scatter) then advances
+ * the sim. Warmup uses WARMUP_SEED; the op rng is re-seeded with the FIXED
+ * OP_SEED at each op boundary (labs and profiling both use OP_SEED), and the
+ * round-robin cursor resets at each phase boundary so repeated ops replay the
+ * identical churn. World-state drift is fine.
+ */
+function build(): { scenario: Scenario; bodies: BodyInfo[] } {
+    const world = createWorld(makeWorldSettings());
+    const bodies = populate(world, makeRng(RNG_SEED));
+    const warmupRng = makeRng(WARMUP_SEED);
+    let opRng = makeRng(OP_SEED);
     let cursor = 0;
-    for (let i = 0; i < steps; i++) {
-        if (i % CHURN_INTERVAL === 0) {
+
+    const churnStep = (rng: () => number, localIndex: number): void => {
+        if (localIndex % CHURN_INTERVAL === 0) {
             const info = bodies[cursor % bodies.length];
             cursor++;
             // re-drop at a fresh random scatter position, waking the body
@@ -197,41 +225,58 @@ function runSim(world: World, bodies: BodyInfo[], rng: () => number, steps: numb
             rigidBody.setPosition(world, info.body, [x, y, z], true);
         }
         updateWorld(world, undefined, TIME_STEP);
-    }
+    };
+
+    const scenario: Scenario = {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(stepIndex: number): void {
+            if (stepIndex < STEADY_WARMUP_STEPS) {
+                if (stepIndex === 0) cursor = 0;
+                churnStep(warmupRng, stepIndex);
+            } else {
+                const k = (stepIndex - STEADY_WARMUP_STEPS) % STEPS_PER_OP;
+                if (k === 0) {
+                    opRng = makeRng(OP_SEED);
+                    cursor = 0;
+                }
+                churnStep(opRng, k);
+            }
+        },
+    };
+    return { scenario, bodies };
+}
+
+export function createScenario(): Scenario {
+    return build().scenario;
 }
 
 group('mesh-field', () => {
     bench('mesh-field', function* () {
-        const world = createWorld(makeWorldSettings());
-        const bodies = populate(world, makeRng(RNG_SEED));
-        runSim(world, bodies, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            runSim(world, bodies, makeRng(OP_SEED), STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
 
 export function runForProfiling(): void {
-    const world = createWorld(makeWorldSettings());
-    const bodies = populate(world, makeRng(RNG_SEED));
-    runSim(world, bodies, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        runSim(world, bodies, makeRng(OP_SEED), STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }
 
 // TEMP sanity
 export function __sanity(): void {
-    const world = createWorld(makeWorldSettings());
-    const bodies = populate(world, makeRng(RNG_SEED));
+    const { scenario: s, bodies } = build();
     const t0 = performance.now();
-    runSim(world, bodies, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
     const t1 = performance.now();
-    const opTimes: number[] = [];
     for (let op = 0; op < 6; op++) {
         const a = performance.now();
-        runSim(world, bodies, makeRng(OP_SEED), STEPS_PER_OP);
-        opTimes.push(performance.now() - a);
+        for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + op * STEPS_PER_OP + i);
+        const opMs = performance.now() - a;
         let asleep = 0;
         let below = 0;
         for (const { body } of bodies) {
@@ -239,7 +284,7 @@ export function __sanity(): void {
             if (body.position[1] < -20) below++;
         }
         console.error(
-            `[mesh-field] op${op} ${opTimes[op].toFixed(0)}ms  ` +
+            `[mesh-field] op${op} ${opMs.toFixed(0)}ms  ` +
                 `asleep ${asleep}/${bodies.length} (${((100 * asleep) / bodies.length).toFixed(0)}%)  belowVoid ${below}`,
         );
     }

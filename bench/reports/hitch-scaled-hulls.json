@@ -1,0 +1,94 @@
+{
+  "scenario": "scaled-hulls",
+  "date": "2026-07-04T08:04:52.931Z",
+  "git": {
+    "rev": "4b14620",
+    "dirty": true
+  },
+  "node": "v24.10.0",
+  "cpu": "Apple M1 Pro",
+  "warmupSteps": 600,
+  "stats": {
+    "count": 1200,
+    "mean": 1.9649,
+    "p50": 1.9142,
+    "p90": 2.2337,
+    "p99": 2.7219,
+    "p999": 4.3749,
+    "max": 5.0429,
+    "histogram": [
+      {
+        "loMs": 0,
+        "hiMs": 0.25,
+        "count": 0
+      },
+      {
+        "loMs": 0.25,
+        "hiMs": 0.5,
+        "count": 0
+      },
+      {
+        "loMs": 0.5,
+        "hiMs": 1,
+        "count": 0
+      },
+      {
+        "loMs": 1,
+        "hiMs": 2,
+        "count": 792
+      },
+      {
+        "loMs": 2,
+        "hiMs": 4,
+        "count": 406
+      },
+      {
+        "loMs": 4,
+        "hiMs": 8,
+        "count": 2
+      },
+      {
+        "loMs": 8,
+        "hiMs": 16,
+        "count": 0
+      },
+      {
+        "loMs": 16,
+        "hiMs": 32,
+        "count": 0
+      },
+      {
+        "loMs": 32,
+        "hiMs": 64,
+        "count": 0
+      },
+      {
+        "loMs": 64,
+        "hiMs": null,
+        "count": 0
+      }
+    ],
+    "worst": [
+      {
+        "index": 412,
+        "ms": 5.0429
+      },
+      {
+        "index": 413,
+        "ms": 4.3749
+      },
+      {
+        "index": 411,
+        "ms": 3.9529
+      },
+      {
+        "index": 1050,
+        "ms": 3.0952
+      },
+      {
+        "index": 1071,
+        "ms": 2.9728
+      }
+    ]
+  }
+}

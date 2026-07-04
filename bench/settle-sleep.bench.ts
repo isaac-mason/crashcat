@@ -72,11 +72,7 @@ function populate(world: World): void {
                     motionType: MotionType.DYNAMIC,
                     objectLayer: 0, // OL_MOVING
                     shape: cubeShape,
-                    position: [
-                        origin + i * STACK_SPACING,
-                        half + 0.1 + k * (BOX_SIZE + 0.1),
-                        origin + j * STACK_SPACING,
-                    ],
+                    position: [origin + i * STACK_SPACING, half + 0.1 + k * (BOX_SIZE + 0.1), origin + j * STACK_SPACING],
                     mass: 1,
                 });
             }
@@ -95,19 +91,37 @@ function populate(world: World): void {
     });
 }
 
-function step(world: World, steps: number): void {
-    for (let i = 0; i < steps; i++) {
-        updateWorld(world, undefined, TIME_STEP);
-    }
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` performs
+ * exactly one simulated step; settle-sleep has no per-step scenario work (the
+ * stacks settle and sleep, only the lone sphere stays active), so it just
+ * advances the sim. The labs bench and `runForProfiling` are both expressed in
+ * terms of this.
+ */
+export function createScenario(): Scenario {
+    const world = createWorld(makeWorldSettings());
+    populate(world);
+    return {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(): void {
+            updateWorld(world, undefined, TIME_STEP);
+        },
+    };
 }
 
 group('settle-sleep', () => {
     bench('settle-sleep', function* () {
-        const world = createWorld(makeWorldSettings());
-        populate(world);
-        step(world, STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            step(world, STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
@@ -118,10 +132,7 @@ group('settle-sleep', () => {
  * collects in-scenario CPU.
  */
 export function runForProfiling(): void {
-    const world = createWorld(makeWorldSettings());
-    populate(world);
-    step(world, STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        step(world, STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }

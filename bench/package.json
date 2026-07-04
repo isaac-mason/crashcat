@@ -8,7 +8,9 @@
         "bench:compare": "labs -c",
         "perf:profile": "node profile.mjs",
         "perf:report": "node perf-report.mjs run",
-        "perf:diff": "node perf-report.mjs diff"
+        "perf:diff": "node perf-report.mjs diff",
+        "hitch": "node hitch.mjs",
+        "focus": "node focus.mjs"
     },
     "dependencies": {
         "crashcat": "workspace:^"

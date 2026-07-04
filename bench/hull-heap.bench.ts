@@ -16,9 +16,9 @@ import {
     enableCollision,
     MotionType,
     plane,
+    type RigidBody,
     registerAll,
     rigidBody,
-    type RigidBody,
     type Shape,
     updateWorld,
     type World,
@@ -102,37 +102,61 @@ function populate(world: World, rng: () => number): RigidBody[] {
     return bodies;
 }
 
-function runSim(world: World, bodies: RigidBody[], rng: () => number, steps: number): void {
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` re-spawns
+ * one hull body per frame (the churn) then advances the sim. Seeding matches
+ * cube-heap: warmup uses a distinct seed; the op rng is re-seeded at each op
+ * boundary with `RNG_SEED + op`, so a labs op (op = 0) runs the fixed-seed
+ * workload while the profiling run's ops rotate. World-state drift is fine.
+ */
+export function createScenario(): Scenario {
+    const world = createWorld(makeWorldSettings());
+    const bodies = populate(world, makeRng(RNG_SEED));
+    const warmupRng = makeRng(RNG_SEED ^ 0xdeadbeef);
+    let opRng = makeRng(RNG_SEED);
     const zero: [number, number, number] = [0, 0, 0];
-    for (let i = 0; i < steps; i++) {
-        const idx = (rng() * bodies.length) | 0;
-        const body = bodies[idx];
+
+    const churn = (rng: () => number): void => {
+        const body = bodies[(rng() * bodies.length) | 0];
         rigidBody.setPosition(world, body, [0, rng() * SPAWN_HEIGHT, 0], true);
         rigidBody.setLinearVelocity(world, body, zero);
         rigidBody.setAngularVelocity(world, body, zero);
         updateWorld(world, undefined, TIME_STEP);
-    }
+    };
+
+    return {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(stepIndex: number): void {
+            if (stepIndex < STEADY_WARMUP_STEPS) {
+                churn(warmupRng);
+            } else {
+                const g = stepIndex - STEADY_WARMUP_STEPS;
+                if (g % STEPS_PER_OP === 0) opRng = makeRng(RNG_SEED + Math.floor(g / STEPS_PER_OP));
+                churn(opRng);
+            }
+        },
+    };
 }
 
 group('hull-heap', () => {
     bench('hull-heap', function* () {
-        const settings = makeWorldSettings();
-        const world = createWorld(settings);
-        const bodies = populate(world, makeRng(RNG_SEED));
-        runSim(world, bodies, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
-        // fixed per-op seed: identical workload every iteration (see cube-heap note)
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            runSim(world, bodies, makeRng(RNG_SEED), STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
 
 export function runForProfiling(): void {
-    const settings = makeWorldSettings();
-    const world = createWorld(settings);
-    const bodies = populate(world, makeRng(RNG_SEED));
-    runSim(world, bodies, makeRng(RNG_SEED ^ 0xdeadbeef), STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        runSim(world, bodies, makeRng(RNG_SEED + i), STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }

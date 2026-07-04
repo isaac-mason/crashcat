@@ -3,63 +3,65 @@
 | field | value |
 | --- | --- |
 | scenario | `hull-heap` |
-| date | 2026-07-03T04:39:37.631Z |
-| git rev | `58a218d` (dirty) |
+| date | 2026-07-04T09:53:13.556Z |
+| git rev | `e8316a4` (dirty) |
 | node | v24.10.0 |
 | cpu | Apple M1 Pro |
-| wall | 11132.3 ms |
-| attributed | 11131.4 ms |
-| samples | 8886 |
+| wall | 10165.8 ms |
+| attributed | 9962.8 ms |
+| startup excluded | 202.9 ms |
+| samples | 8046 |
 
 ## by category
 
 | category      |   pct |     ms |
 | ------------- | ----: | -----: |
-| narrowphase   | 41.8% | 4652.1 |
-| solver        | 23.7% | 2639.1 |
-| shapes        | 12.2% | 1352.9 |
-| step          |  7.4% |  821.0 |
-| broadphase    |  5.8% |  647.3 |
-| body          |  2.8% |  315.3 |
-| math          |  2.6% |  286.3 |
-| runtime       |  2.1% |  239.1 |
-| manifold      |  1.5% |  169.8 |
-| bench-harness |  0.1% |    7.1 |
-| other         |  0.0% |    1.3 |
-| crashcat-util |  0.0% |    0.1 |
+| narrowphase   | 39.5% | 3934.5 |
+| solver        | 29.1% | 2900.9 |
+| shapes        | 10.2% | 1011.9 |
+| step          |  6.4% |  641.8 |
+| body          |  4.2% |  419.1 |
+| broadphase    |  3.4% |  343.3 |
+| math          |  2.8% |  282.7 |
+| manifold      |  1.7% |  167.1 |
+| crashcat-util |  1.6% |  160.8 |
+| runtime       |  0.8% |   81.2 |
+| bench-harness |  0.1% |   11.0 |
+| ccd           |  0.1% |    6.1 |
+| other         |  0.0% |    2.3 |
 
 ## top 30 self-time hotspots
 
-|   # |   pct |     ms | function                            | location                                                     |
-| --: | ----: | -----: | ----------------------------------- | ------------------------------------------------------------ |
-|   1 | 28.7% | 3194.3 | `getSupport`                        | `src/collision/support.ts:125`                               |
-|   2 | 10.9% | 1209.6 | `solveVelocityConstraintsForIsland` | `src/constraints/contact-constraints.ts:1121`                |
-|   3 |  9.4% | 1049.0 | `getSupportingFace$8`               | `src/shapes/convex-hull.ts:529`                              |
-|   4 |  5.1% |  562.5 | `intersectAABB$1`                   | `src/broadphase/dbvt.ts:627`                                 |
-|   5 |  4.4% |  490.8 | `gjkClosestPoints`                  | `src/collision/gjk.ts:1225`                                  |
-|   6 |  3.6% |  400.3 | `addContactConstraint`              | `src/constraints/contact-constraints.ts:582`                 |
-|   7 |  3.1% |  340.4 | `updateWorld`                       | `src/update.ts:45`                                           |
-|   8 |  2.2% |  247.0 | `createTriangle$1`                  | `src/collision/epa-convex-hull-builder.ts:251`               |
-|   9 |  2.0% |  225.8 | `findEdge$1`                        | `src/collision/epa-convex-hull-builder.ts:548`               |
-|  10 |  1.9% |  211.7 | `solvePositionConstraintsForIsland` | `src/constraints/contact-constraints.ts:1399`                |
-|  11 |  1.9% |  210.2 | `getContactsFromCache`              | `src/update.ts:868`                                          |
-|  12 |  1.7% |  188.0 | `penetrationDepthStepEPA`           | `src/collision/penetration.ts:209`                           |
-|  13 |  1.6% |  174.4 | `addPoint$1`                        | `src/collision/epa-convex-hull-builder.ts:629`               |
-|  14 |  1.4% |  154.2 | `getInverseInertiaForRotation`      | `src/body/motion-properties.ts:500`                          |
-|  15 |  1.4% |  153.1 | `narrowphase`                       | `src/update.ts:949`                                          |
-|  16 |  1.1% |  121.4 | `warmStartVelocityConstraints`      | `src/constraints/contact-constraints.ts:971`                 |
-|  17 |  1.1% |  119.4 | `collideConvexVsConvexLocal`        | `src/shapes/convex.ts:329`                                   |
-|  18 |  1.1% |  117.4 | `getVelocityAtPointCOM`             | `src/body/rigid-body.ts:1007`                                |
-|  19 |  0.8% |   84.3 | `clipPolyVsPlane`                   | `src/manifold/clip.ts:13`                                    |
-|  20 |  0.8% |   84.2 | `multiply3x3TransposedVec`          | `…/node_modules/mathcat/dist/mat4.js:603`                    |
-|  21 |  0.7% |   81.0 | `collideConvexVsConvex`             | `src/shapes/convex.ts:247`                                   |
-|  22 |  0.7% |   76.8 | `storeAppliedImpulses`              | `src/constraints/contact-constraints.ts:1359`                |
-|  23 |  0.7% |   76.0 | `calculateInverseEffectiveMass`     | `src/constraints/constraint-part/axis-constraint-part.ts:81` |
-|  24 |  0.7% |   75.2 | `penetrationDepthStepGJK`           | `src/collision/penetration.ts:29`                            |
-|  25 |  0.6% |   71.7 | `calculateNormalVelocityBias`       | `src/constraints/contact-constraints.ts:309`                 |
-|  26 |  0.5% |   55.9 | `update$1`                          | `src/broadphase/dbvt.ts:485`                                 |
-|  27 |  0.5% |   53.6 | `findContact`                       | `src/contacts.ts:647`                                        |
-|  28 |  0.5% |   51.3 | `sortContactIndices`                | `src/constraints/contact-constraints.ts:1541`                |
-|  29 |  0.4% |   45.2 | `fromRotationTranslation`           | `…/node_modules/mathcat/dist/mat4.js:1150`                   |
-|  30 |  0.4% |   44.8 | `setCachedBodyPair`                 | `src/contacts.ts:174`                                        |
+|   # |   pct |     ms | function                                | location                                                     |
+| --: | ----: | -----: | --------------------------------------- | ------------------------------------------------------------ |
+|   1 | 22.8% | 2269.4 | `getSupport`                            | `src/collision/support.ts:139`                               |
+|   2 | 13.7% | 1367.7 | `solveVelocityConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1127`                |
+|   3 |  6.4% |  641.4 | `getSupportingFace$8`                   | `src/shapes/convex-hull.ts:576`                              |
+|   4 |  4.7% |  470.0 | `gjkClosestPoints`                      | `src/collision/gjk.ts:1246`                                  |
+|   5 |  4.4% |  438.5 | `addContactConstraint`                  | `src/constraints/contact-constraints.ts:583`                 |
+|   6 |  3.2% |  317.5 | `createTriangle$1`                      | `src/collision/epa-convex-hull-builder.ts:173`               |
+|   7 |  2.8% |  275.6 | `intersectAABBFatLeaves`                | `src/broadphase/dbvt.ts:590`                                 |
+|   8 |  2.7% |  272.3 | `findEdge$1`                            | `src/collision/epa-convex-hull-builder.ts:506`               |
+|   9 |  2.6% |  255.1 | `solvePositionConstraintsForIsland`     | `src/constraints/contact-constraints.ts:1405`                |
+|  10 |  2.3% |  228.6 | `narrowphase`                           | `src/update.ts:998`                                          |
+|  11 |  2.2% |  215.7 | `penetrationDepthStepEPA`               | `src/collision/penetration.ts:210`                           |
+|  12 |  1.8% |  179.5 | `addPoint$1`                            | `src/collision/epa-convex-hull-builder.ts:596`               |
+|  13 |  1.8% |  176.5 | `warmStartVelocityConstraints`          | `src/constraints/contact-constraints.ts:977`                 |
+|  14 |  1.7% |  165.9 | `getInverseInertiaForRotation`          | `src/body/motion-properties.ts:500`                          |
+|  15 |  1.6% |  160.9 | `updateWorld`                           | `src/update.ts:46`                                           |
+|  16 |  1.5% |  154.4 | `findCollidingPairs`                    | `src/pairs.ts:409`                                           |
+|  17 |  1.4% |  134.6 | `getVelocityAtPointCOM`                 | `src/body/rigid-body.ts:1035`                                |
+|  18 |  1.3% |  125.8 | `collideConvexVsConvexLocal`            | `src/shapes/convex.ts:329`                                   |
+|  19 |  1.2% |  115.4 | `penetrationDepthStepGJK`               | `src/collision/penetration.ts:29`                            |
+|  20 |  1.1% |  109.3 | `collideConvexVsConvex`                 | `src/shapes/convex.ts:247`                                   |
+|  21 |  1.0% |   95.9 | `calculateInverseEffectiveMass`         | `src/constraints/constraint-part/axis-constraint-part.ts:81` |
+|  22 |  0.9% |   90.2 | `storeAppliedImpulses`                  | `src/constraints/contact-constraints.ts:1365`                |
+|  23 |  0.9% |   84.7 | `clipPolyVsPlane`                       | `src/manifold/clip.ts:13`                                    |
+|  24 |  0.8% |   79.7 | `getContactsFromCache`                  | `src/update.ts:914`                                          |
+|  25 |  0.8% |   78.0 | `sortContactIndices`                    | `src/constraints/contact-constraints.ts:1547`                |
+|  26 |  0.6% |   62.7 | `calculateNormalVelocityBias`           | `src/constraints/contact-constraints.ts:310`                 |
+|  27 |  0.6% |   61.7 | `calculateFrictionConstraintProperties` | `src/constraints/contact-constraints.ts:476`                 |
+|  28 |  0.6% |   59.7 | `normalize$2`                           | `…/node_modules/mathcat/dist/vec3.js:369`                    |
+|  29 |  0.6% |   56.8 | `(garbage collector)`                   | ``                                                           |
+|  30 |  0.5% |   53.7 | `getShapeSupportingFace`                | `src/shapes/shapes.ts:489`                                   |
 

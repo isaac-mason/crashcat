@@ -14,8 +14,6 @@
 // invokes via `run-scenario.ts`.
 
 import { bench, group } from '@pmndrs/labs';
-import { type Quat, quat, type Vec3, vec3, vec4 } from 'mathcat';
-
 import {
     addBroadphaseLayer,
     addObjectLayer,
@@ -26,8 +24,8 @@ import {
     enableCollision,
     type Filter,
     filter,
-    kcc,
     type KCC,
+    kcc,
     MotionType,
     registerAll,
     rigidBody,
@@ -38,6 +36,7 @@ import {
     type World,
     type WorldSettings,
 } from 'crashcat';
+import { quat, type Vec3, vec3, vec4 } from 'mathcat';
 
 registerAll();
 
@@ -243,47 +242,81 @@ function steerAgent(world: World, agent: Agent, rng: () => number): void {
     vec3.copy(lv, _horizontal);
 }
 
-function runSim(state: State, rng: () => number, steps: number): void {
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` steers +
+ * updates every character (the KCC shape-cast work) then advances the sim.
+ * Warmup uses WARMUP_SEED; the op rng is re-seeded with the FIXED OP_SEED at
+ * each op boundary (labs and profiling both use OP_SEED) so repeated ops replay
+ * the identical steering. World-state drift is fine.
+ */
+function build(): { scenario: Scenario; agents: Agent[] } {
+    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
     const { world, agents, updateSettings, charFilter } = state;
-    for (let i = 0; i < steps; i++) {
+    const warmupRng = makeRng(WARMUP_SEED);
+    let opRng = makeRng(OP_SEED);
+
+    const stepAll = (rng: () => number): void => {
         for (let a = 0; a < agents.length; a++) {
             steerAgent(world, agents[a], rng);
             kcc.update(world, agents[a].character, TIME_STEP, GRAVITY, updateSettings, undefined, charFilter);
         }
         updateWorld(world, undefined, TIME_STEP);
-    }
+    };
+
+    const scenario: Scenario = {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(stepIndex: number): void {
+            if (stepIndex < STEADY_WARMUP_STEPS) {
+                stepAll(warmupRng);
+            } else {
+                const g = stepIndex - STEADY_WARMUP_STEPS;
+                if (g % STEPS_PER_OP === 0) opRng = makeRng(OP_SEED);
+                stepAll(opRng);
+            }
+        },
+    };
+    return { scenario, agents };
+}
+
+export function createScenario(): Scenario {
+    return build().scenario;
 }
 
 group('kcc-mesh', () => {
     bench('kcc-mesh', function* () {
-        const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-        runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
 
 export function runForProfiling(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }
 
 // TEMP sanity
 export function __sanity(): void {
-    const state = populate(createWorld(makeWorldSettings()), makeRng(RNG_SEED));
+    const { scenario: s, agents } = build();
     const t0 = performance.now();
-    runSim(state, makeRng(WARMUP_SEED), STEADY_WARMUP_STEPS);
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
     const t1 = performance.now();
-    runSim(state, makeRng(OP_SEED), STEPS_PER_OP);
+    for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
     const t2 = performance.now();
     let onGround = 0;
     let minAbove = Infinity;
     let fellThrough = 0;
-    for (const a of state.agents) {
+    for (const a of agents) {
         const p = a.character.position;
         if (kcc.isSupported(a.character)) onGround++;
         const above = p[1] - terrainHeight(p[0], p[2]);
@@ -292,6 +325,6 @@ export function __sanity(): void {
     }
     console.error(
         `[kcc-mesh] warmup ${(t1 - t0).toFixed(0)}ms  op ${(t2 - t1).toFixed(0)}ms  ` +
-            `onGround ${onGround}/${state.agents.length}  minAboveTerrain ${minAbove.toFixed(2)}m  fellThrough ${fellThrough}`,
+            `onGround ${onGround}/${agents.length}  minAboveTerrain ${minAbove.toFixed(2)}m  fellThrough ${fellThrough}`,
     );
 }

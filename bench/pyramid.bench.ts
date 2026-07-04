@@ -77,19 +77,36 @@ function populate(world: World): void {
     }
 }
 
-function step(world: World, steps: number): void {
-    for (let i = 0; i < steps; i++) {
-        updateWorld(world, undefined, TIME_STEP);
-    }
+export type Scenario = {
+    world: World;
+    warmupSteps: number;
+    stepOnce(stepIndex: number): void;
+};
+
+/**
+ * Single source of truth for construction + per-step work. `stepOnce` performs
+ * exactly one simulated step; pyramid has no per-step scenario work (sleeping is
+ * disabled, no churn), so it just advances the sim. The labs bench and
+ * `runForProfiling` are both expressed in terms of this.
+ */
+export function createScenario(): Scenario {
+    const world = createWorld(makeWorldSettings());
+    populate(world);
+    return {
+        world,
+        warmupSteps: STEADY_WARMUP_STEPS,
+        stepOnce(): void {
+            updateWorld(world, undefined, TIME_STEP);
+        },
+    };
 }
 
 group('pyramid', () => {
     bench('pyramid', function* () {
-        const world = createWorld(makeWorldSettings());
-        populate(world);
-        step(world, STEADY_WARMUP_STEPS);
+        const s = createScenario();
+        for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
         yield () => {
-            step(world, STEPS_PER_OP);
+            for (let i = 0; i < STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
         };
     }).gc('inner');
 });
@@ -100,10 +117,7 @@ group('pyramid', () => {
  * collects ~10s of in-scenario CPU.
  */
 export function runForProfiling(): void {
-    const world = createWorld(makeWorldSettings());
-    populate(world);
-    step(world, STEADY_WARMUP_STEPS);
-    for (let i = 0; i < 5; i++) {
-        step(world, STEPS_PER_OP);
-    }
+    const s = createScenario();
+    for (let i = 0; i < s.warmupSteps; i++) s.stepOnce(i);
+    for (let i = 0; i < 5 * STEPS_PER_OP; i++) s.stepOnce(s.warmupSteps + i);
 }
