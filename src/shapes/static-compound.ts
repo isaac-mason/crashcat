@@ -340,8 +340,6 @@ function getSubShapeTransformedShape(
 
 /* cast ray */
 
-// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castRayVsStaticCompound_stackNodes: number[] = [];
 const _castRayVsStaticCompound_stackDist: number[] = [];
 
@@ -1356,8 +1354,6 @@ const _castShapeVsStaticCompound_sweptAABB = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_halfExtents = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_expandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_childExpandedBounds = /* @__PURE__ */ box3.create();
-// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castShapeVsStaticCompound_stackNodes: number[] = [];
 const _castShapeVsStaticCompound_stackDist: number[] = [];
 const _castShapeVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();

@@ -256,8 +256,6 @@ const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
 const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ createRayIntersectsTriangleResult();
-// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castRayVsTriangleMesh_stackNodes: number[] = [];
 const _castRayVsTriangleMesh_stackDist: number[] = [];
 const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
@@ -688,8 +686,6 @@ const _castConvexVsTriangleMesh_AtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsTriangleMesh_invBtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsTriangleMesh_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
 
-// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castConvexVsTriangleMesh_stackNodes: number[] = [];
 const _castConvexVsTriangleMesh_stackDist: number[] = [];
 const _castConvexVsTriangleMesh_halfExtents = /* @__PURE__ */ vec3.create();
@@ -2100,8 +2096,6 @@ const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
 const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
-// parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castSphereVsTriangleMesh_stackNodes: number[] = [];
 const _castSphereVsTriangleMesh_stackDist: number[] = [];
 const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
