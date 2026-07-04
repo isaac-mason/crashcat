@@ -2,6 +2,11 @@
 
 ## v0.0.5 (Unreleased)
 
+- perf: pair discovery skips pairs that can never collide by motion type / sensor role (`bodiesCanCollide`, shared with emission) — overlapping static geometry no longer accrues dead persistent pair records (a dense static field previously created tens of thousands, swept every frame)
+- fix: broadphase `castAABB` spuriously pruned in-range nodes for casts shorter than 1 unit (fraction compared against world length); it now does best-t pruning against the collector's positive early-out fraction like `castRay`, and drops the redundant per-node re-test
+- fix: the CCD ray-vs-expanded-AABB early-out had the same fraction/length mismatch and could cull valid CCD candidates for sub-unit sweeps
+- refactor: **breaking** — `dbvt.rebuild(dbvt)` no longer takes a max-depth argument; the always-re-partition depth is a per-tree `DBVT.maxDepthMarkChanged` field
+- refactor: cast hot paths no longer use `raycast3` structs — scalar ray args throughout, with `rayIntersectsTriangle` joining `rayDistanceToBox3`/`rayHitsBox3` in cast-utils; bit-identical results
 - perf: dirty-gated balanced DBVT rebuild replaces Bullet's incremental-only rotation — a settled/static tree is rebuilt once into a balanced structure (leaf-preserving partial rebuild à la Jolt's `QuadTree::UpdatePrepare`, gated by a dirty flag, one tree per step) then left alone, instead of forever rotating a degenerate tree; a large static field goes from tree height ~127 to ~16 (~5× fewer node visits per ray)
 - perf: analytic ray-vs-box narrowphase (`castRayVsBox`) replaces the generic GJK convex cast for box shapes — a local-space slab test matching Jolt's `BoxShape::CastRay` and meep's `ray_box_local`; box-ray narrowphase ~4× cheaper, bit-identical results
 - perf: broadphase `castRay` prunes nodes whose fat-AABB entry is beyond the closest hit found so far (best-t), threading the collector's early-out fraction into the walk like Jolt/meep
