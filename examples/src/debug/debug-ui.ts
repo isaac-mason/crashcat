@@ -1,5 +1,5 @@
 import { GUI } from 'lil-gui';
-import type { World } from 'crashcat';
+import { dbvt as dbvtNs, type World } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
 import { createStats } from './stats';
 
@@ -169,24 +169,25 @@ export function updateStats(ui: DebugUI, world: World): void {
     let activeNodes = 0;
     let maxDepth = 0;
 
-    for (const dbvt of world.broadphase.dbvts) {
-        totalNodes += dbvt.nodes.length;
-        activeNodes += dbvt.nodes.length - dbvt.freeNodeIndices.length;
+    for (const tree of world.broadphase.dbvts) {
+        totalNodes += dbvtNs.nodeCount(tree);
+        activeNodes += dbvtNs.nodeCount(tree) - tree.freeNodeIndices.length;
 
-        if (dbvt.root !== -1) {
-            const stack: Array<{ nodeIndex: number; depth: number }> = [{ nodeIndex: dbvt.root, depth: 0 }];
+        if (tree.root !== -1) {
+            const stack: Array<{ nodeIndex: number; depth: number }> = [{ nodeIndex: tree.root, depth: 0 }];
 
             while (stack.length > 0) {
                 const { nodeIndex, depth } = stack.pop()!;
-                const node = dbvt.nodes[nodeIndex];
 
                 maxDepth = Math.max(maxDepth, depth);
 
-                if (node.left !== -1) {
-                    stack.push({ nodeIndex: node.left, depth: depth + 1 });
+                const left = dbvtNs.nodeLeft(tree, nodeIndex);
+                const right = dbvtNs.nodeRight(tree, nodeIndex);
+                if (left !== -1) {
+                    stack.push({ nodeIndex: left, depth: depth + 1 });
                 }
-                if (node.right !== -1) {
-                    stack.push({ nodeIndex: node.right, depth: depth + 1 });
+                if (right !== -1) {
+                    stack.push({ nodeIndex: right, depth: depth + 1 });
                 }
             }
         }
