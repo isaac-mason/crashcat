@@ -2,6 +2,8 @@ import { type Box3, box3, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
+import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
+import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
 import { DEFAULT_CONVEX_RADIUS, setBoxSupport } from '../collision/support';
@@ -107,7 +109,7 @@ export const def = /* @__PURE__ */ (() =>
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
-        castRay: convex.castRayVsConvex,
+        castRay: castRayVsBox,
         collidePoint: collidePointVsBox,
         setSupport: setBoxSupport,
         register: () => {
@@ -360,6 +362,160 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 }
 function getInnerRadius(shape: BoxShape): number {
     return Math.min(shape.halfExtents[0], shape.halfExtents[1], shape.halfExtents[2]);
+}
+
+/* cast ray */
+
+const _castRayVsBox_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsBox_origin = /* @__PURE__ */ vec3.create();
+const _castRayVsBox_dir = /* @__PURE__ */ vec3.create();
+const _castRayVsBox_hit = /* @__PURE__ */ createCastRayHit();
+
+/**
+ * Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes — the same
+ * specialization jolt (BoxShape::CastRay → RayAABox) and meep (ray_box_local) ship. This is not an
+ * approximation: the gjk path already casts against a sharp box of |scale|·halfExtents with zero
+ * convex radius (setBoxSupport under INCLUDE_CONVEX_RADIUS), so this is bit-equivalent geometry,
+ * exact rather than iterated to a 1e-3 tolerance. Reporting matches castRayVsConvex (entry hit,
+ * treatConvexAsSolid gate); the hit carries no normal, matching CastRayHit.
+ */
+export function castRayVsBox(
+    collector: CastRayCollector,
+    settings: CastRaySettings,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
+    shape: BoxShape,
+    subShapeId: number,
+    _subShapeIdBits: number,
+    posX: number,
+    posY: number,
+    posZ: number,
+    quatX: number,
+    quatY: number,
+    quatZ: number,
+    quatW: number,
+    scaleX: number,
+    scaleY: number,
+    scaleZ: number,
+): void {
+    // transform the ray into the box's rotation-local frame (translation + rotation removed). scale
+    // is folded into the half extents below rather than inverted out of the ray — matching the gjk
+    // path's convention, so the geometry is identical.
+    quat.set(_castRayVsBox_invQuat, quatX, quatY, quatZ, quatW);
+    quat.conjugate(_castRayVsBox_invQuat, _castRayVsBox_invQuat);
+
+    vec3.set(_castRayVsBox_origin, originX - posX, originY - posY, originZ - posZ);
+    vec3.transformQuat(_castRayVsBox_origin, _castRayVsBox_origin, _castRayVsBox_invQuat);
+    vec3.set(_castRayVsBox_dir, directionX, directionY, directionZ);
+    vec3.transformQuat(_castRayVsBox_dir, _castRayVsBox_dir, _castRayVsBox_invQuat);
+
+    const ox = _castRayVsBox_origin[0];
+    const oy = _castRayVsBox_origin[1];
+    const oz = _castRayVsBox_origin[2];
+    // scale the direction by ray length so the slab fractions are along [0, 1] of the ray (matching
+    // the gjk lambda convention in castRayVsConvex)
+    const dx = _castRayVsBox_dir[0] * length;
+    const dy = _castRayVsBox_dir[1] * length;
+    const dz = _castRayVsBox_dir[2] * length;
+
+    const hx = Math.abs(scaleX) * shape.halfExtents[0];
+    const hy = Math.abs(scaleY) * shape.halfExtents[1];
+    const hz = Math.abs(scaleZ) * shape.halfExtents[2];
+
+    // slab test against the centered box [-h, h]; tmin/tmax bound the ray-fraction hit interval
+    let tmin = -Infinity;
+    let tmax = Infinity;
+
+    if (Math.abs(dx) < 1e-10) {
+        if (ox < -hx || ox > hx) {
+            collector.addMiss();
+            return;
+        }
+    } else {
+        const inv = 1 / dx;
+        let t0 = (-hx - ox) * inv;
+        let t1 = (hx - ox) * inv;
+        if (t0 > t1) {
+            const t = t0;
+            t0 = t1;
+            t1 = t;
+        }
+        if (t0 > tmin) tmin = t0;
+        if (t1 < tmax) tmax = t1;
+        if (tmin > tmax) {
+            collector.addMiss();
+            return;
+        }
+    }
+
+    if (Math.abs(dy) < 1e-10) {
+        if (oy < -hy || oy > hy) {
+            collector.addMiss();
+            return;
+        }
+    } else {
+        const inv = 1 / dy;
+        let t0 = (-hy - oy) * inv;
+        let t1 = (hy - oy) * inv;
+        if (t0 > t1) {
+            const t = t0;
+            t0 = t1;
+            t1 = t;
+        }
+        if (t0 > tmin) tmin = t0;
+        if (t1 < tmax) tmax = t1;
+        if (tmin > tmax) {
+            collector.addMiss();
+            return;
+        }
+    }
+
+    if (Math.abs(dz) < 1e-10) {
+        if (oz < -hz || oz > hz) {
+            collector.addMiss();
+            return;
+        }
+    } else {
+        const inv = 1 / dz;
+        let t0 = (-hz - oz) * inv;
+        let t1 = (hz - oz) * inv;
+        if (t0 > t1) {
+            const t = t0;
+            t0 = t1;
+            t1 = t;
+        }
+        if (t0 > tmin) tmin = t0;
+        if (t1 < tmax) tmax = t1;
+        if (tmin > tmax) {
+            collector.addMiss();
+            return;
+        }
+    }
+
+    // the box is hit over ray fractions [tmin, tmax]; reject if that interval misses the ray segment
+    // [0, 1] (box entirely behind the origin, or entirely beyond the ray's end)
+    if (tmax < 0 || tmin > 1) {
+        collector.addMiss();
+        return;
+    }
+
+    // entry fraction (gjk lambda); tmin < 0 means the origin is inside the box
+    const fraction = tmin;
+    if (settings.treatConvexAsSolid || fraction > 0.0) {
+        _castRayVsBox_hit.status = CastRayStatus.COLLIDING;
+        _castRayVsBox_hit.fraction = Math.max(0.0, fraction);
+        _castRayVsBox_hit.subShapeId = subShapeId;
+        _castRayVsBox_hit.materialId = shape.materialId;
+        _castRayVsBox_hit.bodyIdB = collector.bodyIdB;
+        collector.addHit(_castRayVsBox_hit);
+    } else {
+        collector.addMiss();
+    }
 }
 
 /* collide point */
