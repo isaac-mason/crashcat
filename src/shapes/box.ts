@@ -372,8 +372,7 @@ const _castRayVsBox_dir = /* @__PURE__ */ vec3.create();
 const _castRayVsBox_hit = /* @__PURE__ */ createCastRayHit();
 
 /**
- * Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes — the same
- * specialization jolt (BoxShape::CastRay → RayAABox) and meep (ray_box_local) ship. This is not an
+ * Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes. Not an
  * approximation: the gjk path already casts against a sharp box of |scale|·halfExtents with zero
  * convex radius (setBoxSupport under INCLUDE_CONVEX_RADIUS), so this is bit-equivalent geometry,
  * exact rather than iterated to a 1e-3 tolerance. Reporting matches castRayVsConvex (entry hit,

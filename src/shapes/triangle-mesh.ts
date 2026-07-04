@@ -252,8 +252,7 @@ const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayForMathcat = /* @__PURE__ */ raycast3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
 // parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
-// to the node stack). separate arrays so each keeps its optimal element kind.
+// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castRayVsTriangleMesh_stackNodes: number[] = [];
 const _castRayVsTriangleMesh_stackDist: number[] = [];
 const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
@@ -687,8 +686,7 @@ const _castConvexVsTriangleMesh_invBtoWorld = /* @__PURE__ */ mat4.create();
 const _castConvexVsTriangleMesh_AtoWorldAtContact = /* @__PURE__ */ mat4.create();
 
 // parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
-// to the node stack). separate arrays so each keeps its optimal element kind.
+// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castConvexVsTriangleMesh_stackNodes: number[] = [];
 const _castConvexVsTriangleMesh_stackDist: number[] = [];
 const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
@@ -1359,7 +1357,7 @@ function collideConvexVsTriangleMesh(
         vec3.setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance),
     );
 
-    // pre-compute transformation matrices (align with joltphysics pattern)
+    // pre-compute transformation matrices
     // A-to-world matrix (rotation + translation only, no scale)
     const mat4_AtoWorld = mat4.fromRotationTranslation(
         _collideConvexVsTriangleMesh_mat4_AtoWorld,
@@ -1427,7 +1425,7 @@ function collideConvexVsTriangleMesh(
                 );
 
                 // scale triangle in mesh local space, then transform to shape A's local space
-                // using pre-computed mat4_BtoA matrix (joltphysics pattern)
+                // using pre-computed mat4_BtoA matrix
                 const a = vec3.mul(
                     _collideConvexVsTriangleMesh_triangleA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_a,
@@ -2090,8 +2088,7 @@ const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 // parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
-// array) sharing one size counter — jolt keeps the same structure (a distance stack parallel
-// to the node stack). separate arrays so each keeps its optimal element kind.
+// array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castSphereVsTriangleMesh_stackNodes: number[] = [];
 const _castSphereVsTriangleMesh_stackDist: number[] = [];
 const _castSphereVsTriangleMesh_v0 = /* @__PURE__ */ vec3.create();
