@@ -140,14 +140,29 @@ function edgePrevSlot(recordIndex: number, side: number): number {
     return recordIndex * RECORD_STRIDE + 2 + side * 2;
 }
 
+// Type/role eligibility gate — whether two bodies can EVER collide given their motion types, sensor
+// roles, and the kinematic-vs-non-dynamic opt-in, independent of position/layer/group. One must hold:
+// a body is dynamic, a body opted into kinematic-vs-non-dynamic, or it's a kinematic-vs-sensor pair.
+// Two non-dynamic bodies (static-static, static-kinematic without opt-in, …) can never collide.
+// crashcat's port of jolt's `Body::sFindCollidingPairsCanCollide` (minus its id-ordering dedup, which
+// crashcat handles separately). Shared between pair discovery (skip creating a dead record) and
+// emission (skip reporting) so the two gates can't drift.
+function bodiesCanCollide(a: RigidBody, b: RigidBody): boolean {
+    return (
+        a.collideKinematicVsNonDynamic ||
+        b.collideKinematicVsNonDynamic ||
+        a.motionType === MotionType.DYNAMIC ||
+        b.motionType === MotionType.DYNAMIC ||
+        (a.motionType === MotionType.KINEMATIC && b.sensor) ||
+        (b.motionType === MotionType.KINEMATIC && a.sensor)
+    );
+}
+
 /**
- * The single pair predicate for findCollidingPairs: decides whether an (activeBody, otherBody)
- * candidate found by the tree query becomes a narrowphase pair. All pair-level filtering lives
- * here, in one place (jolt: Body::sFindCollidingPairsCanCollide + ObjectLayerPairFilter,
- * evaluated together at the query leaf).
- *
- * `activeBody` is always drawn from the active body list, so it is awake and non-static —
- * static-static pairs are unrepresentable.
+ * The pair-emission predicate for findCollidingPairs' sweep: decides whether a persistent record
+ * emits an (activeBody, otherBody) narrowphase pair this frame. Layers/groups + the shared
+ * {@link bodiesCanCollide} type gate + activeIndex dedup (jolt: Body::sFindCollidingPairsCanCollide
+ * + ObjectLayerPairFilter).
  */
 function shouldReportPair(layers: Layers, activeBody: RigidBody, otherBody: RigidBody): boolean {
     // self-collision + deduplication: report only when activeBody.activeIndex < otherBody.activeIndex.
@@ -160,18 +175,8 @@ function shouldReportPair(layers: Layers, activeBody: RigidBody, otherBody: Rigi
         return false;
     }
 
-    // motion type / sensor gate — one of these must hold:
-    // - either body opted into kinematic-vs-non-dynamic collisions
-    // - at least one body is dynamic
-    // - a kinematic body can always collide with a sensor
-    if (
-        !activeBody.collideKinematicVsNonDynamic &&
-        !otherBody.collideKinematicVsNonDynamic &&
-        activeBody.motionType !== MotionType.DYNAMIC &&
-        otherBody.motionType !== MotionType.DYNAMIC &&
-        !(activeBody.motionType === MotionType.KINEMATIC && otherBody.sensor) &&
-        !(otherBody.motionType === MotionType.KINEMATIC && activeBody.sensor)
-    ) {
+    // motion type / sensor gate
+    if (!bodiesCanCollide(activeBody, otherBody)) {
         return false;
     }
 
@@ -226,6 +231,13 @@ const PairDiscoveryVisitor: BodyVisitor & {
 
         // self-skip
         if (otherBody.index === movedBody.index) return;
+
+        // motion-type gate: two bodies that can't drive a collision (e.g. static-static) never need
+        // a persistent record — emission (shouldReportPair) would only reject it. skipping it here
+        // keeps the sweep off dead slots (a dense static field would otherwise accrue tens of
+        // thousands). a later setMotionType re-marks the body moved, so the pair is (re)discovered
+        // once a dynamic partner exists.
+        if (!bodiesCanCollide(movedBody, otherBody)) return;
 
         // static prune only: object-layer pair table (a static gate; a layer change marks the
         // body moved for rediscovery, and the sweep re-applies the layer table at emission, so
