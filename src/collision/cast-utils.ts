@@ -1,5 +1,137 @@
+import type { Vec3 } from 'mathcat';
+
 export const INITIAL_EARLY_OUT_FRACTION = 1.0 + 1e-4;
 export const SHOULD_EARLY_OUT_FRACTION = 0.0;
+
+/** result of a {@link rayIntersectsTriangle} test */
+export type RayIntersectsTriangleResult = {
+    hit: boolean;
+    /** fraction along the ray (0-1) where the hit occurred; 0 when no hit */
+    fraction: number;
+    /** true when the triangle's front face was hit */
+    frontFacing: boolean;
+};
+
+export function createRayIntersectsTriangleResult(): RayIntersectsTriangleResult {
+    return {
+        hit: false,
+        fraction: 0,
+        frontFacing: false,
+    };
+}
+
+/**
+ * Ray-triangle intersection test with scalar ray args (no ray struct).
+ * Based on https://github.com/pmjoniak/GeometricTools/blob/master/GTEngine/Include/Mathematics/GteIntrRay3Triangle3.h
+ */
+export function rayIntersectsTriangle(
+    out: RayIntersectsTriangleResult,
+    originX: number,
+    originY: number,
+    originZ: number,
+    directionX: number,
+    directionY: number,
+    directionZ: number,
+    length: number,
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+    backfaceCulling: boolean,
+): void {
+    // edge1 = b - a, edge2 = c - a
+    const e1x = b[0] - a[0];
+    const e1y = b[1] - a[1];
+    const e1z = b[2] - a[2];
+    const e2x = c[0] - a[0];
+    const e2y = c[1] - a[1];
+    const e2z = c[2] - a[2];
+
+    // normal = edge1 × edge2
+    const nx = e1y * e2z - e1z * e2y;
+    const ny = e1z * e2x - e1x * e2z;
+    const nz = e1x * e2y - e1y * e2x;
+
+    // determine front vs back facing
+    let DdN = directionX * nx + directionY * ny + directionZ * nz;
+    let sign: number;
+    if (DdN > 0) {
+        // backface
+        if (backfaceCulling) {
+            out.hit = false;
+            out.fraction = 0;
+            out.frontFacing = false;
+            return;
+        }
+        sign = 1;
+    } else if (DdN < 0) {
+        // frontface
+        sign = -1;
+        DdN = -DdN;
+    } else {
+        // ray is parallel to triangle
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+        return;
+    }
+
+    // diff = origin - a
+    const diffx = originX - a[0];
+    const diffy = originY - a[1];
+    const diffz = originZ - a[2];
+
+    // barycentric coordinate b1: DdQxE2 = sign * D · (diff × edge2)
+    const diffCrossE2x = diffy * e2z - diffz * e2y;
+    const diffCrossE2y = diffz * e2x - diffx * e2z;
+    const diffCrossE2z = diffx * e2y - diffy * e2x;
+    const DdQxE2 = sign * (directionX * diffCrossE2x + directionY * diffCrossE2y + directionZ * diffCrossE2z);
+    if (DdQxE2 < 0) {
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+        return;
+    }
+
+    // barycentric coordinate b2: DdE1xQ = sign * D · (edge1 × diff)
+    const e1CrossDiffx = e1y * diffz - e1z * diffy;
+    const e1CrossDiffy = e1z * diffx - e1x * diffz;
+    const e1CrossDiffz = e1x * diffy - e1y * diffx;
+    const DdE1xQ = sign * (directionX * e1CrossDiffx + directionY * e1CrossDiffy + directionZ * e1CrossDiffz);
+    if (DdE1xQ < 0) {
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+        return;
+    }
+
+    // b1 + b2 must not exceed 1
+    if (DdQxE2 + DdE1xQ > DdN) {
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+        return;
+    }
+
+    // intersection distance along the ray
+    const QdN = -sign * (diffx * nx + diffy * ny + diffz * nz);
+    if (QdN < 0) {
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+        return;
+    }
+
+    const t = QdN / DdN;
+    if (t <= length) {
+        out.hit = true;
+        out.fraction = t / length;
+        out.frontFacing = sign < 0;
+    } else {
+        out.hit = false;
+        out.fraction = 0;
+        out.frontFacing = false;
+    }
+}
 
 /**
  * Compute normalized distance fraction along the ray to a box's entry point. Fully-scalar box args

@@ -1,4 +1,4 @@
-import { type Box3, box3, mat4, type Quat, quat, raycast3, triangle3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, type Quat, quat, triangle3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
@@ -18,7 +18,13 @@ import {
     createCastShapeHit,
     reversedCastShapeVsShape,
 } from '../collision/cast-shape-vs-shape';
-import { INITIAL_EARLY_OUT_FRACTION, rayDistanceToBox3 } from '../collision/cast-utils';
+import {
+    createRayIntersectsTriangleResult,
+    INITIAL_EARLY_OUT_FRACTION,
+    rayDistanceToBox3,
+    rayHitsBox3,
+    rayIntersectsTriangle,
+} from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
 import {
@@ -249,8 +255,7 @@ const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
 const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_rayForMathcat = /* @__PURE__ */ raycast3.create();
-const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ raycast3.createIntersectsTriangleResult();
+const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ createRayIntersectsTriangleResult();
 // parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
 // array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castRayVsTriangleMesh_stackNodes: number[] = [];
@@ -325,11 +330,13 @@ function castRayVsTriangleMesh(
     _castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
     _castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
 
-    // set up scratch ray for mathcat api calls
-    // safe to use module-level scratch because triangle meshes don't nest
-    vec3.copy(_castRayVsTriangleMesh_rayForMathcat.origin, _castRayVsTriangleMesh_rayOriginLocal);
-    vec3.copy(_castRayVsTriangleMesh_rayForMathcat.direction, _castRayVsTriangleMesh_rayDirectionLocal);
-    _castRayVsTriangleMesh_rayForMathcat.length = length;
+    // hoisted scalars for the per-node slab tests and per-triangle intersections
+    const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0];
+    const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1];
+    const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2];
+    const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0];
+    const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1];
+    const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2];
 
     const buffer = shape.bvh.buffer;
     const meshData = shape.data;
@@ -390,9 +397,15 @@ function castRayVsTriangleMesh(
                 // and the ray x triangle test is not so expensive as gjk/epa collision or shapecast.
 
                 // test ray vs triangle
-                raycast3.intersectsTriangle(
+                rayIntersectsTriangle(
                     _castRayVsTriangleMesh_hitResult,
-                    _castRayVsTriangleMesh_rayForMathcat,
+                    localOriginX,
+                    localOriginY,
+                    localOriginZ,
+                    localDirX,
+                    localDirY,
+                    localDirZ,
+                    length,
                     a,
                     b,
                     c,
@@ -432,13 +445,13 @@ function castRayVsTriangleMesh(
             bvh.nodeGetBounds(_castRayVsTriangleMesh_rightBounds, buffer, rightOffset);
 
             const leftDist = rayDistanceToBox3(
-                _castRayVsTriangleMesh_rayForMathcat.origin[0],
-                _castRayVsTriangleMesh_rayForMathcat.origin[1],
-                _castRayVsTriangleMesh_rayForMathcat.origin[2],
-                _castRayVsTriangleMesh_rayForMathcat.direction[0],
-                _castRayVsTriangleMesh_rayForMathcat.direction[1],
-                _castRayVsTriangleMesh_rayForMathcat.direction[2],
-                _castRayVsTriangleMesh_rayForMathcat.length,
+                localOriginX,
+                localOriginY,
+                localOriginZ,
+                localDirX,
+                localDirY,
+                localDirZ,
+                length,
                 _castRayVsTriangleMesh_leftBounds[0],
                 _castRayVsTriangleMesh_leftBounds[1],
                 _castRayVsTriangleMesh_leftBounds[2],
@@ -447,13 +460,13 @@ function castRayVsTriangleMesh(
                 _castRayVsTriangleMesh_leftBounds[5],
             );
             const rightDist = rayDistanceToBox3(
-                _castRayVsTriangleMesh_rayForMathcat.origin[0],
-                _castRayVsTriangleMesh_rayForMathcat.origin[1],
-                _castRayVsTriangleMesh_rayForMathcat.origin[2],
-                _castRayVsTriangleMesh_rayForMathcat.direction[0],
-                _castRayVsTriangleMesh_rayForMathcat.direction[1],
-                _castRayVsTriangleMesh_rayForMathcat.direction[2],
-                _castRayVsTriangleMesh_rayForMathcat.length,
+                localOriginX,
+                localOriginY,
+                localOriginZ,
+                localDirX,
+                localDirY,
+                localDirZ,
+                length,
                 _castRayVsTriangleMesh_rightBounds[0],
                 _castRayVsTriangleMesh_rightBounds[1],
                 _castRayVsTriangleMesh_rightBounds[2],
@@ -533,8 +546,6 @@ const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ (() => {
 
 const _collidePointVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _collidePointVsTriangleMesh_localPoint = /* @__PURE__ */ vec3.create();
-const _collidePointVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
-const _collidePointVsTriangleMesh_rayDirection = /* @__PURE__ */ vec3.create();
 const _collidePointVsTriangleMesh_aabbSize = /* @__PURE__ */ vec3.create();
 const _collidePointVsTriangleMesh_popResult = /* @__PURE__ */ subShape.popResult();
 const _collidePointHit = /* @__PURE__ */ createCollidePointHit();
@@ -592,14 +603,6 @@ function collidePointVsTriangleMesh(
     box3.size(_collidePointVsTriangleMesh_aabbSize, shapeB.aabb);
     const aabbHeight = _collidePointVsTriangleMesh_aabbSize[1];
     const rayLength = aabbHeight * 1.1;
-
-    vec3.set(_collidePointVsTriangleMesh_rayDirection, 0, 1, 0); // +Y axis
-    raycast3.set(
-        _collidePointVsTriangleMesh_ray,
-        _collidePointVsTriangleMesh_localPoint,
-        _collidePointVsTriangleMesh_rayDirection,
-        rayLength,
-    );
 
     // reset hit counter and perform raycast
     hitCountCollector.reset();
@@ -689,7 +692,6 @@ const _castConvexVsTriangleMesh_AtoWorldAtContact = /* @__PURE__ */ mat4.create(
 // array) sharing one size counter. separate arrays so each keeps its optimal element kind.
 const _castConvexVsTriangleMesh_stackNodes: number[] = [];
 const _castConvexVsTriangleMesh_stackDist: number[] = [];
-const _castConvexVsTriangleMesh_raycast = /* @__PURE__ */ raycast3.create();
 const _castConvexVsTriangleMesh_halfExtents = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 const _castConvexVsTriangleMesh_triExpandedBounds = /* @__PURE__ */ box3.create();
@@ -797,20 +799,16 @@ function castConvexVsTriangleMesh(
     const mat4_BtoWorld = targetTransform;
 
     // compute centroid of base AABB
-    const ray = _castConvexVsTriangleMesh_raycast;
-    ray.origin[0] = (_castConvexVsTriangleMesh_sweptAABB[0] + _castConvexVsTriangleMesh_sweptAABB[3]) * 0.5;
-    ray.origin[1] = (_castConvexVsTriangleMesh_sweptAABB[1] + _castConvexVsTriangleMesh_sweptAABB[4]) * 0.5;
-    ray.origin[2] = (_castConvexVsTriangleMesh_sweptAABB[2] + _castConvexVsTriangleMesh_sweptAABB[5]) * 0.5;
+    // cast ray: swept AABB center along the normalized displacement
+    const rayOriginX = (_castConvexVsTriangleMesh_sweptAABB[0] + _castConvexVsTriangleMesh_sweptAABB[3]) * 0.5;
+    const rayOriginY = (_castConvexVsTriangleMesh_sweptAABB[1] + _castConvexVsTriangleMesh_sweptAABB[4]) * 0.5;
+    const rayOriginZ = (_castConvexVsTriangleMesh_sweptAABB[2] + _castConvexVsTriangleMesh_sweptAABB[5]) * 0.5;
 
-    // compute ray direction and length from displacement
-    ray.length = vec3.length(_castConvexVsTriangleMesh_displacementInB);
-    if (ray.length > 1e-10) {
-        vec3.normalize(ray.direction, _castConvexVsTriangleMesh_displacementInB);
-    } else {
-        ray.direction[0] = 0;
-        ray.direction[1] = 0;
-        ray.direction[2] = 0;
-    }
+    const rayLength = vec3.length(_castConvexVsTriangleMesh_displacementInB);
+    const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
+    const rayDirX = _castConvexVsTriangleMesh_displacementInB[0] * invRayLength;
+    const rayDirY = _castConvexVsTriangleMesh_displacementInB[1] * invRayLength;
+    const rayDirZ = _castConvexVsTriangleMesh_displacementInB[2] * invRayLength;
 
     // compute half-extents of the base AABB
     const halfExtents = _castConvexVsTriangleMesh_halfExtents;
@@ -860,7 +858,23 @@ function castConvexVsTriangleMesh(
                 triBounds[5] = triangleAABBs[aabbOffset + 5] + halfExtents[2];
 
                 // early out: ray x triangle expanded bounds
-                if (!raycast3.intersectsBox3(ray, triBounds)) {
+                if (
+                    !rayHitsBox3(
+                        rayOriginX,
+                        rayOriginY,
+                        rayOriginZ,
+                        rayDirX,
+                        rayDirY,
+                        rayDirZ,
+                        rayLength,
+                        triBounds[0],
+                        triBounds[1],
+                        triBounds[2],
+                        triBounds[3],
+                        triBounds[4],
+                        triBounds[5],
+                    )
+                ) {
                     continue;
                 }
 
@@ -1104,13 +1118,13 @@ function castConvexVsTriangleMesh(
 
             // get distance
             const leftDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],
@@ -1129,13 +1143,13 @@ function castConvexVsTriangleMesh(
 
             // get distance
             const rightDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],
@@ -2085,7 +2099,6 @@ const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
 const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_ray = /* @__PURE__ */ raycast3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 // parallel flat stacks for this cast traversal: node offsets (SMI array) + distances (double
 // array) sharing one size counter. separate arrays so each keeps its optimal element kind.
@@ -2296,16 +2309,15 @@ function castSphereVsTriangleMesh(
     // ordered front-to-back traversal (matches castConvexVsTriangleMesh): ray from the
     // sphere center at t=0 along the displacement, node bounds expanded by the sphere
     // radius, children pushed nearest-on-top and pruned against the early-out fraction
-    const ray = _castSphereVsTriangleMesh_ray;
-    vec3.copy(ray.origin, start);
-    ray.length = vec3.length(direction);
-    if (ray.length > 1e-10) {
-        vec3.normalize(ray.direction, direction);
-    } else {
-        ray.direction[0] = 0;
-        ray.direction[1] = 0;
-        ray.direction[2] = 0;
-    }
+    // cast ray: sphere start along the normalized displacement
+    const rayOriginX = start[0];
+    const rayOriginY = start[1];
+    const rayOriginZ = start[2];
+    const rayLength = vec3.length(direction);
+    const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
+    const rayDirX = direction[0] * invRayLength;
+    const rayDirY = direction[1] * invRayLength;
+    const rayDirZ = direction[2] * invRayLength;
 
     let stackSize = 0;
     _castSphereVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -2577,13 +2589,13 @@ function castSphereVsTriangleMesh(
             expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + sphereRadius;
 
             const leftDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],
@@ -2600,13 +2612,13 @@ function castSphereVsTriangleMesh(
             expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + sphereRadius;
 
             const rightDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],

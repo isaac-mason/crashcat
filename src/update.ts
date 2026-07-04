@@ -1,4 +1,4 @@
-import { box3, mat4, type Quat, quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';
@@ -22,6 +22,7 @@ import {
     createDefaultCastShapeSettings,
     createDefaultCollideShapeSettings,
 } from './collision/narrowphase';
+import { rayHitsBox3 } from './collision/cast-utils';
 import { combineMaterial } from './constraints/combine-material';
 import type { ConstraintType } from './constraints/constraint-id';
 import * as axisConstraintPart from './constraints/constraint-part/axis-constraint-part';
@@ -1282,7 +1283,6 @@ const _ccd_relativeDisplacement = /* @__PURE__ */ vec3.create();
 const _ccd_expandedAABB = /* @__PURE__ */ box3.create();
 const _ccd_shapeExtent = /* @__PURE__ */ vec3.create();
 const _ccd_normal = /* @__PURE__ */ vec3.create();
-const _ccd_ray = /* @__PURE__ */ raycast3.create();
 const _ccd_bodyBMotion = /* @__PURE__ */ vec3.create();
 
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
@@ -1478,10 +1478,26 @@ const ccdBodyVisitor: BodyVisitor & {
         box3.copy(_ccd_expandedAABB, bodyB.aabb);
         box3.expandByExtents(_ccd_expandedAABB, _ccd_expandedAABB, _ccd_shapeExtent);
 
-        // ray vs AABB test: early-out if ray doesn't intersect expanded AABB
-        const rayLength = vec3.length(_ccd_relativeDisplacement);
-        raycast3.set(_ccd_ray, this.bodyA.position, _ccd_relativeDisplacement, rayLength);
-        if (!raycast3.intersectsBox3(_ccd_ray, _ccd_expandedAABB)) {
+        // ray vs AABB test: early-out if the swept path can't reach the expanded AABB. the ray is
+        // the relative displacement itself with length 1, so slab t-values and the cap are both
+        // sweep fractions (a world-length cap would wrongly cull sweeps shorter than 1 unit).
+        if (
+            !rayHitsBox3(
+                this.bodyA.position[0],
+                this.bodyA.position[1],
+                this.bodyA.position[2],
+                _ccd_relativeDisplacement[0],
+                _ccd_relativeDisplacement[1],
+                _ccd_relativeDisplacement[2],
+                1,
+                _ccd_expandedAABB[0],
+                _ccd_expandedAABB[1],
+                _ccd_expandedAABB[2],
+                _ccd_expandedAABB[3],
+                _ccd_expandedAABB[4],
+                _ccd_expandedAABB[5],
+            )
+        ) {
             return;
         }
 

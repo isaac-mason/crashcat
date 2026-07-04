@@ -1,10 +1,10 @@
-import { type Box3, box3, mat3, mat4, quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat3, mat4, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
-import { rayDistanceToBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
@@ -1353,7 +1353,6 @@ const _castShapeVsStaticCompound_quatAInB = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_displacementInB = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_mat4 = /* @__PURE__ */ mat4.create();
 const _castShapeVsStaticCompound_sweptAABB = /* @__PURE__ */ box3.create();
-const _castShapeVsStaticCompound_raycast = /* @__PURE__ */ raycast3.create();
 const _castShapeVsStaticCompound_halfExtents = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_expandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_childExpandedBounds = /* @__PURE__ */ box3.create();
@@ -1446,21 +1445,16 @@ function castShapeVsStaticCompound(
     );
     box3.transformMat4(_castShapeVsStaticCompound_sweptAABB, shapeA.aabb, aabbMatrix);
 
-    // compute centroid of base AABB
-    const ray = _castShapeVsStaticCompound_raycast;
-    ray.origin[0] = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
-    ray.origin[1] = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * 0.5;
-    ray.origin[2] = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * 0.5;
+    // cast ray: swept AABB center along the normalized displacement
+    const rayOriginX = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
+    const rayOriginY = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * 0.5;
+    const rayOriginZ = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * 0.5;
 
-    // compute ray direction and length from displacement
-    ray.length = vec3.length(_castShapeVsStaticCompound_displacementInB);
-    if (ray.length > 1e-10) {
-        vec3.normalize(ray.direction, _castShapeVsStaticCompound_displacementInB);
-    } else {
-        ray.direction[0] = 0;
-        ray.direction[1] = 0;
-        ray.direction[2] = 0;
-    }
+    const rayLength = vec3.length(_castShapeVsStaticCompound_displacementInB);
+    const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
+    const rayDirX = _castShapeVsStaticCompound_displacementInB[0] * invRayLength;
+    const rayDirY = _castShapeVsStaticCompound_displacementInB[1] * invRayLength;
+    const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
 
     // compute half-extents of the base AABB
     const halfExtents = _castShapeVsStaticCompound_halfExtents;
@@ -1512,7 +1506,23 @@ function castShapeVsStaticCompound(
                 childBounds[5] += halfExtents[2];
 
                 // early out: ray x child expanded bounds
-                if (!raycast3.intersectsBox3(ray, childBounds)) {
+                if (
+                    !rayHitsBox3(
+                        rayOriginX,
+                        rayOriginY,
+                        rayOriginZ,
+                        rayDirX,
+                        rayDirY,
+                        rayDirZ,
+                        rayLength,
+                        childBounds[0],
+                        childBounds[1],
+                        childBounds[2],
+                        childBounds[3],
+                        childBounds[4],
+                        childBounds[5],
+                    )
+                ) {
                     continue;
                 }
 
@@ -1596,13 +1606,13 @@ function castShapeVsStaticCompound(
             expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const leftDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],
@@ -1618,13 +1628,13 @@ function castShapeVsStaticCompound(
             expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const rightDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
                 expandedBounds[0],
                 expandedBounds[1],
                 expandedBounds[2],
