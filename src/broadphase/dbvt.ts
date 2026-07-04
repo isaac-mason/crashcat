@@ -800,6 +800,12 @@ export function castRay(
     const dirZ = _ray.direction[2];
     const rayLen = _ray.length;
 
+    // closest-hit fraction so far (jolt's GetEarlyOutFraction); any node whose fat-AABB entry
+    // fraction is >= this can't hold a closer hit and is pruned. distances are normalized to
+    // [0, 1] of the ray length (rayDistanceToBox3), matching the collector's fraction. visitors
+    // that don't cast omit it → Infinity → distance pruning off (only misses rejected).
+    let bestFraction = visitor.earlyOutFraction ?? Infinity;
+
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
     _castStackDist[stackSize] = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, dbvt.nodes[dbvt.root].aabb);
@@ -811,14 +817,14 @@ export function castRay(
         const nodeDistance = _castStackDist[stackSize];
         const node = dbvt.nodes[nodeIndex];
 
-        // early-out: skip missed nodes (Infinity distance) and nodes beyond ray length.
-        // the node's own aabb was already ray-tested when its parent pushed it — a finite
-        // stored distance means it hits — so a re-test of node.aabb here would be redundant.
-        if (nodeDistance > length) {
+        // prune: skip misses (Infinity distance) and nodes whose entry is beyond the closest hit
+        // found so far (best-t). the node's own aabb was already ray-tested when its parent pushed
+        // it — a finite stored distance means it hits — so re-testing node.aabb here is redundant.
+        if (nodeDistance >= bestFraction) {
             continue;
         }
 
-        // if internal node, push children sorted by distance
+        // if internal node, push children sorted by distance, culling any beyond best-t
         if (!isLeaf(node)) {
             const leftNode = dbvt.nodes[node.left];
             const rightNode = dbvt.nodes[node.right];
@@ -828,23 +834,23 @@ export function castRay(
 
             // push in reverse order (furthest first) so closest is popped first
             if (leftDist < rightDist) {
-                if (node.right !== -1) {
+                if (rightDist < bestFraction) {
                     _castStackNode[stackSize] = node.right;
                     _castStackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (node.left !== -1) {
+                if (leftDist < bestFraction) {
                     _castStackNode[stackSize] = node.left;
                     _castStackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
-                if (node.left !== -1) {
+                if (leftDist < bestFraction) {
                     _castStackNode[stackSize] = node.left;
                     _castStackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (node.right !== -1) {
+                if (rightDist < bestFraction) {
                     _castStackNode[stackSize] = node.right;
                     _castStackDist[stackSize] = rightDist;
                     stackSize++;
@@ -905,6 +911,9 @@ export function castRay(
         if (visitor.shouldExit) {
             return;
         }
+
+        // a hit may have shrunk the collector's early-out fraction — tighten the pruning bound
+        bestFraction = visitor.earlyOutFraction ?? Infinity;
     }
 }
 

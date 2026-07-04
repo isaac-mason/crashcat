@@ -20,6 +20,7 @@ import type { World } from './world';
 
 const CastRayBodyVisitor = {
     shouldExit: false,
+    earlyOutFraction: 0,
     collector: null! as CastRayCollector,
     settings: null! as CastRaySettings,
     origin: vec3.create(),
@@ -58,10 +59,14 @@ const CastRayBodyVisitor = {
         );
 
         this.shouldExit = collector.shouldEarlyOut();
+        // surface the collector's shrinking early-out fraction so the broadphase can prune nodes
+        // beyond the closest hit found so far
+        this.earlyOutFraction = collector.earlyOutFraction;
     },
     set(collector: CastRayCollector, settings: CastRaySettings, origin: Vec3, direction: Vec3, maxDistance: number) {
         this.collector = collector;
         this.settings = settings;
+        this.earlyOutFraction = collector.earlyOutFraction;
         this.origin[0] = origin[0];
         this.origin[1] = origin[1];
         this.origin[2] = origin[2];
