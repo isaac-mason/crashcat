@@ -9,6 +9,8 @@ import * as dbvt from './dbvt.js';
 export type Broadphase = {
     /** dynamic bounding volume trees, one per broadphase layer */
     dbvts: dbvt.DBVT[];
+    /** round-robin cursor for the dirty-gated rebuild — which tree to check next */
+    nextTreeToOptimize: number;
 };
 /** initializes broadphase state */
 export declare function init(layers: Layers): Broadphase;
@@ -17,10 +19,10 @@ export declare function addBody(broadphase: Broadphase, body: RigidBody, layers:
 /** removes a body from the broadphase */
 export declare function removeBody(broadphase: Broadphase, body: RigidBody): void;
 /**
- * Incrementally optimize the trees (matching Bullet's btDbvtBroadphase::collide).
- * bullet default: 1 + (m_leaves * m_dupdates / 100), where m_dupdates = 0 —
- * minimum 1 node per frame is optimized even with 0% setting.
- * Called once per step by updateWorld, before pair finding.
+ * Dirty-gated balanced rebuild. Called once per step by updateWorld, before pair finding. Scans
+ * layers from the round-robin cursor and rebuilds the first dirty tree found — at most one rebuild
+ * per step to cap worst-frame cost. A clean tree (e.g. a settled static field) costs a single
+ * boolean check and is never touched.
  */
 export declare function optimize(broadphase: Broadphase): void;
 /** updates a body's AABB in the broadphase; returns true iff the body escaped its fat leaf AABB */

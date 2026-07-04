@@ -1,4 +1,4 @@
-import { ConstraintType, MotionType, ShapeType, bvh, rigidBody } from "crashcat";
+import { ConstraintType, MotionType, ShapeType, bvh, dbvt, rigidBody } from "crashcat";
 import * as THREE from "three";
 //#region \0rolldown/runtime.js
 var __defProp = Object.defineProperty;
@@ -1540,26 +1540,35 @@ function updateBroadphaseDbvt(state, world) {
 		]
 	];
 	for (let layerIndex = 0; layerIndex < world.broadphase.dbvts.length; layerIndex++) {
-		const dbvt = world.broadphase.dbvts[layerIndex];
-		if (dbvt.root === -1) continue;
-		const stack = [dbvt.root];
+		const tree = world.broadphase.dbvts[layerIndex];
+		if (tree.root === -1) continue;
+		const stack = [tree.root];
 		while (stack.length > 0) {
 			const nodeIndex = stack.pop();
-			const node = dbvt.nodes[nodeIndex];
-			const isLeaf = node.left === -1 && node.right === -1;
+			const left = dbvt.nodeLeft(tree, nodeIndex);
+			const right = dbvt.nodeRight(tree, nodeIndex);
+			const isLeaf = left === -1 && right === -1;
 			if (isLeaf && !state.options.broadphaseDbvt.showLeafNodes) {
-				if (node.left !== -1) stack.push(node.left);
-				if (node.right !== -1) stack.push(node.right);
+				if (left !== -1) stack.push(left);
+				if (right !== -1) stack.push(right);
 				continue;
 			}
 			if (!isLeaf && !state.options.broadphaseDbvt.showNonLeafNodes) {
-				if (node.left !== -1) stack.push(node.left);
-				if (node.right !== -1) stack.push(node.right);
+				if (left !== -1) stack.push(left);
+				if (right !== -1) stack.push(right);
 				continue;
 			}
 			const color = isLeaf ? layerColorsLeaf[layerIndex % layerColorsLeaf.length] : layerColorsNonLeaf[layerIndex % layerColorsNonLeaf.length];
-			const minX = node.aabb[0], minY = node.aabb[1], minZ = node.aabb[2];
-			const maxX = node.aabb[3], maxY = node.aabb[4], maxZ = node.aabb[5];
+			const _aabb = dbvt.readNodeAabb([
+				0,
+				0,
+				0,
+				0,
+				0,
+				0
+			], tree, nodeIndex);
+			const minX = _aabb[0], minY = _aabb[1], minZ = _aabb[2];
+			const maxX = _aabb[3], maxY = _aabb[4], maxZ = _aabb[5];
 			positions.push(minX, minY, minZ, maxX, minY, minZ);
 			colors.push(...color, ...color);
 			positions.push(maxX, minY, minZ, maxX, minY, maxZ);
@@ -1584,8 +1593,8 @@ function updateBroadphaseDbvt(state, world) {
 			colors.push(...color, ...color);
 			positions.push(minX, minY, maxZ, minX, maxY, maxZ);
 			colors.push(...color, ...color);
-			if (node.left !== -1) stack.push(node.left);
-			if (node.right !== -1) stack.push(node.right);
+			if (left !== -1) stack.push(left);
+			if (right !== -1) stack.push(right);
 		}
 	}
 	const geometry = state.broadphase.dbvtLines.geometry;

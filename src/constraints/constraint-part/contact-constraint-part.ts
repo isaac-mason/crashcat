@@ -32,6 +32,7 @@ import { getSpringBias } from './spring-part';
  * @returns new total lambda (unclamped)
  *
  * @inline
+ * @optimize
  */
 export function getTotalLambda(
     part: AxisConstraintPart,
@@ -92,6 +93,7 @@ export function getTotalLambda(
  * @returns true if impulse was applied
  *
  * @inline
+ * @optimize
  */
 export function applyLambda(
     part: AxisConstraintPart,
@@ -159,6 +161,7 @@ export function applyLambda(
  * @returns true if impulse was applied
  *
  * @inline
+ * @optimize
  */
 export function warmStart(
     part: AxisConstraintPart,
