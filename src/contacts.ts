@@ -1,9 +1,10 @@
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body';
 import type { Bodies } from './body/bodies';
 import { getBodyIdIndex } from './body/body-id';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import type { Listener } from './listener';
+import { invalidateCache, type Pairs } from './pairs';
 
 /** contacts state */
 export type Contacts = {
@@ -20,15 +21,6 @@ export type Contacts = {
      * is the WRITE side this step.
      */
     readIdx: 0 | 1;
-    /**
-     * Per-body-pair cache of last frame's relative pose (body B's COM and
-     * orientation expressed in body A's local frame). Used to decide whether
-     * the narrowphase can be skipped this frame and last frame's manifolds
-     * reused verbatim.
-     *
-     * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
-     */
-    cachedBodyPairs: Map<number, CachedBodyPair>;
 
     /**
      * Deferred onContactRemoved event payloads, flat quads
@@ -43,19 +35,6 @@ export type Contacts = {
 };
 
 /**
- * Per-body-pair cache entry — last frame's relative pose between two bodies.
- *
- * Per-sub-shape-pair manifolds live on the persistent `Contact` records;
- * we walk a body's contact edge list to find them at cache-hit time.
- */
-export type CachedBodyPair = {
-    /** body B's COM position relative to body A, expressed in body A's local frame */
-    deltaPosition: Vec3;
-    /** body B's orientation relative to body A, i.e. `inv(rA) * rB` */
-    deltaRotation: Quat;
-};
-
-/**
  * Cached manifold data — the per-step state we read from last frame and write
  * to this frame.
  *
@@ -67,25 +46,31 @@ export type CachedBodyPair = {
 export type CachedManifold = {
     /** contact normal in body B's local space */
     contactNormal: Vec3;
+
     /** number of contact points (0-4) */
     numContactPoints: number;
+
     /** contact points (max 4 for stable manifold) */
     contactPoints: CachedContactPoint[];
+
     /**
      * Accumulated friction impulse along tangent1 for the entire manifold
      * (used for warm starting next step).
      */
     frictionLambda1: number;
+
     /**
      * Accumulated friction impulse along tangent2 for the entire manifold
      * (used for warm starting next step).
      */
     frictionLambda2: number;
+
     /**
      * Accumulated angular friction impulse around the contact normal for the
      * entire manifold (used for warm starting next step).
      */
     angularFrictionLambda: number;
+
     /** flags bitfield (@see CachedManifoldFlags) */
     flags: number;
 };
@@ -94,22 +79,31 @@ export type CachedManifold = {
 export type Contact = {
     /** contact index (index in contacts.contacts when active, -1 when freed) */
     contactIndex: number;
+
     /** body A ID (always <= bodyIdB for consistent ordering) */
     bodyIdA: number;
+
     /** body A index */
     bodyIndexA: number;
+
     /** body B ID (always >= bodyIdA for consistent ordering) */
     bodyIdB: number;
+
     /** body B index */
     bodyIndexB: number;
+
     /** sub-shape A ID */
     subShapeIdA: number;
+
     /** sub-shape B ID */
     subShapeIdB: number;
+
     /** whether this contact was processed this frame (for stale contact cleanup) */
     processedThisFrame: boolean;
+
     /** two edges for intrusive doubly-linked list: edges[0] = edge in bodyA's contact list, edges[1] = edge in bodyB's contact list */
     edges: [ContactEdge, ContactEdge];
+
     /**
      * Double-buffered cached manifold (read / write side per step).
      * Use getReadManifold / getWriteManifold to access via the Contacts.readIdx
@@ -157,16 +151,10 @@ export function init(): Contacts {
         contacts: [],
         contactsFreeIndices: [],
         readIdx: 0,
-        cachedBodyPairs: new Map(),
         pendingContactRemoved: [],
     };
 }
 
-/**
- * Pack a pair of body IDs into a single number key for the cached-body-pair map.
- * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
- * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
- */
 /** fire and clear deferred onContactRemoved events (queued by body removal) */
 export function flushPendingContactRemoved(contacts: Contacts, listener: Listener | undefined): void {
     const pending = contacts.pendingContactRemoved;
@@ -178,44 +166,6 @@ export function flushPendingContactRemoved(contacts: Contacts, listener: Listene
         }
     }
     pending.length = 0;
-}
-
-export function bodyPairKey(idA: number, idB: number): number {
-    return idA < idB ? idA * 0x1_0000_0000 + idB : idB * 0x1_0000_0000 + idA;
-}
-
-/** create a fresh CachedBodyPair with zeroed deltas */
-function createCachedBodyPair(): CachedBodyPair {
-    return {
-        deltaPosition: vec3.create(),
-        deltaRotation: quat.create(),
-    };
-}
-
-/**
- * Write the current relative pose into the cached-body-pair map, creating the
- * entry if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
- */
-export function setCachedBodyPair(
-    contactsState: Contacts,
-    idA: number,
-    idB: number,
-    deltaPosition: Vec3,
-    deltaRotation: Quat,
-): void {
-    const key = bodyPairKey(idA, idB);
-    let entry = contactsState.cachedBodyPairs.get(key);
-    if (!entry) {
-        entry = createCachedBodyPair();
-        contactsState.cachedBodyPairs.set(key, entry);
-    }
-    vec3.copy(entry.deltaPosition, deltaPosition);
-    quat.copy(entry.deltaRotation, deltaRotation);
-}
-
-/** drop the cached-body-pair entry for the given pair, if any. */
-export function removeCachedBodyPair(contactsState: Contacts, idA: number, idB: number): void {
-    contactsState.cachedBodyPairs.delete(bodyPairKey(idA, idB));
 }
 
 /** the manifold buffer that holds last step's cached data (read side). */
@@ -456,6 +406,7 @@ export function createContact(contacts: Contacts, bodyA: RigidBody, bodyB: Rigid
  * @param bodyB second body in contact
  * @param contact contact to destroy
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, so the pair's pose cache can be invalidated on last-contact removal
  */
 export function destroyContact(
     contacts: Contacts,
@@ -463,6 +414,7 @@ export function destroyContact(
     bodyB: RigidBody,
     contact: Contact,
     listener: Listener | undefined,
+    pairs: Pairs | undefined,
 ): void {
     // notify listener before destroying
     if (listener?.onContactRemoved) {
@@ -489,10 +441,11 @@ export function destroyContact(
     contact.contactIndex = -1;
     contacts.contactsFreeIndices.push(contactId);
 
-    // if this was the last contact between the pair, drop the cached-body-pair
-    // entry so a future broadphase pair re-enters narrowphase from a clean state.
-    if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) {
-        removeCachedBodyPair(contacts, pairIdA, pairIdB);
+    // if this was the last contact between the pair, invalidate the pair's cached pose
+    // so a future broadphase pair re-enters narrowphase from a clean state (cannot cache-hit
+    // into reconstructing zero contacts).
+    if (pairs !== undefined && !hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) {
+        invalidateCache(pairs, bodyA, bodyB);
     }
 }
 
@@ -554,9 +507,9 @@ export function hasContactsBetweenBodies(contacts: Contacts, bodyA: RigidBody, b
  * @param contacts global contact array
  * @param bodies body array for looking up other bodies
  * @param body body whose contacts should be destroyed
- * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody): void {
+export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody, pairs: Pairs | undefined): void {
     // destroy all contacts
     let contactKey = body.headContactKey;
     while (contactKey !== INVALID_CONTACT_KEY) {
@@ -580,7 +533,7 @@ export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: Ri
                 contact.subShapeIdA,
                 contact.subShapeIdB,
             );
-            destroyContact(contacts, body, otherBody, contact, undefined);
+            destroyContact(contacts, body, otherBody, contact, undefined, pairs);
         }
     }
 
@@ -599,12 +552,14 @@ export function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: Ri
  * @param bodyA first body
  * @param bodyB second body
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
 export function destroyStaleContactsBetweenBodies(
     contactsState: Contacts,
     bodyA: RigidBody,
     bodyB: RigidBody,
     listener: Listener | undefined,
+    pairs: Pairs | undefined,
 ): void {
     // search through the smaller body's contact list
     const searchBody = bodyA.contactCount <= bodyB.contactCount ? bodyA : bodyB;
@@ -624,7 +579,7 @@ export function destroyStaleContactsBetweenBodies(
             ((contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id) ||
                 (contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id))
         ) {
-            destroyContact(contactsState, bodyA, bodyB, contact, listener);
+            destroyContact(contactsState, bodyA, bodyB, contact, listener, pairs);
         }
     }
 }
@@ -637,12 +592,14 @@ export function destroyStaleContactsBetweenBodies(
  * @param bodyA first body
  * @param bodyB second body
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
 export function destroyAllContactsBetweenBodies(
     contactsState: Contacts,
     bodyA: RigidBody,
     bodyB: RigidBody,
     listener: Listener | undefined,
+    pairs: Pairs | undefined,
 ): void {
     // search through the smaller body's contact list
     const searchBody = bodyA.contactCount <= bodyB.contactCount ? bodyA : bodyB;
@@ -661,7 +618,7 @@ export function destroyAllContactsBetweenBodies(
             (contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id) ||
             (contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id)
         ) {
-            destroyContact(contactsState, bodyA, bodyB, contact, listener);
+            destroyContact(contactsState, bodyA, bodyB, contact, listener, pairs);
         }
     }
 }
@@ -729,8 +686,14 @@ export function markAllUnprocessed(contacts: Contacts): void {
  * @param contacts contacts state
  * @param bodies world bodies array (needed to look up Body objects by ID)
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export function destroyUnprocessedContacts(contacts: Contacts, bodies: Bodies, listener?: Listener): void {
+export function destroyUnprocessedContacts(
+    contacts: Contacts,
+    bodies: Bodies,
+    listener: Listener | undefined,
+    pairs: Pairs | undefined,
+): void {
     // iterate through all contacts and destroy unprocessed ones directly
     for (let i = 0; i < contacts.contacts.length; i++) {
         const contact = contacts.contacts[i];
@@ -746,7 +709,7 @@ export function destroyUnprocessedContacts(contacts: Contacts, bodies: Bodies, l
         const bodyB = bodies.pool[bodyBIndex];
 
         if (bodyA && bodyB && !bodyA._pooled && !bodyB._pooled) {
-            destroyContact(contacts, bodyA, bodyB, contact, listener);
+            destroyContact(contacts, bodyA, bodyB, contact, listener, pairs);
         }
     }
 }

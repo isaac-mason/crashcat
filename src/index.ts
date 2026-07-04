@@ -53,6 +53,8 @@ export { estimateCollisionResponse, createCollisionEstimationResult } from './co
 export * as broadphase from './broadphase/broadphase';
 export * as dbvt from './broadphase/dbvt';
 export type { BodyVisitor } from './broadphase/body-visitor';
+export * as pairs from './pairs';
+export type { Pairs } from './pairs';
 
 export { INACTIVE_BODY_INDEX } from "./body/sleep";
 export type { BodyId } from './body/body-id';

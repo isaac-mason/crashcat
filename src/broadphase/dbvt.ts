@@ -153,7 +153,7 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
         let parentIndex = prev;
         while (parentIndex !== -1) {
             const parentNode = dbvt.nodes[parentIndex];
-            if (!(box3.containsBox3(parentNode.aabb, childNode.aabb))) {
+            if (!box3.containsBox3(parentNode.aabb, childNode.aabb)) {
                 const leftNode = dbvt.nodes[parentNode.left];
                 const rightNode = dbvt.nodes[parentNode.right];
                 box3.union(parentNode.aabb, leftNode.aabb, rightNode.aabb);
@@ -425,7 +425,7 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
             const rightNode = dbvt.nodes[node.right];
             box3.union(node.aabb, leftNode.aabb, rightNode.aabb);
 
-            if (!(box3.exactEquals(node.aabb, _prevAabb))) {
+            if (!box3.exactEquals(node.aabb, _prevAabb)) {
                 nodeIndex = node.parent;
             } else {
                 break;
@@ -471,16 +471,21 @@ export function remove(dbvt: DBVT, body: RigidBody): void {
     body.dbvtNode = -1;
 }
 
-/* @optimize */
-export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
+/**
+ * @optimize
+ * returns true iff the leaf was reinserted (i.e. the body escaped its fat AABB), false when the
+ * containment early-out fired or there was nothing to do. the persistent-pair broadphase treats a
+ * reinsert as a "moved" event.
+ */
+export function update(dbvt: DBVT, body: RigidBody, lookahead: number): boolean {
     const leafIndex = body.dbvtNode;
-    if (leafIndex === -1) return;
+    if (leafIndex === -1) return false;
 
     const leaf = dbvt.nodes[leafIndex];
 
     // early exit: if body still fits in the fat AABB, nothing to do
     if (box3.containsBox3(leaf.aabb, body.aabb)) {
-        return;
+        return false;
     }
 
     // expand body bounds by margin for fat AABB.
@@ -515,6 +520,8 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): void {
 
     // reinsert from computed root
     insertLeaf(dbvt, rootIndex, leafIndex);
+
+    return true;
 }
 
 export function optimizeBottomUp(dbvt: DBVT): void {
@@ -571,6 +578,55 @@ export function optimizeIncremental(dbvt: DBVT, passes: number): void {
         }
 
         dbvt.optimizationPath++;
+    }
+}
+
+/**
+ * Overlap traversal against the FAT leaf AABBs — no tight body-AABB re-test and no filtering.
+ * Used by persistent-pair discovery: a pair must exist whenever the two fat boxes could
+ * bring the bodies into contact while both coast inside them, so the leaf test must be the
+ * fat node AABB (already tested during descent), NOT the current tight body AABB.
+ */
+export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void {
+    if (dbvt.root === -1) return;
+
+    const qMinX = aabb[0];
+    const qMinY = aabb[1];
+    const qMinZ = aabb[2];
+    const qMaxX = aabb[3];
+    const qMaxY = aabb[4];
+    const qMaxZ = aabb[5];
+
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
+
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
+        const node = dbvt.nodes[nodeIndex];
+
+        // node aabb test (for a leaf this IS the fat leaf test)
+        if (
+            node.aabb[0] > qMaxX ||
+            node.aabb[3] < qMinX ||
+            node.aabb[1] > qMaxY ||
+            node.aabb[4] < qMinY ||
+            node.aabb[2] > qMaxZ ||
+            node.aabb[5] < qMinZ
+        ) {
+            continue;
+        }
+
+        if (!isLeaf(node)) {
+            if (node.left !== -1) _flatStack[stackSize++] = node.left;
+            if (node.right !== -1) _flatStack[stackSize++] = node.right;
+            continue;
+        }
+
+        visitor.visit(world.bodies.pool[node.bodyIndex]);
+
+        if (visitor.shouldExit) {
+            return;
+        }
     }
 }
 
@@ -806,11 +862,19 @@ export function castRay(
         // early out: ray x node aabb
         if (
             !rayHitsBox3(
-                originX, originY, originZ,
-                dirX, dirY, dirZ,
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
                 rayLen,
-                node.aabb[0], node.aabb[1], node.aabb[2],
-                node.aabb[3], node.aabb[4], node.aabb[5],
+                node.aabb[0],
+                node.aabb[1],
+                node.aabb[2],
+                node.aabb[3],
+                node.aabb[4],
+                node.aabb[5],
             )
         ) {
             continue;
@@ -879,11 +943,19 @@ export function castRay(
         // early out: ray-aabb test on body bounds
         if (
             !rayHitsBox3(
-                originX, originY, originZ,
-                dirX, dirY, dirZ,
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
                 rayLen,
-                body.aabb[0], body.aabb[1], body.aabb[2],
-                body.aabb[3], body.aabb[4], body.aabb[5],
+                body.aabb[0],
+                body.aabb[1],
+                body.aabb[2],
+                body.aabb[3],
+                body.aabb[4],
+                body.aabb[5],
             )
         ) {
             continue;
@@ -945,11 +1017,19 @@ export function castAABB(
         // ray-slab test against node aabb expanded by the shape's half extents (minkowski sum)
         if (
             !rayHitsBox3(
-                originX, originY, originZ,
-                dirX, dirY, dirZ,
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
                 castLen,
-                node.aabb[0] - halfX, node.aabb[1] - halfY, node.aabb[2] - halfZ,
-                node.aabb[3] + halfX, node.aabb[4] + halfY, node.aabb[5] + halfZ,
+                node.aabb[0] - halfX,
+                node.aabb[1] - halfY,
+                node.aabb[2] - halfZ,
+                node.aabb[3] + halfX,
+                node.aabb[4] + halfY,
+                node.aabb[5] + halfZ,
             )
         ) {
             continue;
@@ -1032,11 +1112,19 @@ export function castAABB(
         // ray-slab test against body aabb expanded by the shape's half extents (minkowski sum)
         if (
             !rayHitsBox3(
-                originX, originY, originZ,
-                dirX, dirY, dirZ,
+                originX,
+                originY,
+                originZ,
+                dirX,
+                dirY,
+                dirZ,
                 castLen,
-                body.aabb[0] - halfX, body.aabb[1] - halfY, body.aabb[2] - halfZ,
-                body.aabb[3] + halfX, body.aabb[4] + halfY, body.aabb[5] + halfZ,
+                body.aabb[0] - halfX,
+                body.aabb[1] - halfY,
+                body.aabb[2] - halfZ,
+                body.aabb[3] + halfX,
+                body.aabb[4] + halfY,
+                body.aabb[5] + halfZ,
             )
         ) {
             continue;

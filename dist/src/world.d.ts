@@ -5,6 +5,7 @@ import type { Constraints } from './constraints/constraints.js';
 import * as contactConstraints from './constraints/contact-constraints.js';
 import * as contacts from './contacts.js';
 import * as islands from './islands.js';
+import * as pairs from './pairs.js';
 import type { WorldSettings } from './world-settings.js';
 /** physics world state */
 export type World = {
@@ -12,6 +13,8 @@ export type World = {
     settings: WorldSettings;
     /** broadphase state */
     broadphase: broadphase.Broadphase;
+    /** persistent overlapping-pair state (pair set, per-pair pose cache, per-frame emitted pairs) */
+    pairs: pairs.Pairs;
     /** bodies state */
     bodies: bodies.Bodies;
     /** contact constraint state (manages all active constraints and cache) */

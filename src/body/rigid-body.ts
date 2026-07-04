@@ -5,6 +5,7 @@ import type { ConstraintId } from '../constraints/constraint-id';
 import * as constraints from '../constraints/constraints';
 import * as contacts from '../contacts';
 import * as filter from '../filter';
+import * as pairs from '../pairs';
 import * as emptyShape from '../shapes/empty-shape';
 import {
     computeMassProperties,
@@ -228,6 +229,16 @@ export type RigidBody = {
     /** which broadphase dbvt node contains this body */
     dbvtNode: number;
 
+    /** per-frame dedup guard: true if the body is already in the broadphase moved set this frame */
+    movedThisFrame: boolean;
+
+    /**
+     * Head of the intrusive doubly-linked list of persistent broadphase pairs involving this body.
+     * Packed key: pairEdgeKey(recordIndex, side).
+     * Use INVALID_PAIR_KEY (-1) for empty list.
+     */
+    headPairKey: number;
+
     /**
      * Head of the intrusive doubly-linked list of contacts involving this body.
      * Packed key: (contactId << 1) | edgeIndex.
@@ -282,6 +293,8 @@ function makeRigidBody(): RigidBody {
         objectLayer: 0,
         broadphaseLayer: -1,
         dbvtNode: -1,
+        movedThisFrame: false,
+        headPairKey: pairs.INVALID_PAIR_KEY,
         headContactKey: contacts.INVALID_CONTACT_KEY,
         contactCount: 0,
         islandIndex: -1,
@@ -370,9 +383,11 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     body.objectLayer = o.objectLayer;
     body.broadphaseLayer = -1;
     body.dbvtNode = -1;
+    body.movedThisFrame = false;
 
     body.activeIndex = INACTIVE_BODY_INDEX;
 
+    body.headPairKey = pairs.INVALID_PAIR_KEY;
     body.headContactKey = contacts.INVALID_CONTACT_KEY;
     body.contactCount = 0;
     body.islandIndex = -1;
@@ -425,6 +440,10 @@ export function create(world: World, settings: RigidBodySettings): RigidBody {
     // add to broadphase
     broadphase.addBody(world.broadphase, body, world.settings.layers);
 
+    // a new body is a move event: it must discover its overlaps (and static bodies added
+    // after overlapping dynamics get paired here, since statics never move)
+    pairs.markMoved(world.pairs, body);
+
     // add to active bodies list if dynamic/kinematic and not sleeping
     if (body.motionType !== MotionType.STATIC && !body.sleeping) {
         addBodyToActiveBodies(world, body);
@@ -451,10 +470,14 @@ export function remove(world: World, body: RigidBody): boolean {
     removeBodyFromActiveBodies(world, body);
 
     // destroy all contacts involving this body (removal events are queued for the next updateWorld)
-    contacts.destroyBodyContacts(world.contacts, world.bodies, body);
+    contacts.destroyBodyContacts(world.contacts, world.bodies, body, world.pairs);
 
     // destroy all constraints involving this body
     constraints.destroyBodyConstraints(world, body);
+
+    // purge every persistent pair involving this body (independent of the dbvt leaf, so safe
+    // before tree-leaf removal)
+    pairs.purgeBodyPairs(world.pairs, world.bodies.pool, body);
 
     // remove from broadphase
     broadphase.removeBody(world.broadphase, body);
@@ -557,9 +580,12 @@ export function updatePositionFromCenterOfMass(world: World, body: RigidBody): v
 
     // update aabb
     updateAABB(body);
-    
+
     // update body
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 }
 
 /**
@@ -609,7 +635,10 @@ export function updateShape(world: World, body: RigidBody) {
     updateAABB(body);
 
     // notify broadphase of AABB change
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 }
 
 /**
@@ -624,7 +653,10 @@ export function setPosition(world: World, body: RigidBody, position: Vec3, wake:
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -644,7 +676,10 @@ export function setQuaternion(world: World, body: RigidBody, quaternion: Quat, w
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -666,7 +701,10 @@ export function setTransform(world: World, body: RigidBody, position: Vec3, quat
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -681,6 +719,9 @@ export function setObjectLayer(world: World, body: RigidBody, layer: number): vo
     body.objectLayer = layer;
 
     broadphase.reinsertBody(world.broadphase, body, world.settings.layers);
+
+    // a layer change is a move event: rediscover overlaps in the new layer's trees
+    pairs.markMoved(world.pairs, body);
 }
 
 /**

@@ -164,6 +164,14 @@ export type RigidBody = {
     broadphaseLayer: number;
     /** which broadphase dbvt node contains this body */
     dbvtNode: number;
+    /** per-frame dedup guard: true if the body is already in the broadphase moved set this frame */
+    movedThisFrame: boolean;
+    /**
+     * Head of the intrusive doubly-linked list of persistent broadphase pairs involving this body.
+     * Packed key: pairEdgeKey(recordIndex, side).
+     * Use INVALID_PAIR_KEY (-1) for empty list.
+     */
+    headPairKey: number;
     /**
      * Head of the intrusive doubly-linked list of contacts involving this body.
      * Packed key: (contactId << 1) | edgeIndex.

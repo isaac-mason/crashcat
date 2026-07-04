@@ -33,6 +33,7 @@ import * as islands from './islands';
 import { ContactValidateResult, type Listener } from './listener';
 import * as manifold from './manifold/manifold';
 import { MAX_CONTACT_POINTS } from './manifold/manifold';
+import * as pairs from './pairs';
 import { getShapeInnerRadius } from './shapes/shapes';
 import type { World } from './world';
 
@@ -58,17 +59,22 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     /* integrate forces into velocities */
     accelerationIntegrationUpdate(world, timeStep);
 
-    /* broadphase: find potentially colliding body pairs */
-    broadphase.findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
+    /* broadphase: incremental tree optimization */
+    broadphase.optimize(world.broadphase);
+
+    /* pairs: maintain the persistent pair set and find this frame's colliding pairs */
+    pairs.findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
 
     /* narrowphase: check collision for each potentially colliding pair */
-    const pairs = world.broadphase.pairs;
+    const collidingPairs = world.pairs.collidingPairs;
+    const collidingPairCount = world.pairs.collidingPairCount;
 
     const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
 
-    for (let i = 0; i < pairs.n; i++) {
-        const bodyIndexA = pairs.pool[i * 2];
-        const bodyIndexB = pairs.pool[i * 2 + 1];
+    for (let i = 0; i < collidingPairCount; i++) {
+        const bodyIndexA = collidingPairs[i * 3];
+        const bodyIndexB = collidingPairs[i * 3 + 1];
+        const pairRecordIndex = collidingPairs[i * 3 + 2];
 
         let bodyA = world.bodies.pool[bodyIndexA];
         let bodyB = world.bodies.pool[bodyIndexB];
@@ -94,7 +100,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             currDeltaPos = _bodyPairCache_deltaPos;
             currDeltaRot = _bodyPairCache_deltaRot;
             computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
-            pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
+            pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot, pairRecordIndex);
         }
 
         // perform narrowphase collision detection, creates contact constraints (on cache miss only)
@@ -109,7 +115,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         // any sub-threshold velocity, accumulating arbitrary contact-point
         // staleness and amplifying wobble in tall stacks.
         if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) {
-            contacts.setCachedBodyPair(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
+            pairs.setCache(world.pairs, pairRecordIndex, currDeltaPos, currDeltaRot);
         }
 
         // if a contact constraint was created, wake up sleeping dynamic bodies
@@ -126,12 +132,12 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         // skip this on cache hit: every contact was reprocessed by getContactsFromCache
         // and is therefore marked processed, so the scan would no-op anyway.
         if (!pairHandled) {
-            contacts.destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
+            contacts.destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener, world.pairs);
         }
     }
 
     /* clean up stale contacts */
-    contacts.destroyUnprocessedContacts(world.contacts, world.bodies, listener);
+    contacts.destroyUnprocessedContacts(world.contacts, world.bodies, listener, world.pairs);
 
     /* only solve if time step is positive */
     if (timeStep > 0) {
@@ -767,6 +773,8 @@ const _bodyPairCache_invRA = /* @__PURE__ */ quat.create();
 const _bodyPairCache_deltaPos = /* @__PURE__ */ vec3.create();
 const _bodyPairCache_deltaRot = /* @__PURE__ */ quat.create();
 const _bodyPairCache_diff = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_cachedPos = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_cachedRot = /* @__PURE__ */ quat.create();
 const _bodyPairCache_rotA = /* @__PURE__ */ mat4.create();
 const _bodyPairCache_rotB = /* @__PURE__ */ mat4.create();
 const _bodyPairCache_relA = /* @__PURE__ */ vec3.create();
@@ -876,18 +884,32 @@ function getContactsFromCache(
     deltaTime: number,
     currDeltaPos: Vec3,
     currDeltaRot: Quat,
+    pairRecordIndex: number,
 ): boolean {
-    const cached = world.contacts.cachedBodyPairs.get(contacts.bodyPairKey(physA.id, physB.id));
-    if (cached === undefined) return false;
+    const poseCache = world.pairs.poseCache;
+    const cacheBase = pairRecordIndex * pairs.CACHE_STRIDE;
+
+    // no valid last-narrowphase pose cached for this pair record => must run narrowphase
+    if (poseCache[cacheBase + pairs.CACHE_VALID] !== 1) return false;
+
+    // read the cached relative pose from the record's pose-cache block
+    _bodyPairCache_cachedPos[0] = poseCache[cacheBase + pairs.CACHE_DP];
+    _bodyPairCache_cachedPos[1] = poseCache[cacheBase + pairs.CACHE_DP + 1];
+    _bodyPairCache_cachedPos[2] = poseCache[cacheBase + pairs.CACHE_DP + 2];
+
+    _bodyPairCache_cachedRot[0] = poseCache[cacheBase + pairs.CACHE_DR];
+    _bodyPairCache_cachedRot[1] = poseCache[cacheBase + pairs.CACHE_DR + 1];
+    _bodyPairCache_cachedRot[2] = poseCache[cacheBase + pairs.CACHE_DR + 2];
+    _bodyPairCache_cachedRot[3] = poseCache[cacheBase + pairs.CACHE_DR + 3];
 
     // |currDeltaPos - cachedDeltaPos|² <= threshold
-    vec3.sub(_bodyPairCache_diff, currDeltaPos, cached.deltaPosition);
+    vec3.sub(_bodyPairCache_diff, currDeltaPos, _bodyPairCache_cachedPos);
     if (vec3.squaredLength(_bodyPairCache_diff) > world.settings.narrowphase.bodyPairCacheMaxDeltaPositionSq) {
         return false;
     }
 
     // |dot(currDeltaRot, cachedDeltaRot)| >= cos(maxAngle/2)
-    const rotDot = Math.abs(quat.dot(currDeltaRot, cached.deltaRotation));
+    const rotDot = Math.abs(quat.dot(currDeltaRot, _bodyPairCache_cachedRot));
     if (rotDot < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) {
         return false;
     }

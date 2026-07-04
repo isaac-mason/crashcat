@@ -133,7 +133,7 @@ describe('Contacts: Create and Destroy', () => {
         expect(bodyA.contactCount).toBe(1);
         expect(bodyB.contactCount).toBe(1);
 
-        contacts.destroyContact(contactsState, bodyA, bodyB, contact, undefined);
+        contacts.destroyContact(contactsState, bodyA, bodyB, contact, undefined, world.pairs);
 
         expect(bodyA.headContactKey).toBe(contacts.INVALID_CONTACT_KEY);
         expect(bodyA.contactCount).toBe(0);
@@ -162,7 +162,7 @@ describe('Contacts: Create and Destroy', () => {
         // Create and destroy contact
         const contact1 = contacts.createContact(contactsState, bodyA, bodyB, 0, 0);
         const firstId = contact1.contactIndex;
-        contacts.destroyContact(contactsState, bodyA, bodyB, contact1, undefined);
+        contacts.destroyContact(contactsState, bodyA, bodyB, contact1, undefined, world.pairs);
 
         // Create new contact - should reuse ID
         const contact2 = contacts.createContact(contactsState, bodyA, bodyB, 1, 1);
@@ -246,7 +246,7 @@ describe('Contacts: Multiple Contacts', () => {
         expect(bodyA.contactCount).toBe(3);
 
         // Destroy middle contact (A-C)
-        contacts.destroyContact(contactsState, bodyA, bodyC, contactAC, undefined);
+        contacts.destroyContact(contactsState, bodyA, bodyC, contactAC, undefined, world.pairs);
 
         // Body A should have 2 contacts
         expect(bodyA.contactCount).toBe(2);

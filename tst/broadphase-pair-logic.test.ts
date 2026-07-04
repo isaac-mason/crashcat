@@ -3,11 +3,11 @@ import {
     addBroadphaseLayer,
     addObjectLayer,
     box,
-    broadphase,
     createWorld,
     createWorldSettings,
     enableCollision,
     MotionType,
+    pairs,
     registerAll,
     rigidBody,
 } from '../src';
@@ -99,8 +99,8 @@ function runCombo(a: PairBodySpec, b: PairBodySpec, layersCollide: boolean): num
     if (a.sleeping) rigidBody.sleep(world, bodyA);
     if (b.sleeping) rigidBody.sleep(world, bodyB);
 
-    broadphase.findCollidingPairs(world, 0.02, undefined);
-    return world.broadphase.pairs.n;
+    pairs.findCollidingPairs(world, 0.02, undefined);
+    return world.pairs.collidingPairCount;
 }
 
 describe('broadphase pair logic', () => {

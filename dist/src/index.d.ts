@@ -49,6 +49,8 @@ export { estimateCollisionResponse, createCollisionEstimationResult } from './co
 export * as broadphase from './broadphase/broadphase.js';
 export * as dbvt from './broadphase/dbvt.js';
 export type { BodyVisitor } from './broadphase/body-visitor.js';
+export * as pairs from './pairs.js';
+export type { Pairs } from './pairs.js';
 export { INACTIVE_BODY_INDEX } from "./body/sleep.js";
 export type { BodyId } from './body/body-id.js';
 export * from './body/dof.js';

@@ -1,7 +1,8 @@
-import { type Quat, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body.js';
 import type { Bodies } from './body/bodies.js';
 import type { Listener } from './listener.js';
+import { type Pairs } from './pairs.js';
 /** contacts state */
 export type Contacts = {
     /** packed array of all contacts (active + free) */
@@ -18,15 +19,6 @@ export type Contacts = {
      */
     readIdx: 0 | 1;
     /**
-     * Per-body-pair cache of last frame's relative pose (body B's COM and
-     * orientation expressed in body A's local frame). Used to decide whether
-     * the narrowphase can be skipped this frame and last frame's manifolds
-     * reused verbatim.
-     *
-     * Key is packed via `bodyPairKey(idA, idB)` (lower id first).
-     */
-    cachedBodyPairs: Map<number, CachedBodyPair>;
-    /**
      * Deferred onContactRemoved event payloads, flat quads
      * [bodyIdA, bodyIdB, subShapeIdA, subShapeIdB, ...].
      *
@@ -36,18 +28,6 @@ export type Contacts = {
      * OnContactRemoved callback in the update after the body has been removed").
      */
     pendingContactRemoved: number[];
-};
-/**
- * Per-body-pair cache entry — last frame's relative pose between two bodies.
- *
- * Per-sub-shape-pair manifolds live on the persistent `Contact` records;
- * we walk a body's contact edge list to find them at cache-hit time.
- */
-export type CachedBodyPair = {
-    /** body B's COM position relative to body A, expressed in body A's local frame */
-    deltaPosition: Vec3;
-    /** body B's orientation relative to body A, i.e. `inv(rA) * rB` */
-    deltaRotation: Quat;
 };
 /**
  * Cached manifold data — the per-step state we read from last frame and write
@@ -141,21 +121,8 @@ export declare enum CachedManifoldFlags {
 }
 /** creates empty contacts state */
 export declare function init(): Contacts;
-/**
- * Pack a pair of body IDs into a single number key for the cached-body-pair map.
- * Always orders ids ascending so (a, b) and (b, a) hash to the same key.
- * Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
- */
 /** fire and clear deferred onContactRemoved events (queued by body removal) */
 export declare function flushPendingContactRemoved(contacts: Contacts, listener: Listener | undefined): void;
-export declare function bodyPairKey(idA: number, idB: number): number;
-/**
- * Write the current relative pose into the cached-body-pair map, creating the
- * entry if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
- */
-export declare function setCachedBodyPair(contactsState: Contacts, idA: number, idB: number, deltaPosition: Vec3, deltaRotation: Quat): void;
-/** drop the cached-body-pair entry for the given pair, if any. */
-export declare function removeCachedBodyPair(contactsState: Contacts, idA: number, idB: number): void;
 /** the manifold buffer that holds last step's cached data (read side). */
 export declare function getReadManifold(contact: Contact, contactsState: Contacts): CachedManifold;
 /** the manifold buffer being populated this step (write side). */
@@ -199,8 +166,9 @@ export declare function createContact(contacts: Contacts, bodyA: RigidBody, body
  * @param bodyB second body in contact
  * @param contact contact to destroy
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, so the pair's pose cache can be invalidated on last-contact removal
  */
-export declare function destroyContact(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody, contact: Contact, listener: Listener | undefined): void;
+export declare function destroyContact(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody, contact: Contact, listener: Listener | undefined, pairs: Pairs | undefined): void;
 /**
  * Check if any contacts exist between two bodies.
  * Used to determine if body pair cache should be destroyed.
@@ -218,9 +186,9 @@ export declare function hasContactsBetweenBodies(contacts: Contacts, bodyA: Rigi
  * @param contacts global contact array
  * @param bodies body array for looking up other bodies
  * @param body body whose contacts should be destroyed
- * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export declare function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody): void;
+export declare function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody, pairs: Pairs | undefined): void;
 /**
  * Destroy stale contacts (those not processed this frame) between two bodies.
  *
@@ -231,8 +199,9 @@ export declare function destroyBodyContacts(contacts: Contacts, bodies: Bodies, 
  * @param bodyA first body
  * @param bodyB second body
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export declare function destroyStaleContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined): void;
+export declare function destroyStaleContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, pairs: Pairs | undefined): void;
 /**
  * Destroy all contacts between two bodies (used for unprocessed contacts).
  * More efficient than destroyStaleContactsBetweenBodies when we know ALL contacts should be destroyed.
@@ -241,8 +210,9 @@ export declare function destroyStaleContactsBetweenBodies(contactsState: Contact
  * @param bodyA first body
  * @param bodyB second body
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export declare function destroyAllContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined): void;
+export declare function destroyAllContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, pairs: Pairs | undefined): void;
 /**
  * Find a contact between two bodies with specific sub-shapes.
  * Iterates through the smaller body's contact list (O(n) but typically small n).
@@ -265,5 +235,6 @@ export declare function markAllUnprocessed(contacts: Contacts): void;
  * @param contacts contacts state
  * @param bodies world bodies array (needed to look up Body objects by ID)
  * @param listener optional contact listener to notify of removal
+ * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export declare function destroyUnprocessedContacts(contacts: Contacts, bodies: Bodies, listener?: Listener): void;
+export declare function destroyUnprocessedContacts(contacts: Contacts, bodies: Bodies, listener: Listener | undefined, pairs: Pairs | undefined): void;

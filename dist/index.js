@@ -65,7 +65,7 @@ var constraints_exports = /* @__PURE__ */ __exportAll({
 	ensurePool: () => ensurePool,
 	getConstraintIterationOverrides: () => getConstraintIterationOverrides,
 	getConstraintSortFields: () => getConstraintSortFields,
-	init: () => init$7,
+	init: () => init$8,
 	makeConstraintBase: () => makeConstraintBase,
 	registerConstraintDef: () => registerConstraintDef,
 	removeConstraintById: () => removeConstraintById,
@@ -78,7 +78,7 @@ var constraints_exports = /* @__PURE__ */ __exportAll({
 	warmStartVelocityConstraints: () => warmStartVelocityConstraints$1
 });
 /** initialize empty constraints */
-function init$7() {
+function init$8() {
 	return { pools: {} };
 }
 /** define a user constraint def - ensures consistent shape */
@@ -15249,7 +15249,7 @@ function createStackEntry() {
 		iter: -1
 	};
 }
-function init$6() {
+function init$7() {
 	const stack = [];
 	for (let i = 0; i < EPA_MAX_EDGE_LENGTH; i++) stack.push(createStackEntry());
 	const triangles = [];
@@ -15635,7 +15635,7 @@ const popBackEpaSupportPoint = (points) => {
 };
 const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(256);
 const _epa_hullState = /* @__PURE__ */ (() => {
-	const state = init$6();
+	const state = init$7();
 	state.positions = _epa_supportPoints.y.values;
 	return state;
 })();
@@ -24075,87 +24075,15 @@ function shouldPairCollide(groupA, maskA, groupB, maskB) {
 	return (groupA & maskB) !== 0 && (groupB & maskA) !== 0;
 }
 //#endregion
-//#region src/layers.ts
-var layers_exports = /* @__PURE__ */ __exportAll({
-	addBroadphaseLayer: () => addBroadphaseLayer$1,
-	addObjectLayer: () => addObjectLayer$1,
-	broadphaseLayerCollidesWithBroadphaseLayer: () => broadphaseLayerCollidesWithBroadphaseLayer,
-	create: () => create$4,
-	disableCollision: () => disableCollision$1,
-	enableCollision: () => enableCollision$1,
-	objectLayerCollidesWithBroadphaseLayer: () => objectLayerCollidesWithBroadphaseLayer,
-	objectLayerCollidesWithObjectLayer: () => objectLayerCollidesWithObjectLayer
-});
-function create$4() {
-	return {
-		broadphaseLayers: 0,
-		objectLayers: 0,
-		objectLayerToBroadphaseLayer: [],
-		objectLayerPairs: [],
-		objectVsBroadphase: [],
-		broadphasePairs: []
-	};
-}
-function addBroadphaseLayer$1(layers) {
-	const index = layers.broadphaseLayers;
-	layers.broadphaseLayers += 1;
-	const bpCount = layers.broadphaseLayers;
-	const bpSize = bpCount * bpCount;
-	while (layers.broadphasePairs.length < bpSize) layers.broadphasePairs.push(0);
-	const objBpSize = layers.objectLayers * bpCount;
-	while (layers.objectVsBroadphase.length < objBpSize) layers.objectVsBroadphase.push(0);
-	return index;
-}
-function addObjectLayer$1(layers, broadphaseLayer) {
-	const index = layers.objectLayers;
-	layers.objectLayers += 1;
-	layers.objectLayerToBroadphaseLayer[index] = broadphaseLayer;
-	const objCount = layers.objectLayers;
-	const objSize = objCount * objCount;
-	while (layers.objectLayerPairs.length < objSize) layers.objectLayerPairs.push(0);
-	const bpCount = layers.broadphaseLayers;
-	const objBpSize = objCount * bpCount;
-	while (layers.objectVsBroadphase.length < objBpSize) layers.objectVsBroadphase.push(0);
-	layers.objectVsBroadphase[index * bpCount + broadphaseLayer] = 1;
-	return index;
-}
-function enableCollision$1(layers, objectLayerA, objectLayerB) {
-	const objCount = layers.objectLayers;
-	layers.objectLayerPairs[objectLayerA * objCount + objectLayerB] = 1;
-	layers.objectLayerPairs[objectLayerB * objCount + objectLayerA] = 1;
-	const bpA = layers.objectLayerToBroadphaseLayer[objectLayerA];
-	const bpB = layers.objectLayerToBroadphaseLayer[objectLayerB];
-	if (bpA !== void 0 && bpB !== void 0) {
-		const bpCount = layers.broadphaseLayers;
-		layers.broadphasePairs[bpA * bpCount + bpB] = 1;
-		layers.broadphasePairs[bpB * bpCount + bpA] = 1;
-		layers.objectVsBroadphase[objectLayerA * bpCount + bpB] = 1;
-		layers.objectVsBroadphase[objectLayerB * bpCount + bpA] = 1;
-	}
-}
-function disableCollision$1(layers, objectLayerA, objectLayerB) {
-	const objCount = layers.objectLayers;
-	layers.objectLayerPairs[objectLayerA * objCount + objectLayerB] = 0;
-	layers.objectLayerPairs[objectLayerB * objCount + objectLayerA] = 0;
-}
-function objectLayerCollidesWithBroadphaseLayer(layers, objectLayer, broadphaseLayer) {
-	return layers.objectVsBroadphase[objectLayer * layers.broadphaseLayers + broadphaseLayer] === 1;
-}
-function broadphaseLayerCollidesWithBroadphaseLayer(layers, broadphaseLayerA, broadphaseLayerB) {
-	return layers.broadphasePairs[broadphaseLayerA * layers.broadphaseLayers + broadphaseLayerB] === 1;
-}
-function objectLayerCollidesWithObjectLayer(layers, objectLayerA, objectLayerB) {
-	return layers.objectLayerPairs[objectLayerA * layers.objectLayers + objectLayerB] === 1;
-}
-//#endregion
 //#region src/broadphase/dbvt.ts
 var dbvt_exports = /* @__PURE__ */ __exportAll({
 	add: () => add$1,
 	bounds: () => bounds$1,
 	castAABB: () => castAABB$1,
 	castRay: () => castRay$2,
-	create: () => create$3,
+	create: () => create$4,
 	intersectAABB: () => intersectAABB$1,
+	intersectAABBFatLeaves: () => intersectAABBFatLeaves,
 	intersectPoint: () => intersectPoint$1,
 	optimizeBottomUp: () => optimizeBottomUp,
 	optimizeIncremental: () => optimizeIncremental,
@@ -24167,7 +24095,7 @@ var dbvt_exports = /* @__PURE__ */ __exportAll({
 const _flatStack = [];
 const _castStackNode = [];
 const _castStackDist = [];
-function create$3() {
+function create$4() {
 	return {
 		nodes: [],
 		freeNodeIndices: [],
@@ -24590,188 +24518,192 @@ function remove$2(dbvt, body) {
 	releaseNode(dbvt, leafIndex);
 	body.dbvtNode = -1;
 }
+/**
+* returns true iff the leaf was reinserted (i.e. the body escaped its fat AABB), false when the
+* containment early-out fired or there was nothing to do. the persistent-pair broadphase treats a
+* reinsert as a "moved" event.
+*/
 function update$1(dbvt, body, lookahead) {
 	const leafIndex = body.dbvtNode;
-	if (leafIndex !== -1) {
-		const leaf = dbvt.nodes[leafIndex];
-		if (!(body.aabb[0] >= leaf.aabb[0] && body.aabb[3] <= leaf.aabb[3] && body.aabb[1] >= leaf.aabb[1] && body.aabb[4] <= leaf.aabb[4] && body.aabb[2] >= leaf.aabb[2] && body.aabb[5] <= leaf.aabb[5])) {
-			let box = body.aabb;
-			let margin = dbvt.expansionMargin;
-			_bounds[0] = box[0] - margin;
-			_bounds[1] = box[1] - margin;
-			_bounds[2] = box[2] - margin;
-			_bounds[3] = box[3] + margin;
-			_bounds[4] = box[4] + margin;
-			_bounds[5] = box[5] + margin;
-			let rootIndex;
-			if (leafIndex === dbvt.root) {
-				dbvt.root = -1;
-				rootIndex = -1;
-			} else {
-				const parentIndex = dbvt.nodes[leafIndex].parent;
-				const parent = dbvt.nodes[parentIndex];
-				const prevIndex = parent.parent;
-				const siblingIndex = parent.left === leafIndex ? parent.right : parent.left;
-				const sibling = dbvt.nodes[siblingIndex];
-				if (prevIndex !== -1) {
-					const prev = dbvt.nodes[prevIndex];
-					const node = dbvt.nodes[parentIndex];
-					if ((dbvt.nodes[node.parent].right === parentIndex ? 1 : 0) === 0) prev.left = siblingIndex;
-					else prev.right = siblingIndex;
-					sibling.parent = prevIndex;
-					const node$1 = dbvt.nodes[parentIndex];
-					node$1.parent = -1;
-					node$1.left = -1;
-					node$1.right = -1;
-					node$1.bodyIndex = -1;
-					dbvt.freeNodeIndices.push(parentIndex);
-					let nodeIndex = prevIndex;
-					while (nodeIndex !== -1) {
-						const node = dbvt.nodes[nodeIndex];
-						let box$1 = node.aabb;
-						_prevAabb[0] = box$1[0];
-						_prevAabb[1] = box$1[1];
-						_prevAabb[2] = box$1[2];
-						_prevAabb[3] = box$1[3];
-						_prevAabb[4] = box$1[4];
-						_prevAabb[5] = box$1[5];
-						const leftNode = dbvt.nodes[node.left];
-						const rightNode = dbvt.nodes[node.right];
-						let out = node.aabb;
-						let boxA = leftNode.aabb;
-						let boxB = rightNode.aabb;
-						out[0] = Math.min(boxA[0], boxB[0]);
-						out[1] = Math.min(boxA[1], boxB[1]);
-						out[2] = Math.min(boxA[2], boxB[2]);
-						out[3] = Math.max(boxA[3], boxB[3]);
-						out[4] = Math.max(boxA[4], boxB[4]);
-						out[5] = Math.max(boxA[5], boxB[5]);
-						if (node.aabb[0] !== _prevAabb[0] || node.aabb[1] !== _prevAabb[1] || node.aabb[2] !== _prevAabb[2] || node.aabb[3] !== _prevAabb[3] || node.aabb[4] !== _prevAabb[4] || node.aabb[5] !== _prevAabb[5]) nodeIndex = node.parent;
-						else break;
-					}
-					rootIndex = prevIndex !== -1 ? prevIndex : dbvt.root;
-				} else {
-					dbvt.root = siblingIndex;
-					sibling.parent = -1;
-					const node = dbvt.nodes[parentIndex];
-					node.parent = -1;
-					node.left = -1;
-					node.right = -1;
-					node.bodyIndex = -1;
-					dbvt.freeNodeIndices.push(parentIndex);
-					rootIndex = dbvt.root;
-				}
+	if (leafIndex === -1) return false;
+	const leaf = dbvt.nodes[leafIndex];
+	if (body.aabb[0] >= leaf.aabb[0] && body.aabb[3] <= leaf.aabb[3] && body.aabb[1] >= leaf.aabb[1] && body.aabb[4] <= leaf.aabb[4] && body.aabb[2] >= leaf.aabb[2] && body.aabb[5] <= leaf.aabb[5]) return false;
+	let box = body.aabb;
+	let margin = dbvt.expansionMargin;
+	_bounds[0] = box[0] - margin;
+	_bounds[1] = box[1] - margin;
+	_bounds[2] = box[2] - margin;
+	_bounds[3] = box[3] + margin;
+	_bounds[4] = box[4] + margin;
+	_bounds[5] = box[5] + margin;
+	let rootIndex;
+	if (leafIndex === dbvt.root) {
+		dbvt.root = -1;
+		rootIndex = -1;
+	} else {
+		const parentIndex = dbvt.nodes[leafIndex].parent;
+		const parent = dbvt.nodes[parentIndex];
+		const prevIndex = parent.parent;
+		const siblingIndex = parent.left === leafIndex ? parent.right : parent.left;
+		const sibling = dbvt.nodes[siblingIndex];
+		if (prevIndex !== -1) {
+			const prev = dbvt.nodes[prevIndex];
+			const node = dbvt.nodes[parentIndex];
+			if ((dbvt.nodes[node.parent].right === parentIndex ? 1 : 0) === 0) prev.left = siblingIndex;
+			else prev.right = siblingIndex;
+			sibling.parent = prevIndex;
+			const node$1 = dbvt.nodes[parentIndex];
+			node$1.parent = -1;
+			node$1.left = -1;
+			node$1.right = -1;
+			node$1.bodyIndex = -1;
+			dbvt.freeNodeIndices.push(parentIndex);
+			let nodeIndex = prevIndex;
+			while (nodeIndex !== -1) {
+				const node = dbvt.nodes[nodeIndex];
+				let box$1 = node.aabb;
+				_prevAabb[0] = box$1[0];
+				_prevAabb[1] = box$1[1];
+				_prevAabb[2] = box$1[2];
+				_prevAabb[3] = box$1[3];
+				_prevAabb[4] = box$1[4];
+				_prevAabb[5] = box$1[5];
+				const leftNode = dbvt.nodes[node.left];
+				const rightNode = dbvt.nodes[node.right];
+				let out = node.aabb;
+				let boxA = leftNode.aabb;
+				let boxB = rightNode.aabb;
+				out[0] = Math.min(boxA[0], boxB[0]);
+				out[1] = Math.min(boxA[1], boxB[1]);
+				out[2] = Math.min(boxA[2], boxB[2]);
+				out[3] = Math.max(boxA[3], boxB[3]);
+				out[4] = Math.max(boxA[4], boxB[4]);
+				out[5] = Math.max(boxA[5], boxB[5]);
+				if (node.aabb[0] !== _prevAabb[0] || node.aabb[1] !== _prevAabb[1] || node.aabb[2] !== _prevAabb[2] || node.aabb[3] !== _prevAabb[3] || node.aabb[4] !== _prevAabb[4] || node.aabb[5] !== _prevAabb[5]) nodeIndex = node.parent;
+				else break;
 			}
-			if (rootIndex !== -1) if (lookahead >= 0) {
-				for (let i = 0; i < lookahead && rootIndex !== -1; i++) rootIndex = dbvt.nodes[rootIndex].parent;
-				if (rootIndex === -1) rootIndex = dbvt.root;
-			} else rootIndex = dbvt.root;
-			let out = leaf.aabb;
-			out[0] = _bounds[0];
-			out[1] = _bounds[1];
-			out[2] = _bounds[2];
-			out[3] = _bounds[3];
-			out[4] = _bounds[4];
-			out[5] = _bounds[5];
-			const leaf$1 = dbvt.nodes[leafIndex];
-			if (dbvt.root === -1) {
-				dbvt.root = leafIndex;
-				leaf$1.parent = -1;
-			} else {
-				let root = rootIndex;
-				let rootNode = dbvt.nodes[root];
-				while (rootNode.left !== -1 || rootNode.right !== -1) {
-					const leftNode = dbvt.nodes[rootNode.left];
-					const rightNode = dbvt.nodes[rootNode.right];
-					const _inl_arg_0 = leaf$1.aabb;
-					let _proximity__result_1000000;
-					let b = leftNode.aabb;
-					const dx = _inl_arg_0[0] + _inl_arg_0[3] - (b[0] + b[3]);
-					const dy = _inl_arg_0[1] + _inl_arg_0[4] - (b[1] + b[4]);
-					const dz = _inl_arg_0[2] + _inl_arg_0[5] - (b[2] + b[5]);
-					_proximity__result_1000000 = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-					let b$1 = rightNode.aabb;
-					const dx$1 = _inl_arg_0[0] + _inl_arg_0[3] - (b$1[0] + b$1[3]);
-					const dy$1 = _inl_arg_0[1] + _inl_arg_0[4] - (b$1[1] + b$1[4]);
-					const dz$1 = _inl_arg_0[2] + _inl_arg_0[5] - (b$1[2] + b$1[5]);
-					root = (_proximity__result_1000000 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? 0 : 1) === 0 ? rootNode.left : rootNode.right;
-					rootNode = dbvt.nodes[root];
-				}
-				const prev = rootNode.parent;
-				let nodeIndex;
-				if (dbvt.freeNodeIndices.length > 0) {
-					nodeIndex = dbvt.freeNodeIndices.pop();
-					const node = dbvt.nodes[nodeIndex];
-					node.parent = -1;
-					node.left = -1;
-					node.right = -1;
-					empty(node.aabb);
-					node.height = 0;
-					node.bodyIndex = -1;
-				} else {
-					nodeIndex = dbvt.nodes.length;
-					dbvt.nodes.push({
-						index: nodeIndex,
-						parent: -1,
-						left: -1,
-						right: -1,
-						aabb: create$41(),
-						height: 0,
-						bodyIndex: -1
-					});
-				}
-				const newParentIndex = nodeIndex;
-				const newParent = dbvt.nodes[newParentIndex];
-				newParent.parent = prev;
-				let out$1 = newParent.aabb;
-				let boxA = leaf$1.aabb;
-				let boxB = rootNode.aabb;
-				out$1[0] = Math.min(boxA[0], boxB[0]);
-				out$1[1] = Math.min(boxA[1], boxB[1]);
-				out$1[2] = Math.min(boxA[2], boxB[2]);
-				out$1[3] = Math.max(boxA[3], boxB[3]);
-				out$1[4] = Math.max(boxA[4], boxB[4]);
-				out$1[5] = Math.max(boxA[5], boxB[5]);
-				newParent.height = rootNode.height + 1;
-				if (prev !== -1) {
-					const prevNode = dbvt.nodes[prev];
-					const node = dbvt.nodes[root];
-					if ((dbvt.nodes[node.parent].right === root ? 1 : 0) === 0) prevNode.left = newParentIndex;
-					else prevNode.right = newParentIndex;
-					newParent.left = root;
-					rootNode.parent = newParentIndex;
-					newParent.right = leafIndex;
-					leaf$1.parent = newParentIndex;
-					let childNode = newParent;
-					let parentIndex = prev;
-					while (parentIndex !== -1) {
-						const parentNode = dbvt.nodes[parentIndex];
-						if (!(childNode.aabb[0] >= parentNode.aabb[0] && childNode.aabb[3] <= parentNode.aabb[3] && childNode.aabb[1] >= parentNode.aabb[1] && childNode.aabb[4] <= parentNode.aabb[4] && childNode.aabb[2] >= parentNode.aabb[2] && childNode.aabb[5] <= parentNode.aabb[5])) {
-							const leftNode = dbvt.nodes[parentNode.left];
-							const rightNode = dbvt.nodes[parentNode.right];
-							let out$2 = parentNode.aabb;
-							let boxA$1 = leftNode.aabb;
-							let boxB$1 = rightNode.aabb;
-							out$2[0] = Math.min(boxA$1[0], boxB$1[0]);
-							out$2[1] = Math.min(boxA$1[1], boxB$1[1]);
-							out$2[2] = Math.min(boxA$1[2], boxB$1[2]);
-							out$2[3] = Math.max(boxA$1[3], boxB$1[3]);
-							out$2[4] = Math.max(boxA$1[4], boxB$1[4]);
-							out$2[5] = Math.max(boxA$1[5], boxB$1[5]);
-						} else break;
-						childNode = parentNode;
-						parentIndex = parentNode.parent;
-					}
-				} else {
-					newParent.left = root;
-					rootNode.parent = newParentIndex;
-					newParent.right = leafIndex;
-					leaf$1.parent = newParentIndex;
-					dbvt.root = newParentIndex;
-				}
-			}
+			rootIndex = prevIndex !== -1 ? prevIndex : dbvt.root;
+		} else {
+			dbvt.root = siblingIndex;
+			sibling.parent = -1;
+			const node = dbvt.nodes[parentIndex];
+			node.parent = -1;
+			node.left = -1;
+			node.right = -1;
+			node.bodyIndex = -1;
+			dbvt.freeNodeIndices.push(parentIndex);
+			rootIndex = dbvt.root;
 		}
 	}
+	if (rootIndex !== -1) if (lookahead >= 0) {
+		for (let i = 0; i < lookahead && rootIndex !== -1; i++) rootIndex = dbvt.nodes[rootIndex].parent;
+		if (rootIndex === -1) rootIndex = dbvt.root;
+	} else rootIndex = dbvt.root;
+	let out = leaf.aabb;
+	out[0] = _bounds[0];
+	out[1] = _bounds[1];
+	out[2] = _bounds[2];
+	out[3] = _bounds[3];
+	out[4] = _bounds[4];
+	out[5] = _bounds[5];
+	const leaf$1 = dbvt.nodes[leafIndex];
+	if (dbvt.root === -1) {
+		dbvt.root = leafIndex;
+		leaf$1.parent = -1;
+	} else {
+		let root = rootIndex;
+		let rootNode = dbvt.nodes[root];
+		while (rootNode.left !== -1 || rootNode.right !== -1) {
+			const leftNode = dbvt.nodes[rootNode.left];
+			const rightNode = dbvt.nodes[rootNode.right];
+			const _inl_arg_0 = leaf$1.aabb;
+			let _proximity__result_1000000;
+			let b = leftNode.aabb;
+			const dx = _inl_arg_0[0] + _inl_arg_0[3] - (b[0] + b[3]);
+			const dy = _inl_arg_0[1] + _inl_arg_0[4] - (b[1] + b[4]);
+			const dz = _inl_arg_0[2] + _inl_arg_0[5] - (b[2] + b[5]);
+			_proximity__result_1000000 = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+			let b$1 = rightNode.aabb;
+			const dx$1 = _inl_arg_0[0] + _inl_arg_0[3] - (b$1[0] + b$1[3]);
+			const dy$1 = _inl_arg_0[1] + _inl_arg_0[4] - (b$1[1] + b$1[4]);
+			const dz$1 = _inl_arg_0[2] + _inl_arg_0[5] - (b$1[2] + b$1[5]);
+			root = (_proximity__result_1000000 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? 0 : 1) === 0 ? rootNode.left : rootNode.right;
+			rootNode = dbvt.nodes[root];
+		}
+		const prev = rootNode.parent;
+		let nodeIndex;
+		if (dbvt.freeNodeIndices.length > 0) {
+			nodeIndex = dbvt.freeNodeIndices.pop();
+			const node = dbvt.nodes[nodeIndex];
+			node.parent = -1;
+			node.left = -1;
+			node.right = -1;
+			empty(node.aabb);
+			node.height = 0;
+			node.bodyIndex = -1;
+		} else {
+			nodeIndex = dbvt.nodes.length;
+			dbvt.nodes.push({
+				index: nodeIndex,
+				parent: -1,
+				left: -1,
+				right: -1,
+				aabb: create$41(),
+				height: 0,
+				bodyIndex: -1
+			});
+		}
+		const newParentIndex = nodeIndex;
+		const newParent = dbvt.nodes[newParentIndex];
+		newParent.parent = prev;
+		let out$1 = newParent.aabb;
+		let boxA = leaf$1.aabb;
+		let boxB = rootNode.aabb;
+		out$1[0] = Math.min(boxA[0], boxB[0]);
+		out$1[1] = Math.min(boxA[1], boxB[1]);
+		out$1[2] = Math.min(boxA[2], boxB[2]);
+		out$1[3] = Math.max(boxA[3], boxB[3]);
+		out$1[4] = Math.max(boxA[4], boxB[4]);
+		out$1[5] = Math.max(boxA[5], boxB[5]);
+		newParent.height = rootNode.height + 1;
+		if (prev !== -1) {
+			const prevNode = dbvt.nodes[prev];
+			const node = dbvt.nodes[root];
+			if ((dbvt.nodes[node.parent].right === root ? 1 : 0) === 0) prevNode.left = newParentIndex;
+			else prevNode.right = newParentIndex;
+			newParent.left = root;
+			rootNode.parent = newParentIndex;
+			newParent.right = leafIndex;
+			leaf$1.parent = newParentIndex;
+			let childNode = newParent;
+			let parentIndex = prev;
+			while (parentIndex !== -1) {
+				const parentNode = dbvt.nodes[parentIndex];
+				if (!(childNode.aabb[0] >= parentNode.aabb[0] && childNode.aabb[3] <= parentNode.aabb[3] && childNode.aabb[1] >= parentNode.aabb[1] && childNode.aabb[4] <= parentNode.aabb[4] && childNode.aabb[2] >= parentNode.aabb[2] && childNode.aabb[5] <= parentNode.aabb[5])) {
+					const leftNode = dbvt.nodes[parentNode.left];
+					const rightNode = dbvt.nodes[parentNode.right];
+					let out$2 = parentNode.aabb;
+					let boxA$1 = leftNode.aabb;
+					let boxB$1 = rightNode.aabb;
+					out$2[0] = Math.min(boxA$1[0], boxB$1[0]);
+					out$2[1] = Math.min(boxA$1[1], boxB$1[1]);
+					out$2[2] = Math.min(boxA$1[2], boxB$1[2]);
+					out$2[3] = Math.max(boxA$1[3], boxB$1[3]);
+					out$2[4] = Math.max(boxA$1[4], boxB$1[4]);
+					out$2[5] = Math.max(boxA$1[5], boxB$1[5]);
+				} else break;
+				childNode = parentNode;
+				parentIndex = parentNode.parent;
+			}
+		} else {
+			newParent.left = root;
+			rootNode.parent = newParentIndex;
+			newParent.right = leafIndex;
+			leaf$1.parent = newParentIndex;
+			dbvt.root = newParentIndex;
+		}
+	}
+	return true;
 }
 function optimizeBottomUp(dbvt) {
 	if (dbvt.root === -1) return;
@@ -24811,6 +24743,35 @@ function optimizeIncremental(dbvt, passes) {
 			else insertLeaf(dbvt, dbvt.root, nodeIndex);
 		}
 		dbvt.optimizationPath++;
+	}
+}
+/**
+* Overlap traversal against the FAT leaf AABBs — no tight body-AABB re-test and no filtering.
+* Used by persistent-pair discovery: a pair must exist whenever the two fat boxes could
+* bring the bodies into contact while both coast inside them, so the leaf test must be the
+* fat node AABB (already tested during descent), NOT the current tight body AABB.
+*/
+function intersectAABBFatLeaves(world, dbvt, aabb, visitor) {
+	if (dbvt.root === -1) return;
+	const qMinX = aabb[0];
+	const qMinY = aabb[1];
+	const qMinZ = aabb[2];
+	const qMaxX = aabb[3];
+	const qMaxY = aabb[4];
+	const qMaxZ = aabb[5];
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
+		const node = dbvt.nodes[nodeIndex];
+		if (node.aabb[0] > qMaxX || node.aabb[3] < qMinX || node.aabb[1] > qMaxY || node.aabb[4] < qMinY || node.aabb[2] > qMaxZ || node.aabb[5] < qMinZ) continue;
+		if (!isLeaf(node)) {
+			if (node.left !== -1) _flatStack[stackSize++] = node.left;
+			if (node.right !== -1) _flatStack[stackSize++] = node.right;
+			continue;
+		}
+		visitor.visit(world.bodies.pool[node.bodyIndex]);
+		if (visitor.shouldExit) return;
 	}
 }
 function intersectAABB$1(world, dbvt, aabb, queryFilter, visitor) {
@@ -25035,77 +24996,20 @@ var broadphase_exports = /* @__PURE__ */ __exportAll({
 	bounds: () => bounds,
 	castAABB: () => castAABB,
 	castRay: () => castRay$1,
-	findCollidingPairs: () => findCollidingPairs,
-	init: () => init$5,
+	init: () => init$6,
 	intersectAABB: () => intersectAABB,
 	intersectPoint: () => intersectPoint,
+	optimize: () => optimize,
 	reinsertBody: () => reinsertBody,
 	removeBody: () => removeBody,
 	updateBody: () => updateBody
 });
-/**
-* The single pair predicate for findCollidingPairs: decides whether an (activeBody, otherBody)
-* candidate found by the tree query becomes a narrowphase pair. All pair-level filtering lives
-* here, in one place (jolt: Body::sFindCollidingPairsCanCollide + ObjectLayerPairFilter,
-* evaluated together at the query leaf).
-*
-* `activeBody` is always drawn from the active body list, so it is awake and non-static —
-* static-static pairs are unrepresentable.
-*/
-function shouldReportPair(layers, activeBody, otherBody) {
-	if (activeBody.activeIndex >= otherBody.activeIndex) return false;
-	if (!activeBody.collideKinematicVsNonDynamic && !otherBody.collideKinematicVsNonDynamic && activeBody.motionType !== 2 && otherBody.motionType !== 2 && !(activeBody.motionType === 1 && otherBody.sensor) && !(otherBody.motionType === 1 && activeBody.sensor)) return false;
-	if (!objectLayerCollidesWithObjectLayer(layers, activeBody.objectLayer, otherBody.objectLayer)) return false;
-	if (!shouldPairCollide(activeBody.collisionGroups, activeBody.collisionMask, otherBody.collisionGroups, otherBody.collisionMask)) return false;
-	return true;
-}
-/** visitor for finding colliding body pairs, does pair deduplication and motion type filtering */
-var CollisionBodyPairVisitor = class {
-	shouldExit = false;
-	layers = null;
-	activeBody = null;
-	pairs = null;
-	listener = void 0;
-	setup(layers, activeBody, pairs, listener) {
-		this.layers = layers;
-		this.activeBody = activeBody;
-		this.pairs = pairs;
-		this.listener = listener;
-		this.shouldExit = false;
-	}
-	visit(otherBody) {
-		if (!shouldReportPair(this.layers, this.activeBody, otherBody)) return;
-		if (this.listener?.onBodyPairValidate) {
-			let bodyA = this.activeBody;
-			let bodyB = otherBody;
-			if (bodyA.motionType > bodyB.motionType || bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id) {
-				bodyA = otherBody;
-				bodyB = this.activeBody;
-			}
-			if (!this.listener.onBodyPairValidate(bodyA, bodyB)) return;
-		}
-		const pairIndex = this.pairs.n * 2;
-		if (pairIndex >= this.pairs.pool.length) this.pairs.pool.push(this.activeBody.index, otherBody.index);
-		else {
-			this.pairs.pool[pairIndex] = this.activeBody.index;
-			this.pairs.pool[pairIndex + 1] = otherBody.index;
-		}
-		this.pairs.n++;
-	}
-};
-const _collisionBodyPairVisitor = /* @__PURE__ */ new CollisionBodyPairVisitor();
 /** initializes broadphase state */
-function init$5(layers) {
+function init$6(layers) {
 	const numBroadphaseLayers = layers.broadphaseLayers;
 	const dbvts = [];
-	for (let i = 0; i < numBroadphaseLayers; i++) dbvts.push(create$3());
-	return {
-		dbvts,
-		pairs: {
-			pool: [],
-			n: 0
-		}
-	};
+	for (let i = 0; i < numBroadphaseLayers; i++) dbvts.push(create$4());
+	return { dbvts };
 }
 /** adds a body to the broadphase */
 function addBody(broadphase, body, layers) {
@@ -25125,45 +25029,28 @@ function removeBody(broadphase, body) {
 	body.broadphaseLayer = -1;
 	body.dbvtNode = -1;
 }
-/** updates a body's AABB in the broadphase */
+/**
+* Incrementally optimize the trees (matching Bullet's btDbvtBroadphase::collide).
+* bullet default: 1 + (m_leaves * m_dupdates / 100), where m_dupdates = 0 —
+* minimum 1 node per frame is optimized even with 0% setting.
+* Called once per step by updateWorld, before pair finding.
+*/
+function optimize(broadphase) {
+	for (let i = 0; i < broadphase.dbvts.length; i++) {
+		const tree = broadphase.dbvts[i];
+		optimizeIncremental(tree, Math.max(1, Math.floor((tree.nodes.length - tree.freeNodeIndices.length) * .01)));
+	}
+}
+/** updates a body's AABB in the broadphase; returns true iff the body escaped its fat leaf AABB */
 function updateBody(broadphase, body) {
-	if (body.dbvtNode === -1 || body.broadphaseLayer === -1) return;
+	if (body.dbvtNode === -1 || body.broadphaseLayer === -1) return false;
 	const tree = broadphase.dbvts[body.broadphaseLayer];
-	update$1(tree, body, -1);
+	return update$1(tree, body, -1);
 }
 /** removes and re-adds a body in the broadphase when its layer changes */
 function reinsertBody(broadphase, body, layers) {
 	removeBody(broadphase, body);
 	addBody(broadphase, body, layers);
-}
-const _findCollidingPairs_filter = /* @__PURE__ */ createEmpty();
-const _findCollidingPairs_expandedAABB = /* @__PURE__ */ create$41();
-/** find potentially colliding body pairs, updates broadphase.pairs */
-function findCollidingPairs(world, speculativeContactDistance, listener) {
-	const layers = world.settings.layers;
-	const broadphase = world.broadphase;
-	broadphase.pairs.n = 0;
-	setAllEnabled(_findCollidingPairs_filter, layers);
-	for (let i = 0; i < broadphase.dbvts.length; i++) {
-		const tree = broadphase.dbvts[i];
-		optimizeIncremental(tree, Math.max(1, Math.floor((tree.nodes.length - tree.freeNodeIndices.length) * .01)));
-	}
-	const activeIndices = world.bodies.activeBodyIndices;
-	const activeCount = world.bodies.activeBodyCount;
-	const pool = world.bodies.pool;
-	for (let i = 0; i < activeCount; i++) {
-		const body = pool[activeIndices[i]];
-		const activeObjectLayer = body.objectLayer;
-		const activeBroadphaseLayer = layers.objectLayerToBroadphaseLayer[activeObjectLayer];
-		expandByMargin(_findCollidingPairs_expandedAABB, body.aabb, speculativeContactDistance);
-		for (let otherBroadphaseLayer = 0; otherBroadphaseLayer < broadphase.dbvts.length; otherBroadphaseLayer++) {
-			if (!objectLayerCollidesWithBroadphaseLayer(layers, activeObjectLayer, otherBroadphaseLayer)) continue;
-			if (!broadphaseLayerCollidesWithBroadphaseLayer(layers, activeBroadphaseLayer, otherBroadphaseLayer)) continue;
-			const tree = broadphase.dbvts[otherBroadphaseLayer];
-			_collisionBodyPairVisitor.setup(layers, body, broadphase.pairs, listener);
-			intersectAABB$1(world, tree, _findCollidingPairs_expandedAABB, _findCollidingPairs_filter, _collisionBodyPairVisitor);
-		}
-	}
 }
 /** finds bodies with AABBs that intersect the given ray */
 function castRay$1(world, origin, direction, length, queryFilter, visitor) {
@@ -25210,6 +25097,361 @@ function bounds(out, broadphase) {
 		union(out, out, rootNode.aabb);
 	}
 	return out;
+}
+//#endregion
+//#region src/layers.ts
+var layers_exports = /* @__PURE__ */ __exportAll({
+	addBroadphaseLayer: () => addBroadphaseLayer$1,
+	addObjectLayer: () => addObjectLayer$1,
+	broadphaseLayerCollidesWithBroadphaseLayer: () => broadphaseLayerCollidesWithBroadphaseLayer,
+	create: () => create$3,
+	disableCollision: () => disableCollision$1,
+	enableCollision: () => enableCollision$1,
+	objectLayerCollidesWithBroadphaseLayer: () => objectLayerCollidesWithBroadphaseLayer,
+	objectLayerCollidesWithObjectLayer: () => objectLayerCollidesWithObjectLayer
+});
+function create$3() {
+	return {
+		broadphaseLayers: 0,
+		objectLayers: 0,
+		objectLayerToBroadphaseLayer: [],
+		objectLayerPairs: [],
+		objectVsBroadphase: [],
+		broadphasePairs: []
+	};
+}
+function addBroadphaseLayer$1(layers) {
+	const index = layers.broadphaseLayers;
+	layers.broadphaseLayers += 1;
+	const bpCount = layers.broadphaseLayers;
+	const bpSize = bpCount * bpCount;
+	while (layers.broadphasePairs.length < bpSize) layers.broadphasePairs.push(0);
+	const objBpSize = layers.objectLayers * bpCount;
+	while (layers.objectVsBroadphase.length < objBpSize) layers.objectVsBroadphase.push(0);
+	return index;
+}
+function addObjectLayer$1(layers, broadphaseLayer) {
+	const index = layers.objectLayers;
+	layers.objectLayers += 1;
+	layers.objectLayerToBroadphaseLayer[index] = broadphaseLayer;
+	const objCount = layers.objectLayers;
+	const objSize = objCount * objCount;
+	while (layers.objectLayerPairs.length < objSize) layers.objectLayerPairs.push(0);
+	const bpCount = layers.broadphaseLayers;
+	const objBpSize = objCount * bpCount;
+	while (layers.objectVsBroadphase.length < objBpSize) layers.objectVsBroadphase.push(0);
+	layers.objectVsBroadphase[index * bpCount + broadphaseLayer] = 1;
+	return index;
+}
+function enableCollision$1(layers, objectLayerA, objectLayerB) {
+	const objCount = layers.objectLayers;
+	layers.objectLayerPairs[objectLayerA * objCount + objectLayerB] = 1;
+	layers.objectLayerPairs[objectLayerB * objCount + objectLayerA] = 1;
+	const bpA = layers.objectLayerToBroadphaseLayer[objectLayerA];
+	const bpB = layers.objectLayerToBroadphaseLayer[objectLayerB];
+	if (bpA !== void 0 && bpB !== void 0) {
+		const bpCount = layers.broadphaseLayers;
+		layers.broadphasePairs[bpA * bpCount + bpB] = 1;
+		layers.broadphasePairs[bpB * bpCount + bpA] = 1;
+		layers.objectVsBroadphase[objectLayerA * bpCount + bpB] = 1;
+		layers.objectVsBroadphase[objectLayerB * bpCount + bpA] = 1;
+	}
+}
+function disableCollision$1(layers, objectLayerA, objectLayerB) {
+	const objCount = layers.objectLayers;
+	layers.objectLayerPairs[objectLayerA * objCount + objectLayerB] = 0;
+	layers.objectLayerPairs[objectLayerB * objCount + objectLayerA] = 0;
+}
+function objectLayerCollidesWithBroadphaseLayer(layers, objectLayer, broadphaseLayer) {
+	return layers.objectVsBroadphase[objectLayer * layers.broadphaseLayers + broadphaseLayer] === 1;
+}
+function broadphaseLayerCollidesWithBroadphaseLayer(layers, broadphaseLayerA, broadphaseLayerB) {
+	return layers.broadphasePairs[broadphaseLayerA * layers.broadphaseLayers + broadphaseLayerB] === 1;
+}
+function objectLayerCollidesWithObjectLayer(layers, objectLayerA, objectLayerB) {
+	return layers.objectLayerPairs[objectLayerA * layers.objectLayers + objectLayerB] === 1;
+}
+//#endregion
+//#region src/pairs.ts
+var pairs_exports = /* @__PURE__ */ __exportAll({
+	CACHE_DP: () => 1,
+	CACHE_DR: () => 4,
+	CACHE_STRIDE: () => 8,
+	CACHE_VALID: () => 0,
+	INVALID_PAIR_KEY: () => -1,
+	RECORD_STRIDE: () => 6,
+	findCollidingPairs: () => findCollidingPairs,
+	getPairEdgeRecord: () => getPairEdgeRecord,
+	getPairEdgeSide: () => getPairEdgeSide,
+	init: () => init$5,
+	invalidateCache: () => invalidateCache,
+	markMoved: () => markMoved,
+	pairEdgeKey: () => pairEdgeKey,
+	purgeBodyPairs: () => purgeBodyPairs,
+	setCache: () => setCache
+});
+/** initializes pairs state */
+function init$5() {
+	return {
+		records: [],
+		freeRecords: [],
+		recordCount: 0,
+		poseCache: [],
+		collidingPairs: [],
+		collidingPairCount: 0,
+		moved: []
+	};
+}
+/** flag a body as moved this frame (deduped) so it runs discovery in the next findCollidingPairs */
+function markMoved(pairs, body) {
+	if (body.movedThisFrame) return;
+	body.movedThisFrame = true;
+	pairs.moved.push(body.index);
+}
+/**
+* Pack a record index and side into a single pair edge key (mirrors contacts.packContactKey).
+* Layout: [recordIndex][side: 1 bit], side 0 = bodyA's edge, side 1 = bodyB's edge.
+*/
+function pairEdgeKey(recordIndex, side) {
+	return recordIndex * 2 + side;
+}
+/** extract the record index from a packed pair edge key */
+function getPairEdgeRecord(key) {
+	return key >> 1;
+}
+/** extract the side from a packed pair edge key (0 = bodyA's edge, 1 = bodyB's edge) */
+function getPairEdgeSide(key) {
+	return key & 1;
+}
+/** flat slot of the prev pointer for a record's edge on the given side (the next pointer is the slot after) */
+function edgePrevSlot(recordIndex, side) {
+	return recordIndex * 6 + 2 + side * 2;
+}
+/**
+* The single pair predicate for findCollidingPairs: decides whether an (activeBody, otherBody)
+* candidate found by the tree query becomes a narrowphase pair. All pair-level filtering lives
+* here, in one place (jolt: Body::sFindCollidingPairsCanCollide + ObjectLayerPairFilter,
+* evaluated together at the query leaf).
+*
+* `activeBody` is always drawn from the active body list, so it is awake and non-static —
+* static-static pairs are unrepresentable.
+*/
+function shouldReportPair(layers, activeBody, otherBody) {
+	if (activeBody.activeIndex >= otherBody.activeIndex) return false;
+	if (!activeBody.collideKinematicVsNonDynamic && !otherBody.collideKinematicVsNonDynamic && activeBody.motionType !== 2 && otherBody.motionType !== 2 && !(activeBody.motionType === 1 && otherBody.sensor) && !(otherBody.motionType === 1 && activeBody.sensor)) return false;
+	if (!objectLayerCollidesWithObjectLayer(layers, activeBody.objectLayer, otherBody.objectLayer)) return false;
+	if (!shouldPairCollide(activeBody.collisionGroups, activeBody.collisionMask, otherBody.collisionGroups, otherBody.collisionMask)) return false;
+	return true;
+}
+/**
+* discovery visitor: fat-AABB query candidates for a moved body become persistent pair records.
+* semantics-free apart from the static object-layer pair prune — sleeping/kinematic/mask gates are
+* NOT applied here so the persistent set stays valid when those flags change later; they are applied
+* at emission time in the sweep. discovery never emits.
+*/
+const PairDiscoveryVisitor = {
+	shouldExit: false,
+	layers: null,
+	pairs: null,
+	movedBody: null,
+	setup(layers, pairs, movedBody) {
+		this.layers = layers;
+		this.pairs = pairs;
+		this.movedBody = movedBody;
+		this.shouldExit = false;
+	},
+	visit(otherBody) {
+		const movedBody = this.movedBody;
+		if (otherBody.index === movedBody.index) return;
+		if (!objectLayerCollidesWithObjectLayer(this.layers, movedBody.objectLayer, otherBody.objectLayer)) return;
+		const records = this.pairs.records;
+		let edgeKey = movedBody.headPairKey;
+		while (edgeKey !== -1) {
+			const rec = getPairEdgeRecord(edgeKey);
+			const side = getPairEdgeSide(edgeKey);
+			if (records[rec * 6 + (1 - side)] === otherBody.index) return;
+			edgeKey = records[edgePrevSlot(rec, side) + 1];
+		}
+		addPairRecord(this.pairs, movedBody, otherBody);
+	}
+};
+/** add a persistent pair record and link it into both bodies' pair lists */
+function addPairRecord(pairs, bodyA, bodyB) {
+	let rec;
+	if (pairs.freeRecords.length > 0) rec = pairs.freeRecords.pop();
+	else rec = pairs.records.length / 6;
+	const base = rec * 6;
+	pairs.records[base] = bodyA.index;
+	pairs.records[base + 1] = bodyB.index;
+	linkPairEdge(pairs, rec, 0, bodyA);
+	linkPairEdge(pairs, rec, 1, bodyB);
+	pairs.poseCache[rec * 8 + 0] = 0;
+	pairs.recordCount++;
+}
+/** link a record's edge at the head of the body's intrusive pair list */
+function linkPairEdge(pairs, rec, side, body) {
+	const records = pairs.records;
+	const prevSlot = edgePrevSlot(rec, side);
+	records[prevSlot] = -1;
+	records[prevSlot + 1] = body.headPairKey;
+	if (body.headPairKey !== -1) {
+		const headRec = getPairEdgeRecord(body.headPairKey);
+		const headSide = getPairEdgeSide(body.headPairKey);
+		records[edgePrevSlot(headRec, headSide)] = pairEdgeKey(rec, side);
+	}
+	body.headPairKey = pairEdgeKey(rec, side);
+}
+/** unlink a record's edge from its body's pair list, updating neighbours and the body's head */
+function unlinkPairEdge(pairs, pool, rec, side) {
+	const records = pairs.records;
+	const prevSlot = edgePrevSlot(rec, side);
+	const prevKey = records[prevSlot];
+	const nextKey = records[prevSlot + 1];
+	if (prevKey === -1) pool[records[rec * 6 + side]].headPairKey = nextKey;
+	else records[edgePrevSlot(getPairEdgeRecord(prevKey), getPairEdgeSide(prevKey)) + 1] = nextKey;
+	if (nextKey !== -1) records[edgePrevSlot(getPairEdgeRecord(nextKey), getPairEdgeSide(nextKey))] = prevKey;
+	records[prevSlot] = -1;
+	records[prevSlot + 1] = -1;
+}
+/**
+* destroy the persistent pair record at the given record index: unlink both edges from their
+* bodies' pair lists and return the slot to the freelist. record indices are stable — freed slots
+* stay in place until reused by addPairRecord.
+*/
+function removePairRecordAt(pairs, pool, rec) {
+	unlinkPairEdge(pairs, pool, rec, 0);
+	unlinkPairEdge(pairs, pool, rec, 1);
+	pairs.records[rec * 6] = -1;
+	pairs.freeRecords.push(rec);
+	pairs.recordCount--;
+}
+/** write last-narrowphase relative pose into the record's pose-cache block (marks it valid) */
+function setCache(pairs, rec, deltaPosition, deltaRotation) {
+	const poseCache = pairs.poseCache;
+	const base = rec * 8;
+	poseCache[base + 0] = 1;
+	poseCache[base + 1] = deltaPosition[0];
+	poseCache[base + 1 + 1] = deltaPosition[1];
+	poseCache[base + 1 + 2] = deltaPosition[2];
+	poseCache[base + 4] = deltaRotation[0];
+	poseCache[base + 4 + 1] = deltaRotation[1];
+	poseCache[base + 4 + 2] = deltaRotation[2];
+	poseCache[base + 4 + 3] = deltaRotation[3];
+}
+/**
+* invalidate the pair's cached pose. walks bodyA's pair list to find the record — O(pair degree).
+* missing pair = no-op.
+*/
+function invalidateCache(pairs, bodyA, bodyB) {
+	const records = pairs.records;
+	let edgeKey = bodyA.headPairKey;
+	while (edgeKey !== -1) {
+		const rec = getPairEdgeRecord(edgeKey);
+		const side = getPairEdgeSide(edgeKey);
+		if (records[rec * 6 + (1 - side)] === bodyB.index) {
+			pairs.poseCache[rec * 8 + 0] = 0;
+			return;
+		}
+		edgeKey = records[edgePrevSlot(rec, side) + 1];
+	}
+}
+/**
+* destroy every persistent pair involving this body by walking its own pair list — O(pair degree).
+* does not depend on the body's dbvt leaf, so it is safe to call before or independently of
+* tree-leaf removal.
+*/
+function purgeBodyPairs(pairs, pool, body) {
+	let edgeKey = body.headPairKey;
+	while (edgeKey !== -1) {
+		const rec = getPairEdgeRecord(edgeKey);
+		const side = getPairEdgeSide(edgeKey);
+		edgeKey = pairs.records[edgePrevSlot(rec, side) + 1];
+		removePairRecordAt(pairs, pool, rec);
+	}
+}
+const _discovery_expandedFatAABB = /* @__PURE__ */ create$41();
+const _sweep_expandedAABB = /* @__PURE__ */ create$41();
+const _sweep_expandedFatAABB = /* @__PURE__ */ create$41();
+/**
+* find potentially colliding body pairs, updates world.pairs.collidingPairs.
+*
+* moved-only persistent-pair broadphase (box2d-v3 / bullet architecture): a persistent pair set is
+* populated by fat-AABB queries from bodies that moved (escaped their fat leaf) or were added, then
+* swept every frame. the emitted pairs array is semantically identical to the old per-active-body
+* scan (same pair set each frame; intra-pair/record order may differ).
+*/
+function findCollidingPairs(world, speculativeContactDistance, listener) {
+	const layers = world.settings.layers;
+	const broadphase = world.broadphase;
+	const pairs = world.pairs;
+	const pool = world.bodies.pool;
+	pairs.collidingPairCount = 0;
+	const moved = pairs.moved;
+	for (let i = 0; i < moved.length; i++) {
+		const body = pool[moved[i]];
+		if (body._pooled || body.dbvtNode === -1 || body.broadphaseLayer === -1) continue;
+		const objectLayer = body.objectLayer;
+		const bodyBroadphaseLayer = body.broadphaseLayer;
+		const fatLeaf = broadphase.dbvts[bodyBroadphaseLayer].nodes[body.dbvtNode].aabb;
+		expandByMargin(_discovery_expandedFatAABB, fatLeaf, speculativeContactDistance);
+		for (let otherBroadphaseLayer = 0; otherBroadphaseLayer < broadphase.dbvts.length; otherBroadphaseLayer++) {
+			if (!objectLayerCollidesWithBroadphaseLayer(layers, objectLayer, otherBroadphaseLayer)) continue;
+			if (!broadphaseLayerCollidesWithBroadphaseLayer(layers, bodyBroadphaseLayer, otherBroadphaseLayer)) continue;
+			const tree = broadphase.dbvts[otherBroadphaseLayer];
+			PairDiscoveryVisitor.setup(layers, pairs, body);
+			intersectAABBFatLeaves(world, tree, _discovery_expandedFatAABB, PairDiscoveryVisitor);
+		}
+	}
+	for (let i = 0; i < moved.length; i++) pool[moved[i]].movedThisFrame = false;
+	moved.length = 0;
+	const records = pairs.records;
+	const numSlots = records.length / 6;
+	for (let rec = 0; rec < numSlots; rec++) {
+		const base = rec * 6;
+		const bodyIndexA = records[base];
+		if (bodyIndexA === -1) continue;
+		const bodyA = pool[bodyIndexA];
+		const bodyB = pool[records[base + 1]];
+		if (bodyA.dbvtNode === -1 || bodyB.dbvtNode === -1) {
+			removePairRecordAt(pairs, pool, rec);
+			continue;
+		}
+		const fatA = broadphase.dbvts[bodyA.broadphaseLayer].nodes[bodyA.dbvtNode].aabb;
+		const fatB = broadphase.dbvts[bodyB.broadphaseLayer].nodes[bodyB.dbvtNode].aabb;
+		expandByMargin(_sweep_expandedFatAABB, fatA, speculativeContactDistance);
+		if (!intersectsBox3$1(_sweep_expandedFatAABB, fatB)) {
+			removePairRecordAt(pairs, pool, rec);
+			continue;
+		}
+		const moreActive = bodyA.activeIndex <= bodyB.activeIndex ? bodyA : bodyB;
+		const lessActive = moreActive === bodyA ? bodyB : bodyA;
+		expandByMargin(_sweep_expandedAABB, moreActive.aabb, speculativeContactDistance);
+		if (intersectsBox3$1(_sweep_expandedAABB, lessActive.aabb) && shouldReportPair(layers, moreActive, lessActive)) emitCollidingPair(pairs, moreActive, lessActive, rec, listener);
+	}
+}
+/**
+* Emit a colliding pair into this frame's output, after the optional user body pair filter.
+* The single emission point: every pair downstream consumes was pushed here.
+*/
+function emitCollidingPair(pairs, moreActive, lessActive, recordIndex, listener) {
+	if (listener?.onBodyPairValidate) {
+		let sortedA = moreActive;
+		let sortedB = lessActive;
+		if (sortedA.motionType > sortedB.motionType || sortedA.motionType === sortedB.motionType && sortedB.id < sortedA.id) {
+			sortedA = lessActive;
+			sortedB = moreActive;
+		}
+		if (!listener.onBodyPairValidate(sortedA, sortedB)) return;
+	}
+	const collidingPairs = pairs.collidingPairs;
+	const pairIndex = pairs.collidingPairCount * 3;
+	if (pairIndex >= collidingPairs.length) collidingPairs.push(moreActive.index, lessActive.index, recordIndex);
+	else {
+		collidingPairs[pairIndex] = moreActive.index;
+		collidingPairs[pairIndex + 1] = lessActive.index;
+		collidingPairs[pairIndex + 2] = recordIndex;
+	}
+	pairs.collidingPairCount++;
 }
 //#endregion
 //#region src/body/sleep.ts
@@ -25431,7 +25673,6 @@ function combineMaterial(valueA, valueB, modeA, modeB) {
 var contacts_exports = /* @__PURE__ */ __exportAll({
 	CachedManifoldFlags: () => CachedManifoldFlags,
 	INVALID_CONTACT_KEY: () => -1,
-	bodyPairKey: () => bodyPairKey,
 	createContact: () => createContact,
 	destroyAllContactsBetweenBodies: () => destroyAllContactsBetweenBodies,
 	destroyBodyContacts: () => destroyBodyContacts,
@@ -25448,9 +25689,7 @@ var contacts_exports = /* @__PURE__ */ __exportAll({
 	hasContactsBetweenBodies: () => hasContactsBetweenBodies,
 	init: () => init$4,
 	markAllUnprocessed: () => markAllUnprocessed,
-	packContactKey: () => packContactKey,
-	removeCachedBodyPair: () => removeCachedBodyPair,
-	setCachedBodyPair: () => setCachedBodyPair
+	packContactKey: () => packContactKey
 });
 /** flags for cached contact manifolds */
 let CachedManifoldFlags = /* @__PURE__ */ function(CachedManifoldFlags) {
@@ -25468,49 +25707,15 @@ function init$4() {
 		contacts: [],
 		contactsFreeIndices: [],
 		readIdx: 0,
-		cachedBodyPairs: /* @__PURE__ */ new Map(),
 		pendingContactRemoved: []
 	};
 }
-/**
-* Pack a pair of body IDs into a single number key for the cached-body-pair map.
-* Always orders ids ascending so (a, b) and (b, a) hash to the same key.
-* Body IDs are 32-bit; this packs them into the 53-bit-safe integer range.
-*/
 /** fire and clear deferred onContactRemoved events (queued by body removal) */
 function flushPendingContactRemoved(contacts, listener) {
 	const pending = contacts.pendingContactRemoved;
 	if (pending.length === 0) return;
 	if (listener?.onContactRemoved) for (let i = 0; i < pending.length; i += 4) listener.onContactRemoved(pending[i], pending[i + 1], pending[i + 2], pending[i + 3]);
 	pending.length = 0;
-}
-function bodyPairKey(idA, idB) {
-	return idA < idB ? idA * 4294967296 + idB : idB * 4294967296 + idA;
-}
-/** create a fresh CachedBodyPair with zeroed deltas */
-function createCachedBodyPair() {
-	return {
-		deltaPosition: create$48(),
-		deltaRotation: create$44()
-	};
-}
-/**
-* Write the current relative pose into the cached-body-pair map, creating the
-* entry if needed. Caller supplies pre-computed deltaPosition / deltaRotation.
-*/
-function setCachedBodyPair(contactsState, idA, idB, deltaPosition, deltaRotation) {
-	const key = bodyPairKey(idA, idB);
-	let entry = contactsState.cachedBodyPairs.get(key);
-	if (!entry) {
-		entry = createCachedBodyPair();
-		contactsState.cachedBodyPairs.set(key, entry);
-	}
-	copy$9(entry.deltaPosition, deltaPosition);
-	copy$5(entry.deltaRotation, deltaRotation);
-}
-/** drop the cached-body-pair entry for the given pair, if any. */
-function removeCachedBodyPair(contactsState, idA, idB) {
-	contactsState.cachedBodyPairs.delete(bodyPairKey(idA, idB));
 }
 /** the manifold buffer that holds last step's cached data (read side). */
 function getReadManifold(contact, contactsState) {
@@ -25710,8 +25915,9 @@ function createContact(contacts, bodyA, bodyB, subShapeIdA, subShapeIdB) {
 * @param bodyB second body in contact
 * @param contact contact to destroy
 * @param listener optional contact listener to notify of removal
+* @param pairs persistent pair state, so the pair's pose cache can be invalidated on last-contact removal
 */
-function destroyContact(contacts, bodyA, bodyB, contact, listener) {
+function destroyContact(contacts, bodyA, bodyB, contact, listener, pairs) {
 	if (listener?.onContactRemoved) listener.onContactRemoved(contact.bodyIdA, contact.bodyIdB, contact.subShapeIdA, contact.subShapeIdB);
 	const edgeABody = bodyA.id === contact.bodyIdA ? bodyA : bodyB;
 	const edgeBBody = bodyA.id === contact.bodyIdA ? bodyB : bodyA;
@@ -25722,7 +25928,7 @@ function destroyContact(contacts, bodyA, bodyB, contact, listener) {
 	const contactId = contact.contactIndex;
 	contact.contactIndex = -1;
 	contacts.contactsFreeIndices.push(contactId);
-	if (!hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) removeCachedBodyPair(contacts, pairIdA, pairIdB);
+	if (pairs !== void 0 && !hasContactsBetweenBodyIds(contacts, pairIdA, pairIdB)) invalidateCache(pairs, bodyA, bodyB);
 }
 /**
 * Cheap variant of hasContactsBetweenBodies that doesn't need RigidBody refs —
@@ -25763,9 +25969,9 @@ function hasContactsBetweenBodies(contacts, bodyA, bodyB) {
 * @param contacts global contact array
 * @param bodies body array for looking up other bodies
 * @param body body whose contacts should be destroyed
-* @param listener optional contact listener to notify of removal
+* @param pairs persistent pair state, for cache invalidation on last-contact removal
 */
-function destroyBodyContacts(contacts, bodies, body) {
+function destroyBodyContacts(contacts, bodies, body, pairs) {
 	let contactKey = body.headContactKey;
 	while (contactKey !== -1) {
 		const contactId = getContactKeyId(contactKey);
@@ -25776,7 +25982,7 @@ function destroyBodyContacts(contacts, bodies, body) {
 		const otherBody = bodies.pool[otherBodyIndex];
 		if (otherBody) {
 			contacts.pendingContactRemoved.push(contact.bodyIdA, contact.bodyIdB, contact.subShapeIdA, contact.subShapeIdB);
-			destroyContact(contacts, body, otherBody, contact, void 0);
+			destroyContact(contacts, body, otherBody, contact, void 0, pairs);
 		}
 	}
 	body.headContactKey = -1;
@@ -25792,15 +25998,16 @@ function destroyBodyContacts(contacts, bodies, body) {
 * @param bodyA first body
 * @param bodyB second body
 * @param listener optional contact listener to notify of removal
+* @param pairs persistent pair state, for cache invalidation on last-contact removal
 */
-function destroyStaleContactsBetweenBodies(contactsState, bodyA, bodyB, listener) {
+function destroyStaleContactsBetweenBodies(contactsState, bodyA, bodyB, listener, pairs) {
 	let contactKey = (bodyA.contactCount <= bodyB.contactCount ? bodyA : bodyB).headContactKey;
 	while (contactKey !== -1) {
 		const contactId = getContactKeyId(contactKey);
 		const edgeIndex = getContactKeyEdge(contactKey);
 		const contact = contactsState.contacts[contactId];
 		contactKey = contact.edges[edgeIndex].nextKey;
-		if (!contact.processedThisFrame && (contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id || contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id)) destroyContact(contactsState, bodyA, bodyB, contact, listener);
+		if (!contact.processedThisFrame && (contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id || contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id)) destroyContact(contactsState, bodyA, bodyB, contact, listener, pairs);
 	}
 }
 /**
@@ -25811,15 +26018,16 @@ function destroyStaleContactsBetweenBodies(contactsState, bodyA, bodyB, listener
 * @param bodyA first body
 * @param bodyB second body
 * @param listener optional contact listener to notify of removal
+* @param pairs persistent pair state, for cache invalidation on last-contact removal
 */
-function destroyAllContactsBetweenBodies(contactsState, bodyA, bodyB, listener) {
+function destroyAllContactsBetweenBodies(contactsState, bodyA, bodyB, listener, pairs) {
 	let contactKey = (bodyA.contactCount <= bodyB.contactCount ? bodyA : bodyB).headContactKey;
 	while (contactKey !== -1) {
 		const contactId = getContactKeyId(contactKey);
 		const edgeIndex = getContactKeyEdge(contactKey);
 		const contact = contactsState.contacts[contactId];
 		contactKey = contact.edges[edgeIndex].nextKey;
-		if (contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id || contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id) destroyContact(contactsState, bodyA, bodyB, contact, listener);
+		if (contact.bodyIdA === bodyA.id && contact.bodyIdB === bodyB.id || contact.bodyIdA === bodyB.id && contact.bodyIdB === bodyA.id) destroyContact(contactsState, bodyA, bodyB, contact, listener, pairs);
 	}
 }
 /**
@@ -25856,8 +26064,9 @@ function markAllUnprocessed(contacts) {
 * @param contacts contacts state
 * @param bodies world bodies array (needed to look up Body objects by ID)
 * @param listener optional contact listener to notify of removal
+* @param pairs persistent pair state, for cache invalidation on last-contact removal
 */
-function destroyUnprocessedContacts(contacts, bodies, listener) {
+function destroyUnprocessedContacts(contacts, bodies, listener, pairs) {
 	for (let i = 0; i < contacts.contacts.length; i++) {
 		const contact = contacts.contacts[i];
 		if (contact.contactIndex === -1 || contact.processedThisFrame) continue;
@@ -25865,7 +26074,7 @@ function destroyUnprocessedContacts(contacts, bodies, listener) {
 		const bodyBIndex = getBodyIdIndex(contact.bodyIdB);
 		const bodyA = bodies.pool[bodyAIndex];
 		const bodyB = bodies.pool[bodyBIndex];
-		if (bodyA && bodyB && !bodyA._pooled && !bodyB._pooled) destroyContact(contacts, bodyA, bodyB, contact, listener);
+		if (bodyA && bodyB && !bodyA._pooled && !bodyB._pooled) destroyContact(contacts, bodyA, bodyB, contact, listener, pairs);
 	}
 }
 //#endregion
@@ -25972,6 +26181,8 @@ function makeRigidBody() {
 		objectLayer: 0,
 		broadphaseLayer: -1,
 		dbvtNode: -1,
+		movedThisFrame: false,
+		headPairKey: -1,
 		headContactKey: -1,
 		contactCount: 0,
 		islandIndex: -1,
@@ -26030,7 +26241,9 @@ function setRigidBody(body, o) {
 	body.objectLayer = o.objectLayer;
 	body.broadphaseLayer = -1;
 	body.dbvtNode = -1;
+	body.movedThisFrame = false;
 	body.activeIndex = INACTIVE_BODY_INDEX;
+	body.headPairKey = -1;
 	body.headContactKey = -1;
 	body.contactCount = 0;
 	body.islandIndex = -1;
@@ -26063,6 +26276,7 @@ function create$2(world, settings) {
 	updateShape(world, body);
 	if (body.motionType === 2) resetSleepTimer(body);
 	addBody(world.broadphase, body, world.settings.layers);
+	markMoved(world.pairs, body);
 	if (body.motionType !== 0 && !body.sleeping) addBodyToActiveBodies(world, body);
 	return body;
 }
@@ -26077,8 +26291,9 @@ function create$2(world, settings) {
 function remove$1(world, body) {
 	if (body._pooled) return false;
 	removeBodyFromActiveBodies(world, body);
-	destroyBodyContacts(world.contacts, world.bodies, body);
+	destroyBodyContacts(world.contacts, world.bodies, body, world.pairs);
 	destroyBodyConstraints(world, body);
+	purgeBodyPairs(world.pairs, world.bodies.pool, body);
 	removeBody(world.broadphase, body);
 	body._pooled = true;
 	body.userData = null;
@@ -26139,7 +26354,7 @@ function updatePositionFromCenterOfMass(world, body) {
 	transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
 	sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
 	updateAABB(body);
-	updateBody(world.broadphase, body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
 }
 /**
 * Updates the world-space AABB based on the body's transform and shape AABB.
@@ -26226,27 +26441,27 @@ function updateShape(world, body) {
 	if (body.motionType !== 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
-	updateBody(world.broadphase, body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
 }
 /**
 * Sets the body's position and recomputes the world-space center of mass and AABB.
 */
-function setPosition$1(world, body, position, wake$5) {
+function setPosition$1(world, body, position, wake$4) {
 	copy$9(body.position, position);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
-	updateBody(world.broadphase, body);
-	if (wake$5) wake(world, body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
+	if (wake$4) wake(world, body);
 }
 /**
 * Sets the body's orientation and recomputes the world-space center of mass and AABB.
 */
-function setQuaternion$1(world, body, quaternion, wake$1) {
+function setQuaternion$1(world, body, quaternion, wake$2) {
 	copy$5(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
-	updateBody(world.broadphase, body);
-	if (wake$1) wake(world, body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
+	if (wake$2) wake(world, body);
 }
 /**
 * Sets both the body's position and orientation, then recomputes the world-space center of mass and AABB.
@@ -26257,7 +26472,7 @@ function setTransform(world, body, position, quaternion, wake$7) {
 	copy$5(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
-	updateBody(world.broadphase, body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
 	if (wake$7) wake(world, body);
 }
 /**
@@ -26266,6 +26481,7 @@ function setTransform(world, body, position, quaternion, wake$7) {
 function setObjectLayer(world, body, layer) {
 	body.objectLayer = layer;
 	reinsertBody(world.broadphase, body, world.settings.layers);
+	markMoved(world.pairs, body);
 }
 /**
 * Sets the body's motion type and updates active body tracking.
@@ -26274,7 +26490,7 @@ function setObjectLayer(world, body, layer) {
 * @param motionType the new motion type
 * @param wake if true and changing to dynamic/kinematic, wakes the body
 */
-function setMotionType(world, body, motionType, wake$2) {
+function setMotionType(world, body, motionType, wake$1) {
 	const oldMotionType = body.motionType;
 	if (oldMotionType === motionType) return;
 	body.motionType = motionType;
@@ -26286,7 +26502,7 @@ function setMotionType(world, body, motionType, wake$2) {
 		if (!body.sleeping) addBodyToActiveBodies(world, body);
 		if (motionType === 2) resetSleepTimer(body);
 	}
-	if (wake$2 && motionType !== 0) wake(world, body);
+	if (wake$1 && motionType !== 0) wake(world, body);
 	if (motionType !== 0 && oldMotionType === 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
 }
 /**
@@ -26298,10 +26514,10 @@ function setMotionType(world, body, motionType, wake$2) {
 * @param force Force vector in world space
 * @param wake If true, wakes the body if sleeping
 */
-function addForce(world, body, force, wake$6) {
+function addForce(world, body, force, wake$3) {
 	if (body.motionType !== 2) return;
 	addForce$1(body.motionProperties, force);
-	if (wake$6) wake(world, body);
+	if (wake$3) wake(world, body);
 }
 /**
 * Adds a torque (angular force) directly.
@@ -26312,10 +26528,10 @@ function addForce(world, body, force, wake$6) {
 * @param torque torque vector in world space
 * @param wake if true, wakes the body if sleeping
 */
-function addTorque(world, body, torque, wake$3) {
+function addTorque(world, body, torque, wake$5) {
 	if (body.motionType !== 2) return;
 	addTorque$1(body.motionProperties, torque);
-	if (wake$3) wake(world, body);
+	if (wake$5) wake(world, body);
 }
 /**
 * Adds a force at a specific world-space position.
@@ -26328,10 +26544,10 @@ function addTorque(world, body, torque, wake$3) {
 * @param worldPosition position in world space where force is applied
 * @param wake if true, wakes the body if sleeping
 */
-function addForceAtPosition(world, body, force, worldPosition, wake$4) {
+function addForceAtPosition(world, body, force, worldPosition, wake$6) {
 	if (body.motionType !== 2) return;
 	addForceAtPosition$1(body.motionProperties, force, worldPosition, body.centerOfMassPosition);
-	if (wake$4) wake(world, body);
+	if (wake$6) wake(world, body);
 }
 /**
 * Applies an impulse at the body's center of mass.
@@ -28859,12 +29075,15 @@ function updateWorld(world, listener, timeStep) {
 	world.contactConstraints.count = 0;
 	markAllUnprocessed(world.contacts);
 	accelerationIntegrationUpdate(world, timeStep);
+	optimize(world.broadphase);
 	findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
-	const pairs = world.broadphase.pairs;
+	const collidingPairs = world.pairs.collidingPairs;
+	const collidingPairCount = world.pairs.collidingPairCount;
 	const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
-	for (let i = 0; i < pairs.n; i++) {
-		const bodyIndexA = pairs.pool[i * 2];
-		const bodyIndexB = pairs.pool[i * 2 + 1];
+	for (let i = 0; i < collidingPairCount; i++) {
+		const bodyIndexA = collidingPairs[i * 3];
+		const bodyIndexB = collidingPairs[i * 3 + 1];
+		const pairRecordIndex = collidingPairs[i * 3 + 2];
 		let bodyA = world.bodies.pool[bodyIndexA];
 		let bodyB = world.bodies.pool[bodyIndexB];
 		if (bodyA.motionType < bodyB.motionType || bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id) {
@@ -28879,17 +29098,17 @@ function updateWorld(world, listener, timeStep) {
 			currDeltaPos = _bodyPairCache_deltaPos;
 			currDeltaRot = _bodyPairCache_deltaRot;
 			computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
-			pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot);
+			pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot, pairRecordIndex);
 		}
 		const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
-		if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) setCachedBodyPair(world.contacts, bodyA.id, bodyB.id, currDeltaPos, currDeltaRot);
+		if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) setCache(world.pairs, pairRecordIndex, currDeltaPos, currDeltaRot);
 		if (anyConstraintsCreated) {
 			if (bodyA.motionType === 2 && bodyA.sleeping) wake(world, bodyA);
 			if (bodyB.motionType === 2 && bodyB.sleeping) wake(world, bodyB);
 		}
-		if (!pairHandled) destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
+		if (!pairHandled) destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener, world.pairs);
 	}
-	destroyUnprocessedContacts(world.contacts, world.bodies, listener);
+	destroyUnprocessedContacts(world.contacts, world.bodies, listener, world.pairs);
 	if (timeStep > 0) {
 		wakeBodiesInUserConstraints(world);
 		prepare(world.islands, world.bodies, world.contacts.contacts.length);
@@ -29199,6 +29418,8 @@ const _bodyPairCache_invRA = /* @__PURE__ */ create$44();
 const _bodyPairCache_deltaPos = /* @__PURE__ */ create$48();
 const _bodyPairCache_deltaRot = /* @__PURE__ */ create$44();
 const _bodyPairCache_diff = /* @__PURE__ */ create$48();
+const _bodyPairCache_cachedPos = /* @__PURE__ */ create$48();
+const _bodyPairCache_cachedRot = /* @__PURE__ */ create$44();
 const _bodyPairCache_rotA = /* @__PURE__ */ create$46();
 const _bodyPairCache_rotB = /* @__PURE__ */ create$46();
 const _bodyPairCache_relA = /* @__PURE__ */ create$48();
@@ -29266,12 +29487,20 @@ function reconstructManifoldFromCache(out, contact, physA, physB, cached) {
 * (already computed via computeBodyPairDelta) — the caller passes them in so they
 * can be reused to update the cache after this call regardless of hit/miss.
 */
-function getContactsFromCache(world, physA, physB, listener, deltaTime, currDeltaPos, currDeltaRot) {
-	const cached = world.contacts.cachedBodyPairs.get(bodyPairKey(physA.id, physB.id));
-	if (cached === void 0) return false;
-	sub(_bodyPairCache_diff, currDeltaPos, cached.deltaPosition);
+function getContactsFromCache(world, physA, physB, listener, deltaTime, currDeltaPos, currDeltaRot, pairRecordIndex) {
+	const poseCache = world.pairs.poseCache;
+	const cacheBase = pairRecordIndex * 8;
+	if (poseCache[cacheBase + 0] !== 1) return false;
+	_bodyPairCache_cachedPos[0] = poseCache[cacheBase + 1];
+	_bodyPairCache_cachedPos[1] = poseCache[cacheBase + 1 + 1];
+	_bodyPairCache_cachedPos[2] = poseCache[cacheBase + 1 + 2];
+	_bodyPairCache_cachedRot[0] = poseCache[cacheBase + 4];
+	_bodyPairCache_cachedRot[1] = poseCache[cacheBase + 4 + 1];
+	_bodyPairCache_cachedRot[2] = poseCache[cacheBase + 4 + 2];
+	_bodyPairCache_cachedRot[3] = poseCache[cacheBase + 4 + 3];
+	sub(_bodyPairCache_diff, currDeltaPos, _bodyPairCache_cachedPos);
 	if (squaredLength(_bodyPairCache_diff) > world.settings.narrowphase.bodyPairCacheMaxDeltaPositionSq) return false;
-	if (Math.abs(dot(currDeltaRot, cached.deltaRotation)) < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) return false;
+	if (Math.abs(dot(currDeltaRot, _bodyPairCache_cachedRot)) < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) return false;
 	let contactKey = (physA.contactCount <= physB.contactCount ? physA : physB).headContactKey;
 	while (contactKey !== -1) {
 		const contactId = getContactKeyId(contactKey);
@@ -29771,9 +30000,10 @@ function createWorld(settings) {
 	return {
 		settings,
 		bodies: init(),
-		broadphase: init$5(settings.layers),
+		broadphase: init$6(settings.layers),
+		pairs: init$5(),
 		contactConstraints: init$3(),
-		constraints: init$7(),
+		constraints: init$8(),
 		contacts: init$4(),
 		islands: init$1(),
 		ccd: init$2(),
@@ -29784,7 +30014,7 @@ function createWorld(settings) {
 //#region src/world-settings.ts
 const createWorldSettings = () => {
 	return {
-		layers: create$4(),
+		layers: create$3(),
 		gravity: [
 			0,
 			-9.81,
@@ -32892,6 +33122,6 @@ function joints(world, options) {
 	return finalizeLineBuffer(out);
 }
 //#endregion
-export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeCategory, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeClosestPointOnLine, computeClosestPointOnTetrahedron, computeClosestPointOnTriangle, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
+export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeCategory, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeClosestPointOnLine, computeClosestPointOnTetrahedron, computeClosestPointOnTriangle, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, pairs_exports as pairs, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
 
 //# sourceMappingURL=index.js.map
