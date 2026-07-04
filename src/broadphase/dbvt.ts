@@ -12,7 +12,11 @@ export type DBVT = {
     root: number;
 
     expansionMargin: number;
-    optimizationPath: number;
+
+    // any structural change (add / remove / fat-leaf escape) since the last rebuild. gates
+    // the dirty-gated rebuild in broadphase.optimize — a tree that no body has disturbed
+    // (e.g. a settled static field) stays clean and is never rebuilt. jolt's IsDirty().
+    dirty: boolean;
 };
 
 export type DBVTNode = {
@@ -23,7 +27,12 @@ export type DBVTNode = {
     right: number;
 
     aabb: Box3;
-    height: number;
+
+    // internal nodes only (meaningless on leaves — mark/widen starts at a leaf's parent).
+    // invariant: changed ⇒ parent.changed. set when a descendant leaf's fat aabb widens or
+    // the local structure changes; a rebuild keeps every !changed subtree whole and only
+    // re-partitions the changed region + the always-rebuilt top levels. jolt's Node::mIsChanged.
+    changed: boolean;
 
     bodyIndex: number;
 };
@@ -39,13 +48,24 @@ const _flatStack: number[] = [];
 const _castStackNode: number[] = [];
 const _castStackDist: number[] = [];
 
+// binary analogue of jolt's cMaxDepthMarkChanged (5 quad levels ≈ 1024 partitions). the
+// top MAX_DEPTH_MARK_CHANGED levels of a freshly built subtree are born `changed` so the
+// most drift-prone upper structure is always re-partitioned on the next rebuild; deeper,
+// settled subtrees graft in whole. ~1024 grafted units at binary depth 10.
+const MAX_DEPTH_MARK_CHANGED = 10;
+
+// grow-once scratch for rebuild (matches the _flatStack pattern — no pop()/length churn).
+const _collectStack: number[] = []; // collection traversal node stack
+const _buildUnits: number[] = []; // collected unit node indices, partitioned in place
+const _buildCenters: number[] = []; // unit aabb centers, xyz interleaved, swapped alongside _buildUnits
+
 export function create(): DBVT {
     const dbvt: DBVT = {
         nodes: [],
         freeNodeIndices: [],
         root: -1,
         expansionMargin: 0.05,
-        optimizationPath: 0,
+        dirty: false,
     };
 
     return dbvt;
@@ -60,7 +80,7 @@ function requestNode(bvh: DBVT): number {
         node.left = -1;
         node.right = -1;
         box3.empty(node.aabb);
-        node.height = 0;
+        node.changed = false;
         node.bodyIndex = -1;
     } else {
         nodeIndex = bvh.nodes.length;
@@ -70,7 +90,7 @@ function requestNode(bvh: DBVT): number {
             left: -1,
             right: -1,
             aabb: box3.create(),
-            height: 0,
+            changed: false,
             bodyIndex: -1,
         });
     }
@@ -82,6 +102,7 @@ function releaseNode(bvh: DBVT, nodeIndex: number): void {
     node.parent = -1;
     node.left = -1;
     node.right = -1;
+    node.changed = false;
     node.bodyIndex = -1;
     bvh.freeNodeIndices.push(nodeIndex);
 }
@@ -134,7 +155,6 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
 
     newParent.parent = prev;
     box3.union(newParent.aabb, leaf.aabb, rootNode.aabb);
-    newParent.height = rootNode.height + 1;
 
     if (prev !== -1) {
         const prevNode = dbvt.nodes[prev];
@@ -174,221 +194,37 @@ function insertLeaf(dbvt: DBVT, rootIndex: number, leafIndex: number): void {
 
 const _prevAabb = /* @__PURE__ */ box3.create();
 
-// todo: stack impl?
-function fetchLeaves(dbvt: DBVT, rootIndex: number, leaves: number[], depth = -1): void {
-    if (rootIndex === -1) return;
-
-    const root = dbvt.nodes[rootIndex];
-    if (isLeaf(root) || depth === 0) {
-        leaves.push(rootIndex);
-    } else {
-        fetchLeaves(dbvt, root.left, leaves, depth - 1);
-        fetchLeaves(dbvt, root.right, leaves, depth - 1);
+// walk up from a changed node marking ancestors changed. stops at the first already-changed
+// ancestor (the invariant changed ⇒ parent.changed guarantees everything above is done).
+// jolt's MarkNodeAndParentsChanged.
+function markNodeAndParentsChanged(dbvt: DBVT, nodeIndex: number): void {
+    let idx = nodeIndex;
+    while (idx !== -1) {
+        const node = dbvt.nodes[idx];
+        if (node.changed) break;
+        node.changed = true;
+        idx = node.parent;
     }
 }
 
-function surfaceArea(aabb: Box3): number {
-    const sx = aabb[3] - aabb[0];
-    const sy = aabb[4] - aabb[1];
-    const sz = aabb[5] - aabb[2];
-    return 2 * (sx * sy + sx * sz + sy * sz);
-}
-
-const _boundsResult = /* @__PURE__ */ box3.create();
-
-/* @optimize */
-function boundsOfLeaves(dbvt: DBVT, leaves: number[]): Box3 {
-    const result = _boundsResult;
-    box3.empty(result);
-    for (const leafIndex of leaves) {
-        const leaf = dbvt.nodes[leafIndex];
-        box3.union(result, result, leaf.aabb);
-    }
-    return result;
-}
-
-const _mergedAabb = /* @__PURE__ */ box3.create();
-
-function bottomup(dbvt: DBVT, leaves: number[]): void {
-    while (leaves.length > 1) {
-        let minSize = Number.POSITIVE_INFINITY;
-        let minIdx0 = -1;
-        let minIdx1 = -1;
-
-        // find pair with smallest merged AABB
-        for (let i = 0; i < leaves.length; i++) {
-            for (let j = i + 1; j < leaves.length; j++) {
-                const leaf0 = dbvt.nodes[leaves[i]];
-                const leaf1 = dbvt.nodes[leaves[j]];
-                box3.union(_mergedAabb, leaf0.aabb, leaf1.aabb);
-                const sz = surfaceArea(_mergedAabb);
-                if (sz < minSize) {
-                    minSize = sz;
-                    minIdx0 = i;
-                    minIdx1 = j;
-                }
-            }
+// walk up from a leaf's parent widening each ancestor's aabb to encapsulate the (grown) leaf
+// bounds and marking it changed. bounds only grow between rebuilds so containment holds at
+// every instant (queries never miss); the next rebuild recomputes exact unions. once an
+// ancestor already contains the new bounds, only the changed-marking remains. jolt's
+// WidenAndMarkNodeAndParentsChanged, adapted to bounds-on-node.
+function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, newBounds: Box3): void {
+    let idx = parentIndex;
+    while (idx !== -1) {
+        const node = dbvt.nodes[idx];
+        node.changed = true;
+        if (box3.containsBox3(node.aabb, newBounds)) {
+            // containment is monotone up the tree — nothing above needs widening, only marking
+            markNodeAndParentsChanged(dbvt, node.parent);
+            break;
         }
-
-        // merge the pair
-        const n0Index = leaves[minIdx0];
-        const n1Index = leaves[minIdx1];
-        const n0 = dbvt.nodes[n0Index];
-        const n1 = dbvt.nodes[n1Index];
-
-        const parentIndex = requestNode(dbvt);
-        const parent = dbvt.nodes[parentIndex];
-        box3.union(parent.aabb, n0.aabb, n1.aabb);
-        parent.left = n0Index;
-        parent.right = n1Index;
-        n0.parent = parentIndex;
-        n1.parent = parentIndex;
-        parent.height = Math.max(n0.height, n1.height) + 1;
-
-        leaves[minIdx0] = parentIndex;
-        leaves[minIdx1] = leaves[leaves.length - 1];
-        leaves.pop();
+        box3.union(node.aabb, node.aabb, newBounds);
+        idx = node.parent;
     }
-}
-
-const _center: Vec3 = [0, 0, 0];
-
-function topdown(dbvt: DBVT, leaves: number[], buThreshold: number): number {
-    if (leaves.length > 1) {
-        if (leaves.length > buThreshold) {
-            const vol = boundsOfLeaves(dbvt, leaves);
-            const org = [(vol[0] + vol[3]) * 0.5, (vol[1] + vol[4]) * 0.5, (vol[2] + vol[5]) * 0.5] as Vec3;
-
-            // find best axis to split on
-            let bestAxis = -1;
-            let bestMidp = leaves.length;
-            const splitCount = [
-                [0, 0],
-                [0, 0],
-                [0, 0],
-            ];
-
-            for (const leafIndex of leaves) {
-                const leaf = dbvt.nodes[leafIndex];
-                _center[0] = (leaf.aabb[0] + leaf.aabb[3]) * 0.5;
-                _center[1] = (leaf.aabb[1] + leaf.aabb[4]) * 0.5;
-                _center[2] = (leaf.aabb[2] + leaf.aabb[5]) * 0.5;
-
-                for (let j = 0; j < 3; j++) {
-                    splitCount[j][_center[j] > org[j] ? 1 : 0]++;
-                }
-            }
-
-            for (let i = 0; i < 3; i++) {
-                if (splitCount[i][0] > 0 && splitCount[i][1] > 0) {
-                    const midp = Math.abs(splitCount[i][0] - splitCount[i][1]);
-                    if (midp < bestMidp) {
-                        bestAxis = i;
-                        bestMidp = midp;
-                    }
-                }
-            }
-
-            if (bestAxis >= 0) {
-                // partition leaves along best axis
-                const sets: [number[], number[]] = [[], []];
-
-                for (const leafIndex of leaves) {
-                    const leaf = dbvt.nodes[leafIndex];
-                    _center[0] = (leaf.aabb[0] + leaf.aabb[3]) * 0.5;
-                    _center[1] = (leaf.aabb[1] + leaf.aabb[4]) * 0.5;
-                    _center[2] = (leaf.aabb[2] + leaf.aabb[5]) * 0.5;
-                    const side = _center[bestAxis] > org[bestAxis] ? 1 : 0;
-                    sets[side].push(leafIndex);
-                }
-
-                // recursively build subtrees
-                const leftIndex = topdown(dbvt, sets[0], buThreshold);
-                const rightIndex = topdown(dbvt, sets[1], buThreshold);
-
-                const left = dbvt.nodes[leftIndex];
-                const right = dbvt.nodes[rightIndex];
-
-                const parentIndex = requestNode(dbvt);
-                const parent = dbvt.nodes[parentIndex];
-                box3.union(parent.aabb, left.aabb, right.aabb);
-                parent.left = leftIndex;
-                parent.right = rightIndex;
-                left.parent = parentIndex;
-                right.parent = parentIndex;
-                parent.height = Math.max(left.height, right.height) + 1;
-
-                return parentIndex;
-            } else {
-                // couldn't find good split, fall back to bottomup
-                bottomup(dbvt, leaves);
-                return leaves[0];
-            }
-        } else {
-            // count <= threshold, use bottomup
-            bottomup(dbvt, leaves);
-            return leaves[0];
-        }
-    } else {
-        return leaves[0];
-    }
-}
-
-/* @optimize */
-function sort(dbvt: DBVT, nodeIndex: number): number {
-    const n = dbvt.nodes[nodeIndex];
-    const parentIndex = n.parent;
-    if (parentIndex === -1) return nodeIndex;
-
-    const p = dbvt.nodes[parentIndex];
-
-    // heuristic: rotate if parent index > node index
-    if (parentIndex > nodeIndex) {
-        const i = indexof(dbvt, nodeIndex);
-        const siblingIndex = i === 0 ? p.right : p.left;
-        const s = dbvt.nodes[siblingIndex];
-        const grandparentIndex = p.parent;
-
-        if (grandparentIndex !== -1) {
-            const q = dbvt.nodes[grandparentIndex];
-            if (indexof(dbvt, parentIndex) === 0) {
-                q.left = nodeIndex;
-            } else {
-                q.right = nodeIndex;
-            }
-        } else {
-            dbvt.root = nodeIndex;
-        }
-
-        s.parent = nodeIndex;
-        p.parent = nodeIndex;
-        n.parent = grandparentIndex;
-
-        const n0Index = n.left;
-        const n1Index = n.right;
-        p.left = n0Index;
-        p.right = n1Index;
-        dbvt.nodes[n0Index].parent = parentIndex;
-        dbvt.nodes[n1Index].parent = parentIndex;
-
-        if (i === 0) {
-            n.left = parentIndex;
-            n.right = siblingIndex;
-        } else {
-            n.left = siblingIndex;
-            n.right = parentIndex;
-        }
-
-        // swap volumes
-        const tempAabb = box3.create();
-        box3.copy(tempAabb, p.aabb);
-        box3.copy(p.aabb, n.aabb);
-        box3.copy(n.aabb, tempAabb);
-
-        return parentIndex;
-    }
-
-    return nodeIndex;
 }
 
 /* @optimize */
@@ -414,6 +250,10 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
         }
         sibling.parent = prevIndex;
         releaseNode(dbvt, parentIndex);
+
+        // the collapse restructured prev's children — mark it and its ancestors changed so the
+        // next rebuild re-partitions this region (invariant: changed ⇒ parent.changed).
+        markNodeAndParentsChanged(dbvt, prevIndex);
 
         // refit
         let nodeIndex = prevIndex;
@@ -441,23 +281,21 @@ function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     }
 }
 
-const _bounds = /* @__PURE__ */ box3.create();
-
 export function add(dbvt: DBVT, body: RigidBody): number {
-    const bounds = box3.create();
-
-    // expand body bounds by margin
-    box3.expandByMargin(bounds, body.aabb, dbvt.expansionMargin);
-
-    // create leaf node
+    // create leaf node with fat (margin-expanded) bounds
     const leafIndex = requestNode(dbvt);
     const leaf = dbvt.nodes[leafIndex];
-    box3.copy(leaf.aabb, bounds);
+    box3.expandByMargin(leaf.aabb, body.aabb, dbvt.expansionMargin);
     leaf.bodyIndex = body.index;
-    leaf.height = 0;
 
-    // insert into tree
+    // greedy insert so the body is immediately queryable (a rebuild only happens at the next
+    // step); the balanced re-partition is deferred to the dirty-gated rebuild.
     insertLeaf(dbvt, dbvt.root, leafIndex);
+
+    // mark the new leaf's ancestor chain changed + flag the tree for rebuild
+    const parent = dbvt.nodes[leafIndex].parent;
+    if (parent !== -1) markNodeAndParentsChanged(dbvt, parent);
+    dbvt.dirty = true;
 
     return leafIndex;
 }
@@ -469,15 +307,21 @@ export function remove(dbvt: DBVT, body: RigidBody): void {
     removeLeaf(dbvt, leafIndex);
     releaseNode(dbvt, leafIndex);
     body.dbvtNode = -1;
+    dbvt.dirty = true;
 }
 
 /**
  * @optimize
- * returns true iff the leaf was reinserted (i.e. the body escaped its fat AABB), false when the
- * containment early-out fired or there was nothing to do. the persistent-pair broadphase treats a
- * reinsert as a "moved" event.
+ * returns true iff the body escaped its fat AABB (a "moved" event the persistent-pair broadphase
+ * consumes), false when the containment early-out fired.
+ *
+ * jolt-style widen-in-place + defer: on escape we REPLACE the leaf's fat box (may shrink — this is
+ * the one deviation from jolt, forced by crashcat's persistent pairs, which key keep/destroy on the
+ * fat leaf boxes and would leak stale pairs under monotone-growing leaves), then widen ancestors
+ * (grow-only, monotone until rebuild) and mark the path changed. no remove/reinsert — the balanced
+ * restructure is deferred to the next dirty-gated rebuild. per-move cost is O(depth), typically O(1).
  */
-export function update(dbvt: DBVT, body: RigidBody, lookahead: number): boolean {
+export function update(dbvt: DBVT, body: RigidBody): boolean {
     const leafIndex = body.dbvtNode;
     if (leafIndex === -1) return false;
 
@@ -488,97 +332,209 @@ export function update(dbvt: DBVT, body: RigidBody, lookahead: number): boolean 
         return false;
     }
 
-    // expand body bounds by margin for fat AABB.
-    // margin-only (no motion-directed padding) matches the reference consensus:
-    // bullet ships its size-based directional pad disabled, box2d v3 removed the
-    // displacement pad from the lineage, and jolt widens nodes in place instead.
-    box3.expandByMargin(_bounds, body.aabb, dbvt.expansionMargin);
+    // replace the leaf fat box in place — bit-identical values, at the identical escape moments,
+    // as the old remove+reinsert path, so persistent-pair discovery/sweep see unchanged fat-leaf data
+    box3.expandByMargin(leaf.aabb, body.aabb, dbvt.expansionMargin);
 
-    // remove leaf and get root for reinsertion
-    let rootIndex = removeLeaf(dbvt, leafIndex);
-
-    // walk up from returned root using lookahead
-    if (rootIndex !== -1) {
-        if (lookahead >= 0) {
-            // walk up `lookahead` levels from the returned root
-            for (let i = 0; i < lookahead && rootIndex !== -1; i++) {
-                const root = dbvt.nodes[rootIndex];
-                rootIndex = root.parent;
-            }
-            // if we walked off the tree, use tree root
-            if (rootIndex === -1) {
-                rootIndex = dbvt.root;
-            }
-        } else {
-            // use tree root
-            rootIndex = dbvt.root;
-        }
-    }
-
-    // update leaf volume
-    box3.copy(leaf.aabb, _bounds);
-
-    // reinsert from computed root
-    insertLeaf(dbvt, rootIndex, leafIndex);
+    // widen ancestors to keep containment (grow-only until rebuild) and mark the path changed
+    if (leaf.parent !== -1) widenAndMarkNodeAndParentsChanged(dbvt, leaf.parent, leaf.aabb);
+    dbvt.dirty = true;
 
     return true;
 }
 
-export function optimizeBottomUp(dbvt: DBVT): void {
-    if (dbvt.root === -1) return;
+// -----------------------------------------------------------------------------------------------
+// dirty-gated balanced rebuild (jolt QuadTree::UpdatePrepare, single-threaded + binary + in-place).
+//
+// leaf-preserving partial rebuild: leaves and unchanged-internal subtrees keep their node indices
+// (so body.dbvtNode stays valid — no SetBodyLocation equivalent needed); only `changed` internals
+// are recycled and re-partitioned, plus the always-rebuilt top MAX_DEPTH_MARK_CHANGED levels.
+// because changed ⇒ parent.changed, the freed set is one root-connected subtree of f internals whose
+// frontier is f+1 units and the build allocates exactly f internals → nodes.length is invariant
+// across rebuilds (the old optimizeTopDown leaked every internal on every call).
+// -----------------------------------------------------------------------------------------------
 
-    const leaves: number[] = [];
-    fetchLeaves(dbvt, dbvt.root, leaves);
-    bottomup(dbvt, leaves);
-    dbvt.root = leaves[0];
-}
-
-export function optimizeTopDown(dbvt: DBVT, buThreshold = 128): void {
-    if (dbvt.root === -1) return;
-
-    const leaves: number[] = [];
-    fetchLeaves(dbvt, dbvt.root, leaves);
-    dbvt.root = topdown(dbvt, leaves, buThreshold);
-}
-
-export function optimizeIncremental(dbvt: DBVT, passes: number): void {
-    if (dbvt.root === -1) return;
-    if (passes < 0) {
-        // negative passes means optimize all leaves
-        const leaves: number[] = [];
-        fetchLeaves(dbvt, dbvt.root, leaves);
-        passes = leaves.length;
+// in-place median split of units[begin,end) (and their interleaved centers) on the widest-extent
+// axis of the centers. returns the split midpoint; guarantees ≥1 element per side (degenerate
+// identical/collinear centers fall back to the count midpoint), so the build always terminates.
+function sPartition(begin: number, end: number): number {
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+    for (let k = begin; k < end; k++) {
+        const cx = _buildCenters[k * 3];
+        const cy = _buildCenters[k * 3 + 1];
+        const cz = _buildCenters[k * 3 + 2];
+        if (cx < minX) minX = cx;
+        if (cy < minY) minY = cy;
+        if (cz < minZ) minZ = cz;
+        if (cx > maxX) maxX = cx;
+        if (cy > maxY) maxY = cy;
+        if (cz > maxZ) maxZ = cz;
     }
-    if (passes === 0) return;
+    const ex = maxX - minX;
+    const ey = maxY - minY;
+    const ez = maxZ - minZ;
+    const axis = ex >= ey ? (ex >= ez ? 0 : 2) : ey >= ez ? 1 : 2;
+    const split = 0.5 * ((axis === 0 ? minX : axis === 1 ? minY : minZ) + (axis === 0 ? maxX : axis === 1 ? maxY : maxZ));
 
-    for (let i = 0; i < passes; i++) {
-        let nodeIndex = dbvt.root;
-        let bit = 0;
-
-        // descend following optimization path bits
-        while (nodeIndex !== -1) {
-            const node = dbvt.nodes[nodeIndex];
-            if (isLeaf(node)) break;
-
-            nodeIndex = sort(dbvt, nodeIndex);
-            const sortedNode = dbvt.nodes[nodeIndex];
-            const childBit = (dbvt.optimizationPath >> bit) & 1;
-            nodeIndex = childBit === 0 ? sortedNode.left : sortedNode.right;
-            bit = (bit + 1) & 31; // wrap at 32 bits
-        }
-
-        // update the leaf
-        if (nodeIndex !== -1) {
-            const rootIndex = removeLeaf(dbvt, nodeIndex);
-            if (rootIndex !== -1) {
-                insertLeaf(dbvt, rootIndex, nodeIndex);
-            } else {
-                insertLeaf(dbvt, dbvt.root, nodeIndex);
+    // hoare partition: units[] and centers[] swapped together
+    let lo = begin;
+    let hi = end;
+    while (lo < hi) {
+        while (lo < hi && _buildCenters[lo * 3 + axis] < split) lo++;
+        while (lo < hi && _buildCenters[(hi - 1) * 3 + axis] >= split) hi--;
+        if (lo < hi) {
+            hi--;
+            const u = _buildUnits[lo];
+            _buildUnits[lo] = _buildUnits[hi];
+            _buildUnits[hi] = u;
+            for (let c = 0; c < 3; c++) {
+                const t = _buildCenters[lo * 3 + c];
+                _buildCenters[lo * 3 + c] = _buildCenters[hi * 3 + c];
+                _buildCenters[hi * 3 + c] = t;
             }
+            lo++;
+        }
+    }
+    // degenerate: everything on one side → split down the middle by count so both sides are non-empty
+    if (lo === begin || lo === end) return begin + ((end - begin) >> 1);
+    return lo;
+}
+
+// recursively build a balanced binary tree over units[begin,end). returns the subtree root index.
+// nodes at depth < maxDepthMarkChanged are born `changed` so the drift-prone upper structure is
+// always re-partitioned next rebuild. iterative (explicit stack): a geometric median split can
+// legitimately produce 1/(n-1) partitions repeatedly, so recursion depth can reach O(units).
+function buildTree(dbvt: DBVT, begin: number, end: number, maxDepthMarkChanged: number): number {
+    // explicit frame stack — phase 0 = partition + build left, 1 = build right, 2 = combine.
+    // frameSplit holds the split midpoint (phase 0→1) then the resolved left-child index (phase 1→2).
+    const frameBegin: number[] = [];
+    const frameEnd: number[] = [];
+    const frameDepth: number[] = [];
+    const framePhase: number[] = [];
+    const frameSplit: number[] = [];
+
+    let resultIndex = -1;
+    frameBegin.push(begin);
+    frameEnd.push(end);
+    frameDepth.push(0);
+    framePhase.push(0);
+    frameSplit.push(-1);
+
+    while (frameBegin.length > 0) {
+        const top = frameBegin.length - 1;
+        const b = frameBegin[top];
+        const e = frameEnd[top];
+        const depth = frameDepth[top];
+        const phase = framePhase[top];
+
+        if (e - b === 1) {
+            // leaf or grafted unchanged subtree — return its index unchanged, parent set by caller
+            resultIndex = _buildUnits[b];
+            frameBegin.pop();
+            frameEnd.pop();
+            frameDepth.pop();
+            framePhase.pop();
+            frameSplit.pop();
+            continue;
         }
 
-        dbvt.optimizationPath++;
+        if (phase === 0) {
+            // partition, then descend into the left child; remember the split point
+            const mid = sPartition(b, e);
+            framePhase[top] = 1;
+            frameSplit[top] = mid;
+            frameBegin.push(b);
+            frameEnd.push(mid);
+            frameDepth.push(depth + 1);
+            framePhase.push(0);
+            frameSplit.push(-1);
+        } else if (phase === 1) {
+            // left child resolved into resultIndex — stash it, descend into the right child
+            const mid = frameSplit[top];
+            framePhase[top] = 2;
+            frameSplit[top] = resultIndex; // frameSplit now holds the left-child index
+            frameBegin.push(mid);
+            frameEnd.push(e);
+            frameDepth.push(depth + 1);
+            framePhase.push(0);
+            frameSplit.push(-1);
+        } else {
+            // right child resolved — combine into a new internal parent
+            const ri = resultIndex;
+            const li = frameSplit[top];
+            const p = requestNode(dbvt);
+            const parent = dbvt.nodes[p];
+            const left = dbvt.nodes[li];
+            const right = dbvt.nodes[ri];
+            parent.left = li;
+            parent.right = ri;
+            left.parent = p;
+            right.parent = p;
+            box3.union(parent.aabb, left.aabb, right.aabb);
+            parent.changed = depth < maxDepthMarkChanged;
+            resultIndex = p;
+            frameBegin.pop();
+            frameEnd.pop();
+            frameDepth.pop();
+            framePhase.pop();
+            frameSplit.pop();
+        }
     }
+
+    return resultIndex;
+}
+
+/**
+ * Rebuild the tree into a balanced structure and clear the dirty flag. Leaf-preserving and
+ * partial: unchanged internal subtrees graft in whole (indices untouched); only changed internals
+ * are recycled. O(m log m) in the changed unit count m, not the body count.
+ */
+export function rebuild(dbvt: DBVT, maxDepthMarkChanged = MAX_DEPTH_MARK_CHANGED): void {
+    dbvt.dirty = false;
+    if (dbvt.root === -1) return;
+
+    // phase 1: collect units (leaves + unchanged-internal subtree roots) and free changed internals
+    _buildUnits.length = 0;
+    _collectStack.length = 0;
+    _collectStack.push(dbvt.root);
+    while (_collectStack.length > 0) {
+        const idx = _collectStack.pop()!;
+        const node = dbvt.nodes[idx];
+        // leaf-ness tested BEFORE changed: leaves are always kept as units (never freed), preserving
+        // body.dbvtNode; an unchanged internal grafts whole; a changed internal is opened + recycled
+        if (node.left === -1 || !node.changed) {
+            _buildUnits.push(idx);
+        } else {
+            _collectStack.push(node.left);
+            _collectStack.push(node.right);
+            releaseNode(dbvt, idx);
+        }
+    }
+
+    const m = _buildUnits.length;
+    if (m === 1) {
+        // lone leaf, or the whole tree was unchanged — graft as root
+        dbvt.root = _buildUnits[0];
+        dbvt.nodes[dbvt.root].parent = -1;
+        return;
+    }
+
+    // phase 2: unit centers (interleaved xyz), consumed + reordered in place by the build
+    for (let k = 0; k < m; k++) {
+        const aabb = dbvt.nodes[_buildUnits[k]].aabb;
+        _buildCenters[k * 3] = (aabb[0] + aabb[3]) * 0.5;
+        _buildCenters[k * 3 + 1] = (aabb[1] + aabb[4]) * 0.5;
+        _buildCenters[k * 3 + 2] = (aabb[2] + aabb[5]) * 0.5;
+    }
+
+    // phase 3: median-split build over the units
+    dbvt.root = buildTree(dbvt, 0, m, maxDepthMarkChanged);
+    dbvt.nodes[dbvt.root].parent = -1;
 }
 
 /**

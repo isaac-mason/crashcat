@@ -60,7 +60,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     /* integrate forces into velocities */
     accelerationIntegrationUpdate(world, timeStep);
 
-    /* broadphase: incremental tree optimization */
+    /* broadphase: dirty-gated balanced rebuild, one tree per step (round-robin) */
     broadphase.optimize(world.broadphase);
 
     /* pairs: maintain the persistent pair set and find this frame's colliding pairs */

@@ -12,6 +12,8 @@ import * as dbvt from './dbvt';
 export type Broadphase = {
     /** dynamic bounding volume trees, one per broadphase layer */
     dbvts: dbvt.DBVT[];
+    /** round-robin cursor for the dirty-gated rebuild (jolt's mNextLayerToUpdate) */
+    nextTreeToOptimize: number;
 };
 
 /** initializes broadphase state */
@@ -29,6 +31,7 @@ export function init(layers: Layers): Broadphase {
 
     return {
         dbvts,
+        nextTreeToOptimize: 0,
     };
 }
 
@@ -70,17 +73,22 @@ export function removeBody(broadphase: Broadphase, body: RigidBody): void {
 }
 
 /**
- * Incrementally optimize the trees (matching Bullet's btDbvtBroadphase::collide).
- * bullet default: 1 + (m_leaves * m_dupdates / 100), where m_dupdates = 0 —
- * minimum 1 node per frame is optimized even with 0% setting.
- * Called once per step by updateWorld, before pair finding.
+ * Dirty-gated balanced rebuild (jolt's BroadPhaseQuadTree::UpdatePrepare). Called once per step by
+ * updateWorld, before pair finding. Scans layers from the round-robin cursor and rebuilds the first
+ * dirty tree found — at most one rebuild per step to cap worst-frame cost. A clean tree (e.g. a
+ * settled static field) costs a single boolean check and is never touched; this replaces Bullet's
+ * unconditional per-frame incremental rotation, which never balanced a large static tree.
  */
 export function optimize(broadphase: Broadphase): void {
-    for (let i = 0; i < broadphase.dbvts.length; i++) {
-        const tree = broadphase.dbvts[i];
-        // optimize 1% of tree nodes per frame (minimum 1)
-        const passes = Math.max(1, Math.floor((tree.nodes.length - tree.freeNodeIndices.length) * 0.01));
-        dbvt.optimizeIncremental(tree, passes);
+    const n = broadphase.dbvts.length;
+    for (let i = 0; i < n; i++) {
+        const idx = (broadphase.nextTreeToOptimize + i) % n;
+        const tree = broadphase.dbvts[idx];
+        if (tree.dirty) {
+            dbvt.rebuild(tree);
+            broadphase.nextTreeToOptimize = (idx + 1) % n;
+            return;
+        }
     }
 }
 
@@ -89,10 +97,9 @@ export function updateBody(broadphase: Broadphase, body: RigidBody): boolean {
     if (body.dbvtNode === -1 || body.broadphaseLayer === -1) return false;
     const tree = broadphase.dbvts[body.broadphaseLayer];
 
-    // -1 = use tree root for reinsertion.
     // an escape is a move event: the caller marks the body moved (pairs.markMoved) so it
     // rediscovers its overlaps in the next findCollidingPairs.
-    return dbvt.update(tree, body, -1);
+    return dbvt.update(tree, body);
 }
 
 /** removes and re-adds a body in the broadphase when its layer changes */
