@@ -82,6 +82,12 @@ export type Support = {
         outputScale: number;
         /** owned grow-once buffer that `vertices` points at for the non-uniform scaled slow path */
         scratch: number[];
+        /** borrowed CSR neighbour prefix offsets (shape-owned, length numPoints+1); empty ⇔ brute scan */
+        neighborsStart: number[];
+        /** borrowed CSR flat neighbour indices (shape-owned), indexed via `neighborsStart` */
+        neighbors: number[];
+        /** warm-start hint: the last winning vertex index, carried across support calls within one pair; -1 = cold */
+        lastVertex: number;
     };
     /** triangle (mesh face) — support is whichever of the three vertices has the greatest dot with the direction */
     triangle: {

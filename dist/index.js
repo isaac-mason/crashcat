@@ -4544,7 +4544,7 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 	const rayLen = _ray.length;
 	let stackSize = 0;
 	_castStackNode[stackSize] = dbvt.root;
-	_castStackDist[stackSize] = -Infinity;
+	_castStackDist[stackSize] = rayDistanceToBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, dbvt.nodes[dbvt.root].aabb);
 	stackSize++;
 	while (stackSize > 0) {
 		stackSize--;
@@ -4552,7 +4552,6 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 		const nodeDistance = _castStackDist[stackSize];
 		const node = dbvt.nodes[nodeIndex];
 		if (nodeDistance > length) continue;
-		if (!rayHitsBox3(originX, originY, originZ, dirX, dirY, dirZ, rayLen, node.aabb[0], node.aabb[1], node.aabb[2], node.aabb[3], node.aabb[4], node.aabb[5])) continue;
 		if (!isLeaf(node)) {
 			const leftNode = dbvt.nodes[node.left];
 			const rightNode = dbvt.nodes[node.right];
@@ -7591,7 +7590,10 @@ function createSupport() {
 			vertices: EMPTY_VERTICES,
 			vertexCount: 0,
 			outputScale: 1,
-			scratch: []
+			scratch: [],
+			neighborsStart: EMPTY_VERTICES,
+			neighbors: EMPTY_VERTICES,
+			lastVertex: -1
 		},
 		triangle: {
 			a: create$48(),
@@ -7688,25 +7690,58 @@ function getSupport(out, support, direction) {
 			break;
 		}
 		case 4: {
-			const vertices = support.hull.vertices;
-			const length = support.hull.vertexCount * 3;
-			let bestDot = -Infinity;
+			const hull = support.hull;
+			const vertices = hull.vertices;
+			const neighborsStart = hull.neighborsStart;
 			supportX = 0;
 			supportY = 0;
 			supportZ = 0;
-			for (let i = 0; i < length; i += 3) {
-				const vertexX = vertices[i];
-				const vertexY = vertices[i + 1];
-				const vertexZ = vertices[i + 2];
-				const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
-				if (dot > bestDot) {
-					bestDot = dot;
-					supportX = vertexX;
-					supportY = vertexY;
-					supportZ = vertexZ;
+			if (neighborsStart.length === 0 || hull.lastVertex === -1) {
+				const length = hull.vertexCount * 3;
+				let bestDot = -Infinity;
+				let bestBase = 0;
+				for (let i = 0; i < length; i += 3) {
+					const vertexX = vertices[i];
+					const vertexY = vertices[i + 1];
+					const vertexZ = vertices[i + 2];
+					const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
+					if (dot > bestDot) {
+						bestDot = dot;
+						bestBase = i;
+						supportX = vertexX;
+						supportY = vertexY;
+						supportZ = vertexZ;
+					}
 				}
+				if (neighborsStart.length !== 0) hull.lastVertex = bestBase / 3;
+			} else {
+				const neighbors = hull.neighbors;
+				const vertexCount = hull.vertexCount;
+				let cur = hull.lastVertex;
+				let curBase = cur * 3;
+				let bestDot = vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
+				let steps = 0;
+				let prev;
+				do {
+					prev = cur;
+					const end = neighborsStart[cur + 1];
+					for (let k = neighborsStart[cur]; k < end; k++) {
+						const n = neighbors[k];
+						const nb = n * 3;
+						const d = vertices[nb] * directionX + vertices[nb + 1] * directionY + vertices[nb + 2] * directionZ;
+						if (d > bestDot) {
+							bestDot = d;
+							cur = n;
+						}
+					}
+				} while (cur !== prev && ++steps <= vertexCount);
+				hull.lastVertex = cur;
+				curBase = cur * 3;
+				supportX = vertices[curBase];
+				supportY = vertices[curBase + 1];
+				supportZ = vertices[curBase + 2];
 			}
-			const outputScale = support.hull.outputScale;
+			const outputScale = hull.outputScale;
 			supportX *= outputScale;
 			supportY *= outputScale;
 			supportZ *= outputScale;
@@ -7853,6 +7888,9 @@ function setPolygonSupport(out, vertices, vertexCount) {
 	out.hull.vertices = vertices;
 	out.hull.vertexCount = vertexCount;
 	out.hull.outputScale = 1;
+	out.hull.neighborsStart = EMPTY_VERTICES;
+	out.hull.neighbors = EMPTY_VERTICES;
+	out.hull.lastVertex = -1;
 }
 /** point operand (collidePoint) — copies the point */
 function setPointSupport(out, point) {
@@ -8081,6 +8119,9 @@ function setHullSupport(out, shape, mode, scale) {
 	out.addRadius = 0;
 	const hull = out.hull;
 	hull.vertexCount = shape.numPoints;
+	hull.neighborsStart = shape.pointNeighborsStart;
+	hull.neighbors = shape.pointNeighbors;
+	hull.lastVertex = -1;
 	if (scale[0] === scale[1] && scale[1] === scale[2] && scale[0] > 0) {
 		const s = scale[0];
 		hull.outputScale = s;
@@ -25556,6 +25597,7 @@ function removeTwoEdgeFace(inFace, ioAffectedFaces) {
 //#endregion
 //#region src/shapes/convex-hull.ts
 var convex_hull_exports = /* @__PURE__ */ __exportAll({
+	SUPPORT_HILL_CLIMB_MIN_POINTS: () => 32,
 	create: () => create$9,
 	def: () => def$8
 });
@@ -25791,6 +25833,28 @@ function create$9(o) {
 			planes
 		}, finalConvexRadius, shrunkPointPositions);
 	}
+	const bakeAdjacency = o.bakeSupportAdjacency ?? numPoints > 32;
+	const pointNeighborsStart = [];
+	const pointNeighbors = [];
+	if (bakeAdjacency) {
+		const neighborSets = [];
+		for (let p = 0; p < numPoints; p++) neighborSets.push(/* @__PURE__ */ new Set());
+		for (const face of hullFaces) {
+			const first = face.firstVertex;
+			const count = face.numVertices;
+			for (let v = 0; v < count; v++) {
+				const a = vertexIndices[first + v];
+				const b = vertexIndices[first + (v + 1) % count];
+				neighborSets[a].add(b);
+				neighborSets[b].add(a);
+			}
+		}
+		pointNeighborsStart.push(0);
+		for (let p = 0; p < numPoints; p++) {
+			for (const n of neighborSets[p]) pointNeighbors.push(n);
+			pointNeighborsStart.push(pointNeighbors.length);
+		}
+	}
 	return {
 		type: 3,
 		pointPositions,
@@ -25801,6 +25865,8 @@ function create$9(o) {
 		faces: hullFaces,
 		planes,
 		vertexIndices,
+		pointNeighborsStart,
+		pointNeighbors,
 		convexRadius: finalConvexRadius,
 		density,
 		materialId: o.materialId ?? -1,
@@ -25850,18 +25916,36 @@ function getSupportingFace$8(ioResult, direction, shape, _subShapeId) {
 	const face = ioResult.face;
 	const scale = ioResult.scale;
 	const transform = ioResult.transform;
-	set$8(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
-	multiply$2(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[0].normal);
-	const plane0NormalLength = length(_supportingFace_planeNormal);
-	let bestDot = dot$2(_supportingFace_planeNormal, direction) / plane0NormalLength;
+	const planes = shape.planes;
 	let bestFaceIdx = 0;
-	for (let i = 1; i < shape.planes.length; i++) {
-		multiply$2(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[i].normal);
-		const planeNormalLength = length(_supportingFace_planeNormal);
-		const dot = dot$2(_supportingFace_planeNormal, direction) / planeNormalLength;
-		if (dot < bestDot) {
-			bestDot = dot;
-			bestFaceIdx = i;
+	if (scale[0] === scale[1] && scale[1] === scale[2]) {
+		const dx = direction[0];
+		const dy = direction[1];
+		const dz = direction[2];
+		const sign = scale[0] < 0 ? -1 : 1;
+		const n0 = planes[0].normal;
+		let bestDot = sign * (n0[0] * dx + n0[1] * dy + n0[2] * dz);
+		for (let i = 1; i < planes.length; i++) {
+			const n = planes[i].normal;
+			const dot = sign * (n[0] * dx + n[1] * dy + n[2] * dz);
+			if (dot < bestDot) {
+				bestDot = dot;
+				bestFaceIdx = i;
+			}
+		}
+	} else {
+		set$8(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
+		multiply$2(_supportingFace_planeNormal, _supportingFace_invScale, planes[0].normal);
+		const plane0NormalLength = length(_supportingFace_planeNormal);
+		let bestDot = dot$2(_supportingFace_planeNormal, direction) / plane0NormalLength;
+		for (let i = 1; i < planes.length; i++) {
+			multiply$2(_supportingFace_planeNormal, _supportingFace_invScale, planes[i].normal);
+			const planeNormalLength = length(_supportingFace_planeNormal);
+			const dot = dot$2(_supportingFace_planeNormal, direction) / planeNormalLength;
+			if (dot < bestDot) {
+				bestDot = dot;
+				bestFaceIdx = i;
+			}
 		}
 	}
 	const bestFace = shape.faces[bestFaceIdx];

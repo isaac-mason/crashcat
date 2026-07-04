@@ -87,6 +87,12 @@ export type Support = {
         outputScale: number;
         /** owned grow-once buffer that `vertices` points at for the non-uniform scaled slow path */
         scratch: number[];
+        /** borrowed CSR neighbour prefix offsets (shape-owned, length numPoints+1); empty ⇔ brute scan */
+        neighborsStart: number[];
+        /** borrowed CSR flat neighbour indices (shape-owned), indexed via `neighborsStart` */
+        neighbors: number[];
+        /** warm-start hint: the last winning vertex index, carried across support calls within one pair; -1 = cold */
+        lastVertex: number;
     };
 
     /** triangle (mesh face) — support is whichever of the three vertices has the greatest dot with the direction */
@@ -112,7 +118,15 @@ export function createSupport(): Support {
         sphere: { radius: 0 },
         capsule: { halfHeight: 0, radius: 0 },
         cylinder: { radius: 0, halfHeight: 0 },
-        hull: { vertices: EMPTY_VERTICES, vertexCount: 0, outputScale: 1, scratch: [] },
+        hull: {
+            vertices: EMPTY_VERTICES,
+            vertexCount: 0,
+            outputScale: 1,
+            scratch: [],
+            neighborsStart: EMPTY_VERTICES,
+            neighbors: EMPTY_VERTICES,
+            lastVertex: -1,
+        },
         triangle: { a: vec3.create(), b: vec3.create(), c: vec3.create() },
         point: { position: vec3.create() },
     };
@@ -210,26 +224,69 @@ export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
             break;
         }
         case SupportKind.HULL: {
-            const vertices = support.hull.vertices;
-            const length = support.hull.vertexCount * 3;
-            let bestDot = -Infinity;
+            const hull = support.hull;
+            const vertices = hull.vertices;
+            const neighborsStart = hull.neighborsStart;
             supportX = 0;
             supportY = 0;
             supportZ = 0;
-            for (let i = 0; i < length; i += 3) {
-                const vertexX = vertices[i];
-                const vertexY = vertices[i + 1];
-                const vertexZ = vertices[i + 2];
-                const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
-                if (dot > bestDot) {
-                    bestDot = dot;
-                    supportX = vertexX;
-                    supportY = vertexY;
-                    supportZ = vertexZ;
+
+            if (neighborsStart.length === 0 || hull.lastVertex === -1) {
+                // brute scan — no adjacency baked, or cold pair-fill. when accelerated, this first
+                // call seeds the warm-start hint with the exact argmax.
+                const length = hull.vertexCount * 3;
+                let bestDot = -Infinity;
+                let bestBase = 0;
+                for (let i = 0; i < length; i += 3) {
+                    const vertexX = vertices[i];
+                    const vertexY = vertices[i + 1];
+                    const vertexZ = vertices[i + 2];
+                    const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
+                    if (dot > bestDot) {
+                        bestDot = dot;
+                        bestBase = i;
+                        supportX = vertexX;
+                        supportY = vertexY;
+                        supportZ = vertexZ;
+                    }
                 }
+                if (neighborsStart.length !== 0) {
+                    hull.lastVertex = bestBase / 3;
+                }
+            } else {
+                // warm hill-climb over the baked 1-ring: take the best neighbour of the current
+                // vertex, repeat until none improves. a local max over a convex hull's vertex graph
+                // is the global max, so this returns a true support vertex. steps cap guards
+                // non-termination.
+                const neighbors = hull.neighbors;
+                const vertexCount = hull.vertexCount;
+                let cur = hull.lastVertex;
+                let curBase = cur * 3;
+                let bestDot = vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
+                let steps = 0;
+                let prev: number;
+                do {
+                    prev = cur;
+                    const end = neighborsStart[cur + 1];
+                    for (let k = neighborsStart[cur]; k < end; k++) {
+                        const n = neighbors[k];
+                        const nb = n * 3;
+                        const d = vertices[nb] * directionX + vertices[nb + 1] * directionY + vertices[nb + 2] * directionZ;
+                        if (d > bestDot) {
+                            bestDot = d;
+                            cur = n;
+                        }
+                    }
+                } while (cur !== prev && ++steps <= vertexCount);
+                hull.lastVertex = cur;
+                curBase = cur * 3;
+                supportX = vertices[curBase];
+                supportY = vertices[curBase + 1];
+                supportZ = vertices[curBase + 2];
             }
+
             // uniform-scale fast path: scale the winning local vertex (must precede addRadius + transform-back)
-            const outputScale = support.hull.outputScale;
+            const outputScale = hull.outputScale;
             supportX *= outputScale;
             supportY *= outputScale;
             supportZ *= outputScale;
@@ -401,6 +458,10 @@ export function setPolygonSupport(out: Support, vertices: number[], vertexCount:
     out.hull.vertices = vertices; // read-only borrow, valid for this pair
     out.hull.vertexCount = vertexCount;
     out.hull.outputScale = 1;
+    // a borrowed polygon face carries no adjacency: force the brute scan
+    out.hull.neighborsStart = EMPTY_VERTICES;
+    out.hull.neighbors = EMPTY_VERTICES;
+    out.hull.lastVertex = -1;
 }
 
 /** point operand (collidePoint) — copies the point */
@@ -681,6 +742,13 @@ export function setHullSupport(out: Support, shape: ConvexHullShape, mode: Suppo
 
     const hull = out.hull;
     hull.vertexCount = shape.numPoints;
+
+    // borrow the shape's CSR adjacency (empty ⇔ not baked → brute scan). valid for the shrunk set (same
+    // count/order) and every scale path (affine transforms preserve hull vertex adjacency). reset the
+    // warm-start hint so this pair-fill starts cold (first getSupport call brute-seeds it).
+    hull.neighborsStart = shape.pointNeighborsStart;
+    hull.neighbors = shape.pointNeighbors;
+    hull.lastVertex = -1;
 
     // uniform positive scale (identity is just s=1): borrow the shape-owned vertex arrays and scale the
     // winning support point in getSupport — exact, and no per-pair bake. non-uniform / mirrored scale:

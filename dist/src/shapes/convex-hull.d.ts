@@ -14,6 +14,8 @@ export type ConvexHullShapeSettings = {
     density?: number;
     /** material identifier @default -1 */
     materialId?: number;
+    /** bake the vertex 1-ring adjacency used to accelerate support queries by hill climbing. undefined = auto (bake when numPoints > SUPPORT_HILL_CLIMB_MIN_POINTS), false = never, true = always */
+    bakeSupportAdjacency?: boolean;
 };
 /** a convex hull shape */
 export type ConvexHullShape = {
@@ -34,6 +36,14 @@ export type ConvexHullShape = {
     planes: ConvexHullPlane[];
     /** flattened vertex indices for all faces */
     vertexIndices: number[];
+    /**
+     * CSR vertex 1-ring adjacency for support hill climbing; empty ⇔ not baked (runtime brute-scan dispatch).
+     * prefix offsets into `pointNeighbors`, length numPoints+1: vertex `p`'s neighbours are
+     * `pointNeighbors[pointNeighborsStart[p] .. pointNeighborsStart[p+1])`.
+     */
+    pointNeighborsStart: number[];
+    /** flat neighbour point indices, indexed via `pointNeighborsStart`; empty ⇔ not baked */
+    pointNeighbors: number[];
     /** convex radius */
     convexRadius: number;
     /** shape density */
@@ -61,6 +71,8 @@ export type ConvexHullPlane = {
     /** plane constant */
     constant: number;
 };
+/** auto-bake the support hill-climb adjacency above this vertex count (below it, brute scan wins) */
+export declare const SUPPORT_HILL_CLIMB_MIN_POINTS = 32;
 /** create a convex hull shape */
 export declare function create(o: ConvexHullShapeSettings): ConvexHullShape;
 export declare const def: import("./shapes").ShapeDef<ConvexHullShape>;

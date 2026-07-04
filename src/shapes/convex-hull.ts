@@ -33,6 +33,8 @@ export type ConvexHullShapeSettings = {
     density?: number;
     /** material identifier @default -1 */
     materialId?: number;
+    /** bake the vertex 1-ring adjacency used to accelerate support queries by hill climbing. undefined = auto (bake when numPoints > SUPPORT_HILL_CLIMB_MIN_POINTS), false = never, true = always */
+    bakeSupportAdjacency?: boolean;
 };
 
 /** a convex hull shape */
@@ -54,6 +56,14 @@ export type ConvexHullShape = {
     planes: ConvexHullPlane[];
     /** flattened vertex indices for all faces */
     vertexIndices: number[];
+    /**
+     * CSR vertex 1-ring adjacency for support hill climbing; empty ⇔ not baked (runtime brute-scan dispatch).
+     * prefix offsets into `pointNeighbors`, length numPoints+1: vertex `p`'s neighbours are
+     * `pointNeighbors[pointNeighborsStart[p] .. pointNeighborsStart[p+1])`.
+     */
+    pointNeighborsStart: number[];
+    /** flat neighbour point indices, indexed via `pointNeighborsStart`; empty ⇔ not baked */
+    pointNeighbors: number[];
     /** convex radius */
     convexRadius: number;
     /** shape density */
@@ -86,6 +96,9 @@ export type ConvexHullPlane = {
 
 const MAX_POINTS_IN_HULL = 256;
 const MAX_FACE_VERTICES = 32;
+
+/** auto-bake the support hill-climb adjacency above this vertex count (below it, brute scan wins) */
+export const SUPPORT_HILL_CLIMB_MIN_POINTS = 32;
 
 const _tetrahedronVertex1 = /* @__PURE__ */ vec3.create();
 const _tetrahedronVertex2 = /* @__PURE__ */ vec3.create();
@@ -455,6 +468,36 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         );
     }
 
+    // bake the vertex 1-ring adjacency (CSR) for support hill climbing. one table serves every scale
+    // path (affine transforms preserve hull vertex adjacency) and the shrunk point set (same count/order).
+    const bakeAdjacency = o.bakeSupportAdjacency ?? numPoints > SUPPORT_HILL_CLIMB_MIN_POINTS;
+    const pointNeighborsStart: number[] = [];
+    const pointNeighbors: number[] = [];
+    if (bakeAdjacency) {
+        // walk every face's consecutive vertex pairs (each polygon edge, both directions); dedup per vertex
+        const neighborSets: Set<number>[] = [];
+        for (let p = 0; p < numPoints; p++) {
+            neighborSets.push(new Set<number>());
+        }
+        for (const face of hullFaces) {
+            const first = face.firstVertex;
+            const count = face.numVertices;
+            for (let v = 0; v < count; v++) {
+                const a = vertexIndices[first + v];
+                const b = vertexIndices[first + ((v + 1) % count)];
+                neighborSets[a].add(b);
+                neighborSets[b].add(a);
+            }
+        }
+        pointNeighborsStart.push(0);
+        for (let p = 0; p < numPoints; p++) {
+            for (const n of neighborSets[p]) {
+                pointNeighbors.push(n);
+            }
+            pointNeighborsStart.push(pointNeighbors.length);
+        }
+    }
+
     const shape: ConvexHullShape = {
         type: ShapeType.CONVEX_HULL,
         pointPositions,
@@ -465,6 +508,8 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         faces: hullFaces,
         planes,
         vertexIndices,
+        pointNeighborsStart,
+        pointNeighbors,
         convexRadius: finalConvexRadius,
         density,
         materialId: o.materialId ?? -1,
@@ -533,25 +578,46 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
     const scale = ioResult.scale;
     const transform = ioResult.transform;
 
-    // compute inverse scale for normal transformation
-    // normals transform by (M^-1)^T, for diagonal scale matrix this is 1/scale
-    vec3.set(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
-
-    // transform first plane normal and find initial best
-    vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[0].normal);
-    const plane0NormalLength = vec3.length(_supportingFace_planeNormal);
-    let bestDot = vec3.dot(_supportingFace_planeNormal, direction) / plane0NormalLength;
+    const planes = shape.planes;
     let bestFaceIdx = 0;
 
-    // find face with smallest (most negative) dot product
-    for (let i = 1; i < shape.planes.length; i++) {
-        vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, shape.planes[i].normal);
-        const planeNormalLength = vec3.length(_supportingFace_planeNormal);
-        const dot = vec3.dot(_supportingFace_planeNormal, direction) / planeNormalLength;
+    if (scale[0] === scale[1] && scale[1] === scale[2]) {
+        // uniform scale: |invScale·normal| is one constant across all planes (normals are unit at
+        // build), so normalization cannot change the argmin — no per-plane sqrt. mirrored (negative)
+        // scale flips every dot equally, folded into the sign.
+        const dx = direction[0];
+        const dy = direction[1];
+        const dz = direction[2];
+        const sign = scale[0] < 0 ? -1 : 1;
+        const n0 = planes[0].normal;
+        let bestDot = sign * (n0[0] * dx + n0[1] * dy + n0[2] * dz);
+        for (let i = 1; i < planes.length; i++) {
+            const n = planes[i].normal;
+            const dot = sign * (n[0] * dx + n[1] * dy + n[2] * dz);
+            if (dot < bestDot) {
+                bestDot = dot;
+                bestFaceIdx = i;
+            }
+        }
+    } else {
+        // non-uniform scale: normals transform by (M^-1)^T = 1/scale for a diagonal scale matrix
+        vec3.set(_supportingFace_invScale, 1 / scale[0], 1 / scale[1], 1 / scale[2]);
 
-        if (dot < bestDot) {
-            bestDot = dot;
-            bestFaceIdx = i;
+        // transform first plane normal and find initial best
+        vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, planes[0].normal);
+        const plane0NormalLength = vec3.length(_supportingFace_planeNormal);
+        let bestDot = vec3.dot(_supportingFace_planeNormal, direction) / plane0NormalLength;
+
+        // find face with smallest (most negative) dot product
+        for (let i = 1; i < planes.length; i++) {
+            vec3.multiply(_supportingFace_planeNormal, _supportingFace_invScale, planes[i].normal);
+            const planeNormalLength = vec3.length(_supportingFace_planeNormal);
+            const dot = vec3.dot(_supportingFace_planeNormal, direction) / planeNormalLength;
+
+            if (dot < bestDot) {
+                bestDot = dot;
+                bestFaceIdx = i;
+            }
         }
     }
 
