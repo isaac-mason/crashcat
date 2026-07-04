@@ -1,4 +1,4 @@
-import { mat4, quat, vec3, type Vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, convexHull, cylinder, sphere } from '../../src';
 import {
@@ -171,9 +171,7 @@ describe('getSupport — cylinder', () => {
 
 describe('getSupport — convex hull', () => {
     // unit cube corners (plus centre, which must not survive the hull)
-    const positions = [
-        -1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1, 0, 0, 0,
-    ];
+    const positions = [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1, 0, 0, 0];
     const shape = convexHull.create({ positions, convexRadius: 0 });
 
     test('INCLUDE returns the max-dot hull vertex for every direction', () => {
@@ -286,7 +284,11 @@ describe('getSupport — convex hull scaling', () => {
             const cx = cube.pointPositions[i];
             const cy = cube.pointPositions[i + 1];
             const cz = cube.pointPositions[i + 2];
-            ref.push(cx * scale[0] - Math.sign(cx) * rScaled, cy * scale[1] - Math.sign(cy) * rScaled, cz * scale[2] - Math.sign(cz) * rScaled);
+            ref.push(
+                cx * scale[0] - Math.sign(cx) * rScaled,
+                cy * scale[1] - Math.sign(cy) * rScaled,
+                cz * scale[2] - Math.sign(cz) * rScaled,
+            );
         }
         for (const dir of dirs) {
             expectVec(at(s, dir), Array.from(bruteForceMaxDot(ref, cube.numPoints, dir)), 9);

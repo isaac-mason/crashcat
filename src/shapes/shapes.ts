@@ -363,12 +363,7 @@ export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
     subShapeId: SubShapeId,
 ) => void;
 
-export type SetSupportImpl<S extends ShapeBase> = (
-    out: Support,
-    shape: S,
-    mode: SupportFunctionMode,
-    scale: Vec3,
-) => void;
+export type SetSupportImpl<S extends ShapeBase> = (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
 
 export type ShapeDef<S extends ShapeBase> = {
     type: ShapeType;

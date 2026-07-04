@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
 import { vec3 } from 'mathcat';
+import { describe, expect, test } from 'vitest';
 import { ShapeType, scaled, sphere } from '../../src';
 
 describe('Scaled shape AABB caching', () => {

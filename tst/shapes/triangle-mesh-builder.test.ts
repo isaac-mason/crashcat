@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'vitest';
-import { buildTriangleMesh } from '../../src/shapes/utils/triangle-mesh-builder';
+import { describe, expect, test } from 'vitest';
 import { triangleMeshBvh } from '../../src';
+import { buildTriangleMesh } from '../../src/shapes/utils/triangle-mesh-builder';
 import { getActiveEdges } from '../../src/shapes/utils/triangle-mesh-data';
 
 const activeEdgeCosThresholdAngle = 0.996195;
@@ -14,7 +14,7 @@ describe('TriangleMeshBuilder', () => {
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -29,7 +29,7 @@ describe('TriangleMeshBuilder', () => {
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -44,7 +44,7 @@ describe('TriangleMeshBuilder', () => {
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -57,7 +57,7 @@ describe('TriangleMeshBuilder', () => {
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(0);
@@ -70,7 +70,7 @@ describe('TriangleMeshBuilder', () => {
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -84,7 +84,8 @@ describe('TriangleMeshBuilder', () => {
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
 
-activeEdgeCosThresholdAngle            });
+                activeEdgeCosThresholdAngle,
+            });
 
             expect(tightResult.data.triangleCount).toBe(1);
 
@@ -95,7 +96,8 @@ activeEdgeCosThresholdAngle            });
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
 
-activeEdgeCosThresholdAngle            });
+                activeEdgeCosThresholdAngle,
+            });
 
             expect(looseResult.data.triangleCount).toBe(0);
         });
@@ -109,7 +111,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -122,12 +124,11 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
         });
-
 
         test('keeps unique triangles', () => {
             const result = buildTriangleMesh({
@@ -136,7 +137,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -149,7 +150,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -179,7 +180,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -192,7 +193,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -207,7 +208,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -221,7 +222,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -237,7 +238,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.bvh).toBeDefined();
@@ -252,7 +253,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.bvh.buffer.length).toBeGreaterThan(0);
@@ -265,7 +266,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -281,7 +282,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(0);
@@ -294,7 +295,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(0);
@@ -321,7 +322,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(100);
@@ -340,7 +341,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(1);
@@ -358,7 +359,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -384,7 +385,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -402,7 +403,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(getActiveEdges(result.data, 0)).toBe(0b111);
@@ -424,7 +425,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);
@@ -445,8 +446,7 @@ activeEdgeCosThresholdAngle            });
                     // Apex
                     0.5, 0.5, 1,
                 ],
-                indices: 
-                [
+                indices: [
                     // Base (smooth) - consistent CCW winding
                     0, 1, 2, 0, 2, 3,
                     // Sides (sharp relative to base) - consistent CCW winding
@@ -455,7 +455,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             // All 6 triangles should be present (no degenerates, no duplicates)
@@ -489,7 +489,7 @@ activeEdgeCosThresholdAngle            });
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
-                activeEdgeCosThresholdAngle
+                activeEdgeCosThresholdAngle,
             });
 
             expect(result.data.triangleCount).toBe(2);

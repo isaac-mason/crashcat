@@ -451,9 +451,7 @@ export function penetrationDepthStepEPA(
 
         // get distance squared along normal
         const normalLenSq =
-            triangle.normalX * triangle.normalX +
-            triangle.normalY * triangle.normalY +
-            triangle.normalZ * triangle.normalZ;
+            triangle.normalX * triangle.normalX + triangle.normalY * triangle.normalY + triangle.normalZ * triangle.normalZ;
         const distSq = (dot * dot) / normalLenSq;
 
         // check for convergence
@@ -517,8 +515,7 @@ export function penetrationDepthStepEPA(
 
     // calculate penetration normal and depth
     const normalLengthSq = last.normalX * last.normalX + last.normalY * last.normalY + last.normalZ * last.normalZ;
-    const centroidDotNormal =
-        last.centroidX * last.normalX + last.centroidY * last.normalY + last.centroidZ * last.normalZ;
+    const centroidDotNormal = last.centroidX * last.normalX + last.centroidY * last.normalY + last.centroidZ * last.normalZ;
 
     // penetration normal calculation
     const penetrationNormal = _epa_penetrationNormal;
@@ -668,13 +665,7 @@ export function penetrationCastShape(
         shapeBSupport.addRadius = convexRadiusB;
 
         if (
-            !penetrationDepthStepEPA(
-                _castShape_penetrationDepth,
-                shapeASupport,
-                shapeBSupport,
-                penetrationTolerance,
-                out.simplex,
-            )
+            !penetrationDepthStepEPA(_castShape_penetrationDepth, shapeASupport, shapeBSupport, penetrationTolerance, out.simplex)
         ) {
             out.hit = false;
             return;

@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
 import { mat4, quat, vec3 } from 'mathcat';
-import * as motionProperties from '../../src/body/motion-properties';
+import { describe, expect, it } from 'vitest';
 import { DOF_ALL } from '../../src/body/dof';
+import * as motionProperties from '../../src/body/motion-properties';
 
 describe('multiplyWorldSpaceInverseInertiaByVector', () => {
     it('should produce same result as getInverseInertiaForRotation followed by matrix-vector multiply', () => {
@@ -26,12 +26,7 @@ describe('multiplyWorldSpaceInverseInertiaByVector', () => {
         const result1 = mat4.multiply3x3Vec(vec3.create(), invInertia, inputVec);
 
         // method 2: direct vector multiply
-        const result2 = motionProperties.multiplyWorldSpaceInverseInertiaByVector(
-            vec3.create(),
-            mp,
-            bodyQuat,
-            inputVec,
-        );
+        const result2 = motionProperties.multiplyWorldSpaceInverseInertiaByVector(vec3.create(), mp, bodyQuat, inputVec);
 
         expect(result1[0]).toBeCloseTo(result2[0], 10);
         expect(result1[1]).toBeCloseTo(result2[1], 10);
@@ -49,17 +44,12 @@ describe('multiplyWorldSpaceInverseInertiaByVector', () => {
         const bodyQuat = quat.create(); // identity
         const inputVec = vec3.fromValues(1, 1, 1);
 
-        const result = motionProperties.multiplyWorldSpaceInverseInertiaByVector(
-            vec3.create(),
-            mp,
-            bodyQuat,
-            inputVec,
-        );
+        const result = motionProperties.multiplyWorldSpaceInverseInertiaByVector(vec3.create(), mp, bodyQuat, inputVec);
 
         // Y component should be 0 (locked), X and Z should be non-zero
-        expect(result[0]).toBeCloseTo(1, 10);  // invInertiaDiag[0] * 1
-        expect(result[1]).toBeCloseTo(0, 10);  // locked
-        expect(result[2]).toBeCloseTo(3, 10);  // invInertiaDiag[2] * 1
+        expect(result[0]).toBeCloseTo(1, 10); // invInertiaDiag[0] * 1
+        expect(result[1]).toBeCloseTo(0, 10); // locked
+        expect(result[2]).toBeCloseTo(3, 10); // invInertiaDiag[2] * 1
     });
 });
 
@@ -76,14 +66,14 @@ describe('getInverseInertiaForRotation', () => {
 
         const bodyRotation = mat4.create(); // identity
         const out = mat4.create();
-        
+
         motionProperties.getInverseInertiaForRotation(out, mp, bodyRotation);
 
         // diagonal should be 2.5, off-diagonals should be 0
         expect(out[0]).toBeCloseTo(2.5, 10);
         expect(out[5]).toBeCloseTo(2.5, 10);
         expect(out[10]).toBeCloseTo(2.5, 10);
-        
+
         // off-diagonals should be ~0
         expect(out[1]).toBeCloseTo(0, 10);
         expect(out[2]).toBeCloseTo(0, 10);
@@ -107,7 +97,7 @@ describe('getInverseInertiaForRotation', () => {
         const identityRot = mat4.create();
         const out1 = mat4.create();
         motionProperties.getInverseInertiaForRotation(out1, mp, identityRot);
-        
+
         expect(out1[0]).toBeCloseTo(1, 10);
         expect(out1[5]).toBeCloseTo(2, 10);
         expect(out1[10]).toBeCloseTo(3, 10);
@@ -123,8 +113,8 @@ describe('getInverseInertiaForRotation', () => {
         // new X axis is old Y axis -> invInertia_xx = old invInertia_yy = 2
         // new Y axis is old -X axis -> invInertia_yy = old invInertia_xx = 1
         // Z stays same -> invInertia_zz = 3
-        expect(out2[0]).toBeCloseTo(2, 6);  // Ixx^-1
-        expect(out2[5]).toBeCloseTo(1, 6);  // Iyy^-1
+        expect(out2[0]).toBeCloseTo(2, 6); // Ixx^-1
+        expect(out2[5]).toBeCloseTo(1, 6); // Iyy^-1
         expect(out2[10]).toBeCloseTo(3, 6); // Izz^-1
     });
 
@@ -166,14 +156,14 @@ describe('getInverseInertiaForRotation', () => {
         motionProperties.getInverseInertiaForRotation(out, mp, identityRot);
 
         // row 0 and column 0 should be masked to 0
-        expect(out[0]).toBeCloseTo(0, 10);  // col0, row0
-        expect(out[1]).toBeCloseTo(0, 10);  // col0, row1
-        expect(out[2]).toBeCloseTo(0, 10);  // col0, row2
-        expect(out[4]).toBeCloseTo(0, 10);  // col1, row0
-        expect(out[8]).toBeCloseTo(0, 10);  // col2, row0
-        
+        expect(out[0]).toBeCloseTo(0, 10); // col0, row0
+        expect(out[1]).toBeCloseTo(0, 10); // col0, row1
+        expect(out[2]).toBeCloseTo(0, 10); // col0, row2
+        expect(out[4]).toBeCloseTo(0, 10); // col1, row0
+        expect(out[8]).toBeCloseTo(0, 10); // col2, row0
+
         // remaining should be unchanged
-        expect(out[5]).toBeCloseTo(2, 10);  // col1, row1 (Iyy^-1)
+        expect(out[5]).toBeCloseTo(2, 10); // col1, row1 (Iyy^-1)
         expect(out[10]).toBeCloseTo(3, 10); // col2, row2 (Izz^-1)
     });
 
@@ -192,9 +182,9 @@ describe('getInverseInertiaForRotation', () => {
         motionProperties.getInverseInertiaForRotation(out, mp, bodyRot);
 
         // check symmetry: out[row, col] === out[col, row]
-        expect(out[1]).toBeCloseTo(out[4], 10);  // (0,1) vs (1,0)
-        expect(out[2]).toBeCloseTo(out[8], 10);  // (0,2) vs (2,0)
-        expect(out[6]).toBeCloseTo(out[9], 10);  // (1,2) vs (2,1)
+        expect(out[1]).toBeCloseTo(out[4], 10); // (0,1) vs (1,0)
+        expect(out[2]).toBeCloseTo(out[8], 10); // (0,2) vs (2,0)
+        expect(out[6]).toBeCloseTo(out[9], 10); // (1,2) vs (2,1)
     });
 
     it('should produce result matching manual R * D * R^T computation', () => {
@@ -216,19 +206,19 @@ describe('getInverseInertiaForRotation', () => {
         // R = [[c, 0, s], [0, 1, 0], [-s, 0, c]] where c=cos(45)=s=sin(45)=sqrt(2)/2
         const c = Math.cos(Math.PI / 4);
         const s = Math.sin(Math.PI / 4);
-        
+
         // R * D has columns: [c*1, 0, -s*1], [0, 2*1, 0], [s*3, 0, c*3]
         // then (R*D) * R^T...
         // I_world[0][0] = (c*1)*c + 0*0 + (s*3)*s = c²*1 + s²*3
         // I_world[0][2] = (c*1)*(-s) + 0*0 + (s*3)*c = -cs + 3cs = 2cs
         // I_world[1][1] = 0 + 2*1 + 0 = 2
         // I_world[2][2] = (-s*1)*(-s) + 0 + (c*3)*c = s²*1 + c²*3
-        
+
         const expected00 = c * c * 1 + s * s * 3;
         const expected11 = 2;
         const expected22 = s * s * 1 + c * c * 3;
         const expected02 = -c * s * 1 + s * c * 3; // = 2*c*s
-        
+
         expect(out[0]).toBeCloseTo(expected00, 10);
         expect(out[5]).toBeCloseTo(expected11, 10);
         expect(out[10]).toBeCloseTo(expected22, 10);

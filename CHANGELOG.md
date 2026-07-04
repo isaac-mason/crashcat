@@ -2,6 +2,8 @@
 
 ## v0.0.5 (Unreleased)
 
+- feat: persistent body pairs — moved-only broadphase discovery (box2d-v3 style): bodies that escape their fat leaf AABB queue for pair discovery, overlapping pairs persist between frames as records with intrusive per-body edge lists, and the per-pair pose cache lives on the record; broadphase-heavy scenes are 10-15% faster
+- feat: **breaking** — contacts are now nested under their persistent pair record (chained via `prevInPair`/`nextInPair`, staleness via frame stamps) instead of per-body edge lists; the per-frame global contact sweeps are gone, so step cost scales with active contacts rather than total contacts (a fully-settled world steps ~60% faster; sleeping pairs cost two field compares). The `Contact` type loses `edges`/`processedThisFrame` and gains `pairRecord`/`prevInPair`/`nextInPair`/`lastProcessedFrame`; `RigidBody` loses `headContactKey`/`contactCount` — enumerate a body's contacts via its pair list and each pair's contact chain. `onContactRemoved` for transition removals (sleep, teleport, filter changes) now fires during pair finding, before the step's added/persisted events, rather than after the narrowphase loop
 - fix: issues with nested usage of reversedCollideShapeVsShape
 - feat: change build setup so d.ts files are compatible with typescript NodeNext module resolution
 - feat: update mathcat from v0.0.11 to v0.0.13

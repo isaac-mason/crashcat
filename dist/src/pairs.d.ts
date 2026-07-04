@@ -1,5 +1,6 @@
 import { type Quat, type Vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body.js';
+import { type Contacts } from './contacts.js';
 import type { Listener } from './listener.js';
 import type { World } from './world.js';
 /**
@@ -41,12 +42,19 @@ export type Pairs = {
      * are stable for the whole frame (freelist storage — records never move).
      */
     collidingPairs: number[];
+    /**
+     * per-record chain head: the contact index at the head of each record's contact chain, or
+     * INVALID_CONTACT_KEY when the record has no contacts. parallel-by-record like poseCache (NOT a
+     * records-stride slot — this keeps contacts.ts free of any pair layout constant, so its only
+     * dependency on pairs is the erased `Pairs` type). addPairRecord resets the head to empty.
+     */
+    firstContact: number[];
     /** number of colliding pairs emitted this frame */
     collidingPairCount: number;
     /**
-     * pending-discovery queue: indices of bodies that moved this frame (escaped their fat leaf,
-     * were added, or changed layer). consumed and cleared by findCollidingPairs. deduped via
-     * body.movedThisFrame.
+     * the move set: indices of bodies whose fat leaf changed (escaped, added, or changed layer),
+     * awaiting pair discovery. consumed by findCollidingPairs. deduped via body.inMoveSet
+     * (invariant: flag set ⟺ index present here); insertion order is deterministic.
      */
     moved: number[];
 };
@@ -64,10 +72,10 @@ export declare const CACHE_DP = 1;
 export declare const CACHE_DR = 4;
 /** initializes pairs state */
 export declare function init(): Pairs;
-/** flag a body as moved this frame (deduped) so it runs discovery in the next findCollidingPairs */
+/** add a body to the move set (deduped) so it runs pair discovery in the next findCollidingPairs */
 export declare function markMoved(pairs: Pairs, body: RigidBody): void;
 /**
- * Pack a record index and side into a single pair edge key (mirrors contacts.packContactKey).
+ * Pack a record index and side into a single pair edge key.
  * Layout: [recordIndex][side: 1 bit], side 0 = bodyA's edge, side 1 = bodyB's edge.
  */
 export declare function pairEdgeKey(recordIndex: number, side: 0 | 1): number;
@@ -75,19 +83,26 @@ export declare function pairEdgeKey(recordIndex: number, side: 0 | 1): number;
 export declare function getPairEdgeRecord(key: number): number;
 /** extract the side from a packed pair edge key (0 = bodyA's edge, 1 = bodyB's edge) */
 export declare function getPairEdgeSide(key: number): 0 | 1;
+/**
+ * add a persistent pair record and link it into both bodies' pair lists.
+ * exported for the CCD find-or-create path (a CCD hit can involve a pair the sweep never discovered).
+ */
+export declare function addPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): number;
 /** write last-narrowphase relative pose into the record's pose-cache block (marks it valid) */
 export declare function setCache(pairs: Pairs, rec: number, deltaPosition: Vec3, deltaRotation: Quat): void;
 /**
- * invalidate the pair's cached pose. walks bodyA's pair list to find the record — O(pair degree).
- * missing pair = no-op.
+ * find the persistent pair record for a body pair by walking bodyA's pair list — O(pair degree).
+ * returns the record index, or -1 if no record exists. (discovery dedup and the CCD find-or-create
+ * path both use this.)
  */
-export declare function invalidateCache(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): void;
+export declare function findPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): number;
 /**
  * destroy every persistent pair involving this body by walking its own pair list — O(pair degree).
- * does not depend on the body's dbvt leaf, so it is safe to call before or independently of
- * tree-leaf removal.
+ * each record's contact chain is cascaded (removal events queued onto pendingContactRemoved, since
+ * the listener is unavailable at body-removal time). does not depend on the body's dbvt leaf, so it
+ * is safe to call before or independently of tree-leaf removal.
  */
-export declare function purgeBodyPairs(pairs: Pairs, pool: RigidBody[], body: RigidBody): void;
+export declare function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: RigidBody[], body: RigidBody): void;
 /**
  * find potentially colliding body pairs, updates world.pairs.collidingPairs.
  *

@@ -14,7 +14,6 @@ export type Broadphase = {
     dbvts: dbvt.DBVT[];
 };
 
-
 /** initializes broadphase state */
 export function init(layers: Layers): Broadphase {
     const numBroadphaseLayers = layers.broadphaseLayers;

@@ -288,4 +288,3 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 function getInnerRadius(shape: CylinderShape): number {
     return Math.min(shape.halfHeight, shape.radius);
 }
-

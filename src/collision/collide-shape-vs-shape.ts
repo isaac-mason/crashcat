@@ -1,9 +1,8 @@
 import { type Vec3, vec3 } from 'mathcat';
-import { createFace, type Face } from '../utils/face';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
-import type { Shape } from '../shapes/shapes';
+import type { CollideShapeVsShapeFn, Shape } from '../shapes/shapes';
+import { createFace, type Face } from '../utils/face';
 import { pool } from '../utils/pool';
-import type { CollideShapeVsShapeFn } from '../shapes/shapes';
 
 export type CollideShapeHit = {
     /** contact position on body A (world space) */
@@ -211,10 +210,7 @@ export function createDefaultCollideShapeSettings(): CollideShapeSettings {
     };
 }
 
-export function copyCollideShapeSettings(
-    out: CollideShapeSettings,
-    source: CollideShapeSettings,
-): void {
+export function copyCollideShapeSettings(out: CollideShapeSettings, source: CollideShapeSettings): void {
     out.maxSeparationDistance = source.maxSeparationDistance;
     out.collisionTolerance = source.collisionTolerance;
     out.penetrationTolerance = source.penetrationTolerance;

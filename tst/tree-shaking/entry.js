@@ -1,4 +1,4 @@
-import { registerShapes, sphere, box } from '../../dist/index.js';
+import { box, registerShapes, sphere } from '../../dist/index.js';
 
 registerShapes([sphere.def, box.def]);
 const s = sphere.create({ radius: 1 });

@@ -369,7 +369,14 @@ export function clampSwingTwist(part: SwingTwistConstraintPart, ioSwing: Quat, i
                 if (ellipseValue > 1) {
                     // project to ellipse boundary
                     getClosestPointOnEllipse(_clampSwingTwist_ellipseClosest, y, z, a, b);
-                    const newW = Math.sqrt(Math.max(0, 1 - _clampSwingTwist_ellipseClosest[0] * _clampSwingTwist_ellipseClosest[0] - _clampSwingTwist_ellipseClosest[1] * _clampSwingTwist_ellipseClosest[1]));
+                    const newW = Math.sqrt(
+                        Math.max(
+                            0,
+                            1 -
+                                _clampSwingTwist_ellipseClosest[0] * _clampSwingTwist_ellipseClosest[0] -
+                                _clampSwingTwist_ellipseClosest[1] * _clampSwingTwist_ellipseClosest[1],
+                        ),
+                    );
                     quat.set(ioSwing, 0, _clampSwingTwist_ellipseClosest[0], _clampSwingTwist_ellipseClosest[1], newW);
                     clampedAxis |=
                         ClampedAxis.SWING_Y_MIN | ClampedAxis.SWING_Y_MAX | ClampedAxis.SWING_Z_MIN | ClampedAxis.SWING_Z_MAX;
@@ -450,7 +457,7 @@ function getClosestPointOnEllipse(out: [number, number], px: number, py: number,
         // Calculate g(t)
         const tPlusASq = t + aSq;
         const tPlusBSq = t + bSq;
-        const gt = (a * px / tPlusASq) ** 2 + (b * py / tPlusBSq) ** 2 - 1;
+        const gt = ((a * px) / tPlusASq) ** 2 + ((b * py) / tPlusBSq) ** 2 - 1;
 
         // Check if g(t) is close enough to zero
         if (Math.abs(gt) < 1e-6) {
@@ -461,7 +468,7 @@ function getClosestPointOnEllipse(out: [number, number], px: number, py: number,
 
         // Get derivative dg/dt = g'(t) = -2 (a^2 x^2 / (t + a^2)^3 + b^2 y^2 / (t + b^2)^3)
         const gtAccent =
-            -2 * (aSq * px * px / (tPlusASq * tPlusASq * tPlusASq) + bSq * py * py / (tPlusBSq * tPlusBSq * tPlusBSq));
+            -2 * ((aSq * px * px) / (tPlusASq * tPlusASq * tPlusASq) + (bSq * py * py) / (tPlusBSq * tPlusBSq * tPlusBSq));
 
         // Calculate t for next iteration: t_n+1 = t_n - g(t) / g'(t)
         t = t - gt / gtAccent;

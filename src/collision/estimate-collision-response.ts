@@ -144,12 +144,7 @@ function initConstraint(
 }
 
 /** initialize the mini angular friction constraint (axis is the contact normal) */
-function initAngularConstraint(
-    constraint: MiniAngularConstraint,
-    invInertia1: Mat4,
-    invInertia2: Mat4,
-    axis: Vec3,
-): void {
+function initAngularConstraint(constraint: MiniAngularConstraint, invInertia1: Mat4, invInertia2: Mat4, axis: Vec3): void {
     mat4.multiply3x3Vec(constraint.invI1_Axis, invInertia1, axis);
     mat4.multiply3x3Vec(constraint.invI2_Axis, invInertia2, axis);
 
@@ -227,23 +222,13 @@ function solve(
 }
 
 /** angular friction: get unclamped lambda increment (jv = axis · (ω1 - ω2)) */
-function solveGetAngularLambda(
-    constraint: MiniAngularConstraint,
-    angVel1: Vec3,
-    angVel2: Vec3,
-    axis: Vec3,
-): number {
+function solveGetAngularLambda(constraint: MiniAngularConstraint, angVel1: Vec3, angVel2: Vec3, axis: Vec3): number {
     const jv = vec3.dot(axis, angVel1) - vec3.dot(axis, angVel2);
     return constraint.effectiveMass * (jv - constraint.bias);
 }
 
 /** angular friction: apply delta lambda (no linear terms) */
-function applyAngularLambda(
-    constraint: MiniAngularConstraint,
-    lambda: number,
-    angVel1: Vec3,
-    angVel2: Vec3,
-): void {
+function applyAngularLambda(constraint: MiniAngularConstraint, lambda: number, angVel1: Vec3, angVel2: Vec3): void {
     vec3.scaleAndAdd(angVel1, angVel1, constraint.invI1_Axis, -lambda);
     vec3.scaleAndAdd(angVel2, angVel2, constraint.invI2_Axis, lambda);
 }
@@ -553,7 +538,12 @@ export function estimateCollisionResponse(
                 const clamped = Math.max(-maxAngular, Math.min(maxAngular, candidate));
                 const deltaAngular = clamped - result.angularFrictionImpulse;
                 if (deltaAngular !== 0) {
-                    applyAngularLambda(_ecr_angularFrictionConstraint, deltaAngular, result.angularVelocity1, result.angularVelocity2);
+                    applyAngularLambda(
+                        _ecr_angularFrictionConstraint,
+                        deltaAngular,
+                        result.angularVelocity1,
+                        result.angularVelocity2,
+                    );
                 }
                 result.angularFrictionImpulse = clamped;
             }

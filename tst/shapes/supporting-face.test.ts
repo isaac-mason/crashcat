@@ -1,6 +1,6 @@
 import { mat4, quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { box, compound, getShapeSupportingFace, convexHull, createFace, scaled, sphere, transformed } from '../../src';
+import { box, compound, convexHull, createFace, getShapeSupportingFace, scaled, sphere, transformed } from '../../src';
 
 describe('Supporting Face - Sphere', () => {
     test('should return empty face for sphere', () => {
@@ -8,14 +8,7 @@ describe('Supporting Face - Sphere', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(0);
     });
@@ -32,14 +25,7 @@ describe('Supporting Face - Sphere', () => {
         for (const direction of directions) {
             const shape = sphere.create({ radius: 5.0 });
             const face = { vertices: [], numVertices: 0 };
-            getShapeSupportingFace(
-                face,
-                shape,
-                0,
-                direction,
-                mat4.create(),
-            vec3.fromValues(1, 1, 1),
-            );
+            getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
             expect(face.numVertices).toBe(0);
         }
     });
@@ -51,14 +37,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at x = -2
@@ -72,14 +51,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(-1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at x = 1.5
@@ -93,14 +65,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(0, 1, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at y = -2
@@ -114,14 +79,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(0, -1, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at y = 1.5
@@ -135,14 +93,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(0, 0, 1);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at z = -3
@@ -156,14 +107,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(0, 0, -1);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face should be opposite to direction, so at z = 2
@@ -177,14 +121,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(10, 1, 1); // X is dominant
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Should be X-perpendicular face opposite to direction
@@ -198,14 +135,7 @@ describe('Supporting Face - Box', () => {
         const direction = vec3.fromValues(1, 1, 1);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         const halfExtents = vec3.fromValues(2, 1.5, 0.5);
@@ -231,14 +161,7 @@ describe('Supporting Face - Transformed Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
 
@@ -270,14 +193,7 @@ describe('Supporting Face - Transformed Shape', () => {
         const direction = vec3.fromValues(1, 0, 0); // Query in world X direction
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
 
@@ -310,14 +226,7 @@ describe('Supporting Face - Transformed Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         // Sphere returns empty face
         expect(face.numVertices).toBe(0);
@@ -395,14 +304,7 @@ describe('Supporting Face - Scaled Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
 
@@ -428,14 +330,7 @@ describe('Supporting Face - Scaled Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // X face should be scaled and opposite to direction
@@ -451,14 +346,7 @@ describe('Supporting Face - Scaled Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face at -1 (opposite direction), scaled by -1, becomes 1
@@ -500,14 +388,7 @@ describe('Supporting Face - Scaled Shape', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         // Sphere returns empty face regardless of scale
         expect(face.numVertices).toBe(0);
@@ -530,14 +411,7 @@ describe('Supporting Face - Compound Shape', () => {
         const face = { vertices: [], numVertices: 0 };
 
         // Default shapeId=0 computes face for first child
-        getShapeSupportingFace(
-            face,
-            compoundShape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, compoundShape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         // Should get face from first box child
         expect(face.numVertices).toBe(4);
@@ -558,26 +432,12 @@ describe('Supporting Face - Compound Shape', () => {
 
         // Query sphere child (shapeId=0)
         const faceSphere = { vertices: [], numVertices: 0 };
-        getShapeSupportingFace(
-            faceSphere,
-            compoundShape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(faceSphere, compoundShape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
         expect(faceSphere.numVertices).toBe(0); // Sphere returns 0 vertices
 
         // Query box child (shapeId=1)
         const faceBox = { vertices: [], numVertices: 0 };
-        getShapeSupportingFace(
-            faceBox,
-            compoundShape,
-            1,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(faceBox, compoundShape, 1, direction, mat4.create(), vec3.fromValues(1, 1, 1));
         expect(faceBox.numVertices).toBe(4); // Box returns 4 vertices
     });
 });
@@ -594,14 +454,7 @@ describe('Supporting Face - Complex Decorated Shapes', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            transformedShape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, transformedShape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face at -1, scaled by 2 to -2, then translated by 5 to 3
@@ -622,14 +475,7 @@ describe('Supporting Face - Complex Decorated Shapes', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            scaledShape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, scaledShape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         // Face at -1, transformed by +5 to 4, then scaled by 2 to 8
@@ -647,14 +493,7 @@ describe('Supporting Face - Edge Cases', () => {
         const direction = vec3.fromValues(0, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         // Should select one of the faces (behavior with zero direction is undefined,
         // but should return a valid face)
@@ -666,14 +505,7 @@ describe('Supporting Face - Edge Cases', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         for (let i = 0; i < 4; i++) {
@@ -686,14 +518,7 @@ describe('Supporting Face - Edge Cases', () => {
         const direction = vec3.fromValues(1, 0, 0);
         const face = { vertices: [], numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
         for (let i = 0; i < 4; i++) {
@@ -708,14 +533,7 @@ describe('Supporting Face - Edge Cases', () => {
         // Face with smaller initial buffer
         const face = { vertices: new Array(6), numVertices: 0 };
 
-        getShapeSupportingFace(
-            face,
-            shape,
-            0,
-            direction,
-            mat4.create(),
-            vec3.fromValues(1, 1, 1),
-        );
+        getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         // Should resize to accommodate 4 vertices (12 elements)
         expect(face.vertices.length).toBeGreaterThanOrEqual(12);

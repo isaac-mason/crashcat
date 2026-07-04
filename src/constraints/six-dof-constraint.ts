@@ -5,8 +5,6 @@ import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
-import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
     ConstraintType,
@@ -20,6 +18,7 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
+import { MotorState } from './constraint-part/motor-settings';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part';
@@ -28,8 +27,16 @@ import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
-import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
 import { getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
+import {
+    type ConstraintBase,
+    type ConstraintPool,
+    ConstraintSpace,
+    defineConstraint,
+    ensurePool,
+    makeConstraintBase,
+    removeConstraintIdFromBody,
+} from './constraints';
 
 const _twist_temp = /* @__PURE__ */ quat.create();
 

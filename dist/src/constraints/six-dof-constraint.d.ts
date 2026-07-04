@@ -1,16 +1,16 @@
 import type { Quat, Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
-import { MotorState } from './constraint-part/motor-settings.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AngleConstraintPart } from './constraint-part/angle-constraint-part.js';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part.js';
+import { MotorState } from './constraint-part/motor-settings.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part.js';
 import type { SpringSettings } from './constraint-part/spring-settings.js';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part.js';
 import { SwingType } from './constraint-part/swing-twist-constraint-part.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /** axis indices for 6DOF constraint */
 export declare enum SixDOFAxis {
     TRANSLATION_X = 0,

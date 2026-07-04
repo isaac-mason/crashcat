@@ -1,6 +1,6 @@
 import type { Box3, Vec3 } from 'mathcat';
-import type { RigidBody } from './body/rigid-body.js';
 import type { Bodies } from './body/bodies.js';
+import type { RigidBody } from './body/rigid-body.js';
 import type { ContactSettings } from './constraints/contact-constraints.js';
 /** continuous collision detection (CCD) state for one physics step */
 export type CCD = {

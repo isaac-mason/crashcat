@@ -1,13 +1,10 @@
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
 import { pool } from '../utils/pool';
-import {
-    INITIAL_EARLY_OUT_FRACTION,
-    SHOULD_EARLY_OUT_FRACTION,
-} from './cast-utils';
+import { INITIAL_EARLY_OUT_FRACTION, SHOULD_EARLY_OUT_FRACTION } from './cast-utils';
 
 export enum CastRayStatus {
     NOT_COLLIDING,
-    COLLIDING
+    COLLIDING,
 }
 
 export type CastRayHit = {

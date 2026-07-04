@@ -83,8 +83,12 @@ function computeLocalBounds(out: Box3, shape: StaticCompoundShape): void {
 
     for (const child of shape.children) {
         const childAABB = child.shape.aabb;
-        const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
-        const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
+        const minX = childAABB[0],
+            minY = childAABB[1],
+            minZ = childAABB[2];
+        const maxX = childAABB[3],
+            maxY = childAABB[4],
+            maxZ = childAABB[5];
 
         for (let x = 0; x < 2; x++) {
             for (let y = 0; y < 2; y++) {

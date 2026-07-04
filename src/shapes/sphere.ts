@@ -170,7 +170,6 @@ function getInnerRadius(shape: SphereShape): number {
     return shape.radius;
 }
 
-
 /* collide point */
 
 const _collidePointHit = /* @__PURE__ */ createCollidePointHit();

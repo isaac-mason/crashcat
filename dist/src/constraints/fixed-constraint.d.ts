@@ -1,10 +1,10 @@
 import type { Quat, Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /**
  * Fixed constraint removes 6 DOF (3 translation + 3 rotation).
  * Welds two bodies together so they move as one rigid body.

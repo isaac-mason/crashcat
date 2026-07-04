@@ -2,7 +2,6 @@ import type { Quat, Vec2, Vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies.js';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part.js';
 import type { DualAxisConstraintPart } from './constraint-part/dual-axis-constraint-part.js';
@@ -10,6 +9,7 @@ import type { MotorSettings } from './constraint-part/motor-settings.js';
 import { MotorState } from './constraint-part/motor-settings.js';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part.js';
 import type { SpringSettings } from './constraint-part/spring-settings.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /**
  * Slider constraint (prismatic) removes 5 DOF (2 translation perpendicular to slider + 3 rotation).
  * Allows movement only along a single axis, like a piston or rail.

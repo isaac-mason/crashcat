@@ -3,7 +3,6 @@ import { mat4, quat, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -17,7 +16,15 @@ import type { PointConstraintPart } from './constraint-part/point-constraint-par
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part';
 import * as rotationEulerConstraintPart from './constraint-part/rotation-euler-constraint-part';
-import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
+import {
+    type ConstraintBase,
+    type ConstraintPool,
+    ConstraintSpace,
+    defineConstraint,
+    ensurePool,
+    makeConstraintBase,
+    removeConstraintIdFromBody,
+} from './constraints';
 
 /**
  * Fixed constraint removes 6 DOF (3 translation + 3 rotation).

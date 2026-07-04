@@ -1,12 +1,12 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import {
-    type ContactManifold,
-    type RigidBody,
     box,
+    type ContactManifold,
     type Listener,
     MotionQuality,
     MotionType,
+    type RigidBody,
     rigidBody,
     sphere,
     updateWorld,

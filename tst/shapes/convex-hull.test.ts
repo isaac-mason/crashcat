@@ -7,13 +7,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             const thinHull = convexHull.create({
                 positions: [
                     // Very thin disk (0.02 thick)
-                    -10, -10, 0.01,
-                    10, -10, 0.01,
-                    10, 10, 0.01,
-                    -10, 10, 0.01,
-                    -10, -10, -0.01,
-                    10, -10, -0.01,
-                    10, 10, -0.01,
+                    -10, -10, 0.01, 10, -10, 0.01, 10, 10, 0.01, -10, 10, 0.01, -10, -10, -0.01, 10, -10, -0.01, 10, 10, -0.01,
                     -10, 10, -0.01,
                 ],
                 convexRadius: 5, // Too large for thickness
@@ -26,16 +20,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
 
         test('reduces radius for cube with sharp corners', () => {
             const cube = convexHull.create({
-                positions: [
-                    -1, -1, -1,
-                    1, -1, -1,
-                    1, 1, -1,
-                    -1, 1, -1,
-                    -1, -1, 1,
-                    1, -1, 1,
-                    1, 1, 1,
-                    -1, 1, 1,
-                ],
+                positions: [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1],
                 convexRadius: 0.1,
             });
 
@@ -46,16 +31,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
 
         test('preserves radius with larger error tolerance', () => {
             const cube = convexHull.create({
-                positions: [
-                    -1, -1, -1,
-                    1, -1, -1,
-                    1, 1, -1,
-                    -1, 1, -1,
-                    -1, -1, 1,
-                    1, -1, 1,
-                    1, 1, 1,
-                    -1, 1, 1,
-                ],
+                positions: [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1],
                 convexRadius: 0.1,
                 maxErrorConvexRadius: 1.0, // Allow more vertex shift
             });
@@ -70,11 +46,21 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             const pyramid = convexHull.create({
                 positions: [
                     // Sharp pyramid
-                    0, 10, 0, // Sharp apex
-                    -5, 0, -5,
-                    -5, 0, 5,
-                    5, 0, -5,
-                    5, 0, 5,
+                    0,
+                    10,
+                    0, // Sharp apex
+                    -5,
+                    0,
+                    -5,
+                    -5,
+                    0,
+                    5,
+                    5,
+                    0,
+                    -5,
+                    5,
+                    0,
+                    5,
                 ],
                 convexRadius: 2,
                 maxErrorConvexRadius: 0.05,
@@ -85,13 +71,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
         });
 
         test('reduces radius more with stricter error tolerance', () => {
-            const pyramidPositions = [
-                0, 10, 0,
-                -5, 0, -5,
-                -5, 0, 5,
-                5, 0, -5,
-                5, 0, 5,
-            ];
+            const pyramidPositions = [0, 10, 0, -5, 0, -5, -5, 0, 5, 5, 0, -5, 5, 0, 5];
 
             const strictTolerance = convexHull.create({
                 positions: pyramidPositions,
@@ -113,11 +93,21 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             const needle = convexHull.create({
                 positions: [
                     // Extremely sharp needle
-                    0, 20, 0, // Very sharp tip
-                    -0.5, 0, -0.5,
-                    -0.5, 0, 0.5,
-                    0.5, 0, -0.5,
-                    0.5, 0, 0.5,
+                    0,
+                    20,
+                    0, // Very sharp tip
+                    -0.5,
+                    0,
+                    -0.5,
+                    -0.5,
+                    0,
+                    0.5,
+                    0.5,
+                    0,
+                    -0.5,
+                    0.5,
+                    0,
+                    0.5,
                 ],
                 convexRadius: 1,
                 maxErrorConvexRadius: 0.05,
@@ -132,16 +122,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
     describe('Edge Cases', () => {
         test('skips reduction when radius is zero', () => {
             const hull = convexHull.create({
-                positions: [
-                    -1, -1, -1,
-                    1, -1, -1,
-                    1, 1, -1,
-                    -1, 1, -1,
-                    -1, -1, 1,
-                    1, -1, 1,
-                    1, 1, 1,
-                    -1, 1, 1,
-                ],
+                positions: [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1],
                 convexRadius: 0,
             });
 
@@ -152,17 +133,9 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             const hull = convexHull.create({
                 positions: [
                     // Cube vertices
-                    -1, -1, -1,
-                    1, -1, -1,
-                    1, 1, -1,
-                    -1, 1, -1,
-                    -1, -1, 1,
-                    1, -1, 1,
-                    1, 1, 1,
-                    -1, 1, 1,
+                    -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
                     // Interior points (should be filtered by builder)
-                    0, 0, 0,
-                    0.5, 0.5, 0.5,
+                    0, 0, 0, 0.5, 0.5, 0.5,
                 ],
                 convexRadius: 0.1,
                 maxErrorConvexRadius: 1.0, // Allow sharp corners
@@ -175,13 +148,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
 
         test('uses default maxErrorConvexRadius when not specified', () => {
             const hull = convexHull.create({
-                positions: [
-                    0, 10, 0,
-                    -5, 0, -5,
-                    -5, 0, 5,
-                    5, 0, -5,
-                    5, 0, 5,
-                ],
+                positions: [0, 10, 0, -5, 0, -5, -5, 0, 5, 5, 0, -5, 5, 0, 5],
                 convexRadius: 2,
                 // maxErrorConvexRadius not specified, should default to 0.05
             });
@@ -196,14 +163,8 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             // Create a very flat hull where planes might be nearly coplanar
             const flatHull = convexHull.create({
                 positions: [
-                    -10, -10, 0.001,
-                    10, -10, 0.001,
-                    10, 10, 0.001,
-                    -10, 10, 0.001,
-                    -10, -10, -0.001,
-                    10, -10, -0.001,
-                    10, 10, -0.001,
-                    -10, 10, -0.001,
+                    -10, -10, 0.001, 10, -10, 0.001, 10, 10, 0.001, -10, 10, 0.001, -10, -10, -0.001, 10, -10, -0.001, 10, 10,
+                    -0.001, -10, 10, -0.001,
                 ],
                 convexRadius: 5,
                 maxErrorConvexRadius: 0.05,
@@ -218,13 +179,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
         test('reduced radius is stored in final shape', () => {
             const hull = convexHull.create({
                 positions: [
-                    -10, -10, 0.01,
-                    10, -10, 0.01,
-                    10, 10, 0.01,
-                    -10, 10, 0.01,
-                    -10, -10, -0.01,
-                    10, -10, -0.01,
-                    10, 10, -0.01,
+                    -10, -10, 0.01, 10, -10, 0.01, 10, 10, 0.01, -10, 10, 0.01, -10, -10, -0.01, 10, -10, -0.01, 10, 10, -0.01,
                     -10, 10, -0.01,
                 ],
                 convexRadius: 5,
@@ -237,13 +192,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
 
         test('all other shape properties remain valid after reduction', () => {
             const hull = convexHull.create({
-                positions: [
-                    0, 10, 0,
-                    -5, 0, -5,
-                    -5, 0, 5,
-                    5, 0, -5,
-                    5, 0, 5,
-                ],
+                positions: [0, 10, 0, -5, 0, -5, -5, 0, 5, 5, 0, -5, 5, 0, 5],
                 convexRadius: 2,
                 density: 1000,
             });
@@ -273,16 +222,7 @@ describe('ConvexHull - Convex Radius Reduction', () => {
             return out;
         }
 
-        const cubePositions = [
-            -1, -1, -1,
-            1, -1, -1,
-            1, 1, -1,
-            -1, 1, -1,
-            -1, -1, 1,
-            1, -1, 1,
-            1, 1, 1,
-            -1, 1, 1,
-        ];
+        const cubePositions = [-1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1, -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1];
 
         // every shrunk vertex must lie on each of its neighbouring face planes offset inward by the
         // convex radius (numFaces >= 2), or be the vertex pushed straight back along the single normal

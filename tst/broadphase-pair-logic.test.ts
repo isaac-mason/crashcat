@@ -61,7 +61,8 @@ function referenceShouldReport(a: PairBodySpec, b: PairBodySpec, layersCollide: 
 }
 
 function specLabel(s: PairBodySpec): string {
-    const motion = s.motionType === MotionType.STATIC ? 'static' : s.motionType === MotionType.KINEMATIC ? 'kinematic' : 'dynamic';
+    const motion =
+        s.motionType === MotionType.STATIC ? 'static' : s.motionType === MotionType.KINEMATIC ? 'kinematic' : 'dynamic';
     return `${motion}${s.sleeping ? '+asleep' : ''}${s.sensor ? '+sensor' : ''}${s.optIn ? '+optIn' : ''}`;
 }
 
@@ -122,8 +123,18 @@ describe('broadphase pair logic', () => {
                                 for (const optInA of bools) {
                                     for (const optInB of bools) {
                                         for (const layersCollide of bools) {
-                                            const a: PairBodySpec = { motionType: motionA, sleeping: sleepA, sensor: sensorA, optIn: optInA };
-                                            const b: PairBodySpec = { motionType: motionB, sleeping: sleepB, sensor: sensorB, optIn: optInB };
+                                            const a: PairBodySpec = {
+                                                motionType: motionA,
+                                                sleeping: sleepA,
+                                                sensor: sensorA,
+                                                optIn: optInA,
+                                            };
+                                            const b: PairBodySpec = {
+                                                motionType: motionB,
+                                                sleeping: sleepB,
+                                                sensor: sensorB,
+                                                optIn: optInB,
+                                            };
 
                                             const expected = referenceShouldReport(a, b, layersCollide);
                                             const pairs = runCombo(a, b, layersCollide);

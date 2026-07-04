@@ -11,11 +11,50 @@
  */
 export type Simplex = {
     /** minkowski difference (P - Q) per point, flat xyz, length 12 */
-    y: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    y: [
+        x1: number,
+        y1: number,
+        z1: number,
+        x2: number,
+        y2: number,
+        z2: number,
+        x3: number,
+        y3: number,
+        z3: number,
+        x4: number,
+        y4: number,
+        z4: number
+    ];
     /** support point on shape A per point, flat xyz, length 12 */
-    p: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    p: [
+        x1: number,
+        y1: number,
+        z1: number,
+        x2: number,
+        y2: number,
+        z2: number,
+        x3: number,
+        y3: number,
+        z3: number,
+        x4: number,
+        y4: number,
+        z4: number
+    ];
     /** support point on shape B per point, flat xyz, length 12 */
-    q: [x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, x3: number, y3: number, z3: number, x4: number, y4: number, z4: number];
+    q: [
+        x1: number,
+        y1: number,
+        z1: number,
+        x2: number,
+        y2: number,
+        z2: number,
+        x3: number,
+        y3: number,
+        z3: number,
+        x4: number,
+        y4: number,
+        z4: number
+    ];
     /** current number of points in the simplex (0..4) */
     size: number;
 };

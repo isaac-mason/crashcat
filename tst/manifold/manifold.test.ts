@@ -1,7 +1,7 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { createFace, type Face } from '../../src/utils/face';
 import { createContactManifold, manifoldBetweenTwoFaces, pruneContactPoints } from '../../src/manifold/manifold';
+import { createFace, type Face } from '../../src/utils/face';
 
 function createFaceWithVertices(vertices: number[]): Face {
     const face = createFace();

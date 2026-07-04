@@ -1,12 +1,12 @@
-import { vec3, type Vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'mathcat';
+import type { Face } from '../utils/face';
+import { pool } from '../utils/pool';
 import {
     type CollideShapeCollector,
     type CollideShapeHit,
-    createCollideShapeHit,
     copyCollideShapeHit,
+    createCollideShapeHit,
 } from './collide-shape-vs-shape';
-import type { Face } from '../utils/face';
-import { pool } from '../utils/pool';
 
 // cosine of 1 degree (for face contact detection threshold)
 const COS_1_DEGREE = Math.cos((1 * Math.PI) / 180);
@@ -230,11 +230,7 @@ export class InternalEdgeRemovingCollector implements CollideShapeCollector {
      * if vertexIndex1 === vertexIndex2, it's a vertex contact.
      * if vertexIndex1 !== vertexIndex2, it's an edge contact.
      */
-    private findClosestFeature(
-        out: ClosestFeatureResult,
-        face: Face,
-        point: Vec3,
-    ): void {
+    private findClosestFeature(out: ClosestFeatureResult, face: Face, point: Vec3): void {
         let bestDistSq = Number.MAX_VALUE;
         let bestV1 = 0;
         let bestV2 = 0;

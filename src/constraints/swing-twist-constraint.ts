@@ -3,8 +3,6 @@ import { mat3, mat4, quat, vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
-import { MotorState } from './constraint-part/motor-settings';
 import {
     type ConstraintId,
     ConstraintType,
@@ -18,12 +16,21 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { MotorSettings } from './constraint-part/motor-settings';
 import * as motorSettings from './constraint-part/motor-settings';
+import { MotorState } from './constraint-part/motor-settings';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { clampSwingTwist, getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
-import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
+import {
+    type ConstraintBase,
+    type ConstraintPool,
+    ConstraintSpace,
+    defineConstraint,
+    ensurePool,
+    makeConstraintBase,
+    removeConstraintIdFromBody,
+} from './constraints';
 
 /**
  * SwingTwistConstraint is a sophisticated constraint for humanoid ragdoll joints.

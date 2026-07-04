@@ -1,8 +1,10 @@
 import { box3, type Quat, type Vec3 } from 'mathcat';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
+import { INACTIVE_BODY_INDEX } from './body/sleep';
 import type { BodyVisitor } from './broadphase/body-visitor';
 import * as dbvt from './broadphase/dbvt';
+import { type Contacts, destroyPairChain, INVALID_CONTACT_KEY } from './contacts';
 import * as filter from './filter';
 import {
     broadphaseLayerCollidesWithBroadphaseLayer,
@@ -57,13 +59,21 @@ export type Pairs = {
      */
     collidingPairs: number[];
 
+    /**
+     * per-record chain head: the contact index at the head of each record's contact chain, or
+     * INVALID_CONTACT_KEY when the record has no contacts. parallel-by-record like poseCache (NOT a
+     * records-stride slot — this keeps contacts.ts free of any pair layout constant, so its only
+     * dependency on pairs is the erased `Pairs` type). addPairRecord resets the head to empty.
+     */
+    firstContact: number[];
+
     /** number of colliding pairs emitted this frame */
     collidingPairCount: number;
 
     /**
-     * pending-discovery queue: indices of bodies that moved this frame (escaped their fat leaf,
-     * were added, or changed layer). consumed and cleared by findCollidingPairs. deduped via
-     * body.movedThisFrame.
+     * the move set: indices of bodies whose fat leaf changed (escaped, added, or changed layer),
+     * awaiting pair discovery. consumed by findCollidingPairs. deduped via body.inMoveSet
+     * (invariant: flag set ⟺ index present here); insertion order is deterministic.
      */
     moved: number[];
 };
@@ -94,20 +104,21 @@ export function init(): Pairs {
         recordCount: 0,
         poseCache: [],
         collidingPairs: [],
+        firstContact: [],
         collidingPairCount: 0,
         moved: [],
     };
 }
 
-/** flag a body as moved this frame (deduped) so it runs discovery in the next findCollidingPairs */
+/** add a body to the move set (deduped) so it runs pair discovery in the next findCollidingPairs */
 export function markMoved(pairs: Pairs, body: RigidBody): void {
-    if (body.movedThisFrame) return;
-    body.movedThisFrame = true;
+    if (body.inMoveSet) return;
+    body.inMoveSet = true;
     pairs.moved.push(body.index);
 }
 
 /**
- * Pack a record index and side into a single pair edge key (mirrors contacts.packContactKey).
+ * Pack a record index and side into a single pair edge key.
  * Layout: [recordIndex][side: 1 bit], side 0 = bodyA's edge, side 1 = bodyB's edge.
  */
 export function pairEdgeKey(recordIndex: number, side: 0 | 1): number {
@@ -223,23 +234,18 @@ const PairDiscoveryVisitor: BodyVisitor & {
             return;
         }
 
-        // already tracked? walk the moved body's pair list looking for otherBody as the partner —
-        // O(pair degree), bounded by how many fat AABBs one body can overlap
-        const records = this.pairs.records;
-        let edgeKey = movedBody.headPairKey;
-        while (edgeKey !== INVALID_PAIR_KEY) {
-            const rec = getPairEdgeRecord(edgeKey);
-            const side = getPairEdgeSide(edgeKey);
-            if (records[rec * RECORD_STRIDE + (1 - side)] === otherBody.index) return;
-            edgeKey = records[edgePrevSlot(rec, side) + 1];
-        }
+        // already tracked? O(pair degree), bounded by how many fat AABBs one body can overlap
+        if (findPairRecord(this.pairs, movedBody, otherBody) !== -1) return;
 
         addPairRecord(this.pairs, movedBody, otherBody);
     },
 };
 
-/** add a persistent pair record and link it into both bodies' pair lists */
-function addPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): void {
+/**
+ * add a persistent pair record and link it into both bodies' pair lists.
+ * exported for the CCD find-or-create path (a CCD hit can involve a pair the sweep never discovered).
+ */
+export function addPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): number {
     // allocate a record slot from the freelist, or grow
     let rec: number;
     if (pairs.freeRecords.length > 0) {
@@ -256,9 +262,12 @@ function addPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): void {
     linkPairEdge(pairs, rec, 0, bodyA);
     linkPairEdge(pairs, rec, 1, bodyB);
 
-    // a fresh record has no last-narrowphase pose yet
+    // a fresh record has no last-narrowphase pose and no contacts yet
     pairs.poseCache[rec * CACHE_STRIDE + CACHE_VALID] = 0;
+    pairs.firstContact[rec] = INVALID_CONTACT_KEY;
     pairs.recordCount++;
+
+    return rec;
 }
 
 /** link a record's edge at the head of the body's intrusive pair list */
@@ -304,11 +313,25 @@ function unlinkPairEdge(pairs: Pairs, pool: RigidBody[], rec: number, side: 0 | 
 }
 
 /**
- * destroy the persistent pair record at the given record index: unlink both edges from their
- * bodies' pair lists and return the slot to the freelist. record indices are stable — freed slots
- * stay in place until reused by addPairRecord.
+ * destroy the persistent pair record at the given record index. cascades the record's contact chain
+ * FIRST (so the invariant "live contact ⟺ live record that lists it" holds — the chain is destroyed
+ * before the slot can ever be reused), then unlinks both edges from their bodies' pair lists and
+ * returns the slot to the freelist. record indices are stable — freed slots stay in place until
+ * reused by addPairRecord.
+ *
+ * removal events for the cascaded contacts fire immediately on `listener` unless `queueEvents` is
+ * true (the body-removal path, where the listener is unavailable — events go on pendingContactRemoved).
  */
-function removePairRecordAt(pairs: Pairs, pool: RigidBody[], rec: number): void {
+function removePairRecordAt(
+    pairs: Pairs,
+    contacts: Contacts,
+    pool: RigidBody[],
+    rec: number,
+    listener: Listener | undefined,
+    queueEvents: boolean,
+): void {
+    destroyPairChain(contacts, pairs, rec, listener, queueEvents);
+
     unlinkPairEdge(pairs, pool, rec, 0);
     unlinkPairEdge(pairs, pool, rec, 1);
 
@@ -336,29 +359,29 @@ export function setCache(pairs: Pairs, rec: number, deltaPosition: Vec3, deltaRo
 }
 
 /**
- * invalidate the pair's cached pose. walks bodyA's pair list to find the record — O(pair degree).
- * missing pair = no-op.
+ * find the persistent pair record for a body pair by walking bodyA's pair list — O(pair degree).
+ * returns the record index, or -1 if no record exists. (discovery dedup and the CCD find-or-create
+ * path both use this.)
  */
-export function invalidateCache(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): void {
+export function findPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody): number {
     const records = pairs.records;
     let edgeKey = bodyA.headPairKey;
     while (edgeKey !== INVALID_PAIR_KEY) {
         const rec = getPairEdgeRecord(edgeKey);
         const side = getPairEdgeSide(edgeKey);
-        if (records[rec * RECORD_STRIDE + (1 - side)] === bodyB.index) {
-            pairs.poseCache[rec * CACHE_STRIDE + CACHE_VALID] = 0;
-            return;
-        }
+        if (records[rec * RECORD_STRIDE + (1 - side)] === bodyB.index) return rec;
         edgeKey = records[edgePrevSlot(rec, side) + 1];
     }
+    return -1;
 }
 
 /**
  * destroy every persistent pair involving this body by walking its own pair list — O(pair degree).
- * does not depend on the body's dbvt leaf, so it is safe to call before or independently of
- * tree-leaf removal.
+ * each record's contact chain is cascaded (removal events queued onto pendingContactRemoved, since
+ * the listener is unavailable at body-removal time). does not depend on the body's dbvt leaf, so it
+ * is safe to call before or independently of tree-leaf removal.
  */
-export function purgeBodyPairs(pairs: Pairs, pool: RigidBody[], body: RigidBody): void {
+export function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: RigidBody[], body: RigidBody): void {
     let edgeKey = body.headPairKey;
     while (edgeKey !== INVALID_PAIR_KEY) {
         const rec = getPairEdgeRecord(edgeKey);
@@ -367,7 +390,7 @@ export function purgeBodyPairs(pairs: Pairs, pool: RigidBody[], body: RigidBody)
         // save the next key before destroying (the unlink clears this record's edge slots)
         edgeKey = pairs.records[edgePrevSlot(rec, side) + 1];
 
-        removePairRecordAt(pairs, pool, rec);
+        removePairRecordAt(pairs, contacts, pool, rec, undefined, true);
     }
 }
 
@@ -420,11 +443,9 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         }
     }
 
-    // clear the move set for the next frame
-    for (let i = 0; i < moved.length; i++) {
-        pool[moved[i]].movedThisFrame = false;
-    }
-    moved.length = 0;
+    // moved flags intentionally stay set through the sweep — the frame-invariant skip below reads
+    // them. the discovery batch is consumed (flags cleared, entries dequeued) after the sweep.
+    const discoveredCount = moved.length;
 
     // --- (b) sweep: walk the persistent pair set, destroying separated pairs and emitting the rest
     // using exactly the old emission criterion. record indices are stable (freelist storage), so the
@@ -432,6 +453,7 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
     // follows record-slot order (insertion history + freelist reuse) and is not stable across
     // different world histories — downstream must not depend on it (contact constraints are sorted
     // by deterministic sort keys).
+    const contacts = world.contacts;
     const records = pairs.records;
     const numSlots = records.length / RECORD_STRIDE;
     for (let rec = 0; rec < numSlots; rec++) {
@@ -444,9 +466,24 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         const bodyA = pool[bodyIndexA];
         const bodyB = pool[records[base + 1]];
 
+        // frame-invariant skip: two inactive, unmoved bodies with an empty contact chain. their
+        // leaves are frozen (so the fat-overlap answer is last frame's "keep"), emission is
+        // impossible (dedup rejects both-inactive), and there is no chain to reconcile — the
+        // sweep's outcome cannot differ from last frame. this makes a steady-state sleeping pair
+        // cost a few field compares per frame.
+        if (
+            bodyA.activeIndex === INACTIVE_BODY_INDEX &&
+            bodyB.activeIndex === INACTIVE_BODY_INDEX &&
+            !bodyA.inMoveSet &&
+            !bodyB.inMoveSet &&
+            pairs.firstContact[rec] === INVALID_CONTACT_KEY
+        ) {
+            continue;
+        }
+
         // destroy if either leaf is gone, or the two FAT leaf AABBs no longer overlap
         if (bodyA.dbvtNode === -1 || bodyB.dbvtNode === -1) {
-            removePairRecordAt(pairs, pool, rec);
+            removePairRecordAt(pairs, contacts, pool, rec, listener, false);
             continue;
         }
         const fatA = broadphase.dbvts[bodyA.broadphaseLayer].nodes[bodyA.dbvtNode].aabb;
@@ -456,7 +493,7 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         // relative sizes of expansionMargin and the speculative distance
         box3.expandByMargin(_sweep_expandedFatAABB, fatA, speculativeContactDistance);
         if (!box3.intersectsBox3(_sweep_expandedFatAABB, fatB)) {
-            removePairRecordAt(pairs, pool, rec);
+            removePairRecordAt(pairs, contacts, pool, rec, listener, false);
             continue;
         }
 
@@ -468,15 +505,39 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         // tight-AABB re-test: moreActive's aabb expanded by the speculative distance vs the other's
         // tight aabb (equivalent to the old active-body query leaf test)
         box3.expandByMargin(_sweep_expandedAABB, moreActive.aabb, speculativeContactDistance);
+        let emitted = false;
         if (box3.intersectsBox3(_sweep_expandedAABB, lessActive.aabb) && shouldReportPair(layers, moreActive, lessActive)) {
-            emitCollidingPair(pairs, moreActive, lessActive, rec, listener);
+            emitted = emitCollidingPair(pairs, moreActive, lessActive, rec, listener);
+        }
+
+        // a kept-but-not-emitted pair with a live contact chain has its chain destroyed here, with
+        // immediate listener events. this single rule replaces the entire old global unprocessed
+        // sweep: sleep transitions (both-inactive dedup), teleports/fat-separation still-overlapping,
+        // motion/layer/group/mask gates, tight-AABB misses, and onBodyPairValidate rejections all
+        // land here, each destroying a chain exactly once. the empty-chain check keeps steady-state
+        // sleeping pairs O(1) per visit.
+        if (!emitted && pairs.firstContact[rec] !== INVALID_CONTACT_KEY) {
+            destroyPairChain(contacts, pairs, rec, listener, false);
         }
     }
+
+    // consume the move set: clear the discovery batch's flags and dequeue it. marks queued during
+    // the sweep (user mutations from inside onBodyPairValidate — outside the supported callback
+    // contract, but preserved where possible) stay queued for the next frame's discovery.
+    for (let i = 0; i < discoveredCount; i++) {
+        pool[moved[i]].inMoveSet = false;
+    }
+    if (moved.length > discoveredCount) {
+        moved.copyWithin(0, discoveredCount);
+    }
+    moved.length -= discoveredCount;
 }
 
 /**
  * Emit a colliding pair into this frame's output, after the optional user body pair filter.
- * The single emission point: every pair downstream consumes was pushed here.
+ * The single emission point: every pair downstream consumes was pushed here. Returns true if the
+ * pair was emitted, false if the user body pair filter rejected it (so the sweep can destroy its
+ * contact chain, matching the old validate-reject removal).
  */
 function emitCollidingPair(
     pairs: Pairs,
@@ -484,7 +545,7 @@ function emitCollidingPair(
     lessActive: RigidBody,
     recordIndex: number,
     listener: Listener | undefined,
-): void {
+): boolean {
     // user body pair filter — called after all built-in checks pass. bodies are sorted for
     // consistent callback ordering: higher motion type first, then lower id first.
     if (listener?.onBodyPairValidate) {
@@ -495,7 +556,7 @@ function emitCollidingPair(
             sortedB = moreActive;
         }
         if (!listener.onBodyPairValidate(sortedA, sortedB)) {
-            return;
+            return false;
         }
     }
 
@@ -509,4 +570,5 @@ function emitCollidingPair(
         collidingPairs[pairIndex + 2] = recordIndex;
     }
     pairs.collidingPairCount++;
+    return true;
 }

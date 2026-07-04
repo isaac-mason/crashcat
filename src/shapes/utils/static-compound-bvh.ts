@@ -85,11 +85,7 @@ function computeChildBounds(out: Box3, child: CompoundShapeChild): void {
  * precompute child bounds in center-halfExtent format.
  * also reorders children array to match indices array order.
  */
-function precomputeChildBuildData(
-    buildData: number[],
-    indices: number[],
-    children: CompoundShapeChild[],
-): void {
+function precomputeChildBuildData(buildData: number[], indices: number[], children: CompoundShapeChild[]): void {
     const count = indices.length;
     const childBounds = box3.create();
 
@@ -361,7 +357,7 @@ function getOptimalSplit(centerMin: Vec3, centerMax: Vec3): { axis: number; pos:
 
     // choose longest axis
     const axis = _extent[0] >= _extent[1] && _extent[0] >= _extent[2] ? 0 : _extent[1] >= _extent[2] ? 1 : 2;
-    
+
     // split at midpoint
     const pos = (centerMin[axis] + centerMax[axis]) / 2;
 

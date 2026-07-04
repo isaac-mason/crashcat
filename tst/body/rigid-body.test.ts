@@ -1132,8 +1132,6 @@ describe('Body - wakeInAABB', () => {
         expect(kinematicBody.sleeping).toBe(false);
     });
 
-
-
     test('should handle empty AABB region', () => {
         const { world, layers } = createTestWorld();
 

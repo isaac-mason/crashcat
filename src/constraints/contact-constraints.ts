@@ -8,6 +8,7 @@ import * as contacts from '../contacts';
 import type { Listener } from '../listener';
 import type { ContactManifold } from '../manifold/manifold';
 import * as manifold from '../manifold/manifold';
+import type { Pairs } from '../pairs';
 import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as angularFrictionConstraintPart from './constraint-part/angular-friction-constraint-part';
@@ -582,6 +583,8 @@ function calculateFrictionConstraintProperties(
 export function addContactConstraint(
     contactConstraints: ContactConstraints,
     contactsState: contacts.Contacts,
+    pairs: Pairs,
+    pairRecordIndex: number,
     bodyA: body.RigidBody,
     bodyB: body.RigidBody,
     contactManifold: ContactManifold,
@@ -597,20 +600,29 @@ export function addContactConstraint(
         manifold.swapShapes(contactManifold);
     }
 
-    // find or create contact in the contact array
-    const existingContact = contacts.findContact(
+    // find or create the contact nested under this pair record (all chain contacts share the
+    // id-sorted body pair, so matching sub-shape ids is enough after the body-order swap above)
+    const existingContact = contacts.findContactInPair(
         contactsState,
-        bodyA,
-        bodyB,
+        pairs,
+        pairRecordIndex,
         contactManifold.subShapeIdA,
         contactManifold.subShapeIdB,
     );
     const contact =
         existingContact ??
-        contacts.createContact(contactsState, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
+        contacts.createContact(
+            contactsState,
+            pairs,
+            pairRecordIndex,
+            bodyA,
+            bodyB,
+            contactManifold.subShapeIdA,
+            contactManifold.subShapeIdB,
+        );
 
-    // mark contact as processed this frame (for stale contact cleanup)
-    contact.processedThisFrame = true;
+    // stamp contact as processed this frame (for stale contact cleanup)
+    contact.lastProcessedFrame = contactsState.frameStamp;
 
     // double-buffered cache: read prev step's data from `prev`, write this step's data to `curr`
     // jolt: prev = mReadCache->Find(...), curr = mWriteCache->Create(...)
@@ -848,13 +860,7 @@ export function addContactConstraint(
                 constraint.angularFrictionConstraint.totalLambda = 0;
             }
 
-            calculateFrictionConstraintProperties(
-                constraint,
-                bodyA,
-                bodyB,
-                _addContactConstraint_midpoints,
-                contactSettings,
-            );
+            calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
 
             // write the transferred (and possibly cleared) friction λs back to the write-side cache
             // so they're a no-op if the constraint never runs (e.g. fully kinematic pair).

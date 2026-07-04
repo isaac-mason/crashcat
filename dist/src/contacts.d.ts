@@ -1,8 +1,7 @@
 import { type Vec3 } from 'mathcat';
 import type { RigidBody } from './body/rigid-body.js';
-import type { Bodies } from './body/bodies.js';
 import type { Listener } from './listener.js';
-import { type Pairs } from './pairs.js';
+import type { Pairs } from './pairs.js';
 /** contacts state */
 export type Contacts = {
     /** packed array of all contacts (active + free) */
@@ -28,6 +27,12 @@ export type Contacts = {
      * OnContactRemoved callback in the update after the body has been removed").
      */
     pendingContactRemoved: number[];
+    /**
+     * Monotonic per-step frame counter, incremented once at the top of updateWorld. A contact is
+     * fresh this step iff its lastProcessedFrame === frameStamp; the per-pair stale reconcile uses
+     * this instead of a per-step "unprocessed" reset walk over every contact.
+     */
+    frameStamp: number;
 };
 /**
  * Cached manifold data — the per-step state we read from last frame and write
@@ -63,7 +68,14 @@ export type CachedManifold = {
     /** flags bitfield (@see CachedManifoldFlags) */
     flags: number;
 };
-/** contact between two shapes */
+/**
+ * contact between two shapes.
+ *
+ * every live contact is nested under exactly one persistent pair record: it lives in that record's
+ * chain (headed by pairs.firstContact[pairRecord]) via the prevInPair/nextInPair links. the chain is
+ * doubly-linked (unlike jolt's singly-linked manifold chain) so a contact can be unlinked in O(1)
+ * when destroyed in place.
+ */
 export type Contact = {
     /** contact index (index in contacts.contacts when active, -1 when freed) */
     contactIndex: number;
@@ -79,10 +91,14 @@ export type Contact = {
     subShapeIdA: number;
     /** sub-shape B ID */
     subShapeIdB: number;
-    /** whether this contact was processed this frame (for stale contact cleanup) */
-    processedThisFrame: boolean;
-    /** two edges for intrusive doubly-linked list: edges[0] = edge in bodyA's contact list, edges[1] = edge in bodyB's contact list */
-    edges: [ContactEdge, ContactEdge];
+    /** frameStamp of the last step that processed this contact (for stale contact cleanup); init 0 */
+    lastProcessedFrame: number;
+    /** owning pair record index; -1 when freed */
+    pairRecord: number;
+    /** previous contact index in the owning pair's chain (or INVALID_CONTACT_KEY) */
+    prevInPair: number;
+    /** next contact index in the owning pair's chain (or INVALID_CONTACT_KEY) */
+    nextInPair: number;
     /**
      * Double-buffered cached manifold (read / write side per step).
      * Use getReadManifold / getWriteManifold to access via the Contacts.readIdx
@@ -99,16 +115,7 @@ export type CachedContactPoint = {
     /** accumulated normal impulse from previous frame */
     normalLambda: number;
 };
-/** contact edge in the intrusive doubly-linked list, each contact has two edges (one per body) */
-export type ContactEdge = {
-    /** index of the body this edge belongs to */
-    bodyIndex: number;
-    /** packed key to previous contact in this body's list (or INVALID_CONTACT_KEY) */
-    prevKey: number;
-    /** packed key to next contact in this body's list (or INVALID_CONTACT_KEY) */
-    nextKey: number;
-};
-/** invalid contact key constant - used to mark end of linked list */
+/** invalid contact index constant - used to mark end of a pair's contact chain */
 export declare const INVALID_CONTACT_KEY = -1;
 /** flags for cached contact manifolds */
 export declare enum CachedManifoldFlags {
@@ -133,108 +140,67 @@ export declare function getWriteManifold(contact: Contact, contactsState: Contac
  */
 export declare function flipManifoldCache(contactsState: Contacts): void;
 /**
- * Pack a contact ID and edge index into a single integer key.
- * Layout: [contactId: 31 bits][edgeIndex: 1 bit]
+ * Create a new contact nested under a pair record, linking it at the head of the record's chain.
  *
- * @param contactId - The contact ID (0 to 2^31-1)
- * @param edgeIndex - Which edge (0 for bodyA, 1 for bodyB)
- * @returns Packed integer key
- */
-export declare function packContactKey(contactId: number, edgeIndex: 0 | 1): number;
-/** extract contact ID from packed key */
-export declare function getContactKeyId(key: number): number;
-/** extract edge index from packed key */
-export declare function getContactKeyEdge(key: number): 0 | 1;
-/**
- * Create a new contact between two bodies.
- * Links the contact into both bodies' contact lists.
- *
- * @param contacts global contact array
+ * @param contacts global contact state
+ * @param pairs persistent pair state (holds the per-record chain heads)
+ * @param rec owning pair record index
  * @param bodyA first body (must have id <= bodyB.id)
  * @param bodyB second body (must have id >= bodyA.id)
  * @param subShapeIdA sub-shape ID for body A
  * @param subShapeIdB sub-shape ID for body B
  * @returns The newly created contact
  */
-export declare function createContact(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody, subShapeIdA: number, subShapeIdB: number): Contact;
+export declare function createContact(contacts: Contacts, pairs: Pairs, rec: number, bodyA: RigidBody, bodyB: RigidBody, subShapeIdA: number, subShapeIdB: number): Contact;
 /**
- * Destroy a contact, unlinking it from both bodies' contact lists.
- * Returns the contact to the free list for reuse.
+ * Destroy a contact: fire onContactRemoved, unlink from its pair chain (O(1)), and return the slot
+ * to the free list. No body args, no pool scan, no cache bookkeeping — the pair chain is the only
+ * navigation.
  *
- * @param contacts global contact array
- * @param bodyA first body in contact
- * @param bodyB second body in contact
+ * @param contacts global contact state
+ * @param pairs persistent pair state (holds the per-record chain heads)
  * @param contact contact to destroy
  * @param listener optional contact listener to notify of removal
- * @param pairs persistent pair state, so the pair's pose cache can be invalidated on last-contact removal
  */
-export declare function destroyContact(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody, contact: Contact, listener: Listener | undefined, pairs: Pairs | undefined): void;
+export declare function destroyContact(contacts: Contacts, pairs: Pairs, contact: Contact, listener: Listener | undefined): void;
 /**
- * Check if any contacts exist between two bodies.
- * Used to determine if body pair cache should be destroyed.
+ * Destroy every contact in a pair record's chain.
  *
- * @param contacts global contact array
- * @param bodyA first body
- * @param bodyB second body
- * @returns true if at least one contact exists between the bodies
+ * When `queueEvents` is true the removal payloads are pushed onto pendingContactRemoved instead of
+ * fired (the body-removal path, where the listener is unavailable — same pattern as the deferred
+ * body-removal events). The whole chain is freed and the record's head reset to empty.
+ *
+ * @param contacts global contact state
+ * @param pairs persistent pair state (holds the per-record chain heads)
+ * @param rec pair record index whose chain should be destroyed
+ * @param listener optional contact listener to notify of removal (ignored when queueEvents)
+ * @param queueEvents queue removal events onto pendingContactRemoved instead of firing them
  */
-export declare function hasContactsBetweenBodies(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody): boolean;
+export declare function destroyPairChain(contacts: Contacts, pairs: Pairs, rec: number, listener: Listener | undefined, queueEvents: boolean): void;
 /**
- * Destroy all contacts for a specific body.
- * Called when a body is destroyed.
+ * Destroy stale contacts (lastProcessedFrame !== frameStamp) in a pair record's chain.
  *
- * @param contacts global contact array
- * @param bodies body array for looking up other bodies
- * @param body body whose contacts should be destroyed
- * @param pairs persistent pair state, for cache invalidation on last-contact removal
- */
-export declare function destroyBodyContacts(contacts: Contacts, bodies: Bodies, body: RigidBody, pairs: Pairs | undefined): void;
-/**
- * Destroy stale contacts (those not processed this frame) between two bodies.
+ * After narrowphase processes an emitted pair, any chain contacts not re-stamped this frame are
+ * stale (sub-shapes no longer colliding) and are destroyed. The chain IS the pair, so no body-id
+ * filtering is needed.
  *
- * After narrowphase processes a body pair, any contacts that weren't marked as processed
- * are stale (sub-shapes no longer colliding) and should be destroyed.
- *
- * @param contactsState contacts state
- * @param bodyA first body
- * @param bodyB second body
+ * @param contacts global contact state
+ * @param pairs persistent pair state (holds the per-record chain heads)
+ * @param rec pair record index whose chain should be reconciled
  * @param listener optional contact listener to notify of removal
- * @param pairs persistent pair state, for cache invalidation on last-contact removal
  */
-export declare function destroyStaleContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, pairs: Pairs | undefined): void;
+export declare function destroyStaleContactsInPair(contacts: Contacts, pairs: Pairs, rec: number, listener: Listener | undefined): void;
 /**
- * Destroy all contacts between two bodies (used for unprocessed contacts).
- * More efficient than destroyStaleContactsBetweenBodies when we know ALL contacts should be destroyed.
+ * Find a contact in a pair record's chain by sub-shape ids.
  *
- * @param contactsState contacts state
- * @param bodyA first body
- * @param bodyB second body
- * @param listener optional contact listener to notify of removal
- * @param pairs persistent pair state, for cache invalidation on last-contact removal
- */
-export declare function destroyAllContactsBetweenBodies(contactsState: Contacts, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, pairs: Pairs | undefined): void;
-/**
- * Find a contact between two bodies with specific sub-shapes.
- * Iterates through the smaller body's contact list (O(n) but typically small n).
+ * All chain contacts share the id-sorted body pair, so the caller's existing body-order sort covers
+ * orientation — only the two sub-shape ids need matching.
  *
- * @param contacts global contact array
- * @param bodyA first body
- * @param bodyB second body
+ * @param contacts global contact state
+ * @param pairs persistent pair state (holds the per-record chain heads)
+ * @param rec pair record index to search
  * @param subShapeIdA sub-shape ID for body A
  * @param subShapeIdB sub-shape ID for body B
  * @returns The contact if found, null otherwise
  */
-export declare function findContact(contacts: Contacts, bodyA: RigidBody, bodyB: RigidBody, subShapeIdA: number, subShapeIdB: number): Contact | null;
-/** marks contacts as unprocessed for the current frame */
-export declare function markAllUnprocessed(contacts: Contacts): void;
-/**
- * Destroy all contacts that weren't processed this frame.
- * Called after all broadphase pairs have been processed.
- * This cleans up stale contacts between bodies that are no longer near each other.
- *
- * @param contacts contacts state
- * @param bodies world bodies array (needed to look up Body objects by ID)
- * @param listener optional contact listener to notify of removal
- * @param pairs persistent pair state, for cache invalidation on last-contact removal
- */
-export declare function destroyUnprocessedContacts(contacts: Contacts, bodies: Bodies, listener: Listener | undefined, pairs: Pairs | undefined): void;
+export declare function findContactInPair(contacts: Contacts, pairs: Pairs, rec: number, subShapeIdA: number, subShapeIdB: number): Contact | null;

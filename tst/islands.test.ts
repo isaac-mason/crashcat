@@ -1,6 +1,6 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { updateWorld, sphere, INACTIVE_BODY_INDEX, MotionType, rigidBody } from '../src';
+import { INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { createTestWorld } from './helpers';
 
 describe('Islands', () => {

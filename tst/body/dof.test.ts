@@ -1,6 +1,6 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { dof, rigidBody, MotionType, sphere, updateWorld } from '../../src';
+import { dof, MotionType, rigidBody, sphere, updateWorld } from '../../src';
 import { createTestWorld } from '../helpers';
 
 describe('AllowedDegreesOfFreedom', () => {
@@ -117,7 +117,7 @@ describe('AllowedDegreesOfFreedom', () => {
         test('all DOFs locked results in no motion', () => {
             // NOTE: Locking all DOFs is not allowed - the system will assert
             // Use a static body instead if you want a completely immovable object
-            
+
             // This test is intentionally skipped to document the constraint
             expect(true).toBe(true);
         });

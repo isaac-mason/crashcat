@@ -1,4 +1,4 @@
-import { box3, mat4, quat, type Quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { box3, mat4, type Quat, quat, raycast3, type Vec3, vec3 } from 'mathcat';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';
@@ -53,8 +53,9 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     /* clear previous frame's contact constraints */
     world.contactConstraints.count = 0;
 
-    /* mark all body pairs and contacts as unprocessed (we will check 'processed' later for a "contact removed" condition) */
-    contacts.markAllUnprocessed(world.contacts);
+    /* advance the frame stamp: a contact is fresh this step iff its lastProcessedFrame matches.
+       this replaces the old O(total-contacts) "mark all unprocessed" reset walk. */
+    world.contacts.frameStamp++;
 
     /* integrate forces into velocities */
     accelerationIntegrationUpdate(world, timeStep);
@@ -100,11 +101,11 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             currDeltaPos = _bodyPairCache_deltaPos;
             currDeltaRot = _bodyPairCache_deltaRot;
             computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
-            pairHandled = getContactsFromCache(world, bodyA, bodyB, listener, timeStep, currDeltaPos, currDeltaRot, pairRecordIndex);
+            pairHandled = getContactsFromCache(world, listener, timeStep, currDeltaPos, currDeltaRot, pairRecordIndex);
         }
 
         // perform narrowphase collision detection, creates contact constraints (on cache miss only)
-        const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep);
+        const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep, pairRecordIndex);
 
         // refresh the cached-body-pair entry ONLY on cache miss (when narrowphase
         // actually ran). the cache stores the relative pose AT THE TIME OF THE
@@ -128,16 +129,13 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             }
         }
 
-        // destroy stale contacts (unprocessed = sub-shapes no longer colliding).
+        // destroy stale contacts (not re-stamped this frame = sub-shapes no longer colliding).
         // skip this on cache hit: every contact was reprocessed by getContactsFromCache
-        // and is therefore marked processed, so the scan would no-op anyway.
+        // and is therefore stamped fresh, so the scan would no-op anyway.
         if (!pairHandled) {
-            contacts.destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener, world.pairs);
+            contacts.destroyStaleContactsInPair(world.contacts, world.pairs, pairRecordIndex, listener);
         }
     }
-
-    /* clean up stale contacts */
-    contacts.destroyUnprocessedContacts(world.contacts, world.bodies, listener, world.pairs);
 
     /* only solve if time step is positive */
     if (timeStep > 0) {
@@ -279,7 +277,6 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         for (const island of world.islands.islands) {
             islands.checkIslandSleep(island, world, timeStep);
         }
-
     }
 
     /* flip cached manifold buffers: this step's writes become next step's reads */
@@ -396,7 +393,15 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     numManifolds: number;
     maxManifolds: number;
     validateBodyPair: boolean;
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    pairRecordIndex: number;
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void;
     reset(): void;
     finalizeAndCreateConstraints(): boolean;
 } = {
@@ -410,6 +415,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     bodyB: null! as RigidBody,
     listener: undefined,
     deltaTime: null! as number,
+    pairRecordIndex: -1,
 
     // pre-allocated manifolds pool (all 32 slots allocated upfront)
     manifoldsPool: Array.from({ length: 32 }, () => manifold.createContactManifold()),
@@ -425,7 +431,14 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         this.bodyB = null! as RigidBody;
     },
 
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void {
         // reset counter to reuse manifolds in pool (no allocations after warmup)
         this.numManifolds = 0;
         this.earlyOutFraction = Number.MAX_VALUE;
@@ -436,6 +449,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
+        this.pairRecordIndex = pairRecordIndex;
     },
 
     addHit(hit: CollideShapeHit): void {
@@ -604,6 +618,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 const created = contactConstraints.addContactConstraint(
                     this.world.contactConstraints,
                     this.world.contacts,
+                    this.world.pairs,
+                    this.pairRecordIndex,
                     this.bodyA,
                     this.bodyB,
                     currentManifold,
@@ -632,8 +648,16 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
     deltaTime: number;
     constraintsCreated: boolean;
     validateBodyPair: boolean;
+    pairRecordIndex: number;
     _tempManifold: manifold.ContactManifold;
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void;
     reset(): void;
 } = {
     bodyIdB: -1,
@@ -646,6 +670,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
     bodyB: null! as RigidBody,
     listener: undefined,
     deltaTime: null! as number,
+    pairRecordIndex: -1,
 
     // track if any constraints were created
     constraintsCreated: false,
@@ -662,7 +687,14 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         this.bodyB = null! as RigidBody;
     },
 
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void {
         this.constraintsCreated = false;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.validateBodyPair = true;
@@ -672,6 +704,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
+        this.pairRecordIndex = pairRecordIndex;
     },
 
     addHit(hit: CollideShapeHit): void {
@@ -744,6 +777,8 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
             const created = contactConstraints.addContactConstraint(
                 this.world.contactConstraints,
                 this.world.contacts,
+                this.world.pairs,
+                this.pairRecordIndex,
                 this.bodyA,
                 this.bodyB,
                 tempManifold,
@@ -878,8 +913,6 @@ function reconstructManifoldFromCache(
  */
 function getContactsFromCache(
     world: World,
-    physA: RigidBody,
-    physB: RigidBody,
     listener: Listener | undefined,
     deltaTime: number,
     currDeltaPos: Vec3,
@@ -891,6 +924,12 @@ function getContactsFromCache(
 
     // no valid last-narrowphase pose cached for this pair record => must run narrowphase
     if (poseCache[cacheBase + pairs.CACHE_VALID] !== 1) return false;
+
+    // chain-non-empty guard: a pair whose last contact died must not cache-hit into reconstructing
+    // zero contacts. this is load-bearing (it replaces the deleted invalidateCache write-side
+    // bookkeeping) — most importantly on wake, where the record survived and the poseCache may still
+    // read valid=1 but the chain was emptied, so narrowphase must run clean.
+    if (world.pairs.firstContact[pairRecordIndex] === contacts.INVALID_CONTACT_KEY) return false;
 
     // read the cached relative pose from the record's pose-cache block
     _bodyPairCache_cachedPos[0] = poseCache[cacheBase + pairs.CACHE_DP];
@@ -914,49 +953,34 @@ function getContactsFromCache(
         return false;
     }
 
-    // walk this pair's existing contacts and rebuild each manifold from its read-side cache.
-    // iterate the smaller body's list to keep this O(min(|A.contacts|, |B.contacts|)).
-    const searchBody = physA.contactCount <= physB.contactCount ? physA : physB;
-    let contactKey = searchBody.headContactKey;
-
-    while (contactKey !== contacts.INVALID_CONTACT_KEY) {
-        const contactId = contacts.getContactKeyId(contactKey);
-        const edgeIndex = contacts.getContactKeyEdge(contactKey);
+    // walk this pair record's contact chain and rebuild each manifold from its read-side cache.
+    let contactId = world.pairs.firstContact[pairRecordIndex];
+    while (contactId !== contacts.INVALID_CONTACT_KEY) {
         const contact = world.contacts.contacts[contactId];
-        const nextKey = contact.edges[edgeIndex].nextKey;
+        const nextId = contact.nextInPair;
 
-        const matches =
-            (contact.bodyIdA === physA.id && contact.bodyIdB === physB.id) ||
-            (contact.bodyIdA === physB.id && contact.bodyIdB === physA.id);
-
-        if (matches) {
-            const cachedManifold = contacts.getReadManifold(contact, world.contacts);
-            if (cachedManifold.numContactPoints > 0) {
-                // contact stores bodyIdA <= bodyIdB; pass bodies in that same order so
-                // addContactConstraint's internal swap is a no-op.
-                const orderedA = world.bodies.pool[contact.bodyIndexA];
-                const orderedB = world.bodies.pool[contact.bodyIndexB];
-                reconstructManifoldFromCache(
-                    _bodyPairCache_reconstructedManifold,
-                    contact,
-                    orderedA,
-                    orderedB,
-                    cachedManifold,
-                );
-                contactConstraints.addContactConstraint(
-                    world.contactConstraints,
-                    world.contacts,
-                    orderedA,
-                    orderedB,
-                    _bodyPairCache_reconstructedManifold,
-                    world.settings,
-                    listener,
-                    deltaTime,
-                );
-            }
+        const cachedManifold = contacts.getReadManifold(contact, world.contacts);
+        if (cachedManifold.numContactPoints > 0) {
+            // contact stores bodyIdA <= bodyIdB; pass bodies in that same order so
+            // addContactConstraint's internal swap is a no-op.
+            const orderedA = world.bodies.pool[contact.bodyIndexA];
+            const orderedB = world.bodies.pool[contact.bodyIndexB];
+            reconstructManifoldFromCache(_bodyPairCache_reconstructedManifold, contact, orderedA, orderedB, cachedManifold);
+            contactConstraints.addContactConstraint(
+                world.contactConstraints,
+                world.contacts,
+                world.pairs,
+                pairRecordIndex,
+                orderedA,
+                orderedB,
+                _bodyPairCache_reconstructedManifold,
+                world.settings,
+                listener,
+                deltaTime,
+            );
         }
 
-        contactKey = nextKey;
+        contactId = nextId;
     }
 
     return true;
@@ -977,6 +1001,7 @@ function narrowphase(
     bodyB: RigidBody,
     listener: Listener | undefined,
     deltaTime: number,
+    pairRecordIndex: number,
 ): boolean {
     // set collide settings from world options
     const collideSettings = _narrowphase_collideSettings;
@@ -1003,7 +1028,7 @@ function narrowphase(
 
     if (useManifoldReduction) {
         // use reduction collector - accumulates manifolds, creates constraints after
-        narrowphaseWithReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime, pairRecordIndex);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -1056,7 +1081,7 @@ function narrowphase(
         return constraintsCreated;
     } else {
         // use non-reduction collector - creates constraints immediately in addHit
-        narrowphaseWithoutReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithoutReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime, pairRecordIndex);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -1551,11 +1576,21 @@ function onCCDContactAdded(
         }
     }
 
+    // find-or-create the owning pair record: CCD can hit a body pair the broadphase sweep never
+    // discovered. a real contact implies a real overlapping pair — the next sweep keeps the record
+    // if the fat AABBs overlap, else destroys it through the normal cascade. slots freed during this
+    // step's sweep are safe to reuse (cascades run before a slot is freed, so no contact ever holds
+    // a pairRecord pointing at a freed/reused slot).
+    let rec = pairs.findPairRecord(world.pairs, orderedBodyA, orderedBodyB);
+    if (rec === -1) {
+        rec = pairs.addPairRecord(world.pairs, orderedBodyA, orderedBodyB);
+    }
+
     // find existing contact
-    const existingContact = contacts.findContact(
+    const existingContact = contacts.findContactInPair(
         world.contacts,
-        orderedBodyA,
-        orderedBodyB,
+        world.pairs,
+        rec,
         swappedManifold.subShapeIdA,
         swappedManifold.subShapeIdB,
     );
@@ -1564,20 +1599,22 @@ function onCCDContactAdded(
         // contact persisted from previous frame
         // mark it as CCD contact to prevent warm-starting with stale impulses
         contacts.getWriteManifold(existingContact, world.contacts).flags |= contacts.CachedManifoldFlags.CCDContact;
-        existingContact.processedThisFrame = true;
+        existingContact.lastProcessedFrame = world.contacts.frameStamp;
 
         listener.onContactPersisted?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
     } else {
         // new contact - create it with CCD flag
         const contact = contacts.createContact(
             world.contacts,
+            world.pairs,
+            rec,
             orderedBodyA,
             orderedBodyB,
             swappedManifold.subShapeIdA,
             swappedManifold.subShapeIdB,
         );
         contacts.getWriteManifold(contact, world.contacts).flags = contacts.CachedManifoldFlags.CCDContact;
-        contact.processedThisFrame = true;
+        contact.lastProcessedFrame = world.contacts.frameStamp;
 
         listener.onContactAdded?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
     }

@@ -6,7 +6,7 @@ import * as pointConstraint from './constraints/point-constraint';
 import * as sixDOFConstraint from './constraints/six-dof-constraint';
 import * as sliderConstraint from './constraints/slider-constraint';
 import * as swingTwistConstraint from './constraints/swing-twist-constraint';
-import { registerShapes, registerConstraints } from './register';
+import { registerConstraints, registerShapes } from './register';
 import * as box from './shapes/box';
 import * as capsule from './shapes/capsule';
 import * as compound from './shapes/compound';

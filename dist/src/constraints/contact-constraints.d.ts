@@ -4,6 +4,7 @@ import * as body from '../body/rigid-body.js';
 import * as contacts from '../contacts.js';
 import type { Listener } from '../listener.js';
 import type { ContactManifold } from '../manifold/manifold.js';
+import type { Pairs } from '../pairs.js';
 import type { WorldSettings } from '../world-settings.js';
 import * as angularFrictionConstraintPart from './constraint-part/angular-friction-constraint-part.js';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part.js';
@@ -161,7 +162,7 @@ export declare function copyContactSettings(out: ContactSettings, source: Contac
 /**
  * add a contact constraint from a new manifold
  */
-export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number): boolean;
+export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, pairs: Pairs, pairRecordIndex: number, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number): boolean;
 /**
  * apply warm start impulses from previous frame to give solver a good initial guess.
  * significantly improves convergence speed (~3x faster).

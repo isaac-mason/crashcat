@@ -389,9 +389,11 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
                 const n2 = p2.normal;
                 vec3.cross(_perpendicularNormal, n1, n2);
                 vec3.normalize(_perpendicularNormal, _perpendicularNormal);
-                const perpConstant = -(_perpendicularNormal[0] * pointPositions[fb] +
+                const perpConstant = -(
+                    _perpendicularNormal[0] * pointPositions[fb] +
                     _perpendicularNormal[1] * pointPositions[fb + 1] +
-                    _perpendicularNormal[2] * pointPositions[fb + 2]);
+                    _perpendicularNormal[2] * pointPositions[fb + 2]
+                );
                 p3 = { normal: _perpendicularNormal, constant: perpConstant };
                 offsetMask = [1, 1, 0]; // third plane not offset
             }

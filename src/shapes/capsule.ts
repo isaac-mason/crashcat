@@ -275,4 +275,3 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 function getInnerRadius(shape: CapsuleShape): number {
     return shape.radius;
 }
-

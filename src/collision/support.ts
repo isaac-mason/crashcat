@@ -674,12 +674,7 @@ function computeScaledShrunkHullPoints(shape: ConvexHullShape, scale: Vec3, dst:
  * scaled vertices into scratch per pair (slow path). `vertices` is a read-only borrow valid for the
  * current pair.
  */
-export function setHullSupport(
-    out: Support,
-    shape: ConvexHullShape,
-    mode: SupportFunctionMode,
-    scale: Vec3,
-): void {
+export function setHullSupport(out: Support, shape: ConvexHullShape, mode: SupportFunctionMode, scale: Vec3): void {
     out.kind = SupportKind.HULL;
     out.hasTransform = false;
     out.addRadius = 0;

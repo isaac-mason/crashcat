@@ -1,9 +1,6 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import {
-    computeBarycentricCoordinates2d,
-    computeBarycentricCoordinates3d,
-} from '../../src/collision/closest-points';
+import { computeBarycentricCoordinates2d, computeBarycentricCoordinates3d } from '../../src/collision/closest-points';
 
 describe('computeBarycentricCoordinates2d', () => {
     test('should compute barycentric coordinates for origin on line', () => {

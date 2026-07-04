@@ -622,34 +622,45 @@ function computeClosestPointToSimplex(
 
         case 2: {
             // line segment
-            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
-            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
+            _simplexY0[0] = y[0];
+            _simplexY0[1] = y[1];
+            _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3];
+            _simplexY1[1] = y[4];
+            _simplexY1[2] = y[5];
             computeClosestPointOnLine(_closestPoint, _simplexY0, _simplexY1, 1e-10);
             break;
         }
 
         case 3: {
             // triangle
-            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
-            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
-            _simplexY2[0] = y[6]; _simplexY2[1] = y[7]; _simplexY2[2] = y[8];
-            computeClosestPointOnTriangle(
-                _closestPoint,
-                _simplexY0,
-                _simplexY1,
-                _simplexY2,
-                lastPointPartOfClosest,
-                1e-10,
-            );
+            _simplexY0[0] = y[0];
+            _simplexY0[1] = y[1];
+            _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3];
+            _simplexY1[1] = y[4];
+            _simplexY1[2] = y[5];
+            _simplexY2[0] = y[6];
+            _simplexY2[1] = y[7];
+            _simplexY2[2] = y[8];
+            computeClosestPointOnTriangle(_closestPoint, _simplexY0, _simplexY1, _simplexY2, lastPointPartOfClosest, 1e-10);
             break;
         }
 
         case 4: {
             // tetrahedron
-            _simplexY0[0] = y[0]; _simplexY0[1] = y[1]; _simplexY0[2] = y[2];
-            _simplexY1[0] = y[3]; _simplexY1[1] = y[4]; _simplexY1[2] = y[5];
-            _simplexY2[0] = y[6]; _simplexY2[1] = y[7]; _simplexY2[2] = y[8];
-            _simplexY3[0] = y[9]; _simplexY3[1] = y[10]; _simplexY3[2] = y[11];
+            _simplexY0[0] = y[0];
+            _simplexY0[1] = y[1];
+            _simplexY0[2] = y[2];
+            _simplexY1[0] = y[3];
+            _simplexY1[1] = y[4];
+            _simplexY1[2] = y[5];
+            _simplexY2[0] = y[6];
+            _simplexY2[1] = y[7];
+            _simplexY2[2] = y[8];
+            _simplexY3[0] = y[9];
+            _simplexY3[1] = y[10];
+            _simplexY3[2] = y[11];
             computeClosestPointOnTetrahedron(
                 _closestPoint,
                 _simplexY0,
@@ -1131,8 +1142,12 @@ export function gjkCastShape(
             const yy = _simplex.y;
             const pp = _simplex.p;
             const qq = _simplex.q;
-            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
-            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            _simplexY0[0] = yy[0];
+            _simplexY0[1] = yy[1];
+            _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3];
+            _simplexY1[1] = yy[4];
+            _simplexY1[2] = yy[5];
             computeBarycentricCoordinates2d(_bary, _simplexY0, _simplexY1, 1e-10);
 
             // out.pointB += q[0] * u + q[1] * v + _normalizedV * convexRadiusB
@@ -1154,9 +1169,15 @@ export function gjkCastShape(
             const yy = _simplex.y;
             const pp = _simplex.p;
             const qq = _simplex.q;
-            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
-            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
-            _simplexY2[0] = yy[6]; _simplexY2[1] = yy[7]; _simplexY2[2] = yy[8];
+            _simplexY0[0] = yy[0];
+            _simplexY0[1] = yy[1];
+            _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3];
+            _simplexY1[1] = yy[4];
+            _simplexY1[2] = yy[5];
+            _simplexY2[0] = yy[6];
+            _simplexY2[1] = yy[7];
+            _simplexY2[2] = yy[8];
             computeBarycentricCoordinates3d(_bary, _simplexY0, _simplexY1, _simplexY2, 1e-10);
 
             out.pointB[0] += qq[0] * _bary.u + qq[3] * _bary.v + qq[6] * _bary.w + _normalizedV[0] * convexRadiusB;
@@ -1372,8 +1393,12 @@ export function gjkClosestPoints(
             const yy = _simplex.y;
             const pp = _simplex.p;
             const qq = _simplex.q;
-            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
-            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
+            _simplexY0[0] = yy[0];
+            _simplexY0[1] = yy[1];
+            _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3];
+            _simplexY1[1] = yy[4];
+            _simplexY1[2] = yy[5];
             computeBarycentricCoordinates2d(_bary, _simplexY0, _simplexY1, 1e-10);
 
             out.pointA[0] = pp[0] * _bary.u + pp[3] * _bary.v;
@@ -1391,9 +1416,15 @@ export function gjkClosestPoints(
             const yy = _simplex.y;
             const pp = _simplex.p;
             const qq = _simplex.q;
-            _simplexY0[0] = yy[0]; _simplexY0[1] = yy[1]; _simplexY0[2] = yy[2];
-            _simplexY1[0] = yy[3]; _simplexY1[1] = yy[4]; _simplexY1[2] = yy[5];
-            _simplexY2[0] = yy[6]; _simplexY2[1] = yy[7]; _simplexY2[2] = yy[8];
+            _simplexY0[0] = yy[0];
+            _simplexY0[1] = yy[1];
+            _simplexY0[2] = yy[2];
+            _simplexY1[0] = yy[3];
+            _simplexY1[1] = yy[4];
+            _simplexY1[2] = yy[5];
+            _simplexY2[0] = yy[6];
+            _simplexY2[1] = yy[7];
+            _simplexY2[2] = yy[8];
             computeBarycentricCoordinates3d(_bary, _simplexY0, _simplexY1, _simplexY2, 1e-10);
 
             out.pointA[0] = pp[0] * _bary.u + pp[3] * _bary.v + pp[6] * _bary.w;

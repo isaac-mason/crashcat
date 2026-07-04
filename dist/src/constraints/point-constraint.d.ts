@@ -1,9 +1,9 @@
 import type { Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /** point constraint removes 3 translational DOF */
 export type PointConstraint = ConstraintBase & {
     localSpacePosition1: Vec3;

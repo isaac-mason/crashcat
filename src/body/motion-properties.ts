@@ -494,7 +494,7 @@ const _scaled = mat4.create();
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
- * 
+ *
  * @optimize
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
@@ -576,7 +576,6 @@ export function setLinearVelocity(motionProperties: MotionProperties, velocity: 
 export function setAngularVelocity(motionProperties: MotionProperties, velocity: Vec3): void {
     vec3.copy(motionProperties.angularVelocity, velocity);
     clampAngularVelocity(motionProperties);
-
 }
 
 /**
@@ -605,7 +604,7 @@ export function addAngularVelocity(motionProperties: MotionProperties, velocityD
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
- * 
+ *
  * @optimize
  */
 export function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
@@ -618,7 +617,7 @@ export function addLinearVelocityStep(motionProperties: MotionProperties, linear
  * Applies translation locking based on allowed degrees of freedom.
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
- * 
+ *
  * @optimize
  */
 export function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
@@ -630,7 +629,7 @@ export function subLinearVelocityStep(motionProperties: MotionProperties, linear
  * Add an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
- * 
+ *
  * @optimize
  */
 export function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
@@ -641,7 +640,7 @@ export function addAngularVelocityStep(motionProperties: MotionProperties, angul
  * Subtract an angular velocity step (used during constraint solving).
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
- * 
+ *
  * @optimize
  */
 export function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
@@ -654,7 +653,7 @@ export function subAngularVelocityStep(motionProperties: MotionProperties, angul
  *
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
- * 
+ *
  * @optimize
  */
 export function scaleToMass(motionProperties: MotionProperties, newMass: number): void {

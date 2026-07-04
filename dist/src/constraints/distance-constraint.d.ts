@@ -1,10 +1,10 @@
 import type { Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part.js';
 import type { SpringSettings } from './constraint-part/spring-settings.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /** distance constraint removes 1 translational DOF (distance between two points) */
 export type DistanceConstraint = ConstraintBase & {
     localSpacePosition1: Vec3;

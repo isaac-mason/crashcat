@@ -12,6 +12,7 @@ import {
     rigidBody,
     updateWorld,
 } from '../src';
+import { bodyContactCount } from './helpers';
 
 registerAll();
 
@@ -68,6 +69,31 @@ describe('persistent-pair broadphase', () => {
         rigidBody.wake(world, a);
         pairs.findCollidingPairs(world, SPEC, undefined);
         expect(world.pairs.collidingPairCount).toBe(1);
+    });
+
+    test('teleport-sleeping destruction: teleporting a sleeping body away destroys the separated record the same frame', () => {
+        const { world, layer } = makeWorld();
+
+        const a = makeBox(world, layer, [0, 0, 0]);
+        const b = makeBox(world, layer, [0.4, 0, 0]);
+
+        pairs.findCollidingPairs(world, SPEC, undefined);
+        expect(world.pairs.recordCount).toBe(1);
+
+        rigidBody.sleep(world, a);
+        rigidBody.sleep(world, b);
+
+        // settle into the sleeping steady state: the record persists but is not emitted
+        pairs.findCollidingPairs(world, SPEC, undefined);
+        expect(world.pairs.recordCount).toBe(1);
+        expect(world.pairs.collidingPairCount).toBe(0);
+
+        // teleport sleeping a far away WITHOUT waking it. the moved flag must route the pair
+        // through the full sweep (past the frame-invariant sleeping-pair skip) so the
+        // fat-separated record is destroyed this frame, not deferred until a later wake
+        rigidBody.setPosition(world, a, [100, 0, 0], false);
+        pairs.findCollidingPairs(world, SPEC, undefined);
+        expect(world.pairs.recordCount).toBe(0);
     });
 
     test('teleport-sleeping discovery (G5): teleporting a sleeping body onto another discovers the pair; emitted once woken', () => {
@@ -184,8 +210,8 @@ describe('drift-into-contact discovery', () => {
             updateWorld(world, undefined, 1 / 60);
         }
 
-        expect(bodyA.contactCount).toBeGreaterThan(0);
-        expect(bodyB.contactCount).toBeGreaterThan(0);
+        expect(bodyContactCount(world, bodyA)).toBeGreaterThan(0);
+        expect(bodyContactCount(world, bodyB)).toBeGreaterThan(0);
     });
 });
 

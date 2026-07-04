@@ -1,6 +1,6 @@
 import { box3, vec3 } from 'mathcat';
 import { describe, expect, it } from 'vitest';
-import { type World, box, filter, type BodyVisitor, dbvt, MotionType, type RigidBody, rigidBody } from '../src';
+import { type BodyVisitor, box, dbvt, filter, MotionType, type RigidBody, rigidBody, type World } from '../src';
 import { createTestWorld } from './helpers';
 
 function makeBody(

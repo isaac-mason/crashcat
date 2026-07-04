@@ -1,7 +1,6 @@
 import type { Quat, Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AngleConstraintPart } from './constraint-part/angle-constraint-part.js';
 import type { HingeRotationConstraintPart } from './constraint-part/hinge-rotation-constraint-part.js';
@@ -9,6 +8,7 @@ import type { MotorSettings } from './constraint-part/motor-settings.js';
 import { MotorState } from './constraint-part/motor-settings.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
 import type { SpringSettings } from './constraint-part/spring-settings.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /**
  * Hinge constraint removes 5 DOF (3 translation + 2 rotation).
  * Allows rotation only around the hinge axis, like a door hinge or wheel.

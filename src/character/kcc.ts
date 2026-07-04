@@ -21,7 +21,7 @@ import { createSupport, type Support, SupportFunctionMode, setPolygonSupport } f
 import type { Filter } from '../filter';
 import * as query from '../query';
 import type { Shape } from '../shapes/shapes';
-import { getShapeSupportingFace, setShapeSupport, ShapeType } from '../shapes/shapes';
+import { getShapeSupportingFace, ShapeType, setShapeSupport } from '../shapes/shapes';
 import { createFace } from '../utils/face';
 import type { World } from '../world';
 

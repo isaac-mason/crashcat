@@ -2,14 +2,14 @@ import type { Quat, Vec3 } from 'mathcat';
 import type { Bodies } from '../body/bodies.js';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
-import { MotorState } from './constraint-part/motor-settings.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AngleConstraintPart } from './constraint-part/angle-constraint-part.js';
 import type { MotorSettings } from './constraint-part/motor-settings.js';
+import { MotorState } from './constraint-part/motor-settings.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part.js';
 import { SwingType } from './constraint-part/swing-twist-constraint-part.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /**
  * SwingTwistConstraint is a sophisticated constraint for humanoid ragdoll joints.
  * It allows limited rotation with separate swing and twist limits.

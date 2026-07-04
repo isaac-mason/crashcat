@@ -1,4 +1,4 @@
-import { registerConstraintDef, type ConstraintDef } from './constraints/constraints';
+import { type ConstraintDef, registerConstraintDef } from './constraints/constraints';
 import { type ShapeDef, shapeDefs } from './shapes/shapes';
 
 /** register shape definitions */

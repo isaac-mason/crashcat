@@ -67,7 +67,9 @@ export function transformFaceWithMat4RotationTranslation(face: Face, matrix: Mat
  */
 export function transformFaceWithMat4Scale(face: Face, matrix: Mat4, scale: Vec3): void {
     // extract rotation from matrix and combine with scale
-    const sx = scale[0], sy = scale[1], sz = scale[2];
+    const sx = scale[0],
+        sy = scale[1],
+        sz = scale[2];
     const m00 = matrix[0] * sx;
     const m01 = matrix[1] * sx;
     const m02 = matrix[2] * sx;

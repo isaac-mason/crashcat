@@ -68,8 +68,12 @@ function computeTransformedLocalBounds(out: Box3, shape: TransformedShape): void
     box3.empty(out);
 
     const childAABB = shape.shape.aabb;
-    const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
-    const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
+    const minX = childAABB[0],
+        minY = childAABB[1],
+        minZ = childAABB[2];
+    const maxX = childAABB[3],
+        maxY = childAABB[4],
+        maxZ = childAABB[5];
 
     // transform all 8 corners of the child AABB
     for (let x = 0; x < 2; x++) {

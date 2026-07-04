@@ -30,7 +30,11 @@ describe('SubShapeID', () => {
         const compoundShape = compound.create({
             children: [
                 { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 1 }) },
-                { position: vec3.create(), quaternion: quat.create(), shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }) },
+                {
+                    position: vec3.create(),
+                    quaternion: quat.create(),
+                    shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
+                },
                 { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 2 }) },
             ],
         });

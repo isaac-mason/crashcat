@@ -1,4 +1,4 @@
-import { type Mat3, type Vec3, box3, mat3, vec3 } from 'mathcat';
+import { box3, type Mat3, mat3, type Vec3, vec3 } from 'mathcat';
 import type { World } from '../world';
 import type { MotionProperties } from './motion-properties';
 import { MotionType } from './motion-type';
@@ -16,7 +16,7 @@ const _axis: Vec3 = /* @__PURE__ */ vec3.create();
  * - center of mass
  * - center of mass + largest bounding box axis
  * - center of mass + second largest bounding box axis
- * 
+ *
  * @optimize
  */
 export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3]): void {
@@ -43,16 +43,22 @@ export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3
     let s2: number; // scale for axis 2
     if (ex <= ey && ex <= ez) {
         // X is smallest: use Y and Z axes
-        c1 = 3; s1 = ey;
-        c2 = 6; s2 = ez;
+        c1 = 3;
+        s1 = ey;
+        c2 = 6;
+        s2 = ez;
     } else if (ey <= ez) {
         // Y is smallest: use X and Z axes
-        c1 = 0; s1 = ex;
-        c2 = 6; s2 = ez;
+        c1 = 0;
+        s1 = ex;
+        c2 = 6;
+        s2 = ez;
     } else {
         // Z is smallest: use X and Y axes
-        c1 = 0; s1 = ex;
-        c2 = 3; s2 = ey;
+        c1 = 0;
+        s1 = ex;
+        c2 = 3;
+        s2 = ey;
     }
 
     // point 1 = com + axis1 * scale1
@@ -164,7 +170,7 @@ export function removeBodyFromActiveBodies(world: World, body: RigidBody): void 
 export function sleep(world: World, body: RigidBody): void {
     // exit if body is static
     if (body.motionType === MotionType.STATIC) return;
-    
+
     // exit if already sleeping
     if (body.sleeping) return;
 

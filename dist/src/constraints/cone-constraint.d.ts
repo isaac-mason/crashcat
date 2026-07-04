@@ -1,10 +1,10 @@
 import type { Vec3 } from 'mathcat';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
-import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AngleConstraintPart } from './constraint-part/angle-constraint-part.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
+import { type ConstraintBase, ConstraintSpace } from './constraints.js';
 /**
  * Cone constraint constrains 2 bodies to a single point and limits the swing between twist axes within a cone.
  *

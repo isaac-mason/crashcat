@@ -350,7 +350,11 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
 
         // check all constraints in island
         for (let ci = 0; ci < island.constraintIds.length; ci++) {
-            constraints.getConstraintIterationOverrides(_finalize_constraintOverrides, constraintsState, island.constraintIds[ci]);
+            constraints.getConstraintIterationOverrides(
+                _finalize_constraintOverrides,
+                constraintsState,
+                island.constraintIds[ci],
+            );
             const vOv = _finalize_constraintOverrides.velocity;
             const pOv = _finalize_constraintOverrides.position;
             if (vOv > numVelocitySteps) numVelocitySteps = vOv;

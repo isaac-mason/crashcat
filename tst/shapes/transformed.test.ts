@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
 import { quat, vec3 } from 'mathcat';
+import { describe, expect, test } from 'vitest';
 import { ShapeType, sphere, transformed } from '../../src';
 
 describe('Transformed shape AABB caching', () => {
