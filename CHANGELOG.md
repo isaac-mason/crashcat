@@ -15,6 +15,7 @@
 - feat: **breaking** — convex hull vertices are now stored as flat `number[]` SoA arrays on `ConvexHullShape` (`pointPositions`/`pointNumFaces`/`pointFaces`/`numPoints`) instead of a `ConvexHullPoint[]` object array; read `shape.pointPositions[i * 3 + k]` in place of `shape.points[i].position[k]`, and the `ConvexHullPoint` type is removed.
 - perf: convex-radius shrink rewritten as an allocation-free scalar routine (scaled + unscaled, no `plane3` objects).
 - feat: **breaking** — convex support is now a single monomorphic `getSupport(out, support, direction)` over one tagged `Support` struct, filled per-pair via `setShapeSupport` (or the per-shape `set*Support` setters). The `ShapeSupportPool`, `getShapeSupportFunction`, `createShapeSupportPool`, `TransformedSupport`, and `AddConvexRadiusSupport` machinery is removed; transform and convex-radius inflation are now folded onto the struct (`hasTransform`/`transform`, `addRadius`).
+- feat: start using [compilecat](htps://github.com/isaacmason/compilecat) to opt-in optimize some hot-path functions
 
 ## v0.0.4
 
