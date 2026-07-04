@@ -778,6 +778,7 @@ export function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void {
 const _ray = /* @__PURE__ */ raycast3.create();
 const _nodeBounds = /* @__PURE__ */ box3.create(); // scratch for expanded child bounds in castAABB distance sort
 
+/* @optimize */
 export function castRay(
     world: World,
     dbvt: DBVT,
