@@ -916,7 +916,7 @@ const listener: Listener = {
         // sum up total normal impulse from all contact points
         let totalNormalImpulse = 0;
         for (let i = 0; i < collisionEstimationResult.numImpulses; i++) {
-            totalNormalImpulse += collisionEstimationResult.impulses[i].contactImpulse;
+            totalNormalImpulse += collisionEstimationResult.contactImpulse[i];
         }
 
         // scale impulse to strength (tune this scaling based on feel)
