@@ -1,11 +1,11 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
+import { DOF_ALL } from '../../src/body/dof';
+import * as motionPropertiesModule from '../../src/body/motion-properties';
 import { MotionType } from '../../src/body/motion-type';
 import type { RigidBody } from '../../src/body/rigid-body';
 import * as axisConstraintPart from '../../src/constraints/constraint-part/axis-constraint-part';
 import * as contactConstraintPart from '../../src/constraints/constraint-part/contact-constraint-part';
-import { DOF_ALL } from '../../src/body/dof';
-import * as motionPropertiesModule from '../../src/body/motion-properties';
 
 /**
  * create a minimal rigid body for testing constraint parts.

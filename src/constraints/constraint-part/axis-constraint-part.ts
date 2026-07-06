@@ -229,12 +229,17 @@ export function calculateConstraintPropertiesWithMassOverride(
     axis: Vec3,
     bias: number,
 ): void {
-    // scale inverse inertia matrices only for dynamic bodies
-    if (bodyA.motionType === MotionType.DYNAMIC) {
+    // scale inverse inertia only for dynamic bodies, and only when the scale is not 1 —
+    // the unscaled matrix is passed through directly in the common case (no 16-element copy)
+    let invIA = invInertiaA;
+    if (bodyA.motionType === MotionType.DYNAMIC && invInertiaScaleA !== 1) {
         mat4.multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
+        invIA = _acp_scaledInvInertiaA;
     }
-    if (bodyB.motionType === MotionType.DYNAMIC) {
+    let invIB = invInertiaB;
+    if (bodyB.motionType === MotionType.DYNAMIC && invInertiaScaleB !== 1) {
         mat4.multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
+        invIB = _acp_scaledInvInertiaB;
     }
 
     const invEffectiveMass = calculateInverseEffectiveMass(
@@ -243,8 +248,8 @@ export function calculateConstraintPropertiesWithMassOverride(
         bodyB,
         invMassA,
         invMassB,
-        _acp_scaledInvInertiaA,
-        _acp_scaledInvInertiaB,
+        invIA,
+        invIB,
         r1PlusU,
         r2,
         axis,

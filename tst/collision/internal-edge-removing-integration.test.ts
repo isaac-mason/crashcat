@@ -1,5 +1,5 @@
+import { quat, vec3 } from 'mathcat';
 import { describe, expect, it } from 'vitest';
-import { vec3, quat } from 'mathcat';
 import * as crashcat from '../../src';
 
 describe('InternalEdgeRemovingCollector Integration', () => {

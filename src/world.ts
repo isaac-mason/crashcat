@@ -6,6 +6,7 @@ import * as constraints from './constraints/constraints';
 import * as contactConstraints from './constraints/contact-constraints';
 import * as contacts from './contacts';
 import * as islands from './islands';
+import * as pairs from './pairs';
 import type { WorldSettings } from './world-settings';
 
 /** physics world state */
@@ -15,6 +16,9 @@ export type World = {
 
     /** broadphase state */
     broadphase: broadphase.Broadphase;
+
+    /** persistent overlapping-pair state (pair set, per-pair pose cache, per-frame emitted pairs) */
+    pairs: pairs.Pairs;
 
     /** bodies state */
     bodies: bodies.Bodies;
@@ -48,6 +52,7 @@ export function createWorld(settings: WorldSettings): World {
         settings,
         bodies: bodies.init(),
         broadphase: broadphase.init(settings.layers),
+        pairs: pairs.init(),
         contactConstraints: contactConstraints.init(),
         constraints: constraints.init(),
         contacts: contacts.init(),

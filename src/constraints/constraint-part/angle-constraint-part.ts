@@ -1,21 +1,21 @@
 import type { Vec3 } from 'mathcat';
 import { vec3 } from 'mathcat';
-import type { RigidBody } from '../../body/rigid-body';
-import { addRotationStep, subRotationStep } from '../../body/rigid-body-step';
-import { MotionType } from '../../body/motion-type';
 import {
     addAngularVelocityStep,
-    subAngularVelocityStep,
     multiplyWorldSpaceInverseInertiaByVector,
+    subAngularVelocityStep,
 } from '../../body/motion-properties';
+import { MotionType } from '../../body/motion-type';
+import type { RigidBody } from '../../body/rigid-body';
+import { addRotationStep, subRotationStep } from '../../body/rigid-body-step';
 import {
-    createSpringPart,
     calculateSpringPropertiesWithBias,
     calculateSpringPropertiesWithFrequencyAndDamping,
-    calculateSpringPropertiesWithStiffnessAndDamping,
     calculateSpringPropertiesWithSettings,
-    isSpringActive,
+    calculateSpringPropertiesWithStiffnessAndDamping,
+    createSpringPart,
     getSpringBias,
+    isSpringActive,
     type SpringPart,
 } from './spring-part';
 import type { SpringSettings } from './spring-settings';

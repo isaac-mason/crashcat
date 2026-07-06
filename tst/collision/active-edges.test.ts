@@ -8,7 +8,7 @@ describe('Active Edges - isEdgeActive', () => {
         const normal1 = vec3.fromValues(0, 1, 0);
         const normal2 = vec3.fromValues(0, 1, 0);
         const edgeDirection = vec3.fromValues(1, 0, 0);
-        const cosThreshold = Math.cos(10 * Math.PI / 180); // 10 degrees
+        const cosThreshold = Math.cos((10 * Math.PI) / 180); // 10 degrees
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 
@@ -17,11 +17,11 @@ describe('Active Edges - isEdgeActive', () => {
 
     test('sharp convex edge (90 degrees) should be active', () => {
         // Two triangles at 90 degree angle (convex edge)
-        const normal1 = vec3.fromValues(0, 1, 0);  // Up
-        const normal2 = vec3.fromValues(1, 0, 0);  // Right
+        const normal1 = vec3.fromValues(0, 1, 0); // Up
+        const normal2 = vec3.fromValues(1, 0, 0); // Right
         // For convex edge, cross product n1 x n2 = (0,0,-1), so edge direction should align
         const edgeDirection = vec3.fromValues(0, 0, -1); // Edge points along -Z
-        const cosThreshold = Math.cos(10 * Math.PI / 180); // 10 degrees
+        const cosThreshold = Math.cos((10 * Math.PI) / 180); // 10 degrees
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 
@@ -30,11 +30,11 @@ describe('Active Edges - isEdgeActive', () => {
 
     test('sharp convex edge (45 degrees) should be active', () => {
         // Two triangles at 45 degree angle
-        const normal1 = vec3.fromValues(0, 1, 0);  // Up
+        const normal1 = vec3.fromValues(0, 1, 0); // Up
         const normal2 = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 0)); // 45 degrees
         // Cross product will point in -Z direction for this convex configuration
         const edgeDirection = vec3.fromValues(0, 0, -1);
-        const cosThreshold = Math.cos(10 * Math.PI / 180); // 10 degrees
+        const cosThreshold = Math.cos((10 * Math.PI) / 180); // 10 degrees
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 
@@ -43,11 +43,11 @@ describe('Active Edges - isEdgeActive', () => {
 
     test('small angle convex edge (5 degrees) should be inactive with 10 degree threshold', () => {
         // Two triangles at 5 degree angle - below threshold
-        const angle = 5 * Math.PI / 180;
+        const angle = (5 * Math.PI) / 180;
         const normal1 = vec3.fromValues(0, 1, 0);
         const normal2 = vec3.normalize(vec3.create(), vec3.fromValues(Math.sin(angle), Math.cos(angle), 0));
         const edgeDirection = vec3.fromValues(0, 0, 1);
-        const cosThreshold = Math.cos(10 * Math.PI / 180); // 10 degrees
+        const cosThreshold = Math.cos((10 * Math.PI) / 180); // 10 degrees
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 
@@ -57,8 +57,8 @@ describe('Active Edges - isEdgeActive', () => {
     test('concave edge should always be inactive', () => {
         // Two triangles forming a valley (concave edge)
         // Normal1 points up, Normal2 points left - forms a valley
-        const normal1 = vec3.fromValues(0, 1, 0);   // Up
-        const normal2 = vec3.fromValues(-1, 0, 0);  // Left (forms valley when edge points forward)
+        const normal1 = vec3.fromValues(0, 1, 0); // Up
+        const normal2 = vec3.fromValues(-1, 0, 0); // Left (forms valley when edge points forward)
         const edgeDirection = vec3.fromValues(0, 0, 1);
         const cosThreshold = 0.0; // Even with very permissive threshold
 
@@ -70,9 +70,9 @@ describe('Active Edges - isEdgeActive', () => {
     test('back-to-back triangles should always be active', () => {
         // Triangles with opposite normals (back to back)
         const normal1 = vec3.fromValues(0, 1, 0);
-        const normal2 = vec3.fromValues(0, -1, 0);  // Opposite direction
+        const normal2 = vec3.fromValues(0, -1, 0); // Opposite direction
         const edgeDirection = vec3.fromValues(1, 0, 0);
-        const cosThreshold = Math.cos(10 * Math.PI / 180);
+        const cosThreshold = Math.cos((10 * Math.PI) / 180);
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 
@@ -81,11 +81,11 @@ describe('Active Edges - isEdgeActive', () => {
 
     test('nearly back-to-back triangles (179 degrees) should be active', () => {
         // Triangles at 179 degrees apart (nearly opposite)
-        const angle = 179 * Math.PI / 180;
+        const angle = (179 * Math.PI) / 180;
         const normal1 = vec3.fromValues(0, 1, 0);
         const normal2 = vec3.fromValues(0, Math.cos(angle), 0); // Almost pointing down
         const edgeDirection = vec3.fromValues(0, 0, 1);
-        const cosThreshold = Math.cos(10 * Math.PI / 180);
+        const cosThreshold = Math.cos((10 * Math.PI) / 180);
 
         const result = activeEdges.isEdgeActive(normal1, normal2, edgeDirection, cosThreshold);
 

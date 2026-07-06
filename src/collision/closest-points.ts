@@ -16,12 +16,7 @@ export function createBarycentricCoordinatesResult(): BarycentricCoordinatesResu
     };
 }
 
-export function computeBarycentricCoordinates2d(
-    out: BarycentricCoordinatesResult,
-    a: Vec3,
-    b: Vec3,
-    squaredTolerance: number,
-) {
+export function computeBarycentricCoordinates2d(out: BarycentricCoordinatesResult, a: Vec3, b: Vec3, squaredTolerance: number) {
     // ab = b - a
     const abx = b[0] - a[0];
     const aby = b[1] - a[1];
@@ -50,7 +45,7 @@ export function computeBarycentricCoordinates2d(
         out.u = 1.0 - out.v;
     }
     out.isValid = true;
-};
+}
 
 const _otherBarycentric = /* @__PURE__ */ createBarycentricCoordinatesResult();
 
@@ -147,6 +142,4 @@ export function computeBarycentricCoordinates3d(
         }
     }
     out.isValid = true;
-};
-
-
+}

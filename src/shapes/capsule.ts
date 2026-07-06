@@ -1,7 +1,7 @@
 import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
-import { type Support, SupportFunctionMode } from '../collision/support';
+import { setCapsuleSupport } from '../collision/support';
 import { assert } from '../utils/assert';
 import { transformFaceWithMat4Scale } from '../utils/face';
 import * as convex from './convex';
@@ -119,8 +119,7 @@ export const def = /* @__PURE__ */ (() =>
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        createSupportPool: createCapsuleSupportPool,
-        getSupportFunction: getCapsuleSupportFunction,
+        setSupport: setCapsuleSupport,
         register: () => {
             // capsule vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
@@ -275,135 +274,4 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 
 function getInnerRadius(shape: CapsuleShape): number {
     return shape.radius;
-}
-
-/* support functions */
-
-/**
- * Capsule support for EXCLUDE_CONVEX_RADIUS mode.
- * Used by GJK - returns line segment endpoints, stores radius in convexRadius.
- */
-export type CapsuleNoConvexSupport = {
-    halfHeightOfCylinder: Vec3; // (0, halfHeight, 0)
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function capsuleNoConvexGetSupport(this: CapsuleNoConvexSupport, direction: Vec3, out: Vec3): void {
-    // a line segment along Y axis from (0, -halfHeight, 0) to (0, halfHeight, 0)
-    // return top or bottom endpoint based on Y component of direction
-    const halfHeight = this.halfHeightOfCylinder[1];
-    out[0] = 0;
-    out[1] = direction[1] > 0 ? halfHeight : -halfHeight;
-    out[2] = 0;
-}
-
-export function createCapsuleNoConvexSupport(): CapsuleNoConvexSupport {
-    return {
-        halfHeightOfCylinder: vec3.create(),
-        convexRadius: 0,
-        getSupport: capsuleNoConvexGetSupport,
-    };
-}
-
-export function setCapsuleNoConvexSupport(
-    out: CapsuleNoConvexSupport,
-    halfHeightOfCylinder: number,
-    radius: number,
-    scale: Vec3,
-): void {
-    // uniform scale only - take absolute value of first component
-    const absScale = Math.abs(scale[0]);
-    const scaledHalfHeight = absScale * halfHeightOfCylinder;
-    const scaledRadius = absScale * radius;
-
-    out.halfHeightOfCylinder[0] = 0;
-    out.halfHeightOfCylinder[1] = scaledHalfHeight;
-    out.halfHeightOfCylinder[2] = 0;
-    out.convexRadius = scaledRadius;
-}
-
-/**
- * Capsule support for INCLUDE_CONVEX_RADIUS mode.
- * Used by EPA and raycasting - returns surface points, convexRadius is 0.
- */
-export type CapsuleWithConvexSupport = {
-    halfHeightOfCylinder: Vec3; // (0, halfHeight, 0)
-    radius: number;
-    convexRadius: number;
-    getSupport(direction: Vec3, out: Vec3): void;
-};
-
-function capsuleWithConvexGetSupport(this: CapsuleWithConvexSupport, direction: Vec3, out: Vec3): void {
-    const dx = direction[0];
-    const dy = direction[1];
-    const dz = direction[2];
-    const lengthSq = dx * dx + dy * dy + dz * dz;
-    const halfHeight = this.halfHeightOfCylinder[1];
-
-    if (lengthSq > 0) {
-        const s = this.radius / Math.sqrt(lengthSq);
-        out[0] = dx * s;
-        out[1] = dy * s + (dy > 0 ? halfHeight : -halfHeight);
-        out[2] = dz * s;
-    } else {
-        out[0] = 0;
-        out[1] = halfHeight;
-        out[2] = 0;
-    }
-}
-
-export function createCapsuleWithConvexSupport(): CapsuleWithConvexSupport {
-    return {
-        halfHeightOfCylinder: vec3.create(),
-        radius: 0,
-        convexRadius: 0,
-        getSupport: capsuleWithConvexGetSupport,
-    };
-}
-
-export function setCapsuleWithConvexSupport(
-    out: CapsuleWithConvexSupport,
-    halfHeightOfCylinder: number,
-    radius: number,
-    scale: Vec3,
-): void {
-    // uniform scale only - take absolute value of first component
-    const absScale = Math.abs(scale[0]);
-    const scaledHalfHeight = absScale * halfHeightOfCylinder;
-    const scaledRadius = absScale * radius;
-
-    out.halfHeightOfCylinder[0] = 0;
-    out.halfHeightOfCylinder[1] = scaledHalfHeight;
-    out.halfHeightOfCylinder[2] = 0;
-    out.radius = scaledRadius;
-    out.convexRadius = 0;
-}
-
-type CapsuleSupportPool = {
-    noConvex: CapsuleNoConvexSupport;
-    withConvex: CapsuleWithConvexSupport;
-};
-
-function createCapsuleSupportPool(): CapsuleSupportPool {
-    return {
-        noConvex: createCapsuleNoConvexSupport(),
-        withConvex: createCapsuleWithConvexSupport(),
-    };
-}
-
-function getCapsuleSupportFunction(
-    pool: CapsuleSupportPool,
-    shape: CapsuleShape,
-    mode: SupportFunctionMode,
-    scale: Vec3,
-): Support {
-    if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
-        setCapsuleWithConvexSupport(pool.withConvex, shape.halfHeightOfCylinder, shape.radius, scale);
-        return pool.withConvex;
-    } else {
-        // EXCLUDE_CONVEX_RADIUS or DEFAULT
-        setCapsuleNoConvexSupport(pool.noConvex, shape.halfHeightOfCylinder, shape.radius, scale);
-        return pool.noConvex;
-    }
 }

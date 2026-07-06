@@ -80,7 +80,7 @@ export function scale(out: MassProperties, source: MassProperties, inScale: Vec3
     const i_xx = xyz_scaled_sq[1] + xyz_scaled_sq[2];
     const i_yy = xyz_scaled_sq[0] + xyz_scaled_sq[2];
     const i_zz = xyz_scaled_sq[0] + xyz_scaled_sq[1];
-    
+
     // calculate new off-diagonal elements
     const i_xy = inScale[0] * inScale[1] * source.inertia[4]; // a.inertia[4] is the (0,1) element (column-major)
     const i_xz = inScale[0] * inScale[2] * source.inertia[8]; // a.inertia[8] is the (0,2) element
@@ -214,10 +214,10 @@ export function scaleToMass(massProperties: MassProperties, newMass: number): Ma
     if (massProperties.mass > 0) {
         // calculate how much we have to scale the inertia tensor
         const massScale = newMass / massProperties.mass;
-        
+
         // update mass
         massProperties.mass = newMass;
-        
+
         // scale the 3x3 inertia tensor (upper-left of the 4x4 matrix)
         for (let col = 0; col < 3; col++) {
             for (let row = 0; row < 3; row++) {
@@ -228,6 +228,6 @@ export function scaleToMass(massProperties: MassProperties, newMass: number): Ma
         // just set the mass if the current mass is zero
         massProperties.mass = newMass;
     }
-    
+
     return massProperties;
 }

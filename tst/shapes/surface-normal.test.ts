@@ -1,6 +1,6 @@
 import { quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { box, compound, convexHull, scaled, sphere, transformed, triangleMesh, subShape, getShapeSurfaceNormal } from '../../src';
+import { box, compound, convexHull, getShapeSurfaceNormal, scaled, sphere, subShape, transformed, triangleMesh } from '../../src';
 
 describe('Surface Normal - Sphere', () => {
     test('should return normal pointing away from center', () => {
@@ -28,7 +28,7 @@ describe('Surface Normal - Sphere', () => {
         expect(normal[0]).toBeCloseTo(1 / expectedLength, 5);
         expect(normal[1]).toBeCloseTo(1 / expectedLength, 5);
         expect(normal[2]).toBeCloseTo(0);
-        
+
         // Should be unit length
         const length = vec3.length(normal);
         expect(length).toBeCloseTo(1, 5);
@@ -106,11 +106,11 @@ describe('Surface Normal - Triangle Mesh', () => {
             positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
             indices: [0, 1, 2],
         });
-        
+
         // Build SubShapeID for triangle 0
         const builder = subShape.builder();
         subShape.pushIndex(builder, builder, 0, 1); // triangle index 0 of 1 triangles
-        
+
         const position = vec3.fromValues(0.3, 0.3, 0);
         const normal = vec3.create();
 
@@ -127,7 +127,7 @@ describe('Surface Normal - Triangle Mesh', () => {
     //         positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
     //         indices: [0, 1, 2],
     //     });
-        
+
     //     const position = vec3.fromValues(0.5, 0.5, 0);
     //     const normal = vec3.create();
 
@@ -166,7 +166,7 @@ describe('Surface Normal - Scaled Shape', () => {
         expect(normal[0]).toBeCloseTo(2 / expectedLength, 5);
         expect(normal[1]).toBeCloseTo(2 / expectedLength, 5);
         expect(normal[2]).toBeCloseTo(0);
-        
+
         const length = vec3.length(normal);
         expect(length).toBeCloseTo(1, 5);
     });
@@ -178,7 +178,7 @@ describe('Surface Normal - Transformed Shape', () => {
         const transformedPosition = vec3.fromValues(3, 2, 1);
         const transformedQuaternion = quat.create();
         const shape = transformed.create({ shape: innerShape, position: transformedPosition, quaternion: transformedQuaternion });
-        
+
         const position = vec3.fromValues(4.1, 2, 1); // outside +X face in world space
         const normal = vec3.create();
 
@@ -196,7 +196,7 @@ describe('Surface Normal - Transformed Shape', () => {
         // 90 degree rotation around Z axis: +X face becomes +Y face
         const transformedQuaternion = quat.fromValues(0, 0, Math.sin(Math.PI / 4), Math.cos(Math.PI / 4));
         const shape = transformed.create({ shape: innerShape, position: transformedPosition, quaternion: transformedQuaternion });
-        
+
         const position = vec3.fromValues(0, 2.1, 0); // outside what is now the +Y face in world space
         const normal = vec3.create();
 
@@ -214,15 +214,17 @@ describe('Surface Normal - Compound Shape', () => {
     test('should return normal from correct child shape', () => {
         const box1 = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
         const box2 = box.create({ halfExtents: vec3.fromValues(2, 2, 2) });
-        const shape = compound.create({ children: [
-            { position: vec3.create(), quaternion: quat.create(), shape: box1 },
-            { position: vec3.create(), quaternion: quat.create(), shape: box2 },
-        ] });
-        
+        const shape = compound.create({
+            children: [
+                { position: vec3.create(), quaternion: quat.create(), shape: box1 },
+                { position: vec3.create(), quaternion: quat.create(), shape: box2 },
+            ],
+        });
+
         // Build SubShapeID for child 1 (the larger box)
         const builder = subShape.builder();
         subShape.pushIndex(builder, builder, 1, shape.children.length);
-        
+
         const position = vec3.fromValues(2.1, 0, 0); // outside +X face of larger box
         const normal = vec3.create();
 
@@ -237,23 +239,25 @@ describe('Surface Normal - Compound Shape', () => {
     test('compound shape -> transformed shape -> box shape', () => {
         // Create the hierarchy: compound containing a transformed box
         const innerBox = box.create({ halfExtents: vec3.fromValues(1, 2, 1) });
-        
+
         // Transform: translate and rotate the box
         const translation = vec3.fromValues(5, 3, 0);
         // 90 degree rotation around Z: +X becomes +Y, +Y becomes -X
         const rotation = quat.fromValues(0, 0, Math.sin(Math.PI / 4), Math.cos(Math.PI / 4));
-        
+
         // Add another shape to make it actually compound
         const sphere1 = sphere.create({ radius: 1.0 });
-        const compoundShape = compound.create({ children: [
-            { position: vec3.create(), quaternion: quat.create(), shape: sphere1 },
-            { position: translation, quaternion: rotation, shape: innerBox },
-        ] });
-        
+        const compoundShape = compound.create({
+            children: [
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere1 },
+                { position: translation, quaternion: rotation, shape: innerBox },
+            ],
+        });
+
         // Build SubShapeID: compound child 1 (the transformed box)
         const builder = subShape.builder();
         subShape.pushIndex(builder, builder, 1, compoundShape.children.length);
-        
+
         // Position outside the +Y face of the rotated box in world coordinates
         // Original box +X face (at x=1) becomes +Y face after rotation
         // After translation by (5,3,0), the +Y face is at world y = 3 + 1 = 4
@@ -270,16 +274,14 @@ describe('Surface Normal - Compound Shape', () => {
 
     test('should work with valid empty SubShapeID for single child', () => {
         const box1 = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
-        const shape = compound.create({ children: [
-            { position: vec3.create(), quaternion: quat.create(), shape: box1 },
-        ] });
-        
+        const shape = compound.create({ children: [{ position: vec3.create(), quaternion: quat.create(), shape: box1 }] });
+
         const position = vec3.fromValues(1, 1, 1);
         const normal = vec3.create();
 
         // With 1 child, subShapeId.EMPTY_SUB_SHAPE_ID when popped with 0 bits gives index 0, which is valid
         getShapeSurfaceNormal(normal, shape, position, subShape.EMPTY_SUB_SHAPE_ID);
-        
+
         // Should return a valid normal from the box
         const length = vec3.length(normal);
         expect(length).toBeCloseTo(1, 5); // Should be unit length
@@ -290,48 +292,48 @@ describe('Surface Normal - Compound Shape', () => {
 //     test('should handle nested transformations correctly', () => {
 //         // Create: compound -> scaled shape -> transformed shape -> box
 //         const innerBox = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
-        
+
 //         // Transform: rotate 90° around Z
 //         const rotation = quat.fromValues(0, 0, Math.sin(Math.PI / 4), Math.cos(Math.PI / 4));
-//         const transformedShape = transformed.create({ 
-//             shape: innerBox, 
+//         const transformedShape = transformed.create({
+//             shape: innerBox,
 //             translation: vec3.fromValues(2, 0, 0),
-//             rotation 
+//             rotation
 //         });
-        
+
 //         // Scale the transformed shape
-//         const scaledShape = scaled.create({ 
-//             shape: transformedShape, 
-//             scale: vec3.fromValues(2, 2, 2) 
+//         const scaledShape = scaled.create({
+//             shape: transformedShape,
+//             scale: vec3.fromValues(2, 2, 2)
 //         });
-        
+
 //         // Add to compound
 //         const sphere1 = sphere.create({ radius: 0.5 });
 //         const compoundShape = compound.create({ children: [
 //             { position: vec3.create(), quaternion: quat.create(), shape: sphere1 },
 //             { position: vec3.create(), quaternion: quat.create(), shape: scaledShape },
 //         ] });
-        
+
 //         // Build SubShapeID for the scaled transformed box
 //         const builder = subShapeId.builder();
 //         subShapeId.pushIndex(builder, builder, 1, compoundShape.children.length);
-        
+
 //         // Let me trace this more carefully:
 //         // 1. Box at origin with halfExtents (1,1,1)
-//         // 2. Rotate 90° around Z: +X face becomes +Y face, -X becomes -Y, +Y becomes -X, -Y becomes +X  
+//         // 2. Rotate 90° around Z: +X face becomes +Y face, -X becomes -Y, +Y becomes -X, -Y becomes +X
 //         // 3. Translate by (2,0,0): box center moves to (2,0,0)
 //         // 4. Scale by (2,2,2): box halfExtents become (2,2,2), center stays at (2,0,0)
-//         // 
+//         //
 //         // So final box faces are at:
-//         // - +X face: x = 2 + 2 = 4 (was +Y face originally) 
+//         // - +X face: x = 2 + 2 = 4 (was +Y face originally)
 //         // - -X face: x = 2 - 2 = 0 (was -Y face originally)
-//         // - +Y face: y = 0 + 2 = 2 (was -X face originally)  
+//         // - +Y face: y = 0 + 2 = 2 (was -X face originally)
 //         // - -Y face: y = 0 - 2 = -2 (was +X face originally)
-//         // 
+//         //
 //         // Position (2, 2.1, 0) hits the +Y face (y=2.1 > 2)
 //         // This face corresponds to the original -X face of the box
 //         // So we should get the original -X normal rotated and scaled
-        
+
 //         const position = vec3.fromValues(2, 2.1, 0);
 //         const normal = vec3.create();
 
@@ -341,7 +343,7 @@ describe('Surface Normal - Compound Shape', () => {
 //         // - Box gets rotated 90° around Z (+X → +Y, +Y → -X)
 //         // - Then translated by (2, 0, 0)
 //         // - Then scaled by 2
-//         // 
+//         //
 //         // Position (2, 2.1, 0) after inverse transforms:
 //         // - Unscale: (1, 1.05, 0)
 //         // - Untranslate: (-1, 1.05, 0)
@@ -350,7 +352,7 @@ describe('Surface Normal - Compound Shape', () => {
 //         // In box space (1.05, 1, 0) is closest to +X face at x=1
 //         // Box normal (+1, 0, 0) transformed back:
 //         // - Rotate by +90°Z: (0, 1, 0)
-        
+
 //         expect(normal[0]).toBeCloseTo(0, 5);
 //         expect(normal[1]).toBeCloseTo(1, 5);
 //         expect(normal[2]).toBeCloseTo(0);
@@ -362,22 +364,22 @@ describe('Surface Normal - Compound Shape', () => {
 //             positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], // triangle in XY plane, normal +Z
 //             indices: [0, 1, 2],
 //         });
-        
+
 //         const sphere1 = sphere.create({ radius: 1.0 });
 //         const compoundShape = compound.create({ children: [
 //             { position: vec3.create(), quaternion: quat.create(), shape: sphere1 },
 //             { position: vec3.create(), quaternion: quat.create(), shape: mesh },
 //         ] });
-        
+
 //         // Build SubShapeID: compound child 1 -> triangle 0
 //         const builder1 = subShapeId.builder();
 //         const builder2 = subShapeId.builder();
-        
+
 //         // First level: compound child 1 (the triangle mesh)
 //         subShapeId.pushIndex(builder1, builder2, 1, compoundShape.children.length);
 //         // Second level: triangle 0 within the mesh
 //         subShapeId.pushIndex(builder2, builder1, 0, 1);
-        
+
 //         const position = vec3.fromValues(0.3, 0.3, 0.1);
 //         const normal = vec3.create();
 
@@ -389,7 +391,6 @@ describe('Surface Normal - Compound Shape', () => {
 //         expect(normal[2]).toBeCloseTo(1);
 //     });
 // });
-
 
 // describe('getSurfaceNormal', () => {
 //     test('sphere: normal at surface point equals normalized position', () => {
@@ -545,16 +546,7 @@ describe('Surface Normal - Compound Shape', () => {
 
 describe('Surface Normal - ConvexHull', () => {
     test('should return plane normal for box hull - +X direction', () => {
-        const boxPoints = [
-            -1, -1, -1,
-            1, -1, -1,
-            -1, 1, -1,
-            1, 1, -1,
-            -1, -1, 1,
-            1, -1, 1,
-            -1, 1, 1,
-            1, 1, 1,
-        ];
+        const boxPoints = [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1];
         const hull = convexHull.create({ positions: boxPoints, convexRadius: 0.0 });
         const normal = vec3.create();
 
@@ -563,7 +555,7 @@ describe('Surface Normal - ConvexHull', () => {
         // Should return a normalized normal
         const len = vec3.length(normal);
         expect(len).toBeCloseTo(1, 5);
-        
+
         // Should be along one of the axes
         const absX = Math.abs(normal[0]);
         const absY = Math.abs(normal[1]);
@@ -573,16 +565,7 @@ describe('Surface Normal - ConvexHull', () => {
     });
 
     test('should return plane normal for box hull - +Y direction', () => {
-        const boxPoints = [
-            -1, -1, -1,
-            1, -1, -1,
-            -1, 1, -1,
-            1, 1, -1,
-            -1, -1, 1,
-            1, -1, 1,
-            -1, 1, 1,
-            1, 1, 1,
-        ];
+        const boxPoints = [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1];
         const hull = convexHull.create({ positions: boxPoints, convexRadius: 0.0 });
         const normal = vec3.create();
 
@@ -594,16 +577,7 @@ describe('Surface Normal - ConvexHull', () => {
     });
 
     test('should select best plane based on dot product', () => {
-        const boxPoints = [
-            -1, -1, -1,
-            1, -1, -1,
-            -1, 1, -1,
-            1, 1, -1,
-            -1, -1, 1,
-            1, -1, 1,
-            -1, 1, 1,
-            1, 1, 1,
-        ];
+        const boxPoints = [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1];
         const hull = convexHull.create({ positions: boxPoints, convexRadius: 0.0 });
         const normal = vec3.create();
 

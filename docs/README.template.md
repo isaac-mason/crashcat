@@ -332,6 +332,10 @@ The convex hull of a set of points.
 
 <Snippet source="./shapes.ts" select="convex-hull" />
 
+**⚠️ Scaling convex hulls**
+
+Uniform scaling of a convex hull is the fast path. Non-uniform scaling is supported but slower — the convex-radius-shrunk vertex set has to be rebaked per collision pair every frame. Prefer uniform scale, or bake the scaled geometry into the hull points directly.
+
 ### Triangle Mesh Shape
 
 Triangle meshes represent complex geometry using triangles. Typically used for static terrain and level geometry.

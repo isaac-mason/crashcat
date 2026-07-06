@@ -20,6 +20,7 @@ import type { World } from './world';
 
 const CastRayBodyVisitor = {
     shouldExit: false,
+    earlyOutFraction: 0,
     collector: null! as CastRayCollector,
     settings: null! as CastRaySettings,
     origin: vec3.create(),
@@ -58,10 +59,14 @@ const CastRayBodyVisitor = {
         );
 
         this.shouldExit = collector.shouldEarlyOut();
+        // surface the collector's shrinking early-out fraction so the broadphase can prune nodes
+        // beyond the closest hit found so far
+        this.earlyOutFraction = collector.earlyOutFraction;
     },
     set(collector: CastRayCollector, settings: CastRaySettings, origin: Vec3, direction: Vec3, maxDistance: number) {
         this.collector = collector;
         this.settings = settings;
+        this.earlyOutFraction = collector.earlyOutFraction;
         this.origin[0] = origin[0];
         this.origin[1] = origin[1];
         this.origin[2] = origin[2];
@@ -98,6 +103,7 @@ const _castShape_mat4 = /* @__PURE__ */ mat4.create();
 
 const CastShapeBodyVisitor = {
     shouldExit: false,
+    earlyOutFraction: 0,
     collector: null! as CastShapeCollector,
     settings: null! as CastShapeSettings,
     shape: null! as Shape,
@@ -147,6 +153,9 @@ const CastShapeBodyVisitor = {
         );
 
         this.shouldExit = collector.shouldEarlyOut();
+        // positive early-out fraction (floored at 0, since a shape cast may hit at fraction 0) so
+        // castAABB can prune nodes past the closest impact so far
+        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
     },
     set(
         collector: CastShapeCollector,
@@ -159,6 +168,7 @@ const CastShapeBodyVisitor = {
     ) {
         this.collector = collector;
         this.settings = settings;
+        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
         this.shape = shape;
         this.position[0] = position[0];
         this.position[1] = position[1];

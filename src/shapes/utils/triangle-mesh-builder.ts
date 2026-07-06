@@ -11,6 +11,7 @@ import {
     OFFSET_NORMAL_X,
     OFFSET_NORMAL_Y,
     OFFSET_NORMAL_Z,
+    precomputeTriangleAABBs,
     TRIANGLE_STRIDE,
 } from './triangle-mesh-data';
 
@@ -200,6 +201,7 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
         positions,
         triangleBuffer: finalTriangleBuffer,
         triangleCount: finalTriangleCount,
+        triangleAABBs: [],
     };
 
     /* compute active edges based on dihedral angles */
@@ -210,6 +212,9 @@ export function buildTriangleMesh(settings: TriangleMeshBuilderSettings): Triang
         strategy: settings.bvhSplitStrategy,
         maxLeafTris: settings.bvhMaxLeafTris,
     });
+
+    /* precompute per-triangle aabbs (after the bvh build, which reorders triangles) */
+    precomputeTriangleAABBs(data);
 
     return {
         data,

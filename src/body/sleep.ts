@@ -1,4 +1,4 @@
-import { box3, type Vec3, vec3 } from 'mathcat';
+import { box3, type Mat3, mat3, type Vec3, vec3 } from 'mathcat';
 import type { World } from '../world';
 import type { MotionProperties } from './motion-properties';
 import { MotionType } from './motion-type';
@@ -7,70 +7,71 @@ import type { RigidBody } from './rigid-body';
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 export const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
 
-const _getSleepTestPoints_extent = /* @__PURE__ */ vec3.create();
-const _getSleepTestPoints_tempVec = /* @__PURE__ */ vec3.create();
-const _getSleepTestPoints_xAxis = /* @__PURE__ */ vec3.fromValues(1, 0, 0);
-const _getSleepTestPoints_yAxis = /* @__PURE__ */ vec3.fromValues(0, 1, 0);
-const _getSleepTestPoints_zAxis = /* @__PURE__ */ vec3.fromValues(0, 0, 1);
+const _extents: Vec3 = /* @__PURE__ */ vec3.create();
+const _rot: Mat3 = /* @__PURE__ */ mat3.create();
+const _axis: Vec3 = /* @__PURE__ */ vec3.create();
 
 /**
  * get the 3 test points for sleep detection:
  * - center of mass
  * - center of mass + largest bounding box axis
  * - center of mass + second largest bounding box axis
+ *
+ * @optimize
  */
 export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3]): void {
+    const com = body.centerOfMassPosition;
+
     // center of mass is the first position
-    vec3.copy(outPoints[0], body.centerOfMassPosition);
+    vec3.copy(outPoints[0], com);
 
-    // get bounding box extent (half-sizes)
-    box3.extents(_getSleepTestPoints_extent, body.shape.aabb);
+    // half-sizes of shape AABB
+    box3.extents(_extents, body.shape.aabb);
+    const ex = _extents[0];
+    const ey = _extents[1];
+    const ez = _extents[2];
 
-    // find smallest axis (we'll use the other two)
-    const x = _getSleepTestPoints_extent[0];
-    const y = _getSleepTestPoints_extent[1];
-    const z = _getSleepTestPoints_extent[2];
+    // rotation matrix from body quaternion (column-major)
+    // col0 = rotated X axis [0,1,2], col1 = rotated Y axis [3,4,5], col2 = rotated Z axis [6,7,8]
+    mat3.fromQuat(_rot, body.quaternion);
 
-    let lowestComponent: number;
-    if (x <= y && x <= z) {
-        lowestComponent = 0; // X is smallest
-    } else if (y <= z) {
-        lowestComponent = 1; // Y is smallest
+    // find smallest extent axis — use the two largest for test points
+    // pick (col, scale) pairs for point 1 and point 2
+    let c1: number; // column offset for axis 1
+    let s1: number; // scale for axis 1
+    let c2: number; // column offset for axis 2
+    let s2: number; // scale for axis 2
+    if (ex <= ey && ex <= ez) {
+        // X is smallest: use Y and Z axes
+        c1 = 3;
+        s1 = ey;
+        c2 = 6;
+        s2 = ez;
+    } else if (ey <= ez) {
+        // Y is smallest: use X and Z axes
+        c1 = 0;
+        s1 = ex;
+        c2 = 6;
+        s2 = ez;
     } else {
-        lowestComponent = 2; // Z is smallest
+        // Z is smallest: use X and Y axes
+        c1 = 0;
+        s1 = ex;
+        c2 = 3;
+        s2 = ey;
     }
 
-    switch (lowestComponent) {
-        case 0: // X is smallest, use Y and Z axes
-            // outPoints[1] = COM + rotated(Y-axis) * extent.y
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_yAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[1], body.centerOfMassPosition, _getSleepTestPoints_tempVec, y);
+    // point 1 = com + axis1 * scale1
+    _axis[0] = _rot[c1];
+    _axis[1] = _rot[c1 + 1];
+    _axis[2] = _rot[c1 + 2];
+    vec3.scaleAndAdd(outPoints[1], com, _axis, s1);
 
-            // outPoints[2] = COM + rotated(Z-axis) * extent.z
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_zAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[2], body.centerOfMassPosition, _getSleepTestPoints_tempVec, z);
-            break;
-
-        case 1: // Y is smallest, use X and Z axes
-            // outPoints[1] = COM + rotated(X-axis) * extent.x
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_xAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[1], body.centerOfMassPosition, _getSleepTestPoints_tempVec, x);
-
-            // outPoints[2] = COM + rotated(Z-axis) * extent.z
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_zAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[2], body.centerOfMassPosition, _getSleepTestPoints_tempVec, z);
-            break;
-
-        case 2: // Z is smallest, use X and Y axes
-            // outPoints[1] = COM + rotated(X-axis) * extent.x
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_xAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[1], body.centerOfMassPosition, _getSleepTestPoints_tempVec, x);
-
-            // outPoints[2] = COM + rotated(Y-axis) * extent.y
-            vec3.transformQuat(_getSleepTestPoints_tempVec, _getSleepTestPoints_yAxis, body.quaternion);
-            vec3.scaleAndAdd(outPoints[2], body.centerOfMassPosition, _getSleepTestPoints_tempVec, y);
-            break;
-    }
+    // point 2 = com + axis2 * scale2
+    _axis[0] = _rot[c2];
+    _axis[1] = _rot[c2 + 1];
+    _axis[2] = _rot[c2 + 2];
+    vec3.scaleAndAdd(outPoints[2], com, _axis, s2);
 }
 
 /** reset the sleep test spheres to center around the given points with radius 0 */
@@ -169,7 +170,7 @@ export function removeBodyFromActiveBodies(world: World, body: RigidBody): void 
 export function sleep(world: World, body: RigidBody): void {
     // exit if body is static
     if (body.motionType === MotionType.STATIC) return;
-    
+
     // exit if already sleeping
     if (body.sleeping) return;
 

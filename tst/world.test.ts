@@ -2,14 +2,18 @@ import { quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import { MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { getBodyIdIndex, getBodyIdSequence, INVALID_BODY_ID } from '../src/body/body-id';
-import { createTestWorld } from './helpers';
+import { bodyContactCount, createTestWorld } from './helpers';
 
 describe('World', () => {
     test('should add and remove body', () => {
         const { world, layers } = createTestWorld();
 
         const shape = sphere.create({ radius: 1.0 });
-        const testBody = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        const testBody = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
         // Body should have valid ID now
         expect(testBody.id).not.toBe(INVALID_BODY_ID);
 
@@ -92,15 +96,30 @@ describe('World', () => {
         const shape = sphere.create({ radius: 1.0 });
 
         // Add three bodies
-        const body1 = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC, position: vec3.fromValues(1, 0, 0) });
+        const body1 = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(1, 0, 0),
+        });
         const id1 = body1.id;
         const index1 = getBodyIdIndex(id1);
 
-        const body2 = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC, position: vec3.fromValues(2, 0, 0) });
+        const body2 = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(2, 0, 0),
+        });
         const id2 = body2.id;
         const index2 = getBodyIdIndex(id2);
 
-        const body3 = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC, position: vec3.fromValues(3, 0, 0) });
+        const body3 = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(3, 0, 0),
+        });
         const id3 = body3.id;
         const index3 = getBodyIdIndex(id3);
 
@@ -124,7 +143,11 @@ describe('World', () => {
         const { world, layers } = createTestWorld();
 
         const shape = sphere.create({ radius: 1.0 });
-        const testBody = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        const testBody = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
 
         // Remove body (should succeed)
         const removed = rigidBody.remove(world, testBody);
@@ -141,16 +164,16 @@ describe('World', () => {
         const shape = sphere.create({ radius: 1.0, density: 1000 });
 
         // Create two bodies that are initially colliding (overlapping)
-        const bodyA = rigidBody.create(world, { 
-            shape, 
-            objectLayer: layers.OBJECT_LAYER_NOT_MOVING, 
+        const bodyA = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
             motionType: MotionType.STATIC,
             position: vec3.fromValues(0, 0, 0),
         });
 
-        const bodyB = rigidBody.create(world, { 
-            shape, 
-            objectLayer: layers.OBJECT_LAYER_MOVING, 
+        const bodyB = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
             motionType: MotionType.DYNAMIC,
             position: vec3.fromValues(0.5, 0, 0), // overlapping with bodyA
         });
@@ -181,8 +204,8 @@ describe('World', () => {
         expect(contactAdded[0].bodyIdB).toBe(bodyB.id);
 
         // Verify contacts exist
-        expect(bodyA.contactCount).toBeGreaterThan(0);
-        expect(bodyB.contactCount).toBeGreaterThan(0);
+        expect(bodyContactCount(world, bodyA)).toBeGreaterThan(0);
+        expect(bodyContactCount(world, bodyB)).toBeGreaterThan(0);
 
         // Reset callback tracking
         contactAdded.length = 0;
@@ -215,8 +238,8 @@ describe('World', () => {
         expect(contactRemoved[0].bodyIdB).toBe(bodyB.id);
 
         // Verify contacts were destroyed
-        expect(bodyA.contactCount).toBe(0);
-        expect(bodyB.contactCount).toBe(0);
+        expect(bodyContactCount(world, bodyA)).toBe(0);
+        expect(bodyContactCount(world, bodyB)).toBe(0);
     });
 
     test('should clean up stale contacts when sub-shapes stop colliding within same body pair', () => {
@@ -254,7 +277,7 @@ describe('World', () => {
         updateWorld(world, listener, 1 / 60);
 
         // Verify contact exists
-        expect(bodyA.contactCount).toBeGreaterThan(0);
+        expect(bodyContactCount(world, bodyA)).toBeGreaterThan(0);
 
         // Move sphere to a different position (still in broadphase range but not colliding)
         rigidBody.setTransform(world, bodyA, vec3.fromValues(5, 0, 0), quat.create(), false);
@@ -269,6 +292,55 @@ describe('World', () => {
         expect(contactRemoved.length).toBeGreaterThan(0);
 
         // Verify contacts were destroyed
-        expect(bodyA.contactCount).toBe(0);
+        expect(bodyContactCount(world, bodyA)).toBe(0);
+    });
+});
+
+describe('World: Contact Removed on Body Removal', () => {
+    test('removing a touching body fires onContactRemoved on the next update', () => {
+        const { world, layers } = createTestWorld();
+        const shape = sphere.create({ radius: 0.5 });
+
+        const bodyA = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, 0, 0),
+        });
+        const bodyB = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0.5, 0, 0), // overlapping
+        });
+
+        const contactRemoved: Array<{ bodyIdA: number; bodyIdB: number }> = [];
+        const listener = {
+            onContactRemoved: (bodyIdA: number, bodyIdB: number) => {
+                contactRemoved.push({ bodyIdA, bodyIdB });
+            },
+        };
+
+        // establish the contact
+        updateWorld(world, listener, 1 / 60);
+        expect(bodyContactCount(world, bodyA)).toBeGreaterThan(0);
+        expect(contactRemoved.length).toBe(0);
+
+        // remove body B — events are DEFERRED, not fired at removal time (jolt semantics:
+        // "you'll receive an onContactRemoved callback in the update after the body has
+        // been removed")
+        const bodyBId = bodyB.id;
+        rigidBody.remove(world, bodyB);
+        expect(contactRemoved.length).toBe(0);
+
+        // the next update fires the queued removal with the (now dead) body's id
+        updateWorld(world, listener, 1 / 60);
+        expect(contactRemoved.length).toBe(1);
+        expect(contactRemoved[0].bodyIdA).toBe(bodyA.id);
+        expect(contactRemoved[0].bodyIdB).toBe(bodyBId);
+
+        // fired exactly once
+        updateWorld(world, listener, 1 / 60);
+        expect(contactRemoved.length).toBe(1);
     });
 });

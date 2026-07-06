@@ -1,14 +1,24 @@
 import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { type RigidBody, box, type Listener, MotionQuality, MotionType, rigidBody, sphere, updateWorld } from '../src';
+import {
+    box,
+    type ContactManifold,
+    type Listener,
+    MotionQuality,
+    MotionType,
+    type RigidBody,
+    rigidBody,
+    sphere,
+    updateWorld,
+} from '../src';
 import { createTestWorld } from './helpers';
 
 describe('CCD (Continuous Collision Detection) / MotionQuality.LINEAR_CAST', () => {
     test('should prevent fast bullet from tunneling through thin wall with LINEAR_CAST', () => {
         const { world, layers } = createTestWorld();
 
-        // Create a thin static wall
-        const wallShape = box.create({ halfExtents: vec3.fromValues(5, 5, 0.1), density: 1000 });
+        // thin wall facing the travel axis (X): spans x in [-0.1, 0.1]
+        const wallShape = box.create({ halfExtents: vec3.fromValues(0.1, 5, 5), density: 1000 });
         rigidBody.create(world, {
             shape: wallShape,
             objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
@@ -16,94 +26,75 @@ describe('CCD (Continuous Collision Detection) / MotionQuality.LINEAR_CAST', () 
             position: vec3.fromValues(0, 0, 0),
         });
 
-        // Create a fast-moving bullet with LINEAR_CAST (CCD enabled)
+        // fast bullet, clearly separated from the wall (no overlap at frame start)
         const bulletShape = sphere.create({ radius: 0.2, density: 1000 });
         const bullet = rigidBody.create(world, {
             shape: bulletShape,
             objectLayer: layers.OBJECT_LAYER_MOVING,
             motionType: MotionType.DYNAMIC,
-            position: vec3.fromValues(-10, 0, 0),
+            position: vec3.fromValues(-2, 0, 0),
         });
-
-        // Set bullet motion quality to LINEAR_CAST for CCD
         bullet.motionProperties.motionQuality = MotionQuality.LINEAR_CAST;
 
-        // Give bullet very high velocity toward the wall (enough to tunnel without CCD)
-        const highVelocity = vec3.fromValues(200, 0, 0); // 200 m/s
-        vec3.copy(bullet.motionProperties.linearVelocity, highVelocity);
+        // 300 m/s -> 5 units this frame, would reach x=3 (well past the wall) without CCD
+        vec3.set(bullet.motionProperties.linearVelocity, 300, 0, 0);
 
-        // Store initial position
-        const initialX = bullet.position[0];
+        updateWorld(world, undefined, 1 / 60);
 
-        // Run physics for one frame (1/60 second)
-        const timeStep = 1 / 60;
-        updateWorld(world, undefined, timeStep);
-
-        // Without CCD, bullet would travel ~3.33 units (200 * 1/60) and tunnel through the wall
-        // With CCD enabled, bullet should stop at or very close to the wall surface (near x=0)
-
-        // Bullet should have moved forward from start
-        expect(bullet.position[0]).toBeGreaterThan(initialX);
-
-        // Most importantly: bullet should stop before passing through the wall
-        // (x should be < ~0.3 accounting for radius and wall thickness)
-        expect(bullet.position[0]).toBeLessThan(0.5);
-
-        // CCD should have detected and handled the collision (velocity changed)
-        const finalVelocityX = bullet.motionProperties.linearVelocity[0];
-        expect(finalVelocityX).not.toBe(highVelocity[0]); // Velocity should have changed
+        // bullet advanced toward the wall but was stopped at its near face (~ -0.1 - radius), not tunneled through
+        expect(bullet.position[0]).toBeGreaterThan(-2);
+        expect(bullet.position[0]).toBeLessThan(0);
+        // velocity was killed by the contact
+        expect(bullet.motionProperties.linearVelocity[0]).toBeLessThan(300);
     });
 
-    test('should trigger contact listener callbacks for CCD contacts', () => {
+    // A CCD contact is reported through the contact listener on the step the bodies actually
+    // collide, independently of the discrete narrowphase. The bullet starts fully separated from
+    // the wall, so no discrete contact can exist at the start of the step: the only way the listener
+    // fires this step is via the CCD sweep that detects the mid-step crossing.
+    test('should fire onContactAdded on the impact frame for a CCD contact', () => {
         const { world, layers } = createTestWorld();
 
-        // Create a static wall
-        const wallShape = box.create({ halfExtents: vec3.fromValues(5, 5, 0.5), density: 1000 });
-        rigidBody.create(world, {
+        const wallShape = box.create({ halfExtents: vec3.fromValues(0.1, 5, 5), density: 1000 });
+        const wall = rigidBody.create(world, {
             shape: wallShape,
             objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
             motionType: MotionType.STATIC,
             position: vec3.fromValues(0, 0, 0),
         });
 
-        // Create a fast-moving bullet with CCD enabled
-        const bulletShape = sphere.create({ radius: 0.3, density: 1000 });
+        const bulletShape = sphere.create({ radius: 0.2, density: 1000 });
         const bullet = rigidBody.create(world, {
             shape: bulletShape,
             objectLayer: layers.OBJECT_LAYER_MOVING,
             motionType: MotionType.DYNAMIC,
-            position: vec3.fromValues(-5, 0, 0),
+            // clearly separated: ~1.6 gap to the wall face, so no discrete contact can exist at frame start
+            position: vec3.fromValues(-2, 0, 0),
         });
-
         bullet.motionProperties.motionQuality = MotionQuality.LINEAR_CAST;
-        vec3.set(bullet.motionProperties.linearVelocity, 100, 0, 0);
+        vec3.set(bullet.motionProperties.linearVelocity, 300, 0, 0);
 
-        // Track contact callbacks
-        let contactAddedCalled = false;
-        const bodiesFromCallback: RigidBody[] = [];
-
+        let added = 0;
+        const bodyIds: number[] = [];
+        let normalX = 0;
         const listener: Listener = {
-            onContactAdded: (bodyA: RigidBody, bodyB: RigidBody) => {
-                contactAddedCalled = true;
-                bodiesFromCallback.push(bodyA, bodyB);
+            onContactAdded: (bodyA: RigidBody, bodyB: RigidBody, manifold: ContactManifold) => {
+                added++;
+                bodyIds.push(bodyA.id, bodyB.id);
+                normalX = manifold.worldSpaceNormal[0];
             },
         };
 
-        // Run physics update
+        // one step: the bullet crosses the wall mid-step, so the CCD sweep is the only thing that
+        // can detect and report this contact
         updateWorld(world, listener, 1 / 60);
 
-        // Verify contact listener was called for CCD collision
-        expect(contactAddedCalled).toBe(true);
-
-        // Verify the callback was called with our bullet (don't assume ordering)
-        const bodyIdsFromCallback = bodiesFromCallback.map((b) => b.id);
-        expect(bodyIdsFromCallback).toContain(bullet.id);
-
-        // Verify bullet was stopped by the wall (main goal of CCD - no tunneling)
-        // Bullet should be close to wall surface, not past it
-        expect(bullet.position[0]).toBeLessThan(0.5);
-
-        // Bullet shouldn't have tunneled through (absolute position check)
-        expect(Math.abs(bullet.position[0])).toBeLessThan(10); // sanity check
+        expect(added).toBe(1);
+        expect(bodyIds).toContain(bullet.id);
+        expect(bodyIds).toContain(wall.id);
+        // contact normal is along the travel axis (the wall face the bullet hit)
+        expect(Math.abs(normalX)).toBeGreaterThan(0.9);
+        // and it actually stopped at the wall rather than tunneling
+        expect(bullet.position[0]).toBeLessThan(0);
     });
 });

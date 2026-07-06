@@ -113,7 +113,7 @@ describe('Body Sleeping', () => {
         // sleeping body top is at y=2, falling body center should be above y=2
         // (falling body has half extent 0.5, so center at 2.5 means bottom at 2.0)
         expect(fallingBody.position[1]).toBeGreaterThan(2.0);
-        
+
         // sleeping body should still be at approximately y=1 (resting on floor)
         expect(sleepingBody.position[1]).toBeCloseTo(1.0, 0);
     });
@@ -151,13 +151,13 @@ describe('Body Sleeping', () => {
         }
 
         // verify most bodies are sleeping
-        const sleepingCount = bodies.filter(b => b.sleeping).length;
+        const sleepingCount = bodies.filter((b) => b.sleeping).length;
         expect(sleepingCount).toBeGreaterThan(40);
 
         // pick a sleeping body in the middle
-        const targetBody = bodies.find(b => b.sleeping && Math.abs(b.position[0]) < 2 && Math.abs(b.position[2]) < 2);
+        const targetBody = bodies.find((b) => b.sleeping && Math.abs(b.position[0]) < 2 && Math.abs(b.position[2]) < 2);
         expect(targetBody).toBeDefined();
-        
+
         const targetY = targetBody!.position[1];
         const targetX = targetBody!.position[0];
         const targetZ = targetBody!.position[2];
@@ -197,11 +197,7 @@ describe('Body Sleeping', () => {
                 shape: capsule.create({ halfHeightOfCylinder: 0.5, radius: 0.3 }),
                 objectLayer: layers.OBJECT_LAYER_MOVING,
                 motionType: MotionType.DYNAMIC,
-                position: vec3.fromValues(
-                    (i % 10) * 2 - 9,
-                    0.8,
-                    Math.floor(i / 10) * 2 - 4,
-                ),
+                position: vec3.fromValues((i % 10) * 2 - 9, 0.8, Math.floor(i / 10) * 2 - 4),
             });
             bodies.push(body);
         }
@@ -235,7 +231,7 @@ describe('Body Sleeping', () => {
         }
 
         // now pick a sleeping body and drop another on it
-        const sleepingBodies = bodies.filter(b => b.sleeping && !b._pooled);
+        const sleepingBodies = bodies.filter((b) => b.sleeping && !b._pooled);
         expect(sleepingBodies.length).toBeGreaterThan(0);
 
         const targetBody = sleepingBodies[0];
@@ -306,12 +302,12 @@ describe('Body Sleeping', () => {
             updateWorld(world, undefined, 1 / 60);
         }
 
-        const sleepingCount = bodies.filter(b => b.sleeping).length;
+        const sleepingCount = bodies.filter((b) => b.sleeping).length;
         console.log('sleeping bodies:', sleepingCount, '/', bodies.length);
         expect(sleepingCount).toBeGreaterThan(40);
 
         // pick a sleeping body
-        const targetBody = bodies.find(b => b.sleeping);
+        const targetBody = bodies.find((b) => b.sleeping);
         expect(targetBody).toBeDefined();
 
         const targetX = targetBody!.position[0];
@@ -367,7 +363,7 @@ describe('Body Sleeping', () => {
         // Simulate for timeBeforeSleep (0.5s) + margin
         const timeBeforeSleep = world.settings.sleeping.timeBeforeSleep;
         const steps = Math.ceil((timeBeforeSleep + 0.1) * 60); // 60 fps for 0.6s
-        
+
         for (let i = 0; i < steps; i++) {
             updateWorld(world, undefined, 1 / 60);
         }

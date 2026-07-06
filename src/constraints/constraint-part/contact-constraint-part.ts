@@ -30,6 +30,9 @@ import { getSpringBias } from './spring-part';
  * @param movingB true if body B is not static (dynamic or kinematic)
  * @param axis constraint axis
  * @returns new total lambda (unclamped)
+ *
+ * @inline
+ * @optimize
  */
 export function getTotalLambda(
     part: AxisConstraintPart,
@@ -88,6 +91,9 @@ export function getTotalLambda(
  * @param axis constraint axis
  * @param totalLambda new total lambda to apply
  * @returns true if impulse was applied
+ *
+ * @inline
+ * @optimize
  */
 export function applyLambda(
     part: AxisConstraintPart,
@@ -153,6 +159,9 @@ export function applyLambda(
  * @param axis constraint axis
  * @param warmStartRatio scale factor for warm start (dt_new / dt_old)
  * @returns true if impulse was applied
+ *
+ * @inline
+ * @optimize
  */
 export function warmStart(
     part: AxisConstraintPart,

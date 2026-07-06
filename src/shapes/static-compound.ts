@@ -1,14 +1,13 @@
-import { type Box3, box3, mat3, mat4, quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat3, mat4, quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
-import { rayDistanceToBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
-import * as bvhStack from '../utils/bvh-stack';
 import type { CompoundShapeChild } from './compound';
 import {
     collisionDispatch,
@@ -84,8 +83,12 @@ function computeLocalBounds(out: Box3, shape: StaticCompoundShape): void {
 
     for (const child of shape.children) {
         const childAABB = child.shape.aabb;
-        const minX = childAABB[0], minY = childAABB[1], minZ = childAABB[2];
-        const maxX = childAABB[3], maxY = childAABB[4], maxZ = childAABB[5];
+        const minX = childAABB[0],
+            minY = childAABB[1],
+            minZ = childAABB[2];
+        const maxX = childAABB[3],
+            maxY = childAABB[4],
+            maxZ = childAABB[5];
 
         for (let x = 0; x < 2; x++) {
             for (let y = 0; y < 2; y++) {
@@ -337,7 +340,8 @@ function getSubShapeTransformedShape(
 
 /* cast ray */
 
-const _castRayVsStaticCompound_stack = /* @__PURE__ */ bvhStack.create();
+const _castRayVsStaticCompound_stackNodes: number[] = [];
+const _castRayVsStaticCompound_stackDist: number[] = [];
 
 const _castRayVsStaticCompound_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_quat = /* @__PURE__ */ quat.create();
@@ -417,23 +421,25 @@ function castRay(
     const localDirY = _castRayVsStaticCompound_localRayDir[1];
     const localDirZ = _castRayVsStaticCompound_localRayDir[2];
 
-    bvhStack.reset(_castRayVsStaticCompound_stack);
-    bvhStack.push(_castRayVsStaticCompound_stack, 0, -Infinity); // root always visited
+    let stackSize = 0;
+    _castRayVsStaticCompound_stackNodes[stackSize] = 0;
+    _castRayVsStaticCompound_stackDist[stackSize] = -Infinity; // root always visited
+    stackSize++;
 
-    while (_castRayVsStaticCompound_stack.size > 0) {
+    while (stackSize > 0) {
         // early out: very close hit
         if (collector.earlyOutFraction <= 0) {
             break;
         }
 
-        const entry = bvhStack.pop(_castRayVsStaticCompound_stack)!;
+        stackSize--;
+        const nodeOffset = _castRayVsStaticCompound_stackNodes[stackSize];
+        const nodeDistance = _castRayVsStaticCompound_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (entry.distance >= collector.earlyOutFraction) {
+        if (nodeDistance >= collector.earlyOutFraction) {
             continue;
         }
-
-        const nodeOffset = entry.nodeIndex;
 
         // note: no need to test ray x child bounds intersection here - we already proved the ray
         // intersects this node's bounds when we computed the distance during push.
@@ -511,7 +517,12 @@ function castRay(
                 localDirY,
                 localDirZ,
                 length,
-                _castRayVsStaticCompound_nodeBounds,
+                _castRayVsStaticCompound_nodeBounds[0],
+                _castRayVsStaticCompound_nodeBounds[1],
+                _castRayVsStaticCompound_nodeBounds[2],
+                _castRayVsStaticCompound_nodeBounds[3],
+                _castRayVsStaticCompound_nodeBounds[4],
+                _castRayVsStaticCompound_nodeBounds[5],
             );
 
             bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
@@ -523,25 +534,38 @@ function castRay(
                 localDirY,
                 localDirZ,
                 length,
-                _castRayVsStaticCompound_nodeBounds,
+                _castRayVsStaticCompound_nodeBounds[0],
+                _castRayVsStaticCompound_nodeBounds[1],
+                _castRayVsStaticCompound_nodeBounds[2],
+                _castRayVsStaticCompound_nodeBounds[3],
+                _castRayVsStaticCompound_nodeBounds[4],
+                _castRayVsStaticCompound_nodeBounds[5],
             );
 
             // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsStaticCompound_stack, rightOffset, rightDist);
+                    _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
+                    _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsStaticCompound_stack, leftOffset, leftDist);
+                    _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
+                    _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
             } else {
                 // right is closer - push left first
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsStaticCompound_stack, leftOffset, leftDist);
+                    _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
+                    _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castRayVsStaticCompound_stack, rightOffset, rightDist);
+                    _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
+                    _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
             }
         }
@@ -550,7 +574,9 @@ function castRay(
 
 /* collide point */
 
-const _collidePointVsStaticCompound_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this overlap traversal — carries no distances. grow-once
+// with a size counter (no pop()/length churn, stays packed).
+const _collidePointVsStaticCompound_stackNodes: number[] = [];
 
 const _collidePointVsStaticCompound_posB = /* @__PURE__ */ vec3.create();
 const _collidePointVsStaticCompound_quatB = /* @__PURE__ */ quat.create();
@@ -603,14 +629,13 @@ function collidePoint(
     const localPointY = _collidePointVsStaticCompound_localPoint[1];
     const localPointZ = _collidePointVsStaticCompound_localPoint[2];
 
-    bvhStack.reset(_collidePointVsStaticCompound_stack);
-    bvhStack.push(_collidePointVsStaticCompound_stack, 0, 0);
+    let stackSize = 0;
+    _collidePointVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (_collidePointVsStaticCompound_stack.size > 0) {
+    while (stackSize > 0) {
         if (collector.shouldEarlyOut()) break;
 
-        const entry = bvhStack.pop(_collidePointVsStaticCompound_stack)!;
-        const nodeOffset = entry.nodeIndex;
+        const nodeOffset = _collidePointVsStaticCompound_stackNodes[--stackSize];
 
         // point-AABB test using LOCAL point
         if (
@@ -687,15 +712,17 @@ function collidePoint(
             // internal node: push both children
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
-            bvhStack.push(_collidePointVsStaticCompound_stack, leftOffset, 0);
-            bvhStack.push(_collidePointVsStaticCompound_stack, rightOffset, 0);
+            _collidePointVsStaticCompound_stackNodes[stackSize++] = leftOffset;
+            _collidePointVsStaticCompound_stackNodes[stackSize++] = rightOffset;
         }
     }
 }
 
 /* collide shape */
 
-const _collideStaticCompoundVsShape_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this overlap traversal — carries no distances. grow-once
+// with a size counter (no pop()/length churn, stays packed).
+const _collideStaticCompoundVsShape_stackNodes: number[] = [];
 const _collideStaticCompoundVsShape_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 const _collideStaticCompoundVsShape_posA = /* @__PURE__ */ vec3.create();
@@ -785,14 +812,13 @@ function collideStaticCompoundVsShape(
     queryBounds[4] += settings.maxSeparationDistance;
     queryBounds[5] += settings.maxSeparationDistance;
 
-    bvhStack.reset(_collideStaticCompoundVsShape_stack);
-    bvhStack.push(_collideStaticCompoundVsShape_stack, 0, 0);
+    let stackSize = 0;
+    _collideStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (_collideStaticCompoundVsShape_stack.size > 0) {
+    while (stackSize > 0) {
         if (collector.shouldEarlyOut()) break;
 
-        const entry = bvhStack.pop(_collideStaticCompoundVsShape_stack)!;
-        const nodeOffset = entry.nodeIndex;
+        const nodeOffset = _collideStaticCompoundVsShape_stackNodes[--stackSize];
 
         // AABB-AABB test using transformed bounds
         if (
@@ -880,13 +906,15 @@ function collideStaticCompoundVsShape(
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
-            bvhStack.push(_collideStaticCompoundVsShape_stack, leftOffset, 0);
-            bvhStack.push(_collideStaticCompoundVsShape_stack, rightOffset, 0);
+            _collideStaticCompoundVsShape_stackNodes[stackSize++] = leftOffset;
+            _collideStaticCompoundVsShape_stackNodes[stackSize++] = rightOffset;
         }
     }
 }
 
-const _collideShapeVsStaticCompound_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this overlap traversal — carries no distances. grow-once
+// with a size counter (no pop()/length churn, stays packed).
+const _collideShapeVsStaticCompound_stackNodes: number[] = [];
 const _collideShapeVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 const _collideShapeVsStaticCompound_posB = /* @__PURE__ */ vec3.create();
 const _collideShapeVsStaticCompound_quatB = /* @__PURE__ */ quat.create();
@@ -977,14 +1005,13 @@ function collideShapeVsStaticCompound(
     queryBounds[4] += settings.maxSeparationDistance;
     queryBounds[5] += settings.maxSeparationDistance;
 
-    bvhStack.reset(_collideShapeVsStaticCompound_stack);
-    bvhStack.push(_collideShapeVsStaticCompound_stack, 0, 0);
+    let stackSize = 0;
+    _collideShapeVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (_collideShapeVsStaticCompound_stack.size > 0) {
+    while (stackSize > 0) {
         if (collector.shouldEarlyOut()) break;
 
-        const entry = bvhStack.pop(_collideShapeVsStaticCompound_stack)!;
-        const nodeOffset = entry.nodeIndex;
+        const nodeOffset = _collideShapeVsStaticCompound_stackNodes[--stackSize];
 
         if (
             !bvh.nodeIntersectsBox(
@@ -1071,15 +1098,17 @@ function collideShapeVsStaticCompound(
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
-            bvhStack.push(_collideShapeVsStaticCompound_stack, leftOffset, 0);
-            bvhStack.push(_collideShapeVsStaticCompound_stack, rightOffset, 0);
+            _collideShapeVsStaticCompound_stackNodes[stackSize++] = leftOffset;
+            _collideShapeVsStaticCompound_stackNodes[stackSize++] = rightOffset;
         }
     }
 }
 
 /* cast shape */
 
-const _castStaticCompoundVsShape_stack = /* @__PURE__ */ bvhStack.create();
+// flat SMI stack of node offsets for this overlap traversal — carries no distances. grow-once
+// with a size counter (no pop()/length churn, stays packed).
+const _castStaticCompoundVsShape_stackNodes: number[] = [];
 const _castStaticCompoundVsShape_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 const _castStaticCompoundVsShape_posA = /* @__PURE__ */ vec3.create();
@@ -1190,14 +1219,13 @@ function castStaticCompoundVsShape(
     endBounds[5] = queryBounds[5] + localDisp[2];
     box3.union(queryBounds, queryBounds, endBounds);
 
-    bvhStack.reset(_castStaticCompoundVsShape_stack);
-    bvhStack.push(_castStaticCompoundVsShape_stack, 0, 0);
+    let stackSize = 0;
+    _castStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (_castStaticCompoundVsShape_stack.size > 0) {
+    while (stackSize > 0) {
         if (collector.earlyOutFraction <= -Infinity) break;
 
-        const entry = bvhStack.pop(_castStaticCompoundVsShape_stack)!;
-        const nodeOffset = entry.nodeIndex;
+        const nodeOffset = _castStaticCompoundVsShape_stackNodes[--stackSize];
 
         // BVH culling using swept bounds
         if (
@@ -1290,8 +1318,8 @@ function castStaticCompoundVsShape(
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
-            bvhStack.push(_castStaticCompoundVsShape_stack, leftOffset, 0);
-            bvhStack.push(_castStaticCompoundVsShape_stack, rightOffset, 0);
+            _castStaticCompoundVsShape_stackNodes[stackSize++] = leftOffset;
+            _castStaticCompoundVsShape_stackNodes[stackSize++] = rightOffset;
         }
     }
 }
@@ -1323,11 +1351,11 @@ const _castShapeVsStaticCompound_quatAInB = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_displacementInB = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_mat4 = /* @__PURE__ */ mat4.create();
 const _castShapeVsStaticCompound_sweptAABB = /* @__PURE__ */ box3.create();
-const _castShapeVsStaticCompound_raycast = /* @__PURE__ */ raycast3.create();
 const _castShapeVsStaticCompound_halfExtents = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_expandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_childExpandedBounds = /* @__PURE__ */ box3.create();
-const _castShapeVsStaticCompound_stack = /* @__PURE__ */ bvhStack.create();
+const _castShapeVsStaticCompound_stackNodes: number[] = [];
+const _castShapeVsStaticCompound_stackDist: number[] = [];
 const _castShapeVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 const _castShapeVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
@@ -1413,21 +1441,16 @@ function castShapeVsStaticCompound(
     );
     box3.transformMat4(_castShapeVsStaticCompound_sweptAABB, shapeA.aabb, aabbMatrix);
 
-    // compute centroid of base AABB
-    const ray = _castShapeVsStaticCompound_raycast;
-    ray.origin[0] = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
-    ray.origin[1] = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * 0.5;
-    ray.origin[2] = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * 0.5;
+    // cast ray: swept AABB center along the normalized displacement
+    const rayOriginX = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
+    const rayOriginY = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * 0.5;
+    const rayOriginZ = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * 0.5;
 
-    // compute ray direction and length from displacement
-    ray.length = vec3.length(_castShapeVsStaticCompound_displacementInB);
-    if (ray.length > 1e-10) {
-        vec3.normalize(ray.direction, _castShapeVsStaticCompound_displacementInB);
-    } else {
-        ray.direction[0] = 0;
-        ray.direction[1] = 0;
-        ray.direction[2] = 0;
-    }
+    const rayLength = vec3.length(_castShapeVsStaticCompound_displacementInB);
+    const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
+    const rayDirX = _castShapeVsStaticCompound_displacementInB[0] * invRayLength;
+    const rayDirY = _castShapeVsStaticCompound_displacementInB[1] * invRayLength;
+    const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
 
     // compute half-extents of the base AABB
     const halfExtents = _castShapeVsStaticCompound_halfExtents;
@@ -1435,20 +1458,22 @@ function castShapeVsStaticCompound(
     halfExtents[1] = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
     halfExtents[2] = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
 
-    bvhStack.reset(_castShapeVsStaticCompound_stack);
-    bvhStack.push(_castShapeVsStaticCompound_stack, 0, 0); // root always visited
+    let stackSize = 0;
+    _castShapeVsStaticCompound_stackNodes[stackSize] = 0;
+    _castShapeVsStaticCompound_stackDist[stackSize] = 0; // root always visited
+    stackSize++;
 
     const expandedBounds = _castShapeVsStaticCompound_expandedBounds;
 
-    while (_castShapeVsStaticCompound_stack.size > 0) {
-        const entry = bvhStack.pop(_castShapeVsStaticCompound_stack)!;
+    while (stackSize > 0) {
+        stackSize--;
+        const nodeOffset = _castShapeVsStaticCompound_stackNodes[stackSize];
+        const nodeDistance = _castShapeVsStaticCompound_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (entry.distance >= collector.earlyOutFraction) {
+        if (nodeDistance >= collector.earlyOutFraction) {
             continue;
         }
-
-        const nodeOffset = entry.nodeIndex;
 
         // note: no need to test ray intersection here - we already proved the ray
         // intersects this node's expanded bounds when we computed the distance during push.
@@ -1477,7 +1502,23 @@ function castShapeVsStaticCompound(
                 childBounds[5] += halfExtents[2];
 
                 // early out: ray x child expanded bounds
-                if (!raycast3.intersectsBox3(ray, childBounds)) {
+                if (
+                    !rayHitsBox3(
+                        rayOriginX,
+                        rayOriginY,
+                        rayOriginZ,
+                        rayDirX,
+                        rayDirY,
+                        rayDirZ,
+                        rayLength,
+                        childBounds[0],
+                        childBounds[1],
+                        childBounds[2],
+                        childBounds[3],
+                        childBounds[4],
+                        childBounds[5],
+                    )
+                ) {
                     continue;
                 }
 
@@ -1561,14 +1602,19 @@ function castShapeVsStaticCompound(
             expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const leftDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
-                expandedBounds,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
@@ -1578,32 +1624,45 @@ function castShapeVsStaticCompound(
             expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
             expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
             const rightDist = rayDistanceToBox3(
-                ray.origin[0],
-                ray.origin[1],
-                ray.origin[2],
-                ray.direction[0],
-                ray.direction[1],
-                ray.direction[2],
-                ray.length,
-                expandedBounds,
+                rayOriginX,
+                rayOriginY,
+                rayOriginZ,
+                rayDirX,
+                rayDirY,
+                rayDirZ,
+                rayLength,
+                expandedBounds[0],
+                expandedBounds[1],
+                expandedBounds[2],
+                expandedBounds[3],
+                expandedBounds[4],
+                expandedBounds[5],
             );
 
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castShapeVsStaticCompound_stack, rightOffset, rightDist);
+                    _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
+                    _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castShapeVsStaticCompound_stack, leftOffset, leftDist);
+                    _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
+                    _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
             } else {
                 // right is closer - push left first
                 if (leftDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castShapeVsStaticCompound_stack, leftOffset, leftDist);
+                    _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
+                    _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
+                    stackSize++;
                 }
                 if (rightDist < collector.earlyOutFraction) {
-                    bvhStack.push(_castShapeVsStaticCompound_stack, rightOffset, rightDist);
+                    _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
+                    _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
+                    stackSize++;
                 }
             }
         }

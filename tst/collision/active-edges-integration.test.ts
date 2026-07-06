@@ -1,9 +1,17 @@
 import { quat, vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
-import { EMPTY_SUB_SHAPE_ID } from '../../src';
-import { CastShapeStatus, castShapeVsShape, createClosestCastShapeCollector, createDefaultCastShapeSettings } from '../../src';
-import { collideShapeVsShape, createAllCollideShapeCollector, createDefaultCollideShapeSettings } from '../../src';
-import { sphere, triangleMesh } from '../../src';
+import {
+    CastShapeStatus,
+    castShapeVsShape,
+    collideShapeVsShape,
+    createAllCollideShapeCollector,
+    createClosestCastShapeCollector,
+    createDefaultCastShapeSettings,
+    createDefaultCollideShapeSettings,
+    EMPTY_SUB_SHAPE_ID,
+    sphere,
+    triangleMesh,
+} from '../../src';
 
 const identityQuat = () => quat.create();
 const scaleOne = () => vec3.fromValues(1, 1, 1);

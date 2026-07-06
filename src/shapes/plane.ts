@@ -19,7 +19,7 @@ import {
     createCollideShapeHit,
     reversedCollideShapeVsShape,
 } from '../collision/collide-shape-vs-shape';
-import { createShapeSupportPool, getShapeSupportFunction, SupportFunctionMode } from '../collision/support';
+import { createSupport, getSupport, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import {
@@ -33,6 +33,7 @@ import {
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
+    setShapeSupport,
     shapeDefs,
 } from './shapes';
 
@@ -454,7 +455,7 @@ function collidePointVsPlane(
 
 /* convex vs plane collision */
 
-const _collideConvexVsPlane_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _collideConvexVsPlane_support = /* @__PURE__ */ createSupport();
 const _collideConvexVsPlane_hit = /* @__PURE__ */ createCollideShapeHit();
 const _collideConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
 const _collideConvexVsPlane_localPlane = /* @__PURE__ */ plane3.create();
@@ -543,24 +544,15 @@ function collideConvexVsPlane(
     const normal = _collideConvexVsPlane_localPlane.normal;
 
     // get support function for convex shape with scale applied
-    const supportFn = getShapeSupportFunction(
-        _collideConvexVsPlane_supportPool,
-        shapeA,
-        SupportFunctionMode.DEFAULT,
-        _collideConvexVsPlane_scaleA,
-    );
-
-    if (!supportFn) {
-        throw new Error('collideConvexVsPlane: shape A must be convex');
-    }
+    setShapeSupport(_collideConvexVsPlane_support, shapeA, SupportFunctionMode.DEFAULT, _collideConvexVsPlane_scaleA);
 
     // get support point in direction opposite to plane normal
     vec3.negate(_collideConvexVsPlane_normal, normal);
-    supportFn.getSupport(_collideConvexVsPlane_normal, _collideConvexVsPlane_supportPoint);
+    getSupport(_collideConvexVsPlane_supportPoint, _collideConvexVsPlane_support, _collideConvexVsPlane_normal);
 
     // calculate penetration
     const signedDistance = plane3.distanceToPoint(_collideConvexVsPlane_localPlane, _collideConvexVsPlane_supportPoint);
-    const convexRadius = supportFn.convexRadius;
+    const convexRadius = _collideConvexVsPlane_support.convexRadius;
     const penetration = -signedDistance + convexRadius;
 
     // check if penetration is within tolerance
@@ -709,7 +701,7 @@ function getAdaptivePlaneSupportingFace(
 
 /* cast convex vs plane */
 
-const _castConvexVsPlane_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _castConvexVsPlane_support = /* @__PURE__ */ createSupport();
 const _castConvexVsPlane_hit = /* @__PURE__ */ createCastShapeHit();
 const _castConvexVsPlane_scaledPlane = /* @__PURE__ */ plane3.create();
 const _castConvexVsPlane_scaleA = /* @__PURE__ */ vec3.create();
@@ -784,16 +776,7 @@ export function castConvexVsPlane(
 
     // get support function
     vec3.set(_castConvexVsPlane_scaleA, scaleAX, scaleAY, scaleAZ);
-    const supportFn = getShapeSupportFunction(
-        _castConvexVsPlane_supportPool,
-        shapeA,
-        SupportFunctionMode.DEFAULT,
-        _castConvexVsPlane_scaleA,
-    );
-
-    if (!supportFn) {
-        throw new Error('castConvexVsPlane: shape A must be convex');
-    }
+    setShapeSupport(_castConvexVsPlane_support, shapeA, SupportFunctionMode.DEFAULT, _castConvexVsPlane_scaleA);
 
     // transform normal to convex shape's local space
     quat.conjugate(_castConvexVsPlane_invQuat, _castConvexVsPlane_quatA);
@@ -801,14 +784,14 @@ export function castConvexVsPlane(
 
     // get support point in opposite direction
     vec3.negate(_castConvexVsPlane_normalInShapeSpace, _castConvexVsPlane_normalInShapeSpace);
-    supportFn.getSupport(_castConvexVsPlane_normalInShapeSpace, _castConvexVsPlane_supportPoint);
+    getSupport(_castConvexVsPlane_supportPoint, _castConvexVsPlane_support, _castConvexVsPlane_normalInShapeSpace);
 
     // transform support point to world space
     vec3.transformMat4(_castConvexVsPlane_supportPointWorld, _castConvexVsPlane_supportPoint, _castConvexVsPlane_AtoWorld);
 
     // calculate initial penetration
     const signedDistance = plane3.distanceToPoint(_castConvexVsPlane_scaledPlane, _castConvexVsPlane_supportPointWorld);
-    const convexRadius = supportFn.convexRadius;
+    const convexRadius = _castConvexVsPlane_support.convexRadius;
     const penetrationDepth = -signedDistance + convexRadius;
 
     // direction of cast

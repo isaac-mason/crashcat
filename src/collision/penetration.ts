@@ -2,13 +2,7 @@ import { degreesToRadians, type Mat4, type Vec3, vec3 } from 'mathcat';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
-import type { Support } from './support';
-import {
-    createAddConvexRadiusSupport,
-    createTransformedSupport,
-    setAddConvexRadiusSupport,
-    setTransformedSupport,
-} from './support';
+import { getSupport, type Support } from './support';
 
 export enum PenetrationDepthStatus {
     NOT_COLLIDING,
@@ -78,14 +72,14 @@ export function penetrationDepthStepGJK(
     outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
     outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
 
-    copySimplex(outSimplex, _gjk_closestPoints.simplex);
+    /* @inline */ copySimplex(outSimplex, _gjk_closestPoints.simplex);
 
     if (_gjk_closestPoints.squaredDistance > 0.0) {
         // collision within convex radius - adjust contact points based on convex radii
         const vLength = Math.sqrt(_gjk_closestPoints.squaredDistance);
 
         // move pointA along penetration axis by convexRadiusA
-        vec3.scaleAndAdd(
+        /* @inline */ vec3.scaleAndAdd(
             outPenetrationDepth.pointA,
             outPenetrationDepth.pointA,
             outPenetrationDepth.penetrationAxis,
@@ -93,7 +87,7 @@ export function penetrationDepthStepGJK(
         );
 
         // move pointB along negative penetration axis by convexRadiusB
-        vec3.scaleAndAdd(
+        /* @inline */ vec3.scaleAndAdd(
             outPenetrationDepth.pointB,
             outPenetrationDepth.pointB,
             outPenetrationDepth.penetrationAxis,
@@ -123,6 +117,7 @@ const _epa_p = /* @__PURE__ */ vec3.create();
 const _epa_q = /* @__PURE__ */ vec3.create();
 const _epa_negatedDirection = /* @__PURE__ */ vec3.create();
 const _epa_negatedNormal = /* @__PURE__ */ vec3.create();
+const _epa_triangleNormal = /* @__PURE__ */ vec3.create();
 const _epa_p2 = /* @__PURE__ */ vec3.create();
 const _epa_q2 = /* @__PURE__ */ vec3.create();
 
@@ -153,29 +148,30 @@ const clearEpaSupportPoints = (points: EpaSupportPoints) => {
 
 /** add a support point in the given direction */
 const addEpaSupportPoint = (points: EpaSupportPoints, supportA: Support, supportB: Support, direction: Vec3): number => {
-    vec3.negate(_epa_negatedDirection, direction);
+    /* @inline */ vec3.negate(_epa_negatedDirection, direction);
 
-    supportA.getSupport(direction, _epa_p);
-    supportB.getSupport(_epa_negatedDirection, _epa_q);
+    getSupport(_epa_p, supportA, direction);
+    getSupport(_epa_q, supportB, _epa_negatedDirection);
 
     // store new point
     const idx = points.y.size;
-    const yOut = points.y.values[idx];
-    const pOut = points.p.values[idx];
-    const qOut = points.q.values[idx];
+    const off = idx * 3;
+    const yValues = points.y.values;
+    const pValues = points.p.values;
+    const qValues = points.q.values;
 
     // y = p - q (minkowski difference)
-    yOut[0] = _epa_p[0] - _epa_q[0];
-    yOut[1] = _epa_p[1] - _epa_q[1];
-    yOut[2] = _epa_p[2] - _epa_q[2];
+    yValues[off] = _epa_p[0] - _epa_q[0];
+    yValues[off + 1] = _epa_p[1] - _epa_q[1];
+    yValues[off + 2] = _epa_p[2] - _epa_q[2];
 
-    pOut[0] = _epa_p[0];
-    pOut[1] = _epa_p[1];
-    pOut[2] = _epa_p[2];
+    pValues[off] = _epa_p[0];
+    pValues[off + 1] = _epa_p[1];
+    pValues[off + 2] = _epa_p[2];
 
-    qOut[0] = _epa_q[0];
-    qOut[1] = _epa_q[1];
-    qOut[2] = _epa_q[2];
+    qValues[off] = _epa_q[0];
+    qValues[off + 1] = _epa_q[1];
+    qValues[off + 2] = _epa_q[2];
 
     points.y.size++;
     points.p.size++;
@@ -198,6 +194,7 @@ const _epa_hullState = /* @__PURE__ */ (() => {
     return state;
 })();
 const _epa_newTriangles: hull.NewTriangles = [];
+const _epa_bestDistSq = { value: -1 };
 
 // rotation matrix constants for 120° rotation
 const COS_120_DEG = /* @__PURE__ */ Math.cos(degreesToRadians(120));
@@ -206,9 +203,9 @@ const ONE_MINUS_COS_120_DEG = 1 - COS_120_DEG;
 
 /**
  * EPA penetration depth step.
- * This function expects shapes that INCLUDE their convex radius.
- * The caller should wrap base shapes with AddConvexRadiusSupport before calling,
- * typically in the EPA fallback path. This matches Jolt's EPAPenetrationDepth.h pattern.
+ * This function expects supports that INCLUDE their convex radius. The caller fills the support
+ * structs in INCLUDE mode and folds any extra separation onto `addRadius` before calling, typically
+ * in the EPA fallback path. This matches Jolt's EPAPenetrationDepth.h pattern.
  */
 export function penetrationDepthStepEPA(
     out: PenetrationDepth,
@@ -223,19 +220,16 @@ export function penetrationDepthStepEPA(
 
     // copy simplex points to support points
     for (let i = 0; i < simplex.size; i++) {
-        const point = simplex.points[i];
-        const yOut = supportPoints.y.values[i];
-        const pOut = supportPoints.p.values[i];
-        const qOut = supportPoints.q.values[i];
-        yOut[0] = point.y[0];
-        yOut[1] = point.y[1];
-        yOut[2] = point.y[2];
-        pOut[0] = point.p[0];
-        pOut[1] = point.p[1];
-        pOut[2] = point.p[2];
-        qOut[0] = point.q[0];
-        qOut[1] = point.q[1];
-        qOut[2] = point.q[2];
+        const off = i * 3;
+        supportPoints.y.values[off] = simplex.y[off];
+        supportPoints.y.values[off + 1] = simplex.y[off + 1];
+        supportPoints.y.values[off + 2] = simplex.y[off + 2];
+        supportPoints.p.values[off] = simplex.p[off];
+        supportPoints.p.values[off + 1] = simplex.p[off + 1];
+        supportPoints.p.values[off + 2] = simplex.p[off + 2];
+        supportPoints.q.values[off] = simplex.q[off];
+        supportPoints.q.values[off + 1] = simplex.q[off + 1];
+        supportPoints.q.values[off + 2] = simplex.q[off + 2];
     }
     supportPoints.y.size = simplex.size;
     supportPoints.p.size = simplex.size;
@@ -255,13 +249,12 @@ export function penetrationDepthStepEPA(
 
         case 2: {
             // two vertices - create 3 extra by rotating perpendicular axis
-            const y0 = supportPoints.y.values[0];
-            const y1 = supportPoints.y.values[1];
+            const yValues = supportPoints.y.values;
 
             // axis = normalize(y1 - y0)
-            const axisx = y1[0] - y0[0];
-            const axisy = y1[1] - y0[1];
-            const axisz = y1[2] - y0[2];
+            const axisx = yValues[3] - yValues[0];
+            const axisy = yValues[4] - yValues[1];
+            const axisz = yValues[5] - yValues[2];
             const axisLen = Math.sqrt(axisx * axisx + axisy * axisy + axisz * axisz);
             const axisNormx = axisx / axisLen;
             const axisNormy = axisy / axisLen;
@@ -335,13 +328,16 @@ export function penetrationDepthStepEPA(
 
     // create hull from initial points
     const hullState = _epa_hullState;
+    const triFloat = hullState.triFloat;
+    const triInt = hullState.triInt;
     hull.initialize(hullState, 0, 1, 2);
 
     // add remaining points to hull
     for (let i = 3; i < supportPoints.y.size; i++) {
-        const distSq = { value: -1 };
-        const t = hull.findFacingTriangle(hullState, supportPoints.y.values[i], distSq);
-        if (t !== null) {
+        const distSq = _epa_bestDistSq;
+        distSq.value = -1;
+        const t = hull.findFacingTriangle(hullState, supportPoints.y.values, i * 3, distSq);
+        if (t !== -1) {
             const newTriangles = _epa_newTriangles;
             newTriangles.length = 0;
 
@@ -356,13 +352,13 @@ export function penetrationDepthStepEPA(
     while (true) {
         const triangle = hull.peekClosestTriangleInQueue(hullState);
 
-        if (!triangle) {
+        if (triangle === -1) {
             out.status = PenetrationDepthStatus.NOT_COLLIDING;
             return false;
         }
 
         // skip removed triangles
-        if (triangle.removed) {
+        if ((triInt[triangle * hull.TRI_INT_STRIDE + hull.TRI_FLAGS] & hull.TRI_FLAG_REMOVED) !== 0) {
             hull.popClosestTriangleFromQueue(hullState);
 
             if (!hull.hasNextTriangle(hullState)) {
@@ -375,20 +371,23 @@ export function penetrationDepthStepEPA(
         }
 
         // if closest distance is >= 0, origin is in hull
-        if (triangle.closestLengthSq >= 0.0) {
+        if (triFloat[triangle * hull.TRI_FLOAT_STRIDE + hull.TRI_CLOSEST_LENGTH_SQ] >= 0.0) {
             break;
         }
 
         hull.popClosestTriangleFromQueue(hullState);
 
         // add support point to get origin inside hull
-        const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, triangle.normal);
-        const w = supportPoints.y.values[newIndex];
+        const fBase = triangle * hull.TRI_FLOAT_STRIDE;
+        _epa_triangleNormal[0] = triFloat[fBase + hull.TRI_NORMAL];
+        _epa_triangleNormal[1] = triFloat[fBase + hull.TRI_NORMAL + 1];
+        _epa_triangleNormal[2] = triFloat[fBase + hull.TRI_NORMAL + 2];
+        const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_triangleNormal);
 
         _epa_newTriangles.length = 0;
 
         if (
-            !hull.triangleIsFacing(triangle, w) ||
+            !hull.triangleIsFacing(hullState, triangle, supportPoints.y.values, newIndex * 3) ||
             !hull.addPoint(hullState, triangle, newIndex, Number.MAX_VALUE, _epa_newTriangles)
         ) {
             out.status = PenetrationDepthStatus.NOT_COLLIDING;
@@ -405,40 +404,53 @@ export function penetrationDepthStepEPA(
 
     // main EPA loop - find closest point
     let closestDistSq = Number.MAX_VALUE;
-    let last: hull.Triangle | null = null;
+    let last = -1;
     let flipVSign = false;
 
     do {
         const triangle = hull.popClosestTriangleFromQueue(hullState);
 
-        if (!triangle) {
+        if (triangle === -1) {
             out.status = PenetrationDepthStatus.NOT_COLLIDING;
             return false;
         }
 
         // skip removed triangles
-        if (triangle.removed) {
+        if ((triInt[triangle * hull.TRI_INT_STRIDE + hull.TRI_FLAGS] & hull.TRI_FLAG_REMOVED) !== 0) {
             hull.freeTriangle(hullState, triangle);
             continue;
         }
 
+        const fBase = triangle * hull.TRI_FLOAT_STRIDE;
+        const closestLengthSq = triFloat[fBase + hull.TRI_CLOSEST_LENGTH_SQ];
+
         // check if we found the closest point
-        if (triangle.closestLengthSq >= closestDistSq) {
+        if (closestLengthSq >= closestDistSq) {
             break;
         }
 
         // replace last good triangle
-        if (last !== null) {
+        if (last !== -1) {
             hull.freeTriangle(hullState, last);
         }
         last = triangle;
 
         // add support point in direction of normal
-        const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, triangle.normal);
-        const w = supportPoints.y.values[newIndex];
+        const nX = triFloat[fBase + hull.TRI_NORMAL];
+        const nY = triFloat[fBase + hull.TRI_NORMAL + 1];
+        const nZ = triFloat[fBase + hull.TRI_NORMAL + 2];
+        _epa_triangleNormal[0] = nX;
+        _epa_triangleNormal[1] = nY;
+        _epa_triangleNormal[2] = nZ;
+        const newIndex = addEpaSupportPoint(supportPoints, supportAIncludingRadius, supportBIncludingRadius, _epa_triangleNormal);
+        const wOff = newIndex * 3;
+        const yValues = supportPoints.y.values;
+        const wx = yValues[wOff];
+        const wy = yValues[wOff + 1];
+        const wz = yValues[wOff + 2];
 
         // project w onto triangle normal
-        const dot = triangle.normal[0] * w[0] + triangle.normal[1] * w[1] + triangle.normal[2] * w[2];
+        const dot = nX * wx + nY * wy + nZ * wz;
 
         // check for separating axis
         if (dot < 0.0) {
@@ -447,21 +459,18 @@ export function penetrationDepthStepEPA(
         }
 
         // get distance squared along normal
-        const normalLenSq =
-            triangle.normal[0] * triangle.normal[0] +
-            triangle.normal[1] * triangle.normal[1] +
-            triangle.normal[2] * triangle.normal[2];
+        const normalLenSq = nX * nX + nY * nY + nZ * nZ;
         const distSq = (dot * dot) / normalLenSq;
 
         // check for convergence
-        if (distSq - triangle.closestLengthSq < triangle.closestLengthSq * tolerance) {
+        if (distSq - closestLengthSq < closestLengthSq * tolerance) {
             break;
         }
 
         closestDistSq = Math.min(closestDistSq, distSq);
 
         // check if triangle thinks point is not front facing
-        if (!hull.triangleIsFacing(triangle, w)) {
+        if (!hull.triangleIsFacing(hullState, triangle, yValues, wOff)) {
             break;
         }
 
@@ -477,9 +486,15 @@ export function penetrationDepthStepEPA(
         let hasDefect = false;
         for (let i = 0; i < newTriangles.length; i++) {
             const nt = newTriangles[i];
+            const ntBase = nt * hull.TRI_FLOAT_STRIDE;
             // triangleIsFacingOrigin: check if triangle normal points toward origin
             // if dot(normal, centroid) < 0, origin is on front side (defect)
-            if (nt && nt.normal[0] * nt.centroid[0] + nt.normal[1] * nt.centroid[1] + nt.normal[2] * nt.centroid[2] < 0.0) {
+            if (
+                triFloat[ntBase + hull.TRI_NORMAL] * triFloat[ntBase + hull.TRI_CENTROID] +
+                    triFloat[ntBase + hull.TRI_NORMAL + 1] * triFloat[ntBase + hull.TRI_CENTROID + 1] +
+                    triFloat[ntBase + hull.TRI_NORMAL + 2] * triFloat[ntBase + hull.TRI_CENTROID + 2] <
+                0.0
+            ) {
                 hasDefect = true;
                 break;
             }
@@ -487,11 +502,14 @@ export function penetrationDepthStepEPA(
 
         if (hasDefect) {
             // check if we need to flip penetration sign
-            _epa_negatedNormal[0] = -triangle.normal[0];
-            _epa_negatedNormal[1] = -triangle.normal[1];
-            _epa_negatedNormal[2] = -triangle.normal[2];
-            supportAIncludingRadius.getSupport(_epa_negatedNormal, _epa_p2);
-            supportBIncludingRadius.getSupport(triangle.normal, _epa_q2);
+            _epa_negatedNormal[0] = -nX;
+            _epa_negatedNormal[1] = -nY;
+            _epa_negatedNormal[2] = -nZ;
+            getSupport(_epa_p2, supportAIncludingRadius, _epa_negatedNormal);
+            _epa_triangleNormal[0] = nX;
+            _epa_triangleNormal[1] = nY;
+            _epa_triangleNormal[2] = nZ;
+            getSupport(_epa_q2, supportBIncludingRadius, _epa_triangleNormal);
             const w2x = _epa_p2[0] - _epa_q2[0];
             const w2y = _epa_p2[1] - _epa_q2[1];
             const w2z = _epa_p2[2] - _epa_q2[2];
@@ -504,22 +522,29 @@ export function penetrationDepthStepEPA(
     } while (hull.hasNextTriangle(hullState) && supportPoints.y.size < EPA_MAX_POINTS);
 
     // calculate results
-    if (last === null) {
+    if (last === -1) {
         out.status = PenetrationDepthStatus.NOT_COLLIDING;
         return false;
     }
 
+    const lastFBase = last * hull.TRI_FLOAT_STRIDE;
+    const lastNX = triFloat[lastFBase + hull.TRI_NORMAL];
+    const lastNY = triFloat[lastFBase + hull.TRI_NORMAL + 1];
+    const lastNZ = triFloat[lastFBase + hull.TRI_NORMAL + 2];
+    const lastCX = triFloat[lastFBase + hull.TRI_CENTROID];
+    const lastCY = triFloat[lastFBase + hull.TRI_CENTROID + 1];
+    const lastCZ = triFloat[lastFBase + hull.TRI_CENTROID + 2];
+
     // calculate penetration normal and depth
-    const normalLengthSq = last.normal[0] * last.normal[0] + last.normal[1] * last.normal[1] + last.normal[2] * last.normal[2];
-    const centroidDotNormal =
-        last.centroid[0] * last.normal[0] + last.centroid[1] * last.normal[1] + last.centroid[2] * last.normal[2];
+    const normalLengthSq = lastNX * lastNX + lastNY * lastNY + lastNZ * lastNZ;
+    const centroidDotNormal = lastCX * lastNX + lastCY * lastNY + lastCZ * lastNZ;
 
     // penetration normal calculation
     const penetrationNormal = _epa_penetrationNormal;
     const penetrationNormalScale = centroidDotNormal / normalLengthSq;
-    penetrationNormal[0] = last.normal[0] * penetrationNormalScale;
-    penetrationNormal[1] = last.normal[1] * penetrationNormalScale;
-    penetrationNormal[2] = last.normal[2] * penetrationNormalScale;
+    penetrationNormal[0] = lastNX * penetrationNormalScale;
+    penetrationNormal[1] = lastNY * penetrationNormalScale;
+    penetrationNormal[2] = lastNZ * penetrationNormalScale;
 
     // check for near-zero penetration
     const pnLenSq =
@@ -539,29 +564,41 @@ export function penetrationDepthStepEPA(
     }
 
     // calculate contact points using barycentric coordinates
-    const xp0 = supportPoints.p.values[last.edge[0].startIndex];
-    const xp1 = supportPoints.p.values[last.edge[1].startIndex];
-    const xp2 = supportPoints.p.values[last.edge[2].startIndex];
+    const lastIBase = last * hull.TRI_INT_STRIDE;
+    const s0 = triInt[lastIBase + 0 * 3 + hull.EDGE_START_INDEX] * 3;
+    const s1 = triInt[lastIBase + 1 * 3 + hull.EDGE_START_INDEX] * 3;
+    const s2 = triInt[lastIBase + 2 * 3 + hull.EDGE_START_INDEX] * 3;
 
-    const xq0 = supportPoints.q.values[last.edge[0].startIndex];
-    const xq1 = supportPoints.q.values[last.edge[1].startIndex];
-    const xq2 = supportPoints.q.values[last.edge[2].startIndex];
+    const pValues = supportPoints.p.values;
+    const qValues = supportPoints.q.values;
 
     const contactPointA = _epa_contactPointA;
     const contactPointB = _epa_contactPointB;
 
-    if (last.lambdaRelativeTo0) {
+    if ((triInt[lastIBase + hull.TRI_FLAGS] & hull.TRI_FLAG_LAMBDA_RELATIVE_TO_0) !== 0) {
         // cache vertex components
-        const [xp0x, xp0y, xp0z] = xp0;
-        const [xp1x, xp1y, xp1z] = xp1;
-        const [xp2x, xp2y, xp2z] = xp2;
-        const [xq0x, xq0y, xq0z] = xq0;
-        const [xq1x, xq1y, xq1z] = xq1;
-        const [xq2x, xq2y, xq2z] = xq2;
+        const xp0x = pValues[s0];
+        const xp0y = pValues[s0 + 1];
+        const xp0z = pValues[s0 + 2];
+        const xp1x = pValues[s1];
+        const xp1y = pValues[s1 + 1];
+        const xp1z = pValues[s1 + 2];
+        const xp2x = pValues[s2];
+        const xp2y = pValues[s2 + 1];
+        const xp2z = pValues[s2 + 2];
+        const xq0x = qValues[s0];
+        const xq0y = qValues[s0 + 1];
+        const xq0z = qValues[s0 + 2];
+        const xq1x = qValues[s1];
+        const xq1y = qValues[s1 + 1];
+        const xq1z = qValues[s1 + 2];
+        const xq2x = qValues[s2];
+        const xq2y = qValues[s2 + 1];
+        const xq2z = qValues[s2 + 2];
 
-        // contactPointA = xp0 + (xp1 - xp0) * lambda[0] + (xp2 - xp0) * lambda[1]
-        const lambda0 = last.lambda[0];
-        const lambda1 = last.lambda[1];
+        // contactPointA = xp0 + (xp1 - xp0) * lambda0 + (xp2 - xp0) * lambda1
+        const lambda0 = triFloat[lastFBase + hull.TRI_LAMBDA0];
+        const lambda1 = triFloat[lastFBase + hull.TRI_LAMBDA1];
         contactPointA[0] = xp0x + (xp1x - xp0x) * lambda0 + (xp2x - xp0x) * lambda1;
         contactPointA[1] = xp0y + (xp1y - xp0y) * lambda0 + (xp2y - xp0y) * lambda1;
         contactPointA[2] = xp0z + (xp1z - xp0z) * lambda0 + (xp2z - xp0z) * lambda1;
@@ -572,16 +609,28 @@ export function penetrationDepthStepEPA(
         contactPointB[2] = xq0z + (xq1z - xq0z) * lambda0 + (xq2z - xq0z) * lambda1;
     } else {
         // cache vertex components
-        const [xp0x, xp0y, xp0z] = xp0;
-        const [xp1x, xp1y, xp1z] = xp1;
-        const [xp2x, xp2y, xp2z] = xp2;
-        const [xq0x, xq0y, xq0z] = xq0;
-        const [xq1x, xq1y, xq1z] = xq1;
-        const [xq2x, xq2y, xq2z] = xq2;
+        const xp0x = pValues[s0];
+        const xp0y = pValues[s0 + 1];
+        const xp0z = pValues[s0 + 2];
+        const xp1x = pValues[s1];
+        const xp1y = pValues[s1 + 1];
+        const xp1z = pValues[s1 + 2];
+        const xp2x = pValues[s2];
+        const xp2y = pValues[s2 + 1];
+        const xp2z = pValues[s2 + 2];
+        const xq0x = qValues[s0];
+        const xq0y = qValues[s0 + 1];
+        const xq0z = qValues[s0 + 2];
+        const xq1x = qValues[s1];
+        const xq1y = qValues[s1 + 1];
+        const xq1z = qValues[s1 + 2];
+        const xq2x = qValues[s2];
+        const xq2y = qValues[s2 + 1];
+        const xq2z = qValues[s2 + 2];
 
-        // contactPointA = xp1 + (xp0 - xp1) * lambda[0] + (xp2 - xp1) * lambda[1]
-        const lambda0 = last.lambda[0];
-        const lambda1 = last.lambda[1];
+        // contactPointA = xp1 + (xp0 - xp1) * lambda0 + (xp2 - xp1) * lambda1
+        const lambda0 = triFloat[lastFBase + hull.TRI_LAMBDA0];
+        const lambda1 = triFloat[lastFBase + hull.TRI_LAMBDA1];
         contactPointA[0] = xp1x + (xp0x - xp1x) * lambda0 + (xp2x - xp1x) * lambda1;
         contactPointA[1] = xp1y + (xp0y - xp1y) * lambda0 + (xp2y - xp1y) * lambda1;
         contactPointA[2] = xp1z + (xp0z - xp1z) * lambda0 + (xp2z - xp1z) * lambda1;
@@ -611,9 +660,6 @@ export function penetrationDepthStepEPA(
 }
 
 const _castShape_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
-const _castShape_addRadiusA = /* @__PURE__ */ createAddConvexRadiusSupport();
-const _castShape_addRadiusB = /* @__PURE__ */ createAddConvexRadiusSupport();
-const _castShape_transformedA = /* @__PURE__ */ createTransformedSupport();
 
 export function penetrationCastShape(
     out: GjkCastShapeResult,
@@ -659,19 +705,13 @@ export function penetrationCastShape(
     const shouldDoEPA = returnDeepestPoint && out.lambda === 0.0 && (combinedRadius === 0.0 || contactNormalInvalid);
 
     if (shouldDoEPA) {
-        // if we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point
-        setAddConvexRadiusSupport(_castShape_addRadiusA, convexRadiusA, shapeASupport);
-        setAddConvexRadiusSupport(_castShape_addRadiusB, convexRadiusB, shapeBSupport);
-        setTransformedSupport(_castShape_transformedA, transformAtoB, _castShape_addRadiusA);
+        // if we're initially intersecting, we need to run the EPA algorithm in order to find the deepest contact point.
+        // fold the convex radii onto the support structs; A's A→B transform was already folded by gjkCastShape above.
+        shapeASupport.addRadius = convexRadiusA;
+        shapeBSupport.addRadius = convexRadiusB;
 
         if (
-            !penetrationDepthStepEPA(
-                _castShape_penetrationDepth,
-                _castShape_transformedA,
-                _castShape_addRadiusB,
-                penetrationTolerance,
-                out.simplex,
-            )
+            !penetrationDepthStepEPA(_castShape_penetrationDepth, shapeASupport, shapeBSupport, penetrationTolerance, out.simplex)
         ) {
             out.hit = false;
             return;

@@ -17,21 +17,11 @@ import {
     createDefaultCollideShapeSettings,
 } from '../collision/collide-shape-vs-shape';
 import { createGjkCastShapeResult, gjkCastShape } from '../collision/gjk';
-import {
-    type AddConvexRadiusSupport,
-    createAddConvexRadiusSupport,
-    createPolygonSupport,
-    createShapeSupportPool,
-    getShapeSupportFunction,
-    type ShapeSupportPool,
-    SupportFunctionMode,
-    setAddConvexRadiusSupport,
-    setPolygonSupport,
-} from '../collision/support';
+import { createSupport, type Support, SupportFunctionMode, setPolygonSupport } from '../collision/support';
 import type { Filter } from '../filter';
 import * as query from '../query';
 import type { Shape } from '../shapes/shapes';
-import { getShapeSupportingFace, ShapeType } from '../shapes/shapes';
+import { getShapeSupportingFace, ShapeType, setShapeSupport } from '../shapes/shapes';
 import { createFace } from '../utils/face';
 import type { World } from '../world';
 
@@ -236,10 +226,6 @@ export type CharacterContactSettings = {
  * Used to track which contacts are new, persisted, or removed.
  */
 type ListenerContactValue = {
-    /** pool index when active, -1 when pooled */
-    poolIndex: number;
-    /** packed key for lookup (bodyId << 16 | subShapeId) */
-    packedKey: number;
     /** body ID of the contact */
     bodyId: BodyId;
     /** sub-shape ID of the contact */
@@ -357,8 +343,12 @@ export type CharacterListener = {
         ioCharacterVelocity: Vec3, // can be modified
     ) => void;
 
-    /** called when a contact is removed */
-    onContactRemoved?: (character: KCC, body: RigidBody, subShapeId: number) => void;
+    /**
+     * called when a contact is removed. receives the body ID (not the body): the body may
+     * have been removed and destroyed, in which case this still fires but the body cannot
+     * be accessed.
+     */
+    onContactRemoved?: (character: KCC, bodyId: BodyId, subShapeId: number) => void;
 };
 
 const _create_supportingVolume = /* @__PURE__ */ vec4.create();
@@ -534,22 +524,29 @@ export function remove(world: World, character: KCC): void {
     character.innerRigidBodyId = INVALID_BODY_ID;
 }
 
-/** default capacity for listener contacts pool */
-const DEFAULT_LISTENER_CONTACTS_POOL_SIZE = 256;
+/** initial number of pooled listener contact entries */
+const DEFAULT_LISTENER_CONTACTS_POOL_SIZE = 16;
 
-/** pool for managing ListenerContactValue objects with minimal allocations */
+/**
+ * O(active) store for listener contact tracking (added / persisted / removed detection).
+ *
+ * `live` is a compact array of the currently tracked contacts; lookup is a linear scan
+ * comparing the FULL `bodyId` and `subShapeId` fields. a BodyId is a 52-bit index+sequence
+ * (see body-id.ts) and a subShapeId can exceed 16 bits, so no single JS number packs both
+ * losslessly — identity is compared field-wise. live counts are small, so the scan is cheap
+ * and every operation is O(active) instead of O(capacity). entries are pooled (grow-once):
+ * steady state performs zero allocations.
+ */
 type ListenerContactsPool = {
-    /** all contacts (pooled and active) */
-    pool: ListenerContactValue[];
-    /** indices of free (pooled) contacts */
-    freeIndices: number[];
+    /** compact list of active entries */
+    live: ListenerContactValue[];
+    /** free entry objects (grow-once) */
+    free: ListenerContactValue[];
 };
 
 /** creates a listener contact value (used for initialization and pooling) */
 function createListenerContactValue(): ListenerContactValue {
     return {
-        poolIndex: -1,
-        packedKey: 0,
         bodyId: 0,
         subShapeId: 0,
         count: 0,
@@ -560,66 +557,45 @@ function createListenerContactValue(): ListenerContactValue {
     };
 }
 
-/** creates a new listener contacts pool with the given capacity */
+/** creates a new listener contacts pool with the given initial entry capacity */
 function createListenerContactsPool(capacity: number = DEFAULT_LISTENER_CONTACTS_POOL_SIZE): ListenerContactsPool {
-    const pool: ListenerContactsPool = {
-        pool: [],
-        freeIndices: [],
-    };
+    const pool: ListenerContactsPool = { live: [], free: [] };
     for (let i = 0; i < capacity; i++) {
-        const value = createListenerContactValue();
-        pool.pool.push(value);
-        pool.freeIndices.push(i);
+        pool.free.push(createListenerContactValue());
     }
     return pool;
 }
 
-/** pack bodyId and subShapeId into a single 32-bit number */
-function packListenerContactKey(bodyId: BodyId, subShapeId: number): number {
-    // use lower 16 bits for subShapeId, upper 16 bits for bodyId
-    // this works because body IDs are typically small integers and subShapeIds are also limited
-    return ((bodyId & 0xffff) << 16) | (subShapeId & 0xffff);
-}
-
-/** acquires a listener contact from the pool */
-function acquireListenerContact(pool: ListenerContactsPool): ListenerContactValue {
-    let value: ListenerContactValue;
-    if (pool.freeIndices.length > 0) {
-        const index = pool.freeIndices.pop()!;
-        value = pool.pool[index];
-        value.poolIndex = index;
-    } else {
-        // grow pool if needed
-        value = createListenerContactValue();
-        value.poolIndex = pool.pool.length;
-        pool.pool.push(value);
-    }
+/** acquires an entry for (bodyId, subShapeId), resets it, and adds it to the live list */
+function acquireListenerContact(pool: ListenerContactsPool, bodyId: BodyId, subShapeId: number): ListenerContactValue {
+    const value = pool.free.pop() ?? createListenerContactValue();
+    value.bodyId = bodyId;
+    value.subShapeId = subShapeId;
+    value.count = 0;
+    value.settings.canPushCharacter = true;
+    value.settings.canReceiveImpulses = true;
+    pool.live.push(value);
     return value;
 }
 
-/** releases all listener contacts back to the pool */
+/** releases all live entries back to the free list */
 function releaseAllListenerContacts(pool: ListenerContactsPool): void {
-    pool.freeIndices.length = 0;
-    for (let i = 0; i < pool.pool.length; i++) {
-        pool.pool[i].poolIndex = -1;
-        pool.freeIndices.push(i);
+    for (let i = 0; i < pool.live.length; i++) {
+        pool.free.push(pool.live[i]);
     }
+    pool.live.length = 0;
 }
 
-/** finds a listener contact by packed key, returns null if not found */
-function findListenerContact(pool: ListenerContactsPool, packedKey: number): ListenerContactValue | null {
-    // linear scan through active contacts
-    for (const value of pool.pool) {
-        if (value.poolIndex !== -1 && value.packedKey === packedKey) {
+/** finds a live entry by full body id + sub-shape id, returns null if not found */
+function findListenerContact(pool: ListenerContactsPool, bodyId: BodyId, subShapeId: number): ListenerContactValue | null {
+    const live = pool.live;
+    for (let i = 0; i < live.length; i++) {
+        const value = live[i];
+        if (value.bodyId === bodyId && value.subShapeId === subShapeId) {
             return value;
         }
     }
     return null;
-}
-
-/** iterates all active listener contacts */
-function getActiveListenerContacts(listenerContacts: ListenerContactsPool): ListenerContactValue[] {
-    return listenerContacts.pool.filter((v) => v.poolIndex !== -1);
 }
 
 /**
@@ -740,6 +716,25 @@ function resetContact(contact: CharacterContact): void {
     contact.canReceiveImpulses = true;
 }
 
+/** copies all fields of a contact (for probe passes that must not mutate the live contacts) */
+function copyCharacterContact(out: CharacterContact, source: CharacterContact): void {
+    vec3.copy(out.position, source.position);
+    vec3.copy(out.linearVelocity, source.linearVelocity);
+    vec3.copy(out.contactNormal, source.contactNormal);
+    vec3.copy(out.surfaceNormal, source.surfaceNormal);
+    out.distance = source.distance;
+    out.fraction = source.fraction;
+    out.bodyId = source.bodyId;
+    out.subShapeId = source.subShapeId;
+    out.materialId = source.materialId;
+    out.motionType = source.motionType;
+    out.isSensor = source.isSensor;
+    out.hadCollision = source.hadCollision;
+    out.wasDiscarded = source.wasDiscarded;
+    out.canPushCharacter = source.canPushCharacter;
+    out.canReceiveImpulses = source.canReceiveImpulses;
+}
+
 /** creates an empty CharacterConstraint with default values */
 function createEmptyCharacterConstraint(): CharacterConstraint {
     return {
@@ -758,6 +753,12 @@ function createEmptyCharacterConstraint(): CharacterConstraint {
  * All contacts are considered supported regardless of angle.
  */
 const NO_MAX_SLOPE_ANGLE = 0.9999;
+
+/**
+ * backface flip threshold for surface normals: ~-sin(1°). allow a 1 degree slop —
+ * a perpendicular (grazing) contact is not backfacing and must not be flipped.
+ */
+const BACK_FACE_FLIP_THRESHOLD = -0.0174524;
 
 /**
  * Checks if a slope is too steep to walk on.
@@ -877,9 +878,8 @@ const _characterCastSettings: CastShapeSettings = /* @__PURE__ */ createDefaultC
 const _getContacts_shapePos = /* @__PURE__ */ vec3.create();
 const _getContacts_paddingOffset = /* @__PURE__ */ vec3.create();
 
-const _paddingCorrection_characterSupportPool = /* @__PURE__ */ createShapeSupportPool();
-const _paddingCorrection_polygonSupport = /* @__PURE__ */ createPolygonSupport();
-const _paddingCorrection_addConvexRadius = /* @__PURE__ */ createAddConvexRadiusSupport();
+const _paddingCorrection_characterSupport = /* @__PURE__ */ createSupport();
+const _paddingCorrection_polygonSupport = /* @__PURE__ */ createSupport();
 const _paddingCorrection_face = /* @__PURE__ */ createFace();
 const _paddingCorrection_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 const _paddingCorrection_negativeNormal = /* @__PURE__ */ vec3.create();
@@ -968,8 +968,13 @@ const characterCollideCollector = {
 
         // normal points toward character (from B to A)
         // penetrationAxis points from A to B, so negate it
-        vec3.normalize(contact.contactNormal, hit.penetrationAxis);
-        vec3.negate(contact.contactNormal, contact.contactNormal);
+        // a zero-length penetration axis must yield a zero normal, not NaN
+        if (vec3.squaredLength(hit.penetrationAxis) > 0) {
+            vec3.normalize(contact.contactNormal, hit.penetrationAxis);
+            vec3.negate(contact.contactNormal, contact.contactNormal);
+        } else {
+            vec3.set(contact.contactNormal, 0, 0, 0);
+        }
 
         // get actual geometric surface normal
         // this is more stable than contact normal from gjk / epa
@@ -984,7 +989,7 @@ const characterCollideCollector = {
         vec3.copy(contact.surfaceNormal, _surfaceNormal_temp);
 
         // flip surface normal if hitting back face
-        if (vec3.dot(contact.contactNormal, contact.surfaceNormal) < 0) {
+        if (vec3.dot(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) {
             vec3.negate(contact.surfaceNormal, contact.surfaceNormal);
         }
 
@@ -1134,7 +1139,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
         vec3.copy(contact.surfaceNormal, _surfaceNormal_temp);
 
         // flip surface normal if hitting back face
-        if (vec3.dot(contact.contactNormal, contact.surfaceNormal) < 0) {
+        if (vec3.dot(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) {
             vec3.negate(contact.surfaceNormal, contact.surfaceNormal);
         }
 
@@ -1355,7 +1360,7 @@ function getContactsAtPosition(
 /**
  * Recursively corrects the fraction for character padding by unwrapping decorator shapes.
  * Accumulates transformations through decorator shape hierarchy before performing GJK cast.
- * @param supportPool shape support pool for support function creation
+ * @param characterSupport reusable Support struct, filled with the character shape at the convex leaf
  * @param shape the character shape to cast (may be decorator)
  * @param position start position (accumulated through recursion)
  * @param quaternion start rotation (accumulated through recursion)
@@ -1367,13 +1372,13 @@ function getContactsAtPosition(
  * @returns true if correction was successful
  */
 function correctFractionForCharacterPadding(
-    supportPool: ShapeSupportPool,
+    characterSupport: Support,
     shape: Shape,
     position: Vec3,
     quaternion: Quat,
     displacement: Vec3,
     scale: Vec3,
-    polygon: AddConvexRadiusSupport,
+    polygon: Support,
     inOutFraction: { value: number },
     collisionTolerance: number,
 ): boolean {
@@ -1387,7 +1392,7 @@ function correctFractionForCharacterPadding(
 
         // recurse with accumulated transform
         return correctFractionForCharacterPadding(
-            supportPool,
+            characterSupport,
             shape.shape,
             _correctFraction_tempPos,
             _correctFraction_tempQuat,
@@ -1400,7 +1405,7 @@ function correctFractionForCharacterPadding(
     }
 
     // at the convex level, perform the GJK cast
-    const characterSupport = getShapeSupportFunction(supportPool, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
+    setShapeSupport(characterSupport, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
 
     // build transform matrix from position and quaternion
     const transform = mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position);
@@ -1413,8 +1418,8 @@ function correctFractionForCharacterPadding(
         polygon,
         displacement,
         collisionTolerance,
-        characterSupport.convexRadius,
-        polygon.convexRadius,
+        characterSupport.convexRadius + characterSupport.addRadius,
+        polygon.convexRadius + polygon.addRadius,
         inOutFraction.value,
     );
 
@@ -1541,26 +1546,24 @@ function getFirstContactForSweep(
 
         // only use advanced correction if we have a face with 2+ vertices
         if (_paddingCorrection_face.numVertices >= 2) {
-            // create polygon support from face
-            setPolygonSupport(_paddingCorrection_polygonSupport, _paddingCorrection_face);
-
-            // inflate polygon by character padding
-            setAddConvexRadiusSupport(
-                _paddingCorrection_addConvexRadius,
-                character.characterPadding,
+            // create polygon support from face, inflated by the character padding
+            setPolygonSupport(
                 _paddingCorrection_polygonSupport,
+                _paddingCorrection_face.vertices,
+                _paddingCorrection_face.numVertices,
             );
+            _paddingCorrection_polygonSupport.addRadius = character.characterPadding;
 
             // use recursive function to handle decorator shapes and perform GJK cast
             _paddingCorrection_fractionWrapper.value = out.fraction + characterPaddingFraction;
             corrected = correctFractionForCharacterPadding(
-                _paddingCorrection_characterSupportPool,
+                _paddingCorrection_characterSupport,
                 character.shape,
                 _getContacts_shapePos,
                 character.quaternion,
                 displacement,
                 _paddingCorrection_scale,
-                _paddingCorrection_addConvexRadius,
+                _paddingCorrection_polygonSupport,
                 _paddingCorrection_fractionWrapper,
                 character.collisionTolerance,
             );
@@ -1615,6 +1618,11 @@ function removeConflictingContacts(contacts: CharacterContact[], characterPaddin
             const contactB = contacts[j];
             if (contactB.wasDiscarded) continue;
             if (contactB.distance > -minRequiredPenetration) continue;
+
+            // only discard conflicting contacts on the SAME body: this targets one body's
+            // internal-edge double hits. opposing contacts from two different bodies
+            // (a real wedge) are both legitimate.
+            if (contactA.bodyId !== contactB.bodyId) continue;
 
             // check if normals oppose each other
             const dot = vec3.dot(contactA.contactNormal, contactB.contactNormal);
@@ -2225,7 +2233,7 @@ function solveConstraints(
         // if constraint has velocity, accept the new velocity and update last_velocity
         // otherwise check if velocity reversed relative to last_velocity
         const constraintVelLenSq = vec3.squaredLength(activeConstraint.linearVelocity);
-        if (constraintVelLenSq > 1e-16) {
+        if (constraintVelLenSq >= 1e-8) {
             // constraint has velocity - update last_velocity reference
             vec3.copy(_solveConstraints_lastVelocity, activeConstraint.linearVelocity);
         } else {
@@ -2262,6 +2270,7 @@ const _updateSupporting_invQ = /* @__PURE__ */ quat.create();
 const _updateSupporting_downVelocity = /* @__PURE__ */ vec3.create();
 const _updateSupporting_displacement = /* @__PURE__ */ vec3.create();
 const _updateSupporting_ignoredContacts: CharacterContact[] = [];
+const _updateSupporting_probeContacts: CharacterContact[] = [];
 
 /**
  * Updates ground state from current contacts.
@@ -2478,8 +2487,17 @@ function updateSupportingContact(
                 // if we're sliding down, we may actually be standing on multiple sliding contacts
                 // in such a way that we can't slide off - in this case we're also supported
 
-                // convert the contacts into constraints
-                determineConstraints(character, contacts, lastDeltaTime, _activeConstraints);
+                // run the probe on a COPY of the contacts — solveConstraints/handleContact
+                // flip contact flags (hadCollision / canPushCharacter / wasDiscarded) and the
+                // live flags feed finalizeContactTracking + hasCollidedWith after this probe.
+                releaseAllContacts(_updateSupporting_probeContacts);
+                for (let i = 0; i < contacts.length; i++) {
+                    const copy = acquireContact(_updateSupporting_probeContacts);
+                    copyCharacterContact(copy, contacts[i]);
+                }
+
+                // convert the copied contacts into constraints
+                determineConstraints(character, _updateSupporting_probeContacts, lastDeltaTime, _activeConstraints);
 
                 // solve displacement using these constraints with -up velocity
                 // this checks if we would move at all when "falling"
@@ -2498,8 +2516,9 @@ function updateSupportingContact(
                     _activeConstraints,
                 );
 
-                // release constraints after use
+                // release constraints and probe contact copies after use
                 releaseAllConstraints(_activeConstraints);
+                releaseAllContacts(_updateSupporting_probeContacts);
 
                 // if we're blocked then we're supported, otherwise we're sliding
                 // threshold: displacement² < (0.6 * lastDeltaTime)²
@@ -2663,6 +2682,7 @@ const _moveShape_velocity = /* @__PURE__ */ vec3.create();
  * @param deltaTime time step
  * @param filter collision filter
  * @param listener optional listener for contact callbacks
+ * @param outContacts contact list to collect into — character.contacts for real movement, scratch for probes
  */
 function moveShape(
     world: World,
@@ -2672,6 +2692,7 @@ function moveShape(
     deltaTime: number,
     filter: Filter,
     listener: CharacterListener | undefined,
+    outContacts: CharacterContact[],
 ): void {
     // calculate movement direction for contact detection
     const velocityLenSq = vec3.squaredLength(velocity);
@@ -2694,9 +2715,9 @@ function moveShape(
         }
 
         /* get contacts at current position */
-        getContactsAtPosition(world, character, position, _moveShape_movementDirection, filter, listener, character.contacts);
+        getContactsAtPosition(world, character, position, _moveShape_movementDirection, filter, listener, outContacts);
 
-        const contacts = character.contacts;
+        const contacts = outContacts;
 
         /* remove conflicting contacts (opposing penetration normals) */
         _moveShape_ignoredContacts.length = 0;
@@ -2766,14 +2787,7 @@ function resetContactTracking(character: KCC): void {
     for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];
         if (contact.hadCollision) {
-            const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-            const value = acquireListenerContact(character.listenerContacts);
-            value.packedKey = packedKey;
-            value.bodyId = contact.bodyId;
-            value.subShapeId = contact.subShapeId;
-            value.count = 0;
-            value.settings.canPushCharacter = true;
-            value.settings.canReceiveImpulses = true;
+            acquireListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
         }
     }
 }
@@ -2832,8 +2846,7 @@ function contactAdded(
         return;
     }
 
-    const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-    const tracked = findListenerContact(character.listenerContacts, packedKey);
+    const tracked = findListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
 
     if (tracked) {
         // contact was known from before - fire onContactPersisted (max 1 per contact)
@@ -2878,10 +2891,7 @@ function contactAdded(
             }
         }
         // insert into tracking pool
-        const value = acquireListenerContact(character.listenerContacts);
-        value.packedKey = packedKey;
-        value.bodyId = contact.bodyId;
-        value.subShapeId = contact.subShapeId;
+        const value = acquireListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
         value.count = 1;
         value.settings.canPushCharacter = ioSettings.canPushCharacter;
         value.settings.canReceiveImpulses = ioSettings.canReceiveImpulses;
@@ -2959,33 +2969,31 @@ function handleContact(
  * @param character the character controller
  * @param listener optional listener for callbacks
  */
-function finalizeContactTracking(world: World, character: KCC, listener: CharacterListener | undefined): void {
+function finalizeContactTracking(character: KCC, listener: CharacterListener | undefined): void {
     // re-mark all contacts - reset all counts to 0, then mark active ones as 1
-    const activeListenerContacts = getActiveListenerContacts(character.listenerContacts);
-    for (const value of activeListenerContacts) {
-        value.count = 0;
+    const live = character.listenerContacts.live;
+    for (let i = 0; i < live.length; i++) {
+        live[i].count = 0;
     }
 
     const contacts = character.contacts;
     for (let i = 0; i < contacts.length; i++) {
         const contact = contacts[i];
         if (contact.hadCollision) {
-            const packedKey = packListenerContactKey(contact.bodyId, contact.subShapeId);
-            const tracked = findListenerContact(character.listenerContacts, packedKey);
+            const tracked = findListenerContact(character.listenerContacts, contact.bodyId, contact.subShapeId);
             if (tracked) {
                 tracked.count = 1;
             }
         }
     }
 
-    // fire removal callbacks for contacts not seen this frame
+    // fire removal callbacks for contacts not seen this frame — unconditionally, with the
+    // body ID: the body may already be destroyed, and removal must still be reported
     if (listener?.onContactRemoved) {
-        for (const value of activeListenerContacts) {
+        for (let i = 0; i < live.length; i++) {
+            const value = live[i];
             if (value.count === 0) {
-                const body = rigidBody.get(world, value.bodyId);
-                if (body) {
-                    listener.onContactRemoved(character, body, value.subShapeId);
-                }
+                listener.onContactRemoved(character, value.bodyId, value.subShapeId);
             }
         }
     }
@@ -3167,7 +3175,7 @@ export function refreshContacts(world: World, character: KCC, filter: Filter, li
     updateSupportingContact(world, character, true /* skipContactVelocityCheck */, character.lastDeltaTime, listener);
 
     // finalize contact tracking (fires onContactRemoved callbacks for contacts no longer active)
-    finalizeContactTracking(world, character, listener);
+    finalizeContactTracking(character, listener);
 }
 
 /**
@@ -3275,7 +3283,7 @@ export function setShape(
         releaseAllContacts(character.contacts);
         character.contacts = tempContacts;
         updateSupportingContact(world, character, true /* skipContactVelocityCheck */, character.lastDeltaTime, listener);
-        finalizeContactTracking(world, character, listener);
+        finalizeContactTracking(character, listener);
     } else {
         // no penetration test needed - just change the shape
         character.shape = newShape;
@@ -3343,6 +3351,7 @@ export function move(
         deltaTime,
         filter,
         listener,
+        character.contacts,
     );
 
     // determine ground state from active contacts
@@ -3512,6 +3521,7 @@ export function stickToFloor(
 const _walkStairs_contact = /* @__PURE__ */ createCharacterContact();
 const _walkStairs_testContact = /* @__PURE__ */ createCharacterContact();
 const _walkStairs_up = /* @__PURE__ */ vec3.create();
+const _walkStairs_probeContacts: CharacterContact[] = [];
 const _walkStairs_down = /* @__PURE__ */ vec3.create();
 const _walkStairs_upPosition = /* @__PURE__ */ vec3.create();
 const _walkStairs_newPosition = /* @__PURE__ */ vec3.create();
@@ -3603,7 +3613,7 @@ export function walkStairs(
             c.surfaceNormal[2] * (_walkStairs_horizontalVelocity[2] - c.linearVelocity[2]);
 
         if (relVelDotNormal < 0) {
-            // copy normal to pre-allocated pool (contacts will be modified by moveShape)
+            // copy normal to pre-allocated pool (read again in step 4 after the probe)
             if (_walkStairs_steepSlopeNormalsCount < _walkStairs_steepSlopeNormalsPool.length) {
                 vec3.copy(_walkStairs_steepSlopeNormalsPool[_walkStairs_steepSlopeNormalsCount], c.surfaceNormal);
                 _walkStairs_steepSlopeNormalsCount++;
@@ -3617,6 +3627,8 @@ export function walkStairs(
     }
 
     /* step 3: horizontal movement at elevated position */
+    // probe: contacts go to scratch — on any early-return below, the character's
+    // live contacts must remain the real post-update set
     vec3.copy(_walkStairs_newPosition, _walkStairs_upPosition);
     moveShape(
         world,
@@ -3626,7 +3638,9 @@ export function walkStairs(
         deltaTime,
         filter,
         listener,
+        _walkStairs_probeContacts,
     );
+    releaseAllContacts(_walkStairs_probeContacts);
 
     // calculate horizontal movement
     vec3.sub(_walkStairs_horizontalMovement, _walkStairs_newPosition, _walkStairs_upPosition);
@@ -3683,6 +3697,7 @@ export function walkStairs(
         }
 
         // move further forward to test floor
+        // probe: scratch contacts, same as step 3
         vec3.copy(_walkStairs_testPosition, _walkStairs_upPosition);
         vec3.scale(_walkStairs_characterVelocity, stepForwardTest, 1 / deltaTime);
         moveShape(
@@ -3693,7 +3708,9 @@ export function walkStairs(
             deltaTime,
             filter,
             listener,
+            _walkStairs_probeContacts,
         );
+        releaseAllContacts(_walkStairs_probeContacts);
 
         // check if we moved further than before
         vec3.sub(_walkStairs_horizontalMovement, _walkStairs_testPosition, _walkStairs_upPosition);
@@ -3880,5 +3897,5 @@ export function update(
     }
 
     // finalize contact tracking and fire removal callbacks at end of frame
-    finalizeContactTracking(world, character, listener);
+    finalizeContactTracking(character, listener);
 }

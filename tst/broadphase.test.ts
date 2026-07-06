@@ -1,6 +1,6 @@
 import { type Box3, vec3 } from 'mathcat';
 import { describe, expect, it } from 'vitest';
-import { type BodyVisitor, box, broadphase, filter, MotionType, type RigidBody, rigidBody } from '../src';
+import { type BodyVisitor, box, broadphase, filter, MotionType, pairs, type RigidBody, rigidBody } from '../src';
 import { createTestWorld } from './helpers';
 
 function makeBody(
@@ -50,9 +50,9 @@ describe('Broadphase Integration', () => {
             expect(body.dbvtNode).not.toBeNull();
 
             // Verify body is findable via queries
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
             // Just verify the query works without error
-            expect(world.broadphase.pairs).toBeDefined();
+            expect(world.pairs.collidingPairs).toBeDefined();
         });
 
         it('should handle multiple bodies in broadphase', () => {
@@ -81,12 +81,11 @@ describe('Broadphase Integration', () => {
             const body1 = makeBody(world, 0, 0, 0, 2, 2, 2, OBJECT_LAYER_MOVING);
             const body2 = makeBody(world, 1, 1, 1, 3, 3, 3, OBJECT_LAYER_MOVING);
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
-            const pairs = world.broadphase.pairs;
-            expect(pairs.n).toBe(1);
-            const bodyIndexA = pairs.pool[0];
-            const bodyIndexB = pairs.pool[1];
+            expect(world.pairs.collidingPairCount).toBe(1);
+            const bodyIndexA = world.pairs.collidingPairs[0];
+            const bodyIndexB = world.pairs.collidingPairs[1];
             expect(world.bodies.pool[bodyIndexA]).toBe(body1);
             expect(world.bodies.pool[bodyIndexB]).toBe(body2);
         });
@@ -100,9 +99,9 @@ describe('Broadphase Integration', () => {
             makeBody(world, 0, 0, 0, 1, 1, 1, OBJECT_LAYER_MOVING);
             makeBody(world, 5, 0, 0, 6, 1, 1, OBJECT_LAYER_MOVING);
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
-            expect(world.broadphase.pairs.n).toBe(0);
+            expect(world.pairs.collidingPairCount).toBe(0);
         });
 
         it('should respect object layer collision settings', () => {
@@ -114,10 +113,10 @@ describe('Broadphase Integration', () => {
             makeBody(world, 0, 0, 0, 2, 2, 2, OBJECT_LAYER_MOVING);
             makeBody(world, 1, 1, 1, 3, 3, 3, OBJECT_LAYER_NOT_MOVING);
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
             // In test world, MOVING and NOT_MOVING collide with each other
-            expect(world.broadphase.pairs.n).toBe(1);
+            expect(world.pairs.collidingPairCount).toBe(1);
         });
 
         it('should respect collision groups and masks', () => {
@@ -132,9 +131,9 @@ describe('Broadphase Integration', () => {
             makeBody(world, 0, 0, 0, 2, 2, 2, OBJECT_LAYER_MOVING, 0b0001, 0b0010);
             makeBody(world, 1, 1, 1, 3, 3, 3, OBJECT_LAYER_MOVING, 0b0010, 0b0001);
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
-            expect(world.broadphase.pairs.n).toBe(1);
+            expect(world.pairs.collidingPairCount).toBe(1);
         });
 
         it('should filter bodies with non-matching groups and masks', () => {
@@ -146,10 +145,10 @@ describe('Broadphase Integration', () => {
             makeBody(world, 0, 0, 0, 2, 2, 2, OBJECT_LAYER_MOVING, 0b0001, 0b0010);
             makeBody(world, 1, 1, 1, 3, 3, 3, OBJECT_LAYER_MOVING, 0b0100, 0b1000);
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
             // body2's group (0b0100) doesn't match body1's mask (0b0010)
-            expect(world.broadphase.pairs.n).toBe(0);
+            expect(world.pairs.collidingPairCount).toBe(0);
         });
 
         it('should find sleeping dynamic body when kinematic body queries', () => {
@@ -178,13 +177,13 @@ describe('Broadphase Integration', () => {
                 collideKinematicVsNonDynamic: false,
             });
 
-            broadphase.findCollidingPairs(world, 0, undefined);
+            pairs.findCollidingPairs(world, 0, undefined);
 
             // kinematic should find the sleeping dynamic
-            expect(world.broadphase.pairs.n).toBe(1);
+            expect(world.pairs.collidingPairCount).toBe(1);
 
-            const bodyIndexA = world.broadphase.pairs.pool[0];
-            const bodyIndexB = world.broadphase.pairs.pool[1];
+            const bodyIndexA = world.pairs.collidingPairs[0];
+            const bodyIndexB = world.pairs.collidingPairs[1];
             const pairBodies = [world.bodies.pool[bodyIndexA], world.bodies.pool[bodyIndexB]];
 
             expect(pairBodies).toContain(dynamicBody);
@@ -267,7 +266,7 @@ describe('Broadphase Integration', () => {
             } = createTestWorld();
 
             const body1 = makeBody(world, 0, 0, 0, 1, 1, 1, OBJECT_LAYER_MOVING);
-            const _body2 = makeBody(world, 5, 0, 0, 6, 1, 1, OBJECT_LAYER_MOVING);
+            makeBody(world, 5, 0, 0, 6, 1, 1, OBJECT_LAYER_MOVING);
 
             const layers = world.settings.layers;
 

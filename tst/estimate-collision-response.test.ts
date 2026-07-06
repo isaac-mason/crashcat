@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { vec3 } from 'mathcat';
 import { describe, expect, test } from 'vitest';
 import {
     box,

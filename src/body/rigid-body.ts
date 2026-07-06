@@ -3,8 +3,8 @@ import * as broadphase from '../broadphase/broadphase';
 import { MaterialCombineMode } from '../constraints/combine-material';
 import type { ConstraintId } from '../constraints/constraint-id';
 import * as constraints from '../constraints/constraints';
-import * as contacts from '../contacts';
 import * as filter from '../filter';
+import * as pairs from '../pairs';
 import * as emptyShape from '../shapes/empty-shape';
 import {
     computeMassProperties,
@@ -228,15 +228,15 @@ export type RigidBody = {
     /** which broadphase dbvt node contains this body */
     dbvtNode: number;
 
-    /**
-     * Head of the intrusive doubly-linked list of contacts involving this body.
-     * Packed key: (contactId << 1) | edgeIndex.
-     * Use INVALID_CONTACT_KEY (-1) for empty list.
-     */
-    headContactKey: number;
+    /** true iff this body is in the broadphase move set (pairs.moved), awaiting pair discovery */
+    inMoveSet: boolean;
 
-    /** number of contacts involving this body */
-    contactCount: number;
+    /**
+     * Head of the intrusive doubly-linked list of persistent broadphase pairs involving this body.
+     * Packed key: pairEdgeKey(recordIndex, side).
+     * Use INVALID_PAIR_KEY (-1) for empty list.
+     */
+    headPairKey: number;
 
     /** island index this body belongs to (set during island building, -1 if not in an island) */
     islandIndex: number;
@@ -282,8 +282,8 @@ function makeRigidBody(): RigidBody {
         objectLayer: 0,
         broadphaseLayer: -1,
         dbvtNode: -1,
-        headContactKey: contacts.INVALID_CONTACT_KEY,
-        contactCount: 0,
+        inMoveSet: false,
+        headPairKey: pairs.INVALID_PAIR_KEY,
         islandIndex: -1,
         activeIndex: INACTIVE_BODY_INDEX,
         ccdBodyIndex: -1,
@@ -370,11 +370,11 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     body.objectLayer = o.objectLayer;
     body.broadphaseLayer = -1;
     body.dbvtNode = -1;
+    body.inMoveSet = false;
 
     body.activeIndex = INACTIVE_BODY_INDEX;
 
-    body.headContactKey = contacts.INVALID_CONTACT_KEY;
-    body.contactCount = 0;
+    body.headPairKey = pairs.INVALID_PAIR_KEY;
     body.islandIndex = -1;
     body.ccdBodyIndex = -1;
 
@@ -425,6 +425,10 @@ export function create(world: World, settings: RigidBodySettings): RigidBody {
     // add to broadphase
     broadphase.addBody(world.broadphase, body, world.settings.layers);
 
+    // a new body is a move event: it must discover its overlaps (and static bodies added
+    // after overlapping dynamics get paired here, since statics never move)
+    pairs.markMoved(world.pairs, body);
+
     // add to active bodies list if dynamic/kinematic and not sleeping
     if (body.motionType !== MotionType.STATIC && !body.sleeping) {
         addBodyToActiveBodies(world, body);
@@ -434,7 +438,11 @@ export function create(world: World, settings: RigidBodySettings): RigidBody {
 }
 
 /**
- * Removes a body from the world
+ * Removes a body from the world.
+ *
+ * onContactRemoved events for the body's live contacts are deferred and fired during the
+ * next updateWorld (matching jolt semantics — the callback carries body IDs, so it is safe
+ * even though the body is destroyed by then).
  * @returns true if the body was successfully removed, false if the body was already pooled (invalid)
  */
 export function remove(world: World, body: RigidBody): boolean {
@@ -446,11 +454,13 @@ export function remove(world: World, body: RigidBody): boolean {
     // remove from active bodies list
     removeBodyFromActiveBodies(world, body);
 
-    // destroy all contacts involving this body
-    contacts.destroyBodyContacts(world.contacts, world.bodies, body);
-
     // destroy all constraints involving this body
     constraints.destroyBodyConstraints(world, body);
+
+    // purge every persistent pair involving this body, cascading each pair's contact chain (removal
+    // events are queued for the next updateWorld). independent of the dbvt leaf, so safe before
+    // tree-leaf removal. this is the single purge path — the contact chain lives under the pair.
+    pairs.purgeBodyPairs(world.pairs, world.contacts, world.bodies.pool, body);
 
     // remove from broadphase
     broadphase.removeBody(world.broadphase, body);
@@ -542,7 +552,7 @@ const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = /* @__PURE
  * This derives position from centerOfMassPosition, which is the primary property modified by physics.
  * Formula: position = centerOfMassPosition - rotation × shape.centerOfMass
  */
-export function updatePositionFromCenterOfMass(body: RigidBody): void {
+export function updatePositionFromCenterOfMass(world: World, body: RigidBody): void {
     // get shape center of mass in world space
     const shapeCenterOfMassInWorldSpace = _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace;
     vec3.copy(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
@@ -550,127 +560,27 @@ export function updatePositionFromCenterOfMass(body: RigidBody): void {
 
     // position = centerOfMassPosition - shapeCenterOfMassInWorldSpace
     vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
-}
 
-const _updateBodyAABB_rot = /* @__PURE__ */ mat4.create();
+    // update aabb
+    updateAABB(body);
+
+    // update body
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
+}
 
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
+ *
+ * @optimize
  */
-function updateAABB(body: RigidBody): void {
-    // transform shape AABB to world space by transforming all 8 corners
-    const shapeAABB = body.shape.aabb;
-    const minX = shapeAABB[0];
-    const minY = shapeAABB[1];
-    const minZ = shapeAABB[2];
-    const maxX = shapeAABB[3];
-    const maxY = shapeAABB[4];
-    const maxZ = shapeAABB[5];
-
-    // compute rotation matrix once
-    mat4.fromQuat(_updateBodyAABB_rot, body.quaternion);
-    const m = _updateBodyAABB_rot;
-    const px = body.position[0];
-    const py = body.position[1];
-    const pz = body.position[2];
-
-    // corner 0: (min, min, min) - initialize AABB
-    // worldCorner = R * corner + position
-    let wx = m[0] * minX + m[4] * minY + m[8] * minZ + px;
-    let wy = m[1] * minX + m[5] * minY + m[9] * minZ + py;
-    let wz = m[2] * minX + m[6] * minY + m[10] * minZ + pz;
-    let aabbMinX = wx;
-    let aabbMinY = wy;
-    let aabbMinZ = wz;
-    let aabbMaxX = wx;
-    let aabbMaxY = wy;
-    let aabbMaxZ = wz;
-
-    // corner 1: (max, min, min)
-    wx = m[0] * maxX + m[4] * minY + m[8] * minZ + px;
-    wy = m[1] * maxX + m[5] * minY + m[9] * minZ + py;
-    wz = m[2] * maxX + m[6] * minY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 2: (min, max, min)
-    wx = m[0] * minX + m[4] * maxY + m[8] * minZ + px;
-    wy = m[1] * minX + m[5] * maxY + m[9] * minZ + py;
-    wz = m[2] * minX + m[6] * maxY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 3: (max, max, min)
-    wx = m[0] * maxX + m[4] * maxY + m[8] * minZ + px;
-    wy = m[1] * maxX + m[5] * maxY + m[9] * minZ + py;
-    wz = m[2] * maxX + m[6] * maxY + m[10] * minZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 4: (min, min, max)
-    wx = m[0] * minX + m[4] * minY + m[8] * maxZ + px;
-    wy = m[1] * minX + m[5] * minY + m[9] * maxZ + py;
-    wz = m[2] * minX + m[6] * minY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 5: (max, min, max)
-    wx = m[0] * maxX + m[4] * minY + m[8] * maxZ + px;
-    wy = m[1] * maxX + m[5] * minY + m[9] * maxZ + py;
-    wz = m[2] * maxX + m[6] * minY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 6: (min, max, max)
-    wx = m[0] * minX + m[4] * maxY + m[8] * maxZ + px;
-    wy = m[1] * minX + m[5] * maxY + m[9] * maxZ + py;
-    wz = m[2] * minX + m[6] * maxY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // corner 7: (max, max, max)
-    wx = m[0] * maxX + m[4] * maxY + m[8] * maxZ + px;
-    wy = m[1] * maxX + m[5] * maxY + m[9] * maxZ + py;
-    wz = m[2] * maxX + m[6] * maxY + m[10] * maxZ + pz;
-    aabbMinX = Math.min(aabbMinX, wx);
-    aabbMinY = Math.min(aabbMinY, wy);
-    aabbMinZ = Math.min(aabbMinZ, wz);
-    aabbMaxX = Math.max(aabbMaxX, wx);
-    aabbMaxY = Math.max(aabbMaxY, wy);
-    aabbMaxZ = Math.max(aabbMaxZ, wz);
-
-    // write final AABB
-    body.aabb[0] = aabbMinX;
-    body.aabb[1] = aabbMinY;
-    body.aabb[2] = aabbMinZ;
-    body.aabb[3] = aabbMaxX;
-    body.aabb[4] = aabbMaxY;
-    body.aabb[5] = aabbMaxZ;
+export function updateAABB(body: RigidBody): void {
+    const m: Mat4 = /* @sroa */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    mat4.fromRotationTranslation(m, body.quaternion, body.position);
+    box3.transformMat4(body.aabb, body.shape.aabb, m);
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
@@ -708,7 +618,10 @@ export function updateShape(world: World, body: RigidBody) {
     updateAABB(body);
 
     // notify broadphase of AABB change
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 }
 
 /**
@@ -723,7 +636,10 @@ export function setPosition(world: World, body: RigidBody, position: Vec3, wake:
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -743,7 +659,10 @@ export function setQuaternion(world: World, body: RigidBody, quaternion: Quat, w
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -765,7 +684,10 @@ export function setTransform(world: World, body: RigidBody, position: Vec3, quat
     updateAABB(body);
 
     // update broadphase
-    broadphase.updateBody(world.broadphase, body);
+    if (broadphase.updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 
     // optionally wake body
     if (wake) {
@@ -780,6 +702,9 @@ export function setObjectLayer(world: World, body: RigidBody, layer: number): vo
     body.objectLayer = layer;
 
     broadphase.reinsertBody(world.broadphase, body, world.settings.layers);
+
+    // a layer change is a move event: rediscover overlaps in the new layer's trees
+    pairs.markMoved(world.pairs, body);
 }
 
 /**

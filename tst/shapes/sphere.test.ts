@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { computeMassProperties, sphere, ShapeType } from '../../src';
+import { computeMassProperties, ShapeType, sphere } from '../../src';
 import * as massProperties from '../../src/body/mass-properties';
 
 describe('Sphere AABB caching', () => {

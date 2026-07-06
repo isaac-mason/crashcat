@@ -23,46 +23,42 @@ export const MAX_SEQUENCE = SEQUENCE_MASK;
 
 /** constraint types - encoded in the ConstraintId */
 export enum ConstraintType {
-	POINT = 0,
-	DISTANCE = 1,
-	HINGE = 2,
-	SLIDER = 3,
-	FIXED = 4,
-	CONE = 5,
-	SWING_TWIST = 6,
-	SIX_DOF = 7,
-	USER_1 = 8,
-	USER_2 = 9,
-	USER_3 = 10,
+    POINT = 0,
+    DISTANCE = 1,
+    HINGE = 2,
+    SLIDER = 3,
+    FIXED = 4,
+    CONE = 5,
+    SWING_TWIST = 6,
+    SIX_DOF = 7,
+    USER_1 = 8,
+    USER_2 = 9,
+    USER_3 = 10,
 }
 
 /** serializes a constraint index, type, and sequence number into a packed ConstraintId */
-export const serConstraintId = (
-	index: number,
-	type: ConstraintType,
-	sequence: number,
-): ConstraintId => {
-	const i = index & CONSTRAINT_INDEX_MASK;
-	const t = type & CONSTRAINT_TYPE_MASK;
-	const s = sequence & SEQUENCE_MASK;
+export const serConstraintId = (index: number, type: ConstraintType, sequence: number): ConstraintId => {
+    const i = index & CONSTRAINT_INDEX_MASK;
+    const t = type & CONSTRAINT_TYPE_MASK;
+    const s = sequence & SEQUENCE_MASK;
 
-	// Use addition and multiplication to avoid 32-bit bitwise limitations
-	return i + t * 2 ** TYPE_SHIFT + s * 2 ** SEQUENCE_SHIFT;
+    // Use addition and multiplication to avoid 32-bit bitwise limitations
+    return i + t * 2 ** TYPE_SHIFT + s * 2 ** SEQUENCE_SHIFT;
 };
 
 /** deserializes the constraint index from a packed ConstraintId (index within pool for that type) */
 export const getConstraintIdIndex = (id: ConstraintId): number => {
-	return id & CONSTRAINT_INDEX_MASK;
+    return id & CONSTRAINT_INDEX_MASK;
 };
 
 /** deserializes the constraint type from a packed ConstraintId */
 export const getConstraintIdType = (id: ConstraintId): ConstraintType => {
-	return (id >>> TYPE_SHIFT) & CONSTRAINT_TYPE_MASK;
+    return (id >>> TYPE_SHIFT) & CONSTRAINT_TYPE_MASK;
 };
 
 /** deserializes the sequence number from a packed ConstraintId */
 export const getConstraintIdSequence = (id: ConstraintId): number => {
-	return Math.floor(id / 2 ** SEQUENCE_SHIFT) & SEQUENCE_MASK;
+    return Math.floor(id / 2 ** SEQUENCE_SHIFT) & SEQUENCE_MASK;
 };
 
 /** an invalid ConstraintId */

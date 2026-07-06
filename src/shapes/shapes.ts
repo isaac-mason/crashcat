@@ -6,7 +6,7 @@ import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
-import type { SupportFunctionMode } from '../collision/support';
+import type { Support, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import type { BoxShape } from './box';
 import type { CapsuleShape } from './capsule';
@@ -280,8 +280,7 @@ export type CastShapeVsShapeFn = (
 type OptionalShapeDef =
     | 'computeMassProperties'
     | 'getInnerRadius'
-    | 'createSupportPool'
-    | 'getSupportFunction'
+    | 'setSupport'
     | 'getLeafShape'
     | 'getSubShapeTransformedShape';
 
@@ -319,12 +318,6 @@ export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): 
             out.remainder = subShapeId;
         });
 
-    // default: no support pool
-    const createSupportPool = shapeDef.createSupportPool ?? (() => undefined);
-
-    // default: no-op support function
-    const getSupportFunction = shapeDef.getSupportFunction ?? (() => undefined);
-
     return {
         type: shapeDef.type,
         category: shapeDef.category,
@@ -336,10 +329,17 @@ export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): 
         getSubShapeTransformedShape,
         castRay: shapeDef.castRay,
         collidePoint: shapeDef.collidePoint,
-        createSupportPool,
-        getSupportFunction,
+        setSupport: shapeDef.setSupport,
         register: shapeDef.register,
     };
+}
+
+/**
+ * Fill a monomorphic {@link Support} struct for `shape` (+ mode + scale).
+ * Dispatches to the shape's `setSupport` hook — only convex shapes register one.
+ */
+export function setShapeSupport(out: Support, shape: Shape, mode: SupportFunctionMode, scale: Vec3): void {
+    shapeDefs[shape.type].setSupport!(out, shape, mode, scale);
 }
 
 export type ComputeMassPropertiesImpl<S extends ShapeBase> = (out: MassProperties, shape: S) => void;
@@ -363,12 +363,7 @@ export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
     subShapeId: SubShapeId,
 ) => void;
 
-export type GetSupportFunctionImpl<S extends ShapeBase> = (
-    pool: any,
-    shape: S,
-    mode: SupportFunctionMode,
-    scale: Vec3,
-) => any | undefined;
+export type SetSupportImpl<S extends ShapeBase> = (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
 
 export type ShapeDef<S extends ShapeBase> = {
     type: ShapeType;
@@ -401,21 +396,14 @@ export type ShapeDef<S extends ShapeBase> = {
     collidePoint: CollidePointVsShapeFn<S>;
 
     /**
-     * Create a support pool for this shape type.
-     * return undefined for non-convex shapes.
-     * Called once per ShapeSupportPool when pools are created or shapes are registered.
-     */
-    createSupportPool(): any | undefined;
-
-    /**
-     * Get a support function for this shape.
-     * return undefined for non-convex shapes.
-     * @param pool the pool created by createSupportPool() for this shape type
+     * Fill a monomorphic {@link Support} struct for this shape (+ mode + scale).
+     * Only convex shapes define this; undefined for non-convex shapes.
+     * @param out the Support struct to fill
      * @param shape the shape instance
      * @param mode support function mode (INCLUDE/EXCLUDE_CONVEX_RADIUS)
      * @param scale scale to apply to the shape
      */
-    getSupportFunction: GetSupportFunctionImpl<S>;
+    setSupport?: SetSupportImpl<S>;
 
     /** Register collision and cast handlers for this shape type */
     register(): void;

@@ -26,6 +26,10 @@ import {
  *
  * note that some shapes only support uniform scaling:
  * - sphere
+ *
+ * non-uniform scaling of a convex hull is supported but significantly slower than uniform scaling:
+ * the convex-radius-shrunk vertex set is rebaked per collision pair every frame. prefer uniform scale,
+ * or bake the scaled geometry into the hull points directly.
  */
 export type ScaledShapeSettings = {
     shape: Shape;

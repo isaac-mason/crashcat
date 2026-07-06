@@ -1,4 +1,4 @@
-import { box3, mat4, quat, raycast3, type Vec3, vec3 } from 'mathcat';
+import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';
@@ -22,6 +22,7 @@ import {
     createDefaultCastShapeSettings,
     createDefaultCollideShapeSettings,
 } from './collision/narrowphase';
+import { rayHitsBox3 } from './collision/cast-utils';
 import { combineMaterial } from './constraints/combine-material';
 import type { ConstraintType } from './constraints/constraint-id';
 import * as axisConstraintPart from './constraints/constraint-part/axis-constraint-part';
@@ -33,6 +34,7 @@ import * as islands from './islands';
 import { ContactValidateResult, type Listener } from './listener';
 import * as manifold from './manifold/manifold';
 import { MAX_CONTACT_POINTS } from './manifold/manifold';
+import * as pairs from './pairs';
 import { getShapeInnerRadius } from './shapes/shapes';
 import type { World } from './world';
 
@@ -43,27 +45,38 @@ import type { World } from './world';
  * @param timeStep the time step to advance the world by, in seconds
  */
 export function updateWorld(world: World, listener: Listener | undefined, timeStep: number): void {
+    /* fire deferred contact-removed events (queued by body removal since the last update) */
+    contacts.flushPendingContactRemoved(world.contacts, listener);
+
     /* reset CCD state for this frame */
     ccd.clear(world.ccd, world.bodies);
 
     /* clear previous frame's contact constraints */
     world.contactConstraints.count = 0;
 
-    /* mark all body pairs and contacts as unprocessed (we will check 'processed' later for a "contact removed" condition) */
-    contacts.markAllUnprocessed(world.contacts);
+    /* advance the frame stamp: a contact is fresh this step iff its lastProcessedFrame matches.
+       this replaces the old O(total-contacts) "mark all unprocessed" reset walk. */
+    world.contacts.frameStamp++;
 
     /* integrate forces into velocities */
     accelerationIntegrationUpdate(world, timeStep);
 
-    /* broadphase: find potentially colliding body pairs */
-    broadphase.findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
+    /* broadphase: dirty-gated balanced rebuild, one tree per step (round-robin) */
+    broadphase.optimize(world.broadphase);
+
+    /* pairs: maintain the persistent pair set and find this frame's colliding pairs */
+    pairs.findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
 
     /* narrowphase: check collision for each potentially colliding pair */
-    const pairs = world.broadphase.pairs;
+    const collidingPairs = world.pairs.collidingPairs;
+    const collidingPairCount = world.pairs.collidingPairCount;
 
-    for (let i = 0; i < pairs.n; i++) {
-        const bodyIndexA = pairs.pool[i * 2];
-        const bodyIndexB = pairs.pool[i * 2 + 1];
+    const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
+
+    for (let i = 0; i < collidingPairCount; i++) {
+        const bodyIndexA = collidingPairs[i * 3];
+        const bodyIndexB = collidingPairs[i * 3 + 1];
+        const pairRecordIndex = collidingPairs[i * 3 + 2];
 
         let bodyA = world.bodies.pool[bodyIndexA];
         let bodyB = world.bodies.pool[bodyIndexB];
@@ -71,14 +84,41 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         // ensure that bodyA has the higher motion type (i.e. dynamic trumps kinematic), this ensures that we do the collision detection in the space of a moving body,
         // which avoids accuracy problems when testing a very large static object against a small dynamic object
         // ensure that bodyA id < bodyB id when motion types are the same.
-        if (bodyA.motionType > bodyB.motionType || (bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id)) {
+        if (bodyA.motionType < bodyB.motionType || (bodyA.motionType === bodyB.motionType && bodyB.id < bodyA.id)) {
             const temp = bodyA;
             bodyA = bodyB;
             bodyB = temp;
         }
 
-        // perform narrowphase collision detection, creates contact constraints
-        const anyConstraintsCreated = narrowphase(world, bodyA, bodyB, listener, timeStep);
+        // body-pair contact cache: if neither body has moved enough relative to
+        // the other since last frame, and the pair has existing contacts, reuse
+        // last frame's manifolds verbatim — skipping GJK/EPA entirely kills the
+        // per-frame penetration-axis jitter that perturbs friction tangents in
+        // tall stacks.
+        let pairHandled = false;
+        let currDeltaPos: Vec3 | null = null;
+        let currDeltaRot: Quat | null = null;
+        if (useBodyPairCache) {
+            currDeltaPos = _bodyPairCache_deltaPos;
+            currDeltaRot = _bodyPairCache_deltaRot;
+            computeBodyPairDelta(currDeltaPos, currDeltaRot, bodyA, bodyB);
+            pairHandled = getContactsFromCache(world, listener, timeStep, currDeltaPos, currDeltaRot, pairRecordIndex);
+        }
+
+        // perform narrowphase collision detection, creates contact constraints (on cache miss only)
+        const anyConstraintsCreated = pairHandled ? true : narrowphase(world, bodyA, bodyB, listener, timeStep, pairRecordIndex);
+
+        // refresh the cached-body-pair entry ONLY on cache miss (when narrowphase
+        // actually ran). the cache stores the relative pose AT THE TIME OF THE
+        // LAST FRESH narrowphase computation, not the current pose — on hit the
+        // OLD delta is carried forward so next frame's threshold check measures
+        // total drift since the last real narrowphase pass, not since the last
+        // frame. updating every frame would let the cache slide indefinitely at
+        // any sub-threshold velocity, accumulating arbitrary contact-point
+        // staleness and amplifying wobble in tall stacks.
+        if (useBodyPairCache && !pairHandled && currDeltaPos !== null && currDeltaRot !== null && anyConstraintsCreated) {
+            pairs.setCache(world.pairs, pairRecordIndex, currDeltaPos, currDeltaRot);
+        }
 
         // if a contact constraint was created, wake up sleeping dynamic bodies
         if (anyConstraintsCreated) {
@@ -90,12 +130,13 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             }
         }
 
-        // destroy stale contacts (unprocessed = sub-shapes no longer colliding)
-        contacts.destroyStaleContactsBetweenBodies(world.contacts, bodyA, bodyB, listener);
+        // destroy stale contacts (not re-stamped this frame = sub-shapes no longer colliding).
+        // skip this on cache hit: every contact was reprocessed by getContactsFromCache
+        // and is therefore stamped fresh, so the scan would no-op anyway.
+        if (!pairHandled) {
+            contacts.destroyStaleContactsInPair(world.contacts, world.pairs, pairRecordIndex, listener);
+        }
     }
-
-    /* clean up stale contacts */
-    contacts.destroyUnprocessedContacts(world.contacts, world.bodies, listener);
 
     /* only solve if time step is positive */
     if (timeStep > 0) {
@@ -239,11 +280,11 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         }
     }
 
+    /* flip cached manifold buffers: this step's writes become next step's reads */
+    contacts.flipManifoldCache(world.contacts);
+
     /* clear all forces */
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
-        rigidBody.clearForces(body);
-    }
+    resetForces(world);
 }
 
 const _acceleration_rotation = /* @__PURE__ */ mat4.create();
@@ -251,8 +292,9 @@ const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.motionType !== MotionType.DYNAMIC || body.sleeping) continue;
 
         const mp = body.motionProperties;
 
@@ -334,12 +376,10 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
 
 /** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
 function updateBodyPositions(world: World): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) {
-            continue;
-        }
-        rigidBody.updatePositionFromCenterOfMass(body);
-        rigidBody.setTransform(world, body, body.position, body.quaternion, false);
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.sleeping) continue;
+        rigidBody.updatePositionFromCenterOfMass(world, body);
     }
 }
 
@@ -354,7 +394,15 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     numManifolds: number;
     maxManifolds: number;
     validateBodyPair: boolean;
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    pairRecordIndex: number;
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void;
     reset(): void;
     finalizeAndCreateConstraints(): boolean;
 } = {
@@ -368,6 +416,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     bodyB: null! as RigidBody,
     listener: undefined,
     deltaTime: null! as number,
+    pairRecordIndex: -1,
 
     // pre-allocated manifolds pool (all 32 slots allocated upfront)
     manifoldsPool: Array.from({ length: 32 }, () => manifold.createContactManifold()),
@@ -383,7 +432,14 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         this.bodyB = null! as RigidBody;
     },
 
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void {
         // reset counter to reuse manifolds in pool (no allocations after warmup)
         this.numManifolds = 0;
         this.earlyOutFraction = Number.MAX_VALUE;
@@ -394,6 +450,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
+        this.pairRecordIndex = pairRecordIndex;
     },
 
     addHit(hit: CollideShapeHit): void {
@@ -562,6 +619,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 const created = contactConstraints.addContactConstraint(
                     this.world.contactConstraints,
                     this.world.contacts,
+                    this.world.pairs,
+                    this.pairRecordIndex,
                     this.bodyA,
                     this.bodyB,
                     currentManifold,
@@ -590,8 +649,16 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
     deltaTime: number;
     constraintsCreated: boolean;
     validateBodyPair: boolean;
+    pairRecordIndex: number;
     _tempManifold: manifold.ContactManifold;
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void;
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void;
     reset(): void;
 } = {
     bodyIdB: -1,
@@ -604,6 +671,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
     bodyB: null! as RigidBody,
     listener: undefined,
     deltaTime: null! as number,
+    pairRecordIndex: -1,
 
     // track if any constraints were created
     constraintsCreated: false,
@@ -620,7 +688,14 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         this.bodyB = null! as RigidBody;
     },
 
-    setup(world: World, bodyA: RigidBody, bodyB: RigidBody, listener: Listener | undefined, deltaTime: number): void {
+    setup(
+        world: World,
+        bodyA: RigidBody,
+        bodyB: RigidBody,
+        listener: Listener | undefined,
+        deltaTime: number,
+        pairRecordIndex: number,
+    ): void {
         this.constraintsCreated = false;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.validateBodyPair = true;
@@ -630,6 +705,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         this.bodyB = bodyB;
         this.listener = listener;
         this.deltaTime = deltaTime;
+        this.pairRecordIndex = pairRecordIndex;
     },
 
     addHit(hit: CollideShapeHit): void {
@@ -702,6 +778,8 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
             const created = contactConstraints.addContactConstraint(
                 this.world.contactConstraints,
                 this.world.contacts,
+                this.world.pairs,
+                this.pairRecordIndex,
                 this.bodyA,
                 this.bodyB,
                 tempManifold,
@@ -726,6 +804,189 @@ const _narrowphase_collideSettings = /* @__PURE__ */ createDefaultCollideShapeSe
 const _narrowphase_worldSpaceNormal = /* @__PURE__ */ vec3.create();
 const _narrowphase_tempManifold = /* @__PURE__ */ manifold.createContactManifold();
 
+// scratch state for body-pair cache reuse — see computeBodyPairDelta / getContactsFromCache
+const _bodyPairCache_invRA = /* @__PURE__ */ quat.create();
+const _bodyPairCache_deltaPos = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_deltaRot = /* @__PURE__ */ quat.create();
+const _bodyPairCache_diff = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_cachedPos = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_cachedRot = /* @__PURE__ */ quat.create();
+const _bodyPairCache_rotA = /* @__PURE__ */ mat4.create();
+const _bodyPairCache_rotB = /* @__PURE__ */ mat4.create();
+const _bodyPairCache_relA = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_relB = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_comDelta = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_diffAB = /* @__PURE__ */ vec3.create();
+const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ manifold.createContactManifold();
+
+/**
+ * Compute the relative pose of body B in body A's local frame.
+ * Writes into `outDeltaPos` (B's COM relative to A's COM, rotated into A's frame)
+ * and `outDeltaRot` (relative orientation, inv(rA) * rB).
+ */
+function computeBodyPairDelta(outDeltaPos: Vec3, outDeltaRot: Quat, bodyA: RigidBody, bodyB: RigidBody): void {
+    quat.invert(_bodyPairCache_invRA, bodyA.quaternion);
+
+    // outDeltaPos = inv_rA * (bodyB.com - bodyA.com)
+    vec3.sub(outDeltaPos, bodyB.centerOfMassPosition, bodyA.centerOfMassPosition);
+    vec3.transformQuat(outDeltaPos, outDeltaPos, _bodyPairCache_invRA);
+
+    // outDeltaRot = inv_rA * rB
+    quat.multiply(outDeltaRot, _bodyPairCache_invRA, bodyB.quaternion);
+}
+
+/**
+ * Reconstruct a ContactManifold from a contact's read-side CachedManifold and
+ * the current body transforms.
+ *
+ * Preconditions: physA.id <= physB.id (matches contact's stored ordering).
+ * Lambdas will transfer perfectly through addContactConstraint because the
+ * reconstructed local positions evaluate back to the cached position1/position2.
+ */
+function reconstructManifoldFromCache(
+    out: manifold.ContactManifold,
+    contact: contacts.Contact,
+    physA: RigidBody,
+    physB: RigidBody,
+    cached: contacts.CachedManifold,
+): void {
+    manifold.resetContactManifold(out);
+
+    const rotA = mat4.fromQuat(_bodyPairCache_rotA, physA.quaternion);
+    const rotB = mat4.fromQuat(_bodyPairCache_rotB, physB.quaternion);
+
+    // worldSpaceNormal = rotB * cachedNormal (normal is stored in B-local)
+    mat4.multiply3x3Vec(out.worldSpaceNormal, rotB, cached.contactNormal);
+    vec3.normalize(out.worldSpaceNormal, out.worldSpaceNormal);
+
+    // baseOffset = physA.com
+    vec3.copy(out.baseOffset, physA.centerOfMassPosition);
+
+    // (bodyB.com - bodyA.com) — used to offset body-B contact points to be
+    // baseOffset-relative (since baseOffset = bodyA.com)
+    vec3.sub(_bodyPairCache_comDelta, physB.centerOfMassPosition, physA.centerOfMassPosition);
+
+    let maxPenetration = -Number.MAX_VALUE;
+
+    for (let i = 0; i < cached.numContactPoints; i++) {
+        const cp = cached.contactPoints[i];
+
+        // relA = rotA * cp.position1   (A-local → baseOffset-relative world)
+        mat4.multiply3x3Vec(_bodyPairCache_relA, rotA, cp.position1);
+
+        // relB = (physB.com - physA.com) + rotB * cp.position2
+        mat4.multiply3x3Vec(_bodyPairCache_relB, rotB, cp.position2);
+        vec3.add(_bodyPairCache_relB, _bodyPairCache_relB, _bodyPairCache_comDelta);
+
+        const o = i * 3;
+        out.relativeContactPointsOnA[o] = _bodyPairCache_relA[0];
+        out.relativeContactPointsOnA[o + 1] = _bodyPairCache_relA[1];
+        out.relativeContactPointsOnA[o + 2] = _bodyPairCache_relA[2];
+        out.relativeContactPointsOnB[o] = _bodyPairCache_relB[0];
+        out.relativeContactPointsOnB[o + 1] = _bodyPairCache_relB[1];
+        out.relativeContactPointsOnB[o + 2] = _bodyPairCache_relB[2];
+
+        // penetrationDepth = max((relA - relB) . worldSpaceNormal)
+        // (we no longer have the EPA depth — estimate from the cached points)
+        vec3.sub(_bodyPairCache_diffAB, _bodyPairCache_relA, _bodyPairCache_relB);
+        const d = vec3.dot(_bodyPairCache_diffAB, out.worldSpaceNormal);
+        if (d > maxPenetration) maxPenetration = d;
+    }
+
+    out.numContactPoints = cached.numContactPoints;
+    out.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
+    out.subShapeIdA = contact.subShapeIdA;
+    out.subShapeIdB = contact.subShapeIdB;
+    // materialIds are derived from body.friction/restitution in addContactConstraint,
+    // not from the manifold — leave as default.
+}
+
+/**
+ * Try to satisfy a body pair from the cached manifold instead of running narrowphase.
+ *
+ * Returns true if the pair was handled by the cache — i.e. constraints have been
+ * added for every existing contact between the pair and the caller should NOT run
+ * narrowphase. Returns false on cache miss.
+ *
+ * `currDeltaPos` and `currDeltaRot` are the current-frame relative pose values
+ * (already computed via computeBodyPairDelta) — the caller passes them in so they
+ * can be reused to update the cache after this call regardless of hit/miss.
+ */
+function getContactsFromCache(
+    world: World,
+    listener: Listener | undefined,
+    deltaTime: number,
+    currDeltaPos: Vec3,
+    currDeltaRot: Quat,
+    pairRecordIndex: number,
+): boolean {
+    const poseCache = world.pairs.poseCache;
+    const cacheBase = pairRecordIndex * pairs.CACHE_STRIDE;
+
+    // no valid last-narrowphase pose cached for this pair record => must run narrowphase
+    if (poseCache[cacheBase + pairs.CACHE_VALID] !== 1) return false;
+
+    // chain-non-empty guard: a pair whose last contact died must not cache-hit into reconstructing
+    // zero contacts. this is load-bearing (it replaces the deleted invalidateCache write-side
+    // bookkeeping) — most importantly on wake, where the record survived and the poseCache may still
+    // read valid=1 but the chain was emptied, so narrowphase must run clean.
+    if (world.pairs.firstContact[pairRecordIndex] === contacts.INVALID_CONTACT_KEY) return false;
+
+    // read the cached relative pose from the record's pose-cache block
+    _bodyPairCache_cachedPos[0] = poseCache[cacheBase + pairs.CACHE_DP];
+    _bodyPairCache_cachedPos[1] = poseCache[cacheBase + pairs.CACHE_DP + 1];
+    _bodyPairCache_cachedPos[2] = poseCache[cacheBase + pairs.CACHE_DP + 2];
+
+    _bodyPairCache_cachedRot[0] = poseCache[cacheBase + pairs.CACHE_DR];
+    _bodyPairCache_cachedRot[1] = poseCache[cacheBase + pairs.CACHE_DR + 1];
+    _bodyPairCache_cachedRot[2] = poseCache[cacheBase + pairs.CACHE_DR + 2];
+    _bodyPairCache_cachedRot[3] = poseCache[cacheBase + pairs.CACHE_DR + 3];
+
+    // |currDeltaPos - cachedDeltaPos|² <= threshold
+    vec3.sub(_bodyPairCache_diff, currDeltaPos, _bodyPairCache_cachedPos);
+    if (vec3.squaredLength(_bodyPairCache_diff) > world.settings.narrowphase.bodyPairCacheMaxDeltaPositionSq) {
+        return false;
+    }
+
+    // |dot(currDeltaRot, cachedDeltaRot)| >= cos(maxAngle/2)
+    const rotDot = Math.abs(quat.dot(currDeltaRot, _bodyPairCache_cachedRot));
+    if (rotDot < world.settings.narrowphase.bodyPairCacheCosMaxDeltaRotationDiv2) {
+        return false;
+    }
+
+    // walk this pair record's contact chain and rebuild each manifold from its read-side cache.
+    let contactId = world.pairs.firstContact[pairRecordIndex];
+    while (contactId !== contacts.INVALID_CONTACT_KEY) {
+        const contact = world.contacts.contacts[contactId];
+        const nextId = contact.nextInPair;
+
+        const cachedManifold = contacts.getReadManifold(contact, world.contacts);
+        if (cachedManifold.numContactPoints > 0) {
+            // contact stores bodyIdA <= bodyIdB; pass bodies in that same order so
+            // addContactConstraint's internal swap is a no-op.
+            const orderedA = world.bodies.pool[contact.bodyIndexA];
+            const orderedB = world.bodies.pool[contact.bodyIndexB];
+            reconstructManifoldFromCache(_bodyPairCache_reconstructedManifold, contact, orderedA, orderedB, cachedManifold);
+            contactConstraints.addContactConstraint(
+                world.contactConstraints,
+                world.contacts,
+                world.pairs,
+                pairRecordIndex,
+                orderedA,
+                orderedB,
+                _bodyPairCache_reconstructedManifold,
+                world.settings,
+                listener,
+                deltaTime,
+            );
+        }
+
+        contactId = nextId;
+    }
+
+    return true;
+}
+
 /**
  * performs narrowphase collision detection for a body pair, returns whether any constraints were created
  *
@@ -741,6 +1002,7 @@ function narrowphase(
     bodyB: RigidBody,
     listener: Listener | undefined,
     deltaTime: number,
+    pairRecordIndex: number,
 ): boolean {
     // set collide settings from world options
     const collideSettings = _narrowphase_collideSettings;
@@ -767,7 +1029,7 @@ function narrowphase(
 
     if (useManifoldReduction) {
         // use reduction collector - accumulates manifolds, creates constraints after
-        narrowphaseWithReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime, pairRecordIndex);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -820,7 +1082,7 @@ function narrowphase(
         return constraintsCreated;
     } else {
         // use non-reduction collector - creates constraints immediately in addHit
-        narrowphaseWithoutReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime);
+        narrowphaseWithoutReductionCollector.setup(world, bodyA, bodyB, listener, deltaTime, pairRecordIndex);
 
         // check if enhanced internal edge removal is enabled for either body
         const useEnhancedEdgeRemoval = bodyA.enhancedInternalEdgeRemoval || bodyB.enhancedInternalEdgeRemoval;
@@ -918,8 +1180,9 @@ const _velocity_displacement = /* @__PURE__ */ vec3.create();
 
 /** integrates velocities into positions (p += v*dt) and angular velocities into orientations */
 function velocityIntegrationUpdate(world: World, timeStep: number): void {
-    for (const body of world.bodies.pool) {
-        if (body._pooled || body.motionType === MotionType.STATIC || body.sleeping) continue;
+    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
+        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
+        if (body.sleeping) continue;
 
         const mp = body.motionProperties;
 
@@ -993,8 +1256,7 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
         if (updatePosition) {
             // move the body now (using center of mass)
             vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
-            rigidBody.updatePositionFromCenterOfMass(body);
-            rigidBody.setTransform(world, body, body.position, body.quaternion, false);
+            rigidBody.updatePositionFromCenterOfMass(world, body);
         }
     }
 }
@@ -1021,7 +1283,6 @@ const _ccd_relativeDisplacement = /* @__PURE__ */ vec3.create();
 const _ccd_expandedAABB = /* @__PURE__ */ box3.create();
 const _ccd_shapeExtent = /* @__PURE__ */ vec3.create();
 const _ccd_normal = /* @__PURE__ */ vec3.create();
-const _ccd_ray = /* @__PURE__ */ raycast3.create();
 const _ccd_bodyBMotion = /* @__PURE__ */ vec3.create();
 
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
@@ -1030,7 +1291,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
     bodyA: RigidBody;
     bodyB: RigidBody;
     timeStep: number;
-    hasHit: boolean;
     hit: CastShapeHit;
     setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void;
     reset(): void;
@@ -1044,11 +1304,9 @@ const ccdCastShapeCollector: CastShapeCollector & {
     // result state
     bodyIdB: -1,
     earlyOutFraction: Number.MAX_VALUE,
-    hasHit: false,
     hit: createCastShapeHit(),
 
     setup(ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: RigidBody, timeStep: number): void {
-        this.hasHit = false;
         this.ccdBody = ccdBody;
         this.bodyA = bodyA;
         this.bodyB = bodyB;
@@ -1058,7 +1316,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
     },
 
     reset(): void {
-        this.hasHit = false;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.ccdBody = null! as ccd.CCDBody;
         this.bodyA = null! as RigidBody;
@@ -1126,7 +1383,6 @@ const ccdCastShapeCollector: CastShapeCollector & {
         settings.isSensor = false; // CCD doesn't support sensors
         // mass/inertia scales default to 1.0 (already initialized)
 
-        this.hasHit = true;
         this.earlyOutFraction = fractionPlusSlop;
     },
 
@@ -1222,10 +1478,26 @@ const ccdBodyVisitor: BodyVisitor & {
         box3.copy(_ccd_expandedAABB, bodyB.aabb);
         box3.expandByExtents(_ccd_expandedAABB, _ccd_expandedAABB, _ccd_shapeExtent);
 
-        // ray vs AABB test: early-out if ray doesn't intersect expanded AABB
-        const rayLength = vec3.length(_ccd_relativeDisplacement);
-        raycast3.set(_ccd_ray, this.bodyA.position, _ccd_relativeDisplacement, rayLength);
-        if (!raycast3.intersectsBox3(_ccd_ray, _ccd_expandedAABB)) {
+        // ray vs AABB test: early-out if the swept path can't reach the expanded AABB. the ray is
+        // the relative displacement itself with length 1, so slab t-values and the cap are both
+        // sweep fractions (a world-length cap would wrongly cull sweeps shorter than 1 unit).
+        if (
+            !rayHitsBox3(
+                this.bodyA.position[0],
+                this.bodyA.position[1],
+                this.bodyA.position[2],
+                _ccd_relativeDisplacement[0],
+                _ccd_relativeDisplacement[1],
+                _ccd_relativeDisplacement[2],
+                1,
+                _ccd_expandedAABB[0],
+                _ccd_expandedAABB[1],
+                _ccd_expandedAABB[2],
+                _ccd_expandedAABB[3],
+                _ccd_expandedAABB[4],
+                _ccd_expandedAABB[5],
+            )
+        ) {
             return;
         }
 
@@ -1320,11 +1592,21 @@ function onCCDContactAdded(
         }
     }
 
+    // find-or-create the owning pair record: CCD can hit a body pair the broadphase sweep never
+    // discovered. a real contact implies a real overlapping pair — the next sweep keeps the record
+    // if the fat AABBs overlap, else destroys it through the normal cascade. slots freed during this
+    // step's sweep are safe to reuse (cascades run before a slot is freed, so no contact ever holds
+    // a pairRecord pointing at a freed/reused slot).
+    let rec = pairs.findPairRecord(world.pairs, orderedBodyA, orderedBodyB);
+    if (rec === -1) {
+        rec = pairs.addPairRecord(world.pairs, orderedBodyA, orderedBodyB);
+    }
+
     // find existing contact
-    const existingContact = contacts.findContact(
+    const existingContact = contacts.findContactInPair(
         world.contacts,
-        orderedBodyA,
-        orderedBodyB,
+        world.pairs,
+        rec,
         swappedManifold.subShapeIdA,
         swappedManifold.subShapeIdB,
     );
@@ -1332,21 +1614,23 @@ function onCCDContactAdded(
     if (existingContact) {
         // contact persisted from previous frame
         // mark it as CCD contact to prevent warm-starting with stale impulses
-        existingContact.flags |= contacts.CachedManifoldFlags.CCDContact;
-        existingContact.processedThisFrame = true;
+        contacts.getWriteManifold(existingContact, world.contacts).flags |= contacts.CachedManifoldFlags.CCDContact;
+        existingContact.lastProcessedFrame = world.contacts.frameStamp;
 
         listener.onContactPersisted?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
     } else {
         // new contact - create it with CCD flag
         const contact = contacts.createContact(
             world.contacts,
+            world.pairs,
+            rec,
             orderedBodyA,
             orderedBodyB,
             swappedManifold.subShapeIdA,
             swappedManifold.subShapeIdB,
         );
-        contact.flags = contacts.CachedManifoldFlags.CCDContact;
-        contact.processedThisFrame = true;
+        contacts.getWriteManifold(contact, world.contacts).flags = contacts.CachedManifoldFlags.CCDContact;
+        contact.lastProcessedFrame = world.contacts.frameStamp;
 
         listener.onContactAdded?.(orderedBodyA, orderedBodyB, swappedManifold, contactSettings);
     }
@@ -1388,7 +1672,7 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
         broadphase.castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
 
         // create contact manifold if there was a hit
-        if (ccdBody.hitBodyIndex !== -1 && ccdCastShapeCollector.hasHit) {
+        if (ccdBody.fractionPlusSlop < 1.0) {
             const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
             const hit = ccdCastShapeCollector.hit;
 
@@ -1702,5 +1986,16 @@ function resolveCCDContacts(world: World): void {
         if (bodyB.sleeping) {
             rigidBody.wake(world, bodyB);
         }
+    }
+}
+
+function resetForces(world: World): void {
+    const pool = world.bodies.pool;
+    const activeIndices = world.bodies.activeBodyIndices;
+    const activeCount = world.bodies.activeBodyCount;
+    for (let i = 0; i < activeCount; i++) {
+        const body = pool[activeIndices[i]];
+        if (body.sleeping) continue;
+        rigidBody.clearForces(body);
     }
 }

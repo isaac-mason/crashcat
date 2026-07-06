@@ -2,10 +2,10 @@ export const NONE_FLAG = 0;
 export const ALL_FLAG = ~(~0 << 31);
 
 export function createFlags<T extends readonly string[]>(
-    keys: T
+    keys: T,
 ): {
-        [K in T[number] | "none" | "all"]: number;
-    } {
+    [K in T[number] | 'none' | 'all']: number;
+} {
     const result: any = {};
 
     result.none = 0;

@@ -4,7 +4,6 @@ import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
-import { type ConstraintBase, ConstraintSpace, makeConstraintBase, removeConstraintIdFromBody } from './constraints';
 import {
     type ConstraintId,
     ConstraintType,
@@ -25,7 +24,15 @@ import type { PointConstraintPart } from './constraint-part/point-constraint-par
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
-import { type ConstraintPool, defineConstraint, ensurePool } from './constraints';
+import {
+    type ConstraintBase,
+    type ConstraintPool,
+    ConstraintSpace,
+    defineConstraint,
+    ensurePool,
+    makeConstraintBase,
+    removeConstraintIdFromBody,
+} from './constraints';
 
 /**
  * Hinge constraint removes 5 DOF (3 translation + 2 rotation).

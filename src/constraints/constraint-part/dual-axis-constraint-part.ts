@@ -74,8 +74,8 @@ export function create(): DualAxisConstraintPart {
         invI1_r1PlusUxN2: vec3.create(),
         invI2_r2xN1: vec3.create(),
         invI2_r2xN2: vec3.create(),
-		effectiveMass: mat2.set(mat2.create(), 0, 0, 0, 0),
-		totalLambda: vec2.create(),
+        effectiveMass: mat2.set(mat2.create(), 0, 0, 0, 0),
+        totalLambda: vec2.create(),
     };
 }
 
@@ -90,10 +90,7 @@ export function isActive(part: DualAxisConstraintPart): boolean {
     // check if the effective mass matrix is non-zero by checking if any element is non-zero
     // a zero matrix indicates the constraint is degenerate/inactive
     return (
-        part.effectiveMass[0] !== 0 ||
-        part.effectiveMass[1] !== 0 ||
-        part.effectiveMass[2] !== 0 ||
-        part.effectiveMass[3] !== 0
+        part.effectiveMass[0] !== 0 || part.effectiveMass[1] !== 0 || part.effectiveMass[2] !== 0 || part.effectiveMass[3] !== 0
     );
 }
 

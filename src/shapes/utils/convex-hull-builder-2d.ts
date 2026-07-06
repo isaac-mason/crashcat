@@ -121,7 +121,7 @@ export function initialize(
     }
 
     // add the remaining points to the hull
-    for (; ;) {
+    for (;;) {
         // check if we've reached the max amount of vertices that are allowed
         if (builder._numEdges >= inMaxVertices) {
             result = EResult.MaxVerticesReached;
@@ -203,7 +203,7 @@ export function initialize(
         }
 
         // delete the old edges
-        for (; ;) {
+        for (;;) {
             const next = firstEdge.mNextEdge!;
 
             // redistribute points in conflict list

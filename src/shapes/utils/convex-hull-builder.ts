@@ -1,7 +1,7 @@
 import type { Vec3 } from 'mathcat';
 import { vec3 } from 'mathcat';
-import { createConvexHullBuilder2D, EResult as EResult2D, initialize as initialize2D } from './convex-hull-builder-2d';
 import { assert } from '../../utils/assert';
+import { createConvexHullBuilder2D, EResult as EResult2D, initialize as initialize2D } from './convex-hull-builder-2d';
 
 // minimum triangle area squared
 const MIN_TRIANGLE_AREA_SQ = 1e-12;

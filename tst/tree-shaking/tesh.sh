@@ -1,7 +1,7 @@
 #!/bin/sh
 
-# build with rollup
-npx rollup -c rollup.config.mjs
+# build with rolldown
+npx rolldown -c rolldown.config.mjs
 
 # should not find string "type: ShapeType.TRIANGLE_MESH"
 if grep -q "type: ShapeType.TRIANGLE_MESH" dist/output.js; then

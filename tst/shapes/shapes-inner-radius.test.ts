@@ -1,16 +1,6 @@
 import { quat, vec3 } from 'mathcat';
 import { describe, expect, it } from 'vitest';
-import {
-    box,
-    capsule,
-    compound,
-    convexHull,
-    getShapeInnerRadius,
-    scaled,
-    sphere,
-    transformed,
-    triangleMesh,
-} from '../../src';
+import { box, capsule, compound, convexHull, getShapeInnerRadius, scaled, sphere, transformed, triangleMesh } from '../../src';
 
 describe('getShapeInnerRadius', () => {
     it('returns radius for sphere', () => {
@@ -39,16 +29,7 @@ describe('getShapeInnerRadius', () => {
     it('calculates inner radius for convex hull', () => {
         // Create a simple box-like convex hull
         const shape = convexHull.create({
-            positions: [
-                -1, -1, -1,
-                1, -1, -1,
-                -1, 1, -1,
-                1, 1, -1,
-                -1, -1, 1,
-                1, -1, 1,
-                -1, 1, 1,
-                1, 1, 1,
-            ],
+            positions: [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1],
         });
         const innerRadius = getShapeInnerRadius(shape);
         // For a 2x2x2 box centered at origin, inner radius should be 1

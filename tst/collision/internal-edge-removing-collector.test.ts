@@ -1,13 +1,13 @@
-import { describe, expect, it } from 'vitest';
 import { vec3 } from 'mathcat';
+import { describe, expect, it } from 'vitest';
+import { EMPTY_SUB_SHAPE_ID } from '../../src/body/sub-shape';
 import {
-    InternalEdgeRemovingCollector,
-    createCollideShapeHit,
-    createAllCollideShapeCollector,
     type CollideShapeHit,
+    createAllCollideShapeCollector,
+    createCollideShapeHit,
+    InternalEdgeRemovingCollector,
 } from '../../src/collision/narrowphase';
 import { createFace } from '../../src/utils/face';
-import { EMPTY_SUB_SHAPE_ID } from '../../src/body/sub-shape';
 
 describe('InternalEdgeRemovingCollector', () => {
     describe('face contact detection', () => {

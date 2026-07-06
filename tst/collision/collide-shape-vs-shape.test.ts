@@ -6,9 +6,9 @@ import {
     collideShapeVsShape,
     compound,
     convexHull,
-    cylinder,
     createAllCollideShapeCollector,
     createDefaultCollideShapeSettings,
+    cylinder,
     EMPTY_SUB_SHAPE_ID,
     plane,
     scaled,
@@ -2261,8 +2261,8 @@ describe('collideShapeVsShape - Supporting Face Collection', () => {
         // verify penetration axis exists (non-zero)
         const axisLen = Math.sqrt(
             hit.penetrationAxis[0] * hit.penetrationAxis[0] +
-            hit.penetrationAxis[1] * hit.penetrationAxis[1] +
-            hit.penetrationAxis[2] * hit.penetrationAxis[2]
+                hit.penetrationAxis[1] * hit.penetrationAxis[1] +
+                hit.penetrationAxis[2] * hit.penetrationAxis[2],
         );
         expect(axisLen).toBeGreaterThan(0);
     });

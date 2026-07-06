@@ -1,6 +1,10 @@
 node_modules
-dist
-dist-typedoc
+examples/dist
+tst/tree-shaking/dist
+dist-*
 llm
 tmp
 AGENTS.md
+.labs
+bench/reports
+bench/.profiles

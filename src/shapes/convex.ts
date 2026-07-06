@@ -23,24 +23,13 @@ import {
     penetrationDepthStepGJK,
 } from '../collision/penetration';
 import * as simplex from '../collision/simplex';
-import {
-    type AddConvexRadiusSupport,
-    createAddConvexRadiusSupport,
-    createPointSupport,
-    createShapeSupportPool,
-    createTransformedSupport,
-    getShapeSupportFunction,
-    SupportFunctionMode,
-    setAddConvexRadiusSupport,
-    setPointSupport,
-    setTransformedSupport,
-} from '../collision/support';
+import { createSupport, SupportFunctionMode, setPointSupport } from '../collision/support';
 import type { ConvexShape, Shape } from './shapes';
-import { getShapeSupportingFace } from './shapes';
+import { getShapeSupportingFace, setShapeSupport } from './shapes';
 
 /* cast ray */
 
-const _castRayVsConvex_supportPool = /* @__PURE__ */ createShapeSupportPool();
+const _castRayVsConvex_support = /* @__PURE__ */ createSupport();
 const _castRayVsConvex_hit = /* @__PURE__ */ createCastRayHit();
 const _castRayVsConvex_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_quat = /* @__PURE__ */ quat.create();
@@ -79,12 +68,7 @@ export function castRayVsConvex(
     quat.set(_castRayVsConvex_quat, quatX, quatY, quatZ, quatW);
     vec3.set(_castRayVsConvex_scale, scaleX, scaleY, scaleZ);
 
-    const supportFunction = getShapeSupportFunction(
-        _castRayVsConvex_supportPool,
-        shape,
-        SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
-        _castRayVsConvex_scale,
-    );
+    setShapeSupport(_castRayVsConvex_support, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, _castRayVsConvex_scale);
 
     // transform ray from world space to shape local space
     // first, compute inverse quaternion
@@ -110,7 +94,7 @@ export function castRayVsConvex(
         _castRayVsConvex_rayOriginLocal,
         _castRayVsConvex_rayDirectionLocal,
         1e-3,
-        supportFunction,
+        _castRayVsConvex_support,
         collector.earlyOutFraction,
     );
 
@@ -139,8 +123,8 @@ export function castRayVsConvex(
 const _collidePointVsConvex_quatB = /* @__PURE__ */ quat.create();
 const _collidePointVsConvex_scaleB = /* @__PURE__ */ vec3.create();
 const _collidePointVsConvex_localPoint = /* @__PURE__ */ vec3.create();
-const _collidePointVsConvex_pointSupport = /* @__PURE__ */ createPointSupport();
-const _collidePointVsConvex_convexSupportPool = /* @__PURE__ */ createShapeSupportPool();
+const _collidePointVsConvex_pointSupport = /* @__PURE__ */ createSupport();
+const _collidePointVsConvex_shapeSupport = /* @__PURE__ */ createSupport();
 const _collidePointVsConvex_gjkResult = /* @__PURE__ */ createGjkClosestPoints();
 const _collidePointVsConvex_initialDirection = /* @__PURE__ */ vec3.create();
 const _collidePointVsConvex_scaledAABB = /* @__PURE__ */ box3.create();
@@ -191,8 +175,8 @@ export function collidePointVsConvex(
 
     // get shape support function with scale applied
     vec3.set(_collidePointVsConvex_scaleB, scaleBX, scaleBY, scaleBZ);
-    const shapeSupport = getShapeSupportFunction(
-        _collidePointVsConvex_convexSupportPool,
+    setShapeSupport(
+        _collidePointVsConvex_shapeSupport,
         shapeB,
         SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
         _collidePointVsConvex_scaleB,
@@ -208,7 +192,7 @@ export function collidePointVsConvex(
     // run gjk to test intersection
     gjkClosestPoints(
         _collidePointVsConvex_gjkResult,
-        shapeSupport,
+        _collidePointVsConvex_shapeSupport,
         _collidePointVsConvex_pointSupport,
         settings.collisionTolerance,
         _collidePointVsConvex_initialDirection,
@@ -227,16 +211,11 @@ export function collidePointVsConvex(
 
 /* collide convex vs convex */
 
-const _collideConvex_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
-const _collideConvex_supportPoolB = /* @__PURE__ */ createShapeSupportPool();
+const _collideConvex_supportA = /* @__PURE__ */ createSupport();
+const _collideConvex_supportB = /* @__PURE__ */ createSupport();
 
 const _collideConvex_simplex = /* @__PURE__ */ simplex.createSimplex();
 const _collideConvex_penetrationDepth = /* @__PURE__ */ createPenetrationDepth();
-
-const _collideConvex_transformedSupportB = /* @__PURE__ */ createTransformedSupport();
-
-const _collideConvex_addRadiusSupport: AddConvexRadiusSupport = /* @__PURE__ */ createAddConvexRadiusSupport();
-const _collideConvex_transformedSupport = /* @__PURE__ */ createTransformedSupport();
 
 const _collideConvex_penetrationAxis = /* @__PURE__ */ vec3.create();
 
@@ -363,23 +342,15 @@ export function collideConvexVsConvexLocal(
 
     // TODO: OBB3 early out?
 
-    // get supports
-    const supportA = getShapeSupportFunction(
-        _collideConvex_supportPoolA,
-        shapeA,
-        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
-        scaleA,
-    );
-    const supportB = getShapeSupportFunction(
-        _collideConvex_supportPoolB,
-        shapeB,
-        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
-        scaleB,
-    );
+    // get supports (shrunk cores; convex radius reported and applied by GJK)
+    const supportA = _collideConvex_supportA;
+    const supportB = _collideConvex_supportB;
+    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
+    setShapeSupport(supportB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
 
-    // wrap support objects in TransformedSupport
-    // shape B in A's local space
-    setTransformedSupport(_collideConvex_transformedSupportB, transformBInA, supportB);
+    // fold shape B's transform into A's local space onto its support struct
+    supportB.hasTransform = true;
+    mat4.copy(supportB.transform, transformBInA);
 
     // initial search direction (vector from A to B in A's local space)
     // note: As we don't remember the penetration axis from the last iteration, and it is likely that shape2 is pushed out of
@@ -410,7 +381,7 @@ export function collideConvexVsConvexLocal(
         penetrationDepth,
         simplex,
         supportA,
-        _collideConvex_transformedSupportB,
+        supportB,
         supportA.convexRadius + maxSeparationDistanceToUse,
         supportB.convexRadius,
         penetrationAxis,
@@ -438,36 +409,19 @@ export function collideConvexVsConvexLocal(
             // but we still inflate it enough to avoid the case where EPA misses the collision.
             maxSeparationDistanceToUse = Math.min(maxSeparationDistanceToUse, 1.0);
 
-            // create support functions that include convex radius for EPA
-            const supportAWithRadius = getShapeSupportFunction(
-                _collideConvex_supportPoolA,
-                shapeA,
-                SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
-                scaleA,
-            );
-            const supportBWithRadius = getShapeSupportFunction(
-                _collideConvex_supportPoolB,
-                shapeB,
-                SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
-                scaleB,
-            );
+            // re-fill supports to include convex radius for EPA (resets transform/addRadius)
+            setShapeSupport(supportA, shapeA, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scaleA);
+            setShapeSupport(supportB, shapeB, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scaleB);
 
-            // add separation distance
-            setAddConvexRadiusSupport(_collideConvex_addRadiusSupport, maxSeparationDistanceToUse, supportAWithRadius);
+            // add separation distance along A's direction
+            supportA.addRadius = maxSeparationDistanceToUse;
 
             // shape B in A's local space (reuse transformBInA computed earlier)
-            setTransformedSupport(_collideConvex_transformedSupport, transformBInA, supportBWithRadius);
+            supportB.hasTransform = true;
+            mat4.copy(supportB.transform, transformBInA);
 
             // perform EPA step
-            if (
-                !penetrationDepthStepEPA(
-                    penetrationDepth,
-                    _collideConvex_addRadiusSupport,
-                    _collideConvex_transformedSupport,
-                    penetrationTolerance,
-                    simplex,
-                )
-            ) {
+            if (!penetrationDepthStepEPA(penetrationDepth, supportA, supportB, penetrationTolerance, simplex)) {
                 return;
             }
             break;
@@ -550,8 +504,8 @@ export function collideConvexVsConvexLocal(
 
 /* cast convex vs convex */
 
-const castConvex_supportPoolA = /* @__PURE__ */ createShapeSupportPool();
-const castConvex_supportPoolB = /* @__PURE__ */ createShapeSupportPool();
+const castConvex_supportA = /* @__PURE__ */ createSupport();
+const castConvex_supportB = /* @__PURE__ */ createSupport();
 
 const _castConvex_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
 
@@ -663,8 +617,10 @@ export function castConvexVsConvexLocal(
 ): void {
     // get support functions for both shapes WITHOUT convex radius
     // (radius will be added in EPA if needed)
-    const supportA = getShapeSupportFunction(castConvex_supportPoolA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
-    const supportB = getShapeSupportFunction(castConvex_supportPoolB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
+    const supportA = castConvex_supportA;
+    const supportB = castConvex_supportB;
+    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
+    setShapeSupport(supportB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
 
     // run GJK casting with EPA fallback for deep penetration in B's local space
     const tolerance = 1e-4;
