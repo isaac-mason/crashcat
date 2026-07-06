@@ -1,22 +1,6 @@
 import { type Mat4, type Vec3 } from 'mathcat';
 import { type Simplex } from './simplex.js';
 import { type Support } from './support.js';
-type ClosestPointResult = {
-    point: Vec3;
-    pointSet: number;
-};
-/**
- * @optimize
- */
-export declare function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void;
-/**
- * @optimize
- */
-export declare function computeClosestPointOnTriangle(out: ClosestPointResult, inA: Vec3, inB: Vec3, inC: Vec3, mustIncludeC: boolean, squaredTolerance: number): void;
-/**
- * @optimize
- */
-export declare function computeClosestPointOnTetrahedron(out: ClosestPointResult, inA: Vec3, inB: Vec3, inC: Vec3, inD: Vec3, mustIncludeD: boolean, tolerance: number): void;
 export type GjkCastRayResult = {
     isHitFound: boolean;
     lambda: number;
@@ -89,4 +73,3 @@ export declare function createGjkClosestPoints(): GjkClosestPoints;
  * @optimize
  */
 export declare function gjkClosestPoints(out: GjkClosestPoints, supportA: Support, supportB: Support, tolerance: number, direction: Vec3, maxDistanceSquared: number): void;
-export {};

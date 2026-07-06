@@ -29,10 +29,7 @@ function createClosestPointResult(): ClosestPointResult {
 
 const _lineBary = /* @__PURE__ */ createBarycentricCoordinatesResult();
 
-/**
- * @optimize
- */
-export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void {
+function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: Vec3, squaredTolerance: number): void {
     computeBarycentricCoordinates2d(_lineBary, a, b, squaredTolerance);
     const u = _lineBary.u;
     const v = _lineBary.v;
@@ -52,10 +49,7 @@ export function computeClosestPointOnLine(out: ClosestPointResult, a: Vec3, b: V
     }
 }
 
-/**
- * @optimize
- */
-export function computeClosestPointOnTriangle(
+function computeClosestPointOnTriangle(
     out: ClosestPointResult,
     inA: Vec3,
     inB: Vec3,
@@ -311,10 +305,7 @@ export function computeClosestPointOnTriangle(
 
 const _otherResult_tet = /* @__PURE__ */ createClosestPointResult();
 
-/**
- * @optimize
- */
-export function computeClosestPointOnTetrahedron(
+function computeClosestPointOnTetrahedron(
     out: ClosestPointResult,
     inA: Vec3,
     inB: Vec3,
