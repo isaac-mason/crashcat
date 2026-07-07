@@ -22,8 +22,8 @@ importers:
         specifier: 0.183.0
         version: 0.183.0
       compilecat:
-        specifier: 0.0.6
-        version: 0.0.6(rollup@4.46.2)
+        specifier: 0.0.7
+        version: 0.0.7(rolldown@1.0.2)(rollup@4.46.2)
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21
@@ -234,40 +234,40 @@ packages:
       sisteransi: 1.0.5
     dev: true
 
-  /@compilecat/core-darwin-arm64@0.0.6:
-    resolution: {integrity: sha512-lBhNTDKaHISNx9Q46gNb7FMEHSF7+1bEHmclghhSZAP9dChWm6JJ5f1lFyzArrxkYBPoLLHBsFK1NgSTrJYeTQ==}
+  /@compilecat/core-darwin-arm64@0.0.7:
+    resolution: {integrity: sha512-ZsUscbcshXLt3I43oOdbmpEM1itohYvB0YmhapPEVykttgbotm8VGVwbx2rARzY1AhlmrqPTyMCgNzyOl10Mxw==}
     cpu: [arm64]
     os: [darwin]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-darwin-x64@0.0.6:
-    resolution: {integrity: sha512-ct3GQ9/k9nawvy/c3efRuZISM0WyM84e+Xmlf3OVyaYIp5+cwk5pkiHjm/IZ74OIJCWwRXWboliEmYF5LfXWFw==}
+  /@compilecat/core-darwin-x64@0.0.7:
+    resolution: {integrity: sha512-aFjJCt/bkYo+NMLLy/4OupvRYqkg+17IeZ8EhggVcLmokKRKME5hxXEWP2BAYAEiJu4tWKpRMgsRmIniylmuZw==}
     cpu: [x64]
     os: [darwin]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-linux-arm64-gnu@0.0.6:
-    resolution: {integrity: sha512-quMyi3K01Eb4yo1Yd8So9qMtSNLvB7tS7uEe1duIEPuTezz4nJx4Uv5j28UlkoVRRAfoe/BZDqvLxCeQ0lyYbQ==}
+  /@compilecat/core-linux-arm64-gnu@0.0.7:
+    resolution: {integrity: sha512-ViL/BSZWYcPjn5lo7JFDhHwQxvxKsRv/Wyf55UnLsJKubtYA21JM2IcBclB/njDInFZlF52bXmVqpUCp6PR+yg==}
     cpu: [arm64]
     os: [linux]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-linux-x64-gnu@0.0.6:
-    resolution: {integrity: sha512-IM5EcQOPa6UYFeX9PV+mrbFStYg8QSIOn9zS5QbuTk0LXc86Jpx5vX0NUfuucQgJTG9PRkyWMmc8ieku/wDjqQ==}
+  /@compilecat/core-linux-x64-gnu@0.0.7:
+    resolution: {integrity: sha512-34045dFP+g7rgMDUk/NTHzo6JHrW1ZBpyxRRkTUpS+k9BYMlGFJ3gWH1Z2iiTc95X9MH7XHXjDmUrzpdz0jTzg==}
     cpu: [x64]
     os: [linux]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-wasm32-wasi@0.0.6:
-    resolution: {integrity: sha512-ZjJl/6Guz5SkiIhg959KZd1SUG5v33qS2HYqiFiCkyZqbuUvBGXpGUXs1az88wXv/zwLOuoBo0/K25HuEWCy4w==}
+  /@compilecat/core-wasm32-wasi@0.0.7:
+    resolution: {integrity: sha512-kEn/TxVS+BUf6SO1yDwvqvdlAbryIWY4ZFAMpqnkfwjTp6N0Y2zNzLsMOIRpP2+PbCSEoj8CkcYhukNBp4VzIg==}
     engines: {node: '>=14.0.0'}
     requiresBuild: true
     dependencies:
@@ -277,16 +277,16 @@ packages:
     dev: true
     optional: true
 
-  /@compilecat/core-win32-x64-msvc@0.0.6:
-    resolution: {integrity: sha512-ppe3z31DHQZc3AK01Tht5MEkhd0L9HM0RUUzBddDME53gDZ4wMCsiXoLWNhhvAAIBK8mw1MWPvyZ12G0YySlsQ==}
+  /@compilecat/core-win32-x64-msvc@0.0.7:
+    resolution: {integrity: sha512-MT032CVcairbsDDb/tu69RO8sXPfJoLJz8BE6hUotWotQbZH/lC/hpDpiXKdWgBNAtZNc3d7aHWQaIlV5h2rWQ==}
     cpu: [x64]
     os: [win32]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/wasm@0.0.6:
-    resolution: {integrity: sha512-SR+g7Ylb4KqgzOwxCA/rtAWDe+bAQ/WoojUIQVOKrI4nM6DfuD14KcyUzkVdOETMAVn04RcVSlU+jz2x2cM8MQ==}
+  /@compilecat/wasm@0.0.7:
+    resolution: {integrity: sha512-z4cBG2LilnskiDCam4H2q3uLPC5Rci9RHW95BQxBxllFZkkOW2C/FTESj85O86uVYWJJLlymlV7trfdiCGpTPA==}
     requiresBuild: true
     dev: true
     optional: true
@@ -855,6 +855,13 @@ packages:
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/trace-mapping': 0.3.30
+    dev: true
+
+  /@jridgewell/remapping@2.3.5:
+    resolution: {integrity: sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ==}
+    dependencies:
+      '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.30
     dev: true
 
@@ -1821,20 +1828,30 @@ packages:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
     dev: true
 
-  /compilecat@0.0.6(rollup@4.46.2):
-    resolution: {integrity: sha512-4MmzIIVRECeYaX6lz7ZPTj+mH2vwAzdTK8sGlBRCgCGhr/uK2Cv4t4b6vFZFHnbgPzYplEnwLaoWbXwzMniYYg==}
+  /compilecat@0.0.7(rolldown@1.0.2)(rollup@4.46.2):
+    resolution: {integrity: sha512-CpxOixw0P3qye17rW6jEeCRctK9NMmjuBukGwSnADiWkYsh4U4MMa4P0t6K4gsPV3MeThIYK02o//i9EfTtRzw==}
     peerDependencies:
       rollup: ^4.0.0
     dependencies:
       rollup: 4.46.2
+      unplugin: 3.3.0(rolldown@1.0.2)(rollup@4.46.2)
     optionalDependencies:
-      '@compilecat/core-darwin-arm64': 0.0.6
-      '@compilecat/core-darwin-x64': 0.0.6
-      '@compilecat/core-linux-arm64-gnu': 0.0.6
-      '@compilecat/core-linux-x64-gnu': 0.0.6
-      '@compilecat/core-wasm32-wasi': 0.0.6
-      '@compilecat/core-win32-x64-msvc': 0.0.6
-      '@compilecat/wasm': 0.0.6
+      '@compilecat/core-darwin-arm64': 0.0.7
+      '@compilecat/core-darwin-x64': 0.0.7
+      '@compilecat/core-linux-arm64-gnu': 0.0.7
+      '@compilecat/core-linux-x64-gnu': 0.0.7
+      '@compilecat/core-wasm32-wasi': 0.0.7
+      '@compilecat/core-win32-x64-msvc': 0.0.7
+      '@compilecat/wasm': 0.0.7
+    transitivePeerDependencies:
+      - '@farmfe/core'
+      - '@rspack/core'
+      - bun-types-no-globals
+      - esbuild
+      - rolldown
+      - unloader
+      - vite
+      - webpack
     dev: true
 
   /concat-map@0.0.1:
@@ -2874,6 +2891,11 @@ packages:
     engines: {node: '>=12'}
     dev: true
 
+  /picomatch@4.0.5:
+    resolution: {integrity: sha512-RvwwcruNjI1ncT5xRakeyS9Lf8lcItv34KD+aif+VH9kduAyfYBipGh12274xtenIPZ119/R9BdTBa8gAwSh0A==}
+    engines: {node: '>=12'}
+    dev: true
+
   /pidtree@0.6.0:
     resolution: {integrity: sha512-eG2dWTVw5bzqGRztnHExczNxt5VGsE6OwTeCG3fdUf9KBsZzO3R5OIIIzWR+iZA0NtZ+RDVdaoE2dK1cn6jH4g==}
     engines: {node: '>=0.10'}
@@ -3452,6 +3474,46 @@ packages:
     engines: {node: '>= 4.0.0'}
     dev: true
 
+  /unplugin@3.3.0(rolldown@1.0.2)(rollup@4.46.2):
+    resolution: {integrity: sha512-qa66K+crbfyE6JK10GjvbJeRrOsuC/JpbnHctfyp/i4oBTxWOzJfRZyDiOk1PtErMFRu8JhsU/wPvOdBNWe5Rg==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      '@farmfe/core': '*'
+      '@rspack/core': '*'
+      bun-types-no-globals: '*'
+      esbuild: '*'
+      rolldown: '*'
+      rollup: '*'
+      unloader: '*'
+      vite: '*'
+      webpack: '*'
+    peerDependenciesMeta:
+      '@farmfe/core':
+        optional: true
+      '@rspack/core':
+        optional: true
+      bun-types-no-globals:
+        optional: true
+      esbuild:
+        optional: true
+      rolldown:
+        optional: true
+      rollup:
+        optional: true
+      unloader:
+        optional: true
+      vite:
+        optional: true
+      webpack:
+        optional: true
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      picomatch: 4.0.5
+      rolldown: 1.0.2
+      rollup: 4.46.2
+      webpack-virtual-modules: 0.6.2
+    dev: true
+
   /util-deprecate@1.0.2:
     resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
     dev: true
@@ -3658,6 +3720,10 @@ packages:
       - terser
       - tsx
       - yaml
+    dev: true
+
+  /webpack-virtual-modules@0.6.2:
+    resolution: {integrity: sha512-66/V2i5hQanC51vBQKPH4aI8NMAcBW59FVBs+rC7eGHupMyfn34q7rZIE+ETlJ+XTevqfUhVVBgSUNSW2flEUQ==}
     dev: true
 
   /which@2.0.2:

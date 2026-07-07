@@ -1,4 +1,4 @@
-import { compilecat } from 'compilecat';
+import { compilecat } from 'compilecat/rolldown';
 import MagicString from 'magic-string';
 import filesize from 'rollup-plugin-filesize';
 
