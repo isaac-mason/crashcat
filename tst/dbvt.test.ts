@@ -252,7 +252,7 @@ describe('DBVT', () => {
                 visit: (body: RigidBody) => found.push(body),
             };
 
-            dbvt.walk(tree, visitor, world);
+            dbvt.walk(world, tree, visitor);
 
             expect(found.length).toBe(3);
             expect(found).toContain(bodies[0]);
@@ -528,7 +528,7 @@ describe('DBVT', () => {
 
 function walkBodies(tree: dbvt.DBVT, world: World): RigidBody[] {
     const found: RigidBody[] = [];
-    dbvt.walk(tree, { shouldExit: false, visit: (b: RigidBody) => found.push(b) }, world);
+    dbvt.walk(world, tree, { shouldExit: false, visit: (b: RigidBody) => found.push(b) });
     return found;
 }
 
