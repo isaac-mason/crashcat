@@ -54,7 +54,8 @@ export declare function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: B
 export declare function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void;
 /** @optimize */
 export declare function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
-export declare function walk(dbvt: DBVT, visitor: BodyVisitor, world: World): void;
+/** visit every body in the tree — no filtering, no aabb tests */
+export declare function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void;
 /** @optimize */
 export declare function castRay(world: World, dbvt: DBVT, origin: Vec3, direction: Vec3, length: number, queryFilter: Filter, visitor: BodyVisitor): void;
 /** @optimize */

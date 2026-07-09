@@ -3529,13 +3529,7 @@ function create$35() {
 function requestNode(dbvt) {
 	if (dbvt.freeNodeIndices.length > 0) {
 		const n = dbvt.freeNodeIndices.pop();
-		const t = n * STRIDE_TOPO;
-		dbvt.topo[t] = -1;
-		dbvt.topo[t + 1] = -1;
-		dbvt.topo[t + 2] = -1;
-		dbvt.topo[t + 3] = -1;
-		dbvt.topo[t + 4] = 0;
-		bEmpty(dbvt.bounds, n);
+		setNodeBoundsEmpty(dbvt.bounds, n);
 		return n;
 	}
 	const n = dbvt.bounds.length / STRIDE_BOUNDS;
@@ -3545,14 +3539,14 @@ function requestNode(dbvt) {
 }
 function releaseNode(dbvt, n) {
 	const t = n * STRIDE_TOPO;
-	dbvt.topo[t] = -1;
-	dbvt.topo[t + 1] = -1;
-	dbvt.topo[t + 2] = -1;
-	dbvt.topo[t + 3] = -1;
-	dbvt.topo[t + 4] = 0;
+	dbvt.topo[t + T_PARENT] = -1;
+	dbvt.topo[t + T_LEFT] = -1;
+	dbvt.topo[t + T_RIGHT] = -1;
+	dbvt.topo[t + T_BODY] = -1;
+	dbvt.topo[t + T_CHANGED] = 0;
 	dbvt.freeNodeIndices.push(n);
 }
-function bEmpty(bounds, node) {
+function setNodeBoundsEmpty(bounds, node) {
 	const base = node * STRIDE_BOUNDS;
 	bounds[base] = Infinity;
 	bounds[base + 1] = Infinity;
@@ -3561,7 +3555,7 @@ function bEmpty(bounds, node) {
 	bounds[base + 4] = -Infinity;
 	bounds[base + 5] = -Infinity;
 }
-function bUnionNodes(bounds, out, a, b) {
+function setNodeBoundsUnion(bounds, out, a, b) {
 	const outBase = out * STRIDE_BOUNDS;
 	const aBase = a * STRIDE_BOUNDS;
 	const bBase = b * STRIDE_BOUNDS;
@@ -3578,7 +3572,7 @@ function bUnionNodes(bounds, out, a, b) {
 	bounds[outBase + 4] = maxY;
 	bounds[outBase + 5] = maxZ;
 }
-function bSetExpandBox(bounds, node, box, margin) {
+function setNodeBoundsFromBoxExpanded(bounds, node, box, margin) {
 	const base = node * STRIDE_BOUNDS;
 	bounds[base] = box[0] - margin;
 	bounds[base + 1] = box[1] - margin;
@@ -3587,41 +3581,36 @@ function bSetExpandBox(bounds, node, box, margin) {
 	bounds[base + 4] = box[4] + margin;
 	bounds[base + 5] = box[5] + margin;
 }
-function insertLeaf(dbvt, rootIndex, leafIndex) {
+function insertLeaf(dbvt, leafIndex) {
 	const topo = dbvt.topo;
 	const bounds = dbvt.bounds;
 	if (dbvt.root === -1) {
 		dbvt.root = leafIndex;
 		topo[leafIndex * 5 + 0] = -1;
 	} else {
-		let root = rootIndex;
-		while (topo[root * 5 + 1] !== -1) {
+		let root = dbvt.root;
+		let left = topo[root * 5 + 1];
+		while (left !== -1) {
 			let _proximity__result_9;
-			const b = topo[root * 5 + 1];
 			const aBase = leafIndex * 6;
-			const bBase = b * 6;
+			const bBase = left * 6;
 			const dx = bounds[aBase] + bounds[aBase + 3] - (bounds[bBase] + bounds[bBase + 3]);
 			const dy = bounds[aBase + 1] + bounds[aBase + 4] - (bounds[bBase + 1] + bounds[bBase + 4]);
 			const dz = bounds[aBase + 2] + bounds[aBase + 5] - (bounds[bBase + 2] + bounds[bBase + 5]);
 			_proximity__result_9 = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-			const b$1 = topo[root * 5 + 2];
+			const b = topo[root * 5 + 2];
 			const aBase$1 = leafIndex * 6;
-			const bBase$1 = b$1 * 6;
+			const bBase$1 = b * 6;
 			const dx$1 = bounds[aBase$1] + bounds[aBase$1 + 3] - (bounds[bBase$1] + bounds[bBase$1 + 3]);
 			const dy$1 = bounds[aBase$1 + 1] + bounds[aBase$1 + 4] - (bounds[bBase$1 + 1] + bounds[bBase$1 + 4]);
 			const dz$1 = bounds[aBase$1 + 2] + bounds[aBase$1 + 5] - (bounds[bBase$1 + 2] + bounds[bBase$1 + 5]);
-			root = (_proximity__result_9 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? 0 : 1) === 0 ? topo[root * 5 + 1] : topo[root * 5 + 2];
+			root = _proximity__result_9 < Math.abs(dx$1) + Math.abs(dy$1) + Math.abs(dz$1) ? left : topo[root * 5 + 2];
+			left = topo[root * 5 + 1];
 		}
 		const prev = topo[root * 5 + 0];
 		let _requestNode__result_14;
 		if (dbvt.freeNodeIndices.length > 0) {
 			const n = dbvt.freeNodeIndices.pop();
-			const t = n * 5;
-			dbvt.topo[t] = -1;
-			dbvt.topo[t + 1] = -1;
-			dbvt.topo[t + 2] = -1;
-			dbvt.topo[t + 3] = -1;
-			dbvt.topo[t + 4] = 0;
 			const bounds$1 = dbvt.bounds;
 			const base = n * 6;
 			bounds$1[base] = Infinity;
@@ -3656,7 +3645,7 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 		bounds[outBase$1 + 5] = maxZ$1;
 		if (prev !== -1) {
 			const parent = dbvt.topo[root * 5 + 0];
-			if ((dbvt.topo[parent * 5 + 2] === root ? 1 : 0) === 0) topo[prev * 5 + 1] = newParent;
+			if (dbvt.topo[parent * 5 + 2] !== root) topo[prev * 5 + 1] = newParent;
 			else topo[prev * 5 + 2] = newParent;
 			topo[newParent * 5 + 1] = root;
 			topo[root * 5 + 0] = newParent;
@@ -3669,10 +3658,10 @@ function insertLeaf(dbvt, rootIndex, leafIndex) {
 				const innerBase = childNode * 6;
 				if (!(bounds[outerBase] <= bounds[innerBase] && bounds[outerBase + 1] <= bounds[innerBase + 1] && bounds[outerBase + 2] <= bounds[innerBase + 2] && bounds[outerBase + 3] >= bounds[innerBase + 3] && bounds[outerBase + 4] >= bounds[innerBase + 4] && bounds[outerBase + 5] >= bounds[innerBase + 5])) {
 					const a = topo[parentIndex * 5 + 1];
-					const b$2 = topo[parentIndex * 5 + 2];
+					const b$1 = topo[parentIndex * 5 + 2];
 					const outBase = parentIndex * 6;
 					const aBase$2 = a * 6;
-					const bBase$2 = b$2 * 6;
+					const bBase$2 = b$1 * 6;
 					const minX = bounds[aBase$2] < bounds[bBase$2] ? bounds[aBase$2] : bounds[bBase$2];
 					const minY = bounds[aBase$2 + 1] < bounds[bBase$2 + 1] ? bounds[aBase$2 + 1] : bounds[bBase$2 + 1];
 					const minZ = bounds[aBase$2 + 2] < bounds[bBase$2 + 2] ? bounds[aBase$2 + 2] : bounds[bBase$2 + 2];
@@ -3719,11 +3708,11 @@ function removeLeaf(dbvt, leafIndex) {
 	const siblingIndex = topo[parentIndex * 5 + 1] === leafIndex ? topo[parentIndex * 5 + 2] : topo[parentIndex * 5 + 1];
 	if (prevIndex !== -1) {
 		const parent = dbvt.topo[parentIndex * 5 + 0];
-		if ((dbvt.topo[parent * 5 + 2] === parentIndex ? 1 : 0) === 0) topo[prevIndex * 5 + 1] = siblingIndex;
+		if (dbvt.topo[parent * 5 + 2] !== parentIndex) topo[prevIndex * 5 + 1] = siblingIndex;
 		else topo[prevIndex * 5 + 2] = siblingIndex;
 		topo[siblingIndex * 5 + 0] = prevIndex;
 		const t = parentIndex * 5;
-		dbvt.topo[t] = -1;
+		dbvt.topo[t + 0] = -1;
 		dbvt.topo[t + 1] = -1;
 		dbvt.topo[t + 2] = -1;
 		dbvt.topo[t + 3] = -1;
@@ -3770,7 +3759,7 @@ function removeLeaf(dbvt, leafIndex) {
 		dbvt.root = siblingIndex;
 		topo[siblingIndex * 5 + 0] = -1;
 		const t$1 = parentIndex * 5;
-		dbvt.topo[t$1] = -1;
+		dbvt.topo[t$1 + 0] = -1;
 		dbvt.topo[t$1 + 1] = -1;
 		dbvt.topo[t$1 + 2] = -1;
 		dbvt.topo[t$1 + 3] = -1;
@@ -3781,9 +3770,9 @@ function removeLeaf(dbvt, leafIndex) {
 }
 function add$1(dbvt, body) {
 	const leafIndex = requestNode(dbvt);
-	bSetExpandBox(dbvt.bounds, leafIndex, body.aabb, dbvt.expansionMargin);
+	setNodeBoundsFromBoxExpanded(dbvt.bounds, leafIndex, body.aabb, dbvt.expansionMargin);
 	dbvt.topo[leafIndex * STRIDE_TOPO + T_BODY] = body.index;
-	insertLeaf(dbvt, dbvt.root, leafIndex);
+	insertLeaf(dbvt, leafIndex);
 	const parent = dbvt.topo[leafIndex * STRIDE_TOPO + T_PARENT];
 	if (parent !== -1) markNodeAndParentsChanged(dbvt, parent);
 	dbvt.dirty = true;
@@ -3863,7 +3852,7 @@ function update$11(dbvt, body) {
 	dbvt.dirty = true;
 	return true;
 }
-function sPartition(begin, end) {
+function partitionUnits(begin, end) {
 	let minX = Infinity;
 	let minY = Infinity;
 	let minZ = Infinity;
@@ -3935,7 +3924,7 @@ function buildTree(dbvt, begin, end, maxDepthMarkChanged) {
 			continue;
 		}
 		if (phase === 0) {
-			const mid = sPartition(nodeBegin, nodeEnd);
+			const mid = partitionUnits(nodeBegin, nodeEnd);
 			framePhase[top] = 1;
 			frameSplit[top] = mid;
 			frameBegin.push(nodeBegin);
@@ -3960,7 +3949,7 @@ function buildTree(dbvt, begin, end, maxDepthMarkChanged) {
 			dbvt.topo[parent * STRIDE_TOPO + T_RIGHT] = rightIndex;
 			dbvt.topo[leftIndex * STRIDE_TOPO + T_PARENT] = parent;
 			dbvt.topo[rightIndex * STRIDE_TOPO + T_PARENT] = parent;
-			bUnionNodes(dbvt.bounds, parent, leftIndex, rightIndex);
+			setNodeBoundsUnion(dbvt.bounds, parent, leftIndex, rightIndex);
 			dbvt.topo[parent * STRIDE_TOPO + T_CHANGED] = depth < maxDepthMarkChanged ? 1 : 0;
 			resultIndex = parent;
 			frameBegin.pop();
@@ -4087,7 +4076,7 @@ function intersectPoint$1(world, dbvt, point, queryFilter, visitor) {
 				_flatStack[stackSize++] = topo[nodeIndex * 5 + 2];
 			} else {
 				const body = world.bodies.pool[topo[nodeIndex * 5 + 3]];
-				if (!(!body || body._pooled || (queryFilter.collisionGroups & body.collisionMask) === 0 || (body.collisionGroups & queryFilter.collisionMask) === 0 || queryFilter.enabledObjectLayers[body.objectLayer] !== 1 || queryFilter.bodyFilter && !queryFilter.bodyFilter(body) || px < body.aabb[0] || px > body.aabb[3] || py < body.aabb[1] || py > body.aabb[4] || pz < body.aabb[2] || pz > body.aabb[5])) {
+				if (!((queryFilter.collisionGroups & body.collisionMask) === 0 || (body.collisionGroups & queryFilter.collisionMask) === 0 || queryFilter.enabledObjectLayers[body.objectLayer] !== 1 || queryFilter.bodyFilter && !queryFilter.bodyFilter(body) || px < body.aabb[0] || px > body.aabb[3] || py < body.aabb[1] || py > body.aabb[4] || pz < body.aabb[2] || pz > body.aabb[5])) {
 					visitor.visit(body);
 					if (visitor.shouldExit) return;
 				}
@@ -4095,7 +4084,8 @@ function intersectPoint$1(world, dbvt, point, queryFilter, visitor) {
 		}
 	}
 }
-function walk(dbvt, visitor, world) {
+/** visit every body in the tree — no filtering, no aabb tests */
+function walk(world, dbvt, visitor) {
 	if (dbvt.root === -1) return;
 	const topo = dbvt.topo;
 	let stackSize = 0;
@@ -4108,7 +4098,6 @@ function walk(dbvt, visitor, world) {
 			continue;
 		}
 		const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
-		if (!body || body._pooled) continue;
 		visitor.visit(body);
 		if (visitor.shouldExit) return;
 	}
@@ -4705,7 +4694,7 @@ function castAABB$1(world, dbvt, castBounds, displacement, queryFilter, visitor)
 					}
 				} else {
 					const body = world.bodies.pool[topo[nodeIndex * 5 + 3]];
-					if (body && !body._pooled && (queryFilter.collisionGroups & body.collisionMask) !== 0 && (body.collisionGroups & queryFilter.collisionMask) !== 0 && queryFilter.enabledObjectLayers[body.objectLayer] === 1 && (!queryFilter.bodyFilter || queryFilter.bodyFilter(body))) {
+					if ((queryFilter.collisionGroups & body.collisionMask) !== 0 && (body.collisionGroups & queryFilter.collisionMask) !== 0 && queryFilter.enabledObjectLayers[body.objectLayer] === 1 && (!queryFilter.bodyFilter || queryFilter.bodyFilter(body))) {
 						let _rayHitsBox3__result_6;
 						_inline_rayHitsBox3_6: {
 							const minX$2 = body.aabb[0] - halfX;
