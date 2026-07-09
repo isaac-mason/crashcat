@@ -22,7 +22,7 @@ import { debugRenderer } from 'crashcat/three';
 import { quat, vec3 } from 'mathcat';
 import { GLTFLoader } from 'three/examples/jsm/Addons.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { cameraPosition, Discard, Fn, float, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';
+import { array, cameraPosition, Discard, float, Fn, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';
 import * as THREE from 'three/webgpu';
 
 /* resources */
@@ -148,15 +148,18 @@ await renderer.init();
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.setSize(container.clientWidth, container.clientHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+// cap pixel ratio — on hidpi displays the uncapped ratio renders 4-9x the fragments
+const MAX_PIXEL_RATIO = 1.5;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
 container.appendChild(renderer.domElement);
 
 const onResize = () => {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
 };
 window.addEventListener('resize', onResize);
 
@@ -374,6 +377,14 @@ const obstacleMaterial = new THREE.MeshPhongNodeMaterial({ color: '#ccc', shinin
 const ditherStartDistance = 3;
 const ditherEndDistance = 0.2;
 
+// 4x4 bayer dither thresholds (0-15)/16, row-major
+const BAYER_4X4 = array([
+    float(0.0 / 16.0), float(8.0 / 16.0), float(2.0 / 16.0), float(10.0 / 16.0),
+    float(12.0 / 16.0), float(4.0 / 16.0), float(14.0 / 16.0), float(6.0 / 16.0),
+    float(3.0 / 16.0), float(11.0 / 16.0), float(1.0 / 16.0), float(9.0 / 16.0),
+    float(15.0 / 16.0), float(7.0 / 16.0), float(13.0 / 16.0), float(5.0 / 16.0),
+]);
+
 obstacleMaterial.colorNode = Fn(() => {
     // calculate distance from world position to camera
     const worldPos = positionWorld;
@@ -396,27 +407,9 @@ obstacleMaterial.colorNode = Fn(() => {
         const x = screen.x.mod(4.0).floor();
         const y = screen.y.mod(4.0).floor();
 
-        // bayer matrix thresholds (0-15) / 16
-        const bayerIndex = y.mul(4.0).add(x).floor();
-
-        // bayer 4x4 matrix values
-        const bayerMatrix = float(0.0).toVar();
-        If(bayerIndex.equal(0.0), () => bayerMatrix.assign(0.0 / 16.0));
-        If(bayerIndex.equal(1.0), () => bayerMatrix.assign(8.0 / 16.0));
-        If(bayerIndex.equal(2.0), () => bayerMatrix.assign(2.0 / 16.0));
-        If(bayerIndex.equal(3.0), () => bayerMatrix.assign(10.0 / 16.0));
-        If(bayerIndex.equal(4.0), () => bayerMatrix.assign(12.0 / 16.0));
-        If(bayerIndex.equal(5.0), () => bayerMatrix.assign(4.0 / 16.0));
-        If(bayerIndex.equal(6.0), () => bayerMatrix.assign(14.0 / 16.0));
-        If(bayerIndex.equal(7.0), () => bayerMatrix.assign(6.0 / 16.0));
-        If(bayerIndex.equal(8.0), () => bayerMatrix.assign(3.0 / 16.0));
-        If(bayerIndex.equal(9.0), () => bayerMatrix.assign(11.0 / 16.0));
-        If(bayerIndex.equal(10.0), () => bayerMatrix.assign(1.0 / 16.0));
-        If(bayerIndex.equal(11.0), () => bayerMatrix.assign(9.0 / 16.0));
-        If(bayerIndex.equal(12.0), () => bayerMatrix.assign(15.0 / 16.0));
-        If(bayerIndex.equal(13.0), () => bayerMatrix.assign(7.0 / 16.0));
-        If(bayerIndex.equal(14.0), () => bayerMatrix.assign(13.0 / 16.0));
-        If(bayerIndex.equal(15.0), () => bayerMatrix.assign(5.0 / 16.0));
+        // bayer matrix thresholds (0-15) / 16, indexed by screen position
+        const bayerIndex = y.mul(4.0).add(x).toInt();
+        const bayerMatrix = float(BAYER_4X4.element(bayerIndex));
 
         If(ditherAmount.greaterThan(bayerMatrix), () => {
             Discard();
