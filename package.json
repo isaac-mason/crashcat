@@ -62,7 +62,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
     "@types/three": "0.183.0",
-    "compilecat": "0.0.8",
+    "compilecat": "0.0.10",
     "magic-string": "^0.30.21",
     "npm-run-all2": "^9.0.1",
     "rolldown": "^1.0.2",

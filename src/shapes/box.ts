@@ -1,4 +1,4 @@
-import { type Box3, box3, quat, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, mat4, quat, type Quat, type Vec3, vec3 } from 'mathcat';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -6,6 +6,8 @@ import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
+import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
+import { createCollideShapeHit, reversedCollideShapeVsShape } from '../collision/collide-shape-vs-shape';
 import { DEFAULT_CONVEX_RADIUS, setBoxSupport } from '../collision/support';
 import { assert } from '../utils/assert';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
@@ -13,6 +15,8 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
+    getShapeSupportingFace,
+    type Shape,
     ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
@@ -21,6 +25,7 @@ import {
     setCollideShapeFn,
     shapeDefs,
 } from './shapes';
+import type { SphereShape } from './sphere';
 
 /** settings for creating a box shape */
 export type BoxShapeSettings = {
@@ -122,8 +127,220 @@ export const def = /* @__PURE__ */ (() =>
                     setCastShapeFn(shapeDef.type, ShapeType.BOX, convex.castConvexVsConvex);
                 }
             }
+
+            // analytical sphere vs box (closed-form clamp, skips GJK/EPA).
+            // must be registered after the generic convex loop above: box (ShapeType.BOX = 1)
+            // registers after sphere (ShapeType.SPHERE = 0), and the loop sets these pairs to
+            // the generic handler, so the override has to be applied here to win.
+            setCollideShapeFn(ShapeType.SPHERE, ShapeType.BOX, collideSphereVsBox);
+            setCollideShapeFn(ShapeType.BOX, ShapeType.SPHERE, reversedCollideShapeVsShape(collideSphereVsBox));
         },
     }))();
+
+/* collide sphere vs box (analytical, A = sphere, B = box) */
+
+const _collideSphereVsBox_hit = /* @__PURE__ */ createCollideShapeHit();
+const _collideSphereVsBox_boxRotation: Quat = /* @__PURE__ */ quat.create();
+const _collideSphereVsBox_invBoxRotation: Quat = /* @__PURE__ */ quat.create();
+const _collideSphereVsBox_localCenter: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_coreHalf: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_negCoreHalf: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_closest: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_delta: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_normal: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_face: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_boxPosition: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_worldScratch: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_boxToWorld = /* @__PURE__ */ mat4.create();
+const _collideSphereVsBox_boxScale: Vec3 = /* @__PURE__ */ vec3.create();
+const _collideSphereVsBox_faceDirection: Vec3 = /* @__PURE__ */ vec3.create();
+
+/**
+ * Analytical sphere vs box collision. A is the sphere, B is the box.
+ *
+ * Closed-form clamp of the sphere centre to the box's shrunk core (half-extents minus convex
+ * radius, mirroring setBoxSupport EXCLUDE_CONVEX_RADIUS), with the combined radius handling the
+ * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
+ * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
+ *
+ * The mathcat frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
+ * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
+ * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
+ * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)
+ *
+ * @optimize
+ */
+export function collideSphereVsBox(
+    collector: CollideShapeCollector,
+    settings: CollideShapeSettings,
+    shapeA: Shape,
+    subShapeIdA: number,
+    _subShapeIdBitsA: number,
+    posAX: number,
+    posAY: number,
+    posAZ: number,
+    _quatAX: number,
+    _quatAY: number,
+    _quatAZ: number,
+    _quatAW: number,
+    scaleAX: number,
+    _scaleAY: number,
+    _scaleAZ: number,
+    shapeB: Shape,
+    subShapeIdB: number,
+    _subShapeIdBitsB: number,
+    posBX: number,
+    posBY: number,
+    posBZ: number,
+    quatBX: number,
+    quatBY: number,
+    quatBZ: number,
+    quatBW: number,
+    scaleBX: number,
+    scaleBY: number,
+    scaleBZ: number,
+): void {
+    const sphereShape = shapeA as SphereShape;
+    const boxShape = shapeB as BoxShape;
+
+    const sphereRadius = sphereShape.radius * Math.abs(scaleAX);
+
+    // scaled half-extents and shrunk core (mirror setBoxSupport EXCLUDE_CONVEX_RADIUS)
+    const scaledHalfX = Math.abs(scaleBX) * boxShape.halfExtents[0];
+    const scaledHalfY = Math.abs(scaleBY) * boxShape.halfExtents[1];
+    const scaledHalfZ = Math.abs(scaleBZ) * boxShape.halfExtents[2];
+    const minBoxScale = Math.min(Math.abs(scaleBX), Math.abs(scaleBY), Math.abs(scaleBZ));
+    const scaledConvexRadius = Math.min(boxShape.convexRadius * minBoxScale, DEFAULT_CONVEX_RADIUS);
+    const coreHalfX = Math.max(0, scaledHalfX - scaledConvexRadius);
+    const coreHalfY = Math.max(0, scaledHalfY - scaledConvexRadius);
+    const coreHalfZ = Math.max(0, scaledHalfZ - scaledConvexRadius);
+    const combinedRadius = sphereRadius + scaledConvexRadius;
+
+    // box rotation (box-local -> world) and its inverse (world -> box-local). scale is folded into
+    // the half-extents above, matching the gjk path. rotation is isometric, so distances in the
+    // box-local frame equal world distances.
+    quat.set(_collideSphereVsBox_boxRotation, quatBX, quatBY, quatBZ, quatBW);
+    quat.conjugate(_collideSphereVsBox_invBoxRotation, _collideSphereVsBox_boxRotation);
+
+    // sphere centre into box-local: rotate (posA - posB) by the inverse box rotation
+    vec3.set(_collideSphereVsBox_localCenter, posAX - posBX, posAY - posBY, posAZ - posBZ);
+    vec3.transformQuat(_collideSphereVsBox_localCenter, _collideSphereVsBox_localCenter, _collideSphereVsBox_invBoxRotation);
+
+    // closest point on the core box: clamp the centre to [-coreHalf, +coreHalf]
+    vec3.set(_collideSphereVsBox_coreHalf, coreHalfX, coreHalfY, coreHalfZ);
+    vec3.negate(_collideSphereVsBox_negCoreHalf, _collideSphereVsBox_coreHalf);
+    vec3.min(_collideSphereVsBox_closest, _collideSphereVsBox_localCenter, _collideSphereVsBox_coreHalf);
+    vec3.max(_collideSphereVsBox_closest, _collideSphereVsBox_closest, _collideSphereVsBox_negCoreHalf);
+
+    // delta = centre - closest; distance² is its squared length
+    vec3.subtract(_collideSphereVsBox_delta, _collideSphereVsBox_localCenter, _collideSphereVsBox_closest);
+    const distanceSq = vec3.squaredLength(_collideSphereVsBox_delta);
+    const contactDistance = combinedRadius + settings.maxSeparationDistance;
+    if (distanceSq > contactDistance * contactDistance) {
+        return; // separated beyond radius (+ speculative margin)
+    }
+
+    // outward normal (box surface -> sphere centre) and the core-face contact point, in box-local
+    const normal = _collideSphereVsBox_normal;
+    const face = _collideSphereVsBox_face;
+    let penetration: number;
+
+    if (distanceSq > 1e-12) {
+        // shallow: sphere centre outside the core box — normal is the normalised delta
+        const distance = Math.sqrt(distanceSq);
+        vec3.scale(normal, _collideSphereVsBox_delta, 1 / distance);
+        vec3.copy(face, _collideSphereVsBox_closest);
+        penetration = combinedRadius - distance;
+    } else {
+        // deep: sphere centre inside the core box -> nearest face per axis (SAT, no EPA). per axis
+        // the nearest-face depth is coreHalfExtent - |centre|, its outward normal is sign(centre);
+        // pick the smallest-depth axis (ties X > Y > Z, +face over -face — a straight six-face scan).
+        const localX = _collideSphereVsBox_localCenter[0];
+        const localY = _collideSphereVsBox_localCenter[1];
+        const localZ = _collideSphereVsBox_localCenter[2];
+        const depthX = coreHalfX - Math.abs(localX);
+        const depthY = coreHalfY - Math.abs(localY);
+        const depthZ = coreHalfZ - Math.abs(localZ);
+        let nx = 0;
+        let ny = 0;
+        let nz = 0;
+        let fx = localX;
+        let fy = localY;
+        let fz = localZ;
+        let depth: number;
+        if (depthX <= depthY && depthX <= depthZ) {
+            depth = depthX;
+            nx = localX < 0 ? -1 : 1;
+            fx = nx * coreHalfX;
+        } else if (depthY <= depthZ) {
+            depth = depthY;
+            ny = localY < 0 ? -1 : 1;
+            fy = ny * coreHalfY;
+        } else {
+            depth = depthZ;
+            nz = localZ < 0 ? -1 : 1;
+            fz = nz * coreHalfZ;
+        }
+        vec3.set(normal, nx, ny, nz);
+        vec3.set(face, fx, fy, fz);
+        penetration = combinedRadius + depth;
+    }
+
+    // early-out on penetration vs the collector budget (matches the convex path)
+    if (-penetration >= collector.earlyOutFraction) {
+        return;
+    }
+
+    const hit = _collideSphereVsBox_hit;
+    vec3.set(_collideSphereVsBox_boxPosition, posBX, posBY, posBZ);
+
+    // contact points, box-local -> world:
+    //   box surface  = core face + convexRadius along the normal
+    //   sphere point = centre - sphereRadius along the (box -> sphere) normal
+    vec3.scaleAndAdd(_collideSphereVsBox_worldScratch, face, normal, scaledConvexRadius);
+    vec3.transformQuat(_collideSphereVsBox_worldScratch, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxRotation);
+    vec3.add(hit.pointB, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxPosition);
+
+    vec3.scaleAndAdd(_collideSphereVsBox_worldScratch, _collideSphereVsBox_localCenter, normal, -sphereRadius);
+    vec3.transformQuat(_collideSphereVsBox_worldScratch, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxRotation);
+    vec3.add(hit.pointA, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxPosition);
+
+    // penetration axis: A -> B = -(box-local normal, which points box -> sphere = B -> A) in world
+    vec3.transformQuat(_collideSphereVsBox_worldScratch, normal, _collideSphereVsBox_boxRotation);
+    vec3.negate(hit.penetrationAxis, _collideSphereVsBox_worldScratch);
+
+    hit.penetration = penetration;
+    hit.subShapeIdA = subShapeIdA;
+    hit.subShapeIdB = subShapeIdB;
+    hit.materialIdA = sphereShape.materialId;
+    hit.materialIdB = boxShape.materialId;
+    hit.bodyIdB = collector.bodyIdB;
+
+    if (settings.collectFaces) {
+        // box supporting face: getSupportingFace picks the face by dominant axis + sign of the
+        // passed direction; -normal selects the face whose outward normal is +normal.
+        vec3.negate(_collideSphereVsBox_faceDirection, normal);
+        vec3.set(_collideSphereVsBox_boxScale, scaleBX, scaleBY, scaleBZ);
+        mat4.fromRotationTranslation(
+            _collideSphereVsBox_boxToWorld,
+            _collideSphereVsBox_boxRotation,
+            _collideSphereVsBox_boxPosition,
+        );
+        getShapeSupportingFace(
+            hit.faceB,
+            boxShape,
+            subShapeIdB,
+            _collideSphereVsBox_faceDirection,
+            _collideSphereVsBox_boxToWorld,
+            _collideSphereVsBox_boxScale,
+        );
+
+        // sphere has no supporting face (single point contact)
+        hit.faceA.numVertices = 0;
+    }
+
+    collector.addHit(hit);
+}
 
 function computeMassProperties(out: MassProperties, shape: BoxShape): void {
     const fullExtents = vec3.scale(_computeBoxMassProperties_fullExtents, shape.halfExtents, 2);

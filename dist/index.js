@@ -3168,7 +3168,11 @@ function addLinearVelocityStep(motionProperties, linearVelocityChange) {
 *
 */
 function subLinearVelocityStep(motionProperties, linearVelocityChange) {
-	sub(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
+	const out = motionProperties.linearVelocity;
+	const a = motionProperties.linearVelocity;
+	out[0] = a[0] - linearVelocityChange[0];
+	out[1] = a[1] - linearVelocityChange[1];
+	out[2] = a[2] - linearVelocityChange[2];
 	const velocity = motionProperties.linearVelocity;
 	const allowedTranslation = motionProperties.allowedDegreesOfFreedom & 7;
 	if (!(allowedTranslation & 1)) velocity[0] = 0;
@@ -3195,7 +3199,11 @@ function addAngularVelocityStep(motionProperties, angularVelocityChange) {
 *
 */
 function subAngularVelocityStep(motionProperties, angularVelocityChange) {
-	sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
+	const out = motionProperties.angularVelocity;
+	const a = motionProperties.angularVelocity;
+	out[0] = a[0] - angularVelocityChange[0];
+	out[1] = a[1] - angularVelocityChange[1];
+	out[2] = a[2] - angularVelocityChange[2];
 }
 /**
 * Scales the inverse inertia diagonal when mass changes at runtime.
@@ -5266,9 +5274,7 @@ function makeConstraintBase() {
 //#region src/body/sleep.ts
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
-const _extents = /* @__PURE__ */ create$47();
 const _rot = /* @__PURE__ */ create$44();
-const _axis = /* @__PURE__ */ create$47();
 /**
 * get the 3 test points for sleep detection:
 * - center of mass
@@ -5277,18 +5283,20 @@ const _axis = /* @__PURE__ */ create$47();
 *
 */
 function getSleepTestPoints(body, outPoints) {
+	let _extents_0, _extents_1, _extents_2;
+	let _axis_0, _axis_1, _axis_2;
 	const com = body.centerOfMassPosition;
 	const out = outPoints[0];
 	out[0] = com[0];
 	out[1] = com[1];
 	out[2] = com[2];
 	const box = body.shape.aabb;
-	_extents[0] = (box[3] - box[0]) * .5;
-	_extents[1] = (box[4] - box[1]) * .5;
-	_extents[2] = (box[5] - box[2]) * .5;
-	const ex = _extents[0];
-	const ey = _extents[1];
-	const ez = _extents[2];
+	_extents_0 = (box[3] - box[0]) * .5;
+	_extents_1 = (box[4] - box[1]) * .5;
+	_extents_2 = (box[5] - box[2]) * .5;
+	const ex = _extents_0;
+	const ey = _extents_1;
+	const ez = _extents_2;
 	const q = body.quaternion;
 	const x = q[0];
 	const y = q[1];
@@ -5335,20 +5343,20 @@ function getSleepTestPoints(body, outPoints) {
 		c2 = 3;
 		s2 = ey;
 	}
-	_axis[0] = _rot[c1];
-	_axis[1] = _rot[c1 + 1];
-	_axis[2] = _rot[c1 + 2];
+	_axis_0 = _rot[c1];
+	_axis_1 = _rot[c1 + 1];
+	_axis_2 = _rot[c1 + 2];
 	const out$1 = outPoints[1];
-	out$1[0] = com[0] + _axis[0] * s1;
-	out$1[1] = com[1] + _axis[1] * s1;
-	out$1[2] = com[2] + _axis[2] * s1;
-	_axis[0] = _rot[c2];
-	_axis[1] = _rot[c2 + 1];
-	_axis[2] = _rot[c2 + 2];
+	out$1[0] = com[0] + _axis_0 * s1;
+	out$1[1] = com[1] + _axis_1 * s1;
+	out$1[2] = com[2] + _axis_2 * s1;
+	_axis_0 = _rot[c2];
+	_axis_1 = _rot[c2 + 1];
+	_axis_2 = _rot[c2 + 2];
 	const out$2 = outPoints[2];
-	out$2[0] = com[0] + _axis[0] * s2;
-	out$2[1] = com[1] + _axis[1] * s2;
-	out$2[2] = com[2] + _axis[2] * s2;
+	out$2[0] = com[0] + _axis_0 * s2;
+	out$2[1] = com[1] + _axis_1 * s2;
+	out$2[2] = com[2] + _axis_2 * s2;
 }
 /** reset the sleep test spheres to center around the given points with radius 0 */
 function resetSleepTestSpheres(mp, points) {
@@ -15396,26 +15404,49 @@ function penetrationDepthStepGJK(outPenetrationDepth, outSimplex, supportA, supp
 		outPenetrationDepth.penetrationAxis[1] = 0;
 		outPenetrationDepth.penetrationAxis[2] = 0;
 		outPenetrationDepth.status = 0;
-		return;
+	} else {
+		outPenetrationDepth.pointA[0] = _gjk_closestPoints.pointA[0];
+		outPenetrationDepth.pointA[1] = _gjk_closestPoints.pointA[1];
+		outPenetrationDepth.pointA[2] = _gjk_closestPoints.pointA[2];
+		outPenetrationDepth.pointB[0] = _gjk_closestPoints.pointB[0];
+		outPenetrationDepth.pointB[1] = _gjk_closestPoints.pointB[1];
+		outPenetrationDepth.pointB[2] = _gjk_closestPoints.pointB[2];
+		outPenetrationDepth.penetrationAxis[0] = _gjk_closestPoints.penetrationAxis[0];
+		outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
+		outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
+		const input = _gjk_closestPoints.simplex;
+		outSimplex.size = input.size;
+		const end = input.size * 3;
+		const srcY = input.y;
+		const srcP = input.p;
+		const srcQ = input.q;
+		const dstY = outSimplex.y;
+		const dstP = outSimplex.p;
+		const dstQ = outSimplex.q;
+		for (let i = 0; i < end; i++) {
+			dstY[i] = srcY[i];
+			dstP[i] = srcP[i];
+			dstQ[i] = srcQ[i];
+		}
+		if (_gjk_closestPoints.squaredDistance > 0) {
+			const vLength = Math.sqrt(_gjk_closestPoints.squaredDistance);
+			const out$1 = outPenetrationDepth.pointA;
+			const a = outPenetrationDepth.pointA;
+			const b = outPenetrationDepth.penetrationAxis;
+			const scale = convexRadiusA / vLength;
+			out$1[0] = a[0] + b[0] * scale;
+			out$1[1] = a[1] + b[1] * scale;
+			out$1[2] = a[2] + b[2] * scale;
+			const out$2 = outPenetrationDepth.pointB;
+			const a$1 = outPenetrationDepth.pointB;
+			const b$1 = outPenetrationDepth.penetrationAxis;
+			const scale$1 = -(convexRadiusB / vLength);
+			out$2[0] = a$1[0] + b$1[0] * scale$1;
+			out$2[1] = a$1[1] + b$1[1] * scale$1;
+			out$2[2] = a$1[2] + b$1[2] * scale$1;
+			outPenetrationDepth.status = 1;
+		} else outPenetrationDepth.status = 2;
 	}
-	outPenetrationDepth.pointA[0] = _gjk_closestPoints.pointA[0];
-	outPenetrationDepth.pointA[1] = _gjk_closestPoints.pointA[1];
-	outPenetrationDepth.pointA[2] = _gjk_closestPoints.pointA[2];
-	outPenetrationDepth.pointB[0] = _gjk_closestPoints.pointB[0];
-	outPenetrationDepth.pointB[1] = _gjk_closestPoints.pointB[1];
-	outPenetrationDepth.pointB[2] = _gjk_closestPoints.pointB[2];
-	outPenetrationDepth.penetrationAxis[0] = _gjk_closestPoints.penetrationAxis[0];
-	outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
-	outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
-	copySimplex(outSimplex, _gjk_closestPoints.simplex);
-	if (_gjk_closestPoints.squaredDistance > 0) {
-		const vLength = Math.sqrt(_gjk_closestPoints.squaredDistance);
-		scaleAndAdd(outPenetrationDepth.pointA, outPenetrationDepth.pointA, outPenetrationDepth.penetrationAxis, convexRadiusA / vLength);
-		scaleAndAdd(outPenetrationDepth.pointB, outPenetrationDepth.pointB, outPenetrationDepth.penetrationAxis, -(convexRadiusB / vLength));
-		outPenetrationDepth.status = 1;
-		return;
-	}
-	outPenetrationDepth.status = 2;
 }
 const EPA_MAX_POINTS_TO_INCLUDE_ORIGIN_IN_HULL = 32;
 const EPA_MAX_POINTS = 128;
@@ -15450,7 +15481,9 @@ const clearEpaSupportPoints = (points) => {
 };
 /** add a support point in the given direction */
 const addEpaSupportPoint = (points, supportA, supportB, direction) => {
-	negate(_epa_negatedDirection, direction);
+	_epa_negatedDirection[0] = -direction[0];
+	_epa_negatedDirection[1] = -direction[1];
+	_epa_negatedDirection[2] = -direction[2];
 	getSupport(_epa_p, supportA, direction);
 	getSupport(_epa_q, supportB, _epa_negatedDirection);
 	const idx = points.y.size;
@@ -22800,6 +22833,7 @@ function castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shape
 //#region src/shapes/box.ts
 var box_exports = /* @__PURE__ */ __exportAll({
 	castRayVsBox: () => castRayVsBox,
+	collideSphereVsBox: () => collideSphereVsBox,
 	create: () => create$13,
 	def: () => def$11,
 	update: () => update$9
@@ -22842,28 +22876,291 @@ function update$9(shape) {
 	if (shape.halfExtents[0] < 0 || shape.halfExtents[1] < 0 || shape.halfExtents[2] < 0) throw new Error("box halfExtents must be >= 0");
 	if (shape.convexRadius < 0) throw new Error("box convexRadius must be >= 0");
 	computeBoxLocalBounds(shape.aabb, shape.halfExtents);
-	shape.volume = computeBoxVolume(shape.halfExtents);
+	shape.volume = /* @__PURE__ */ computeBoxVolume(shape.halfExtents);
 }
 const _computeBoxMassProperties_fullExtents = /* @__PURE__ */ create$47();
-const def$11 = /* @__PURE__ */ (() => defineShape({
-	type: 1,
-	category: 0,
-	computeMassProperties: computeMassProperties$12,
-	getSurfaceNormal: getSurfaceNormal$11,
-	getSupportingFace: getSupportingFace$11,
-	getInnerRadius: getInnerRadius$10,
-	castRay: castRayVsBox,
-	collidePoint: collidePointVsBox,
-	setSupport: setBoxSupport,
-	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
-			setCollideShapeFn(1, shapeDef.type, collideConvexVsConvex);
-			setCollideShapeFn(shapeDef.type, 1, collideConvexVsConvex);
-			setCastShapeFn(1, shapeDef.type, castConvexVsConvex);
-			setCastShapeFn(shapeDef.type, 1, castConvexVsConvex);
+const def$11 = /* @__PURE__ */ (() => {
+	return defineShape({
+		type: 1,
+		category: 0,
+		computeMassProperties: computeMassProperties$12,
+		getSurfaceNormal: getSurfaceNormal$11,
+		getSupportingFace: getSupportingFace$11,
+		getInnerRadius: getInnerRadius$10,
+		castRay: castRayVsBox,
+		collidePoint: collidePointVsBox,
+		setSupport: setBoxSupport,
+		register: () => {
+			for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+				setCollideShapeFn(1, shapeDef.type, collideConvexVsConvex);
+				setCollideShapeFn(shapeDef.type, 1, collideConvexVsConvex);
+				setCastShapeFn(1, shapeDef.type, castConvexVsConvex);
+				setCastShapeFn(shapeDef.type, 1, castConvexVsConvex);
+			}
+			setCollideShapeFn(0, 1, collideSphereVsBox);
+			setCollideShapeFn(1, 0, reversedCollideShapeVsShape(collideSphereVsBox));
+		}
+	});
+})();
+const _collideSphereVsBox_hit = /* @__PURE__ */ createCollideShapeHit();
+const _collideSphereVsBox_boxToWorld = /* @__PURE__ */ create$45();
+const _collideSphereVsBox_boxScale = /* @__PURE__ */ create$47();
+const _collideSphereVsBox_faceDirection = /* @__PURE__ */ create$47();
+/**
+* Analytical sphere vs box collision. A is the sphere, B is the box.
+*
+* Closed-form clamp of the sphere centre to the box's shrunk core (half-extents minus convex
+* radius, mirroring setBoxSupport EXCLUDE_CONVEX_RADIUS), with the combined radius handling the
+* rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
+* SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
+*
+* The mathcat frame transforms are written idiomatically; compilecat's `` (flatten +
+* SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
+* path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
+* (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)
+*
+*/
+function collideSphereVsBox(collector, settings, shapeA, subShapeIdA, _subShapeIdBitsA, posAX, posAY, posAZ, _quatAX, _quatAY, _quatAZ, _quatAW, scaleAX, _scaleAY, _scaleAZ, shapeB, subShapeIdB, _subShapeIdBitsB, posBX, posBY, posBZ, quatBX, quatBY, quatBZ, quatBW, scaleBX, scaleBY, scaleBZ) {
+	let _collideSphereVsBox_boxRotation_0, _collideSphereVsBox_boxRotation_1, _collideSphereVsBox_boxRotation_2, _collideSphereVsBox_boxRotation_3;
+	let _collideSphereVsBox_localCenter_0, _collideSphereVsBox_localCenter_1, _collideSphereVsBox_localCenter_2;
+	let _collideSphereVsBox_coreHalf_0, _collideSphereVsBox_coreHalf_1, _collideSphereVsBox_coreHalf_2;
+	let _collideSphereVsBox_negCoreHalf_0, _collideSphereVsBox_negCoreHalf_1, _collideSphereVsBox_negCoreHalf_2;
+	let _collideSphereVsBox_closest_0, _collideSphereVsBox_closest_1, _collideSphereVsBox_closest_2;
+	let _collideSphereVsBox_delta_0, _collideSphereVsBox_delta_1, _collideSphereVsBox_delta_2;
+	let normal_0, normal_1, normal_2;
+	let face_0, face_1, face_2;
+	let _collideSphereVsBox_boxPosition_0, _collideSphereVsBox_boxPosition_1, _collideSphereVsBox_boxPosition_2;
+	const sphereShape = shapeA;
+	const boxShape = shapeB;
+	const sphereRadius = sphereShape.radius * Math.abs(scaleAX);
+	const scaledHalfX = Math.abs(scaleBX) * boxShape.halfExtents[0];
+	const scaledHalfY = Math.abs(scaleBY) * boxShape.halfExtents[1];
+	const scaledHalfZ = Math.abs(scaleBZ) * boxShape.halfExtents[2];
+	const minBoxScale = Math.min(Math.abs(scaleBX), Math.abs(scaleBY), Math.abs(scaleBZ));
+	const scaledConvexRadius = Math.min(boxShape.convexRadius * minBoxScale, DEFAULT_CONVEX_RADIUS);
+	const coreHalfX = Math.max(0, scaledHalfX - scaledConvexRadius);
+	const coreHalfY = Math.max(0, scaledHalfY - scaledConvexRadius);
+	const coreHalfZ = Math.max(0, scaledHalfZ - scaledConvexRadius);
+	const combinedRadius = sphereRadius + scaledConvexRadius;
+	_collideSphereVsBox_boxRotation_0 = quatBX;
+	_collideSphereVsBox_boxRotation_1 = quatBY;
+	_collideSphereVsBox_boxRotation_2 = quatBZ;
+	_collideSphereVsBox_boxRotation_3 = quatBW;
+	const qx = -_collideSphereVsBox_boxRotation_0;
+	const qy = -_collideSphereVsBox_boxRotation_1;
+	const qz = -_collideSphereVsBox_boxRotation_2;
+	const x$2 = posAX - posBX;
+	const y$2 = posAY - posBY;
+	const z$2 = posAZ - posBZ;
+	let uvx = qy * z$2 - qz * y$2;
+	let uvy = qz * x$2 - qx * z$2;
+	let uvz = qx * y$2 - qy * x$2;
+	let uuvx = qy * uvz - qz * uvy;
+	let uuvy = qz * uvx - qx * uvz;
+	let uuvz = qx * uvy - qy * uvx;
+	const w2 = _collideSphereVsBox_boxRotation_3 * 2;
+	uvx *= w2;
+	uvy *= w2;
+	uvz *= w2;
+	uuvx *= 2;
+	uuvy *= 2;
+	uuvz *= 2;
+	_collideSphereVsBox_localCenter_0 = x$2 + uvx + uuvx;
+	_collideSphereVsBox_localCenter_1 = y$2 + uvy + uuvy;
+	_collideSphereVsBox_localCenter_2 = z$2 + uvz + uuvz;
+	_collideSphereVsBox_coreHalf_0 = coreHalfX;
+	_collideSphereVsBox_coreHalf_1 = coreHalfY;
+	_collideSphereVsBox_coreHalf_2 = coreHalfZ;
+	_collideSphereVsBox_negCoreHalf_0 = -_collideSphereVsBox_coreHalf_0;
+	_collideSphereVsBox_negCoreHalf_1 = -_collideSphereVsBox_coreHalf_1;
+	_collideSphereVsBox_negCoreHalf_2 = -_collideSphereVsBox_coreHalf_2;
+	_collideSphereVsBox_closest_0 = Math.min(_collideSphereVsBox_localCenter_0, _collideSphereVsBox_coreHalf_0);
+	_collideSphereVsBox_closest_1 = Math.min(_collideSphereVsBox_localCenter_1, _collideSphereVsBox_coreHalf_1);
+	_collideSphereVsBox_closest_2 = Math.min(_collideSphereVsBox_localCenter_2, _collideSphereVsBox_coreHalf_2);
+	_collideSphereVsBox_closest_0 = Math.max(_collideSphereVsBox_closest_0, _collideSphereVsBox_negCoreHalf_0);
+	_collideSphereVsBox_closest_1 = Math.max(_collideSphereVsBox_closest_1, _collideSphereVsBox_negCoreHalf_1);
+	_collideSphereVsBox_closest_2 = Math.max(_collideSphereVsBox_closest_2, _collideSphereVsBox_negCoreHalf_2);
+	_collideSphereVsBox_delta_0 = _collideSphereVsBox_localCenter_0 - _collideSphereVsBox_closest_0;
+	_collideSphereVsBox_delta_1 = _collideSphereVsBox_localCenter_1 - _collideSphereVsBox_closest_1;
+	_collideSphereVsBox_delta_2 = _collideSphereVsBox_localCenter_2 - _collideSphereVsBox_closest_2;
+	const x$3 = _collideSphereVsBox_delta_0;
+	const y$3 = _collideSphereVsBox_delta_1;
+	const z$3 = _collideSphereVsBox_delta_2;
+	const distanceSq = x$3 * x$3 + y$3 * y$3 + z$3 * z$3;
+	const contactDistance = combinedRadius + settings.maxSeparationDistance;
+	if (!(distanceSq > contactDistance * contactDistance)) {
+		let penetration;
+		if (distanceSq > 1e-12) {
+			const distance = Math.sqrt(distanceSq);
+			const b = 1 / distance;
+			normal_0 = _collideSphereVsBox_delta_0 * b;
+			normal_1 = _collideSphereVsBox_delta_1 * b;
+			normal_2 = _collideSphereVsBox_delta_2 * b;
+			face_0 = _collideSphereVsBox_closest_0;
+			face_1 = _collideSphereVsBox_closest_1;
+			face_2 = _collideSphereVsBox_closest_2;
+			penetration = combinedRadius - distance;
+		} else {
+			const localX = _collideSphereVsBox_localCenter_0;
+			const localY = _collideSphereVsBox_localCenter_1;
+			const localZ = _collideSphereVsBox_localCenter_2;
+			const depthX = coreHalfX - Math.abs(localX);
+			const depthY = coreHalfY - Math.abs(localY);
+			const depthZ = coreHalfZ - Math.abs(localZ);
+			let nx = 0;
+			let ny = 0;
+			let nz = 0;
+			let fx = localX;
+			let fy = localY;
+			let fz = localZ;
+			let depth;
+			if (depthX <= depthY && depthX <= depthZ) {
+				depth = depthX;
+				nx = localX < 0 ? -1 : 1;
+				fx = nx * coreHalfX;
+			} else if (depthY <= depthZ) {
+				depth = depthY;
+				ny = localY < 0 ? -1 : 1;
+				fy = ny * coreHalfY;
+			} else {
+				depth = depthZ;
+				nz = localZ < 0 ? -1 : 1;
+				fz = nz * coreHalfZ;
+			}
+			normal_0 = nx;
+			normal_1 = ny;
+			normal_2 = nz;
+			face_0 = fx;
+			face_1 = fy;
+			face_2 = fz;
+			penetration = combinedRadius + depth;
+		}
+		if (!(-penetration >= collector.earlyOutFraction)) {
+			_collideSphereVsBox_boxPosition_0 = posBX;
+			_collideSphereVsBox_boxPosition_1 = posBY;
+			_collideSphereVsBox_boxPosition_2 = posBZ;
+			const qx$1 = _collideSphereVsBox_boxRotation_0;
+			const qy$1 = _collideSphereVsBox_boxRotation_1;
+			const qz$1 = _collideSphereVsBox_boxRotation_2;
+			const x$4 = face_0 + normal_0 * scaledConvexRadius;
+			const y$4 = face_1 + normal_1 * scaledConvexRadius;
+			const z$4 = face_2 + normal_2 * scaledConvexRadius;
+			let uvx$1 = qy$1 * z$4 - qz$1 * y$4;
+			let uvy$1 = qz$1 * x$4 - qx$1 * z$4;
+			let uvz$1 = qx$1 * y$4 - qy$1 * x$4;
+			let uuvx$1 = qy$1 * uvz$1 - qz$1 * uvy$1;
+			let uuvy$1 = qz$1 * uvx$1 - qx$1 * uvz$1;
+			let uuvz$1 = qx$1 * uvy$1 - qy$1 * uvx$1;
+			const w2$1 = _collideSphereVsBox_boxRotation_3 * 2;
+			uvx$1 *= w2$1;
+			uvy$1 *= w2$1;
+			uvz$1 *= w2$1;
+			uuvx$1 *= 2;
+			uuvy$1 *= 2;
+			uuvz$1 *= 2;
+			const out = _collideSphereVsBox_hit.pointB;
+			out[0] = x$4 + uvx$1 + uuvx$1 + _collideSphereVsBox_boxPosition_0;
+			out[1] = y$4 + uvy$1 + uuvy$1 + _collideSphereVsBox_boxPosition_1;
+			out[2] = z$4 + uvz$1 + uuvz$1 + _collideSphereVsBox_boxPosition_2;
+			const scale = -sphereRadius;
+			const qx$2 = _collideSphereVsBox_boxRotation_0;
+			const qy$2 = _collideSphereVsBox_boxRotation_1;
+			const qz$2 = _collideSphereVsBox_boxRotation_2;
+			const x$5 = _collideSphereVsBox_localCenter_0 + normal_0 * scale;
+			const y$5 = _collideSphereVsBox_localCenter_1 + normal_1 * scale;
+			const z$5 = _collideSphereVsBox_localCenter_2 + normal_2 * scale;
+			let uvx$2 = qy$2 * z$5 - qz$2 * y$5;
+			let uvy$2 = qz$2 * x$5 - qx$2 * z$5;
+			let uvz$2 = qx$2 * y$5 - qy$2 * x$5;
+			let uuvx$2 = qy$2 * uvz$2 - qz$2 * uvy$2;
+			let uuvy$2 = qz$2 * uvx$2 - qx$2 * uvz$2;
+			let uuvz$2 = qx$2 * uvy$2 - qy$2 * uvx$2;
+			const w2$2 = _collideSphereVsBox_boxRotation_3 * 2;
+			uvx$2 *= w2$2;
+			uvy$2 *= w2$2;
+			uvz$2 *= w2$2;
+			uuvx$2 *= 2;
+			uuvy$2 *= 2;
+			uuvz$2 *= 2;
+			const out$1 = _collideSphereVsBox_hit.pointA;
+			out$1[0] = x$5 + uvx$2 + uuvx$2 + _collideSphereVsBox_boxPosition_0;
+			out$1[1] = y$5 + uvy$2 + uuvy$2 + _collideSphereVsBox_boxPosition_1;
+			out$1[2] = z$5 + uvz$2 + uuvz$2 + _collideSphereVsBox_boxPosition_2;
+			const qx$3 = _collideSphereVsBox_boxRotation_0;
+			const qy$3 = _collideSphereVsBox_boxRotation_1;
+			const qz$3 = _collideSphereVsBox_boxRotation_2;
+			const x$6 = normal_0;
+			const y$6 = normal_1;
+			const z$6 = normal_2;
+			let uvx$3 = qy$3 * z$6 - qz$3 * y$6;
+			let uvy$3 = qz$3 * x$6 - qx$3 * z$6;
+			let uvz$3 = qx$3 * y$6 - qy$3 * x$6;
+			let uuvx$3 = qy$3 * uvz$3 - qz$3 * uvy$3;
+			let uuvy$3 = qz$3 * uvx$3 - qx$3 * uvz$3;
+			let uuvz$3 = qx$3 * uvy$3 - qy$3 * uvx$3;
+			const w2$3 = _collideSphereVsBox_boxRotation_3 * 2;
+			uvx$3 *= w2$3;
+			uvy$3 *= w2$3;
+			uvz$3 *= w2$3;
+			uuvx$3 *= 2;
+			uuvy$3 *= 2;
+			uuvz$3 *= 2;
+			const out$2 = _collideSphereVsBox_hit.penetrationAxis;
+			out$2[0] = -(x$6 + uvx$3 + uuvx$3);
+			out$2[1] = -(y$6 + uvy$3 + uuvy$3);
+			out$2[2] = -(z$6 + uvz$3 + uuvz$3);
+			_collideSphereVsBox_hit.penetration = penetration;
+			_collideSphereVsBox_hit.subShapeIdA = subShapeIdA;
+			_collideSphereVsBox_hit.subShapeIdB = subShapeIdB;
+			_collideSphereVsBox_hit.materialIdA = sphereShape.materialId;
+			_collideSphereVsBox_hit.materialIdB = boxShape.materialId;
+			_collideSphereVsBox_hit.bodyIdB = collector.bodyIdB;
+			if (settings.collectFaces) {
+				_collideSphereVsBox_faceDirection[0] = -normal_0;
+				_collideSphereVsBox_faceDirection[1] = -normal_1;
+				_collideSphereVsBox_faceDirection[2] = -normal_2;
+				_collideSphereVsBox_boxScale[0] = scaleBX;
+				_collideSphereVsBox_boxScale[1] = scaleBY;
+				_collideSphereVsBox_boxScale[2] = scaleBZ;
+				const x = _collideSphereVsBox_boxRotation_0;
+				const y = _collideSphereVsBox_boxRotation_1;
+				const z = _collideSphereVsBox_boxRotation_2;
+				const w = _collideSphereVsBox_boxRotation_3;
+				const x2 = x + x;
+				const y2 = y + y;
+				const z2 = z + z;
+				const xx = x * x2;
+				const xy = x * y2;
+				const xz = x * z2;
+				const yy = y * y2;
+				const yz = y * z2;
+				const zz = z * z2;
+				const wx = w * x2;
+				const wy = w * y2;
+				const wz = w * z2;
+				_collideSphereVsBox_boxToWorld[0] = 1 - (yy + zz);
+				_collideSphereVsBox_boxToWorld[1] = xy + wz;
+				_collideSphereVsBox_boxToWorld[2] = xz - wy;
+				_collideSphereVsBox_boxToWorld[3] = 0;
+				_collideSphereVsBox_boxToWorld[4] = xy - wz;
+				_collideSphereVsBox_boxToWorld[5] = 1 - (xx + zz);
+				_collideSphereVsBox_boxToWorld[6] = yz + wx;
+				_collideSphereVsBox_boxToWorld[7] = 0;
+				_collideSphereVsBox_boxToWorld[8] = xz + wy;
+				_collideSphereVsBox_boxToWorld[9] = yz - wx;
+				_collideSphereVsBox_boxToWorld[10] = 1 - (xx + yy);
+				_collideSphereVsBox_boxToWorld[11] = 0;
+				_collideSphereVsBox_boxToWorld[12] = _collideSphereVsBox_boxPosition_0;
+				_collideSphereVsBox_boxToWorld[13] = _collideSphereVsBox_boxPosition_1;
+				_collideSphereVsBox_boxToWorld[14] = _collideSphereVsBox_boxPosition_2;
+				_collideSphereVsBox_boxToWorld[15] = 1;
+				getShapeSupportingFace(_collideSphereVsBox_hit.faceB, boxShape, subShapeIdB, _collideSphereVsBox_faceDirection, _collideSphereVsBox_boxToWorld, _collideSphereVsBox_boxScale);
+				_collideSphereVsBox_hit.faceA.numVertices = 0;
+			}
+			collector.addHit(_collideSphereVsBox_hit);
 		}
 	}
-}))();
+}
 function computeMassProperties$12(out, shape) {
 	setMassAndInertiaOfSolidBox(out, scale$4(_computeBoxMassProperties_fullExtents, shape.halfExtents, 2), shape.density);
 }
@@ -28895,29 +29192,27 @@ const _getSurfaceNormal_normal = /* @__PURE__ */ create$47();
 const _getSupportingFace_a = /* @__PURE__ */ create$47();
 const _getSupportingFace_b = /* @__PURE__ */ create$47();
 const _getSupportingFace_c = /* @__PURE__ */ create$47();
-const def = /* @__PURE__ */ (() => {
-	return defineShape({
-		type: 4,
-		category: 1,
-		computeMassProperties: computeMassProperties$1,
-		getSurfaceNormal,
-		getSupportingFace,
-		castRay: castRayVsTriangleMesh,
-		collidePoint: collidePointVsTriangleMesh,
-		register: () => {
-			for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
-				setCollideShapeFn(shapeDef.type, 4, collideConvexVsTriangleMesh);
-				setCollideShapeFn(4, shapeDef.type, collideTriangleMeshVsConvex);
-				setCastShapeFn(shapeDef.type, 4, castConvexVsTriangleMesh);
-				setCastShapeFn(4, shapeDef.type, castTriangleMeshVsConvex);
-			}
-			setCollideShapeFn(0, 4, collideSphereVsTriangleMesh);
-			setCollideShapeFn(4, 0, collideTriangleMeshVsSphere);
-			setCastShapeFn(0, 4, castSphereVsTriangleMesh);
-			setCastShapeFn(4, 0, castTriangleMeshVsSphere);
+const def = /* @__PURE__ */ (() => defineShape({
+	type: 4,
+	category: 1,
+	computeMassProperties: computeMassProperties$1,
+	getSurfaceNormal,
+	getSupportingFace,
+	castRay: castRayVsTriangleMesh,
+	collidePoint: collidePointVsTriangleMesh,
+	register: () => {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+			setCollideShapeFn(shapeDef.type, 4, collideConvexVsTriangleMesh);
+			setCollideShapeFn(4, shapeDef.type, collideTriangleMeshVsConvex);
+			setCastShapeFn(shapeDef.type, 4, castConvexVsTriangleMesh);
+			setCastShapeFn(4, shapeDef.type, castTriangleMeshVsConvex);
 		}
-	});
-})();
+		setCollideShapeFn(0, 4, collideSphereVsTriangleMesh);
+		setCollideShapeFn(4, 0, collideTriangleMeshVsSphere);
+		setCastShapeFn(0, 4, castSphereVsTriangleMesh);
+		setCastShapeFn(4, 0, castTriangleMeshVsSphere);
+	}
+}))();
 function computeMassProperties$1(out, _shape) {
 	out.mass = 0;
 	identity$2(out.inertia);
@@ -31233,8 +31528,8 @@ function linkBodies(state, bodies, bodyIndexA, bodyIndexB) {
 	if (bodyIndexA >= maxActiveBodies || bodyIndexB >= maxActiveBodies) return;
 	let firstLinkTo = bodyIndexA;
 	let secondLinkTo = bodyIndexB;
-	firstLinkTo = /* @__PURE__ */ getLowestBodyIndex(state, firstLinkTo);
-	secondLinkTo = /* @__PURE__ */ getLowestBodyIndex(state, secondLinkTo);
+	firstLinkTo = getLowestBodyIndex(state, firstLinkTo);
+	secondLinkTo = getLowestBodyIndex(state, secondLinkTo);
 	if (firstLinkTo === secondLinkTo) return;
 	if (firstLinkTo < secondLinkTo) state.bodyLinks[secondLinkTo] = firstLinkTo;
 	else state.bodyLinks[firstLinkTo] = secondLinkTo;

@@ -22,8 +22,8 @@ importers:
         specifier: 0.183.0
         version: 0.183.0
       compilecat:
-        specifier: 0.0.8
-        version: 0.0.8(rolldown@1.0.2)(rollup@4.46.2)
+        specifier: 0.0.10
+        version: 0.0.10(rolldown@1.0.2)(rollup@4.46.2)
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21
@@ -234,40 +234,40 @@ packages:
       sisteransi: 1.0.5
     dev: true
 
-  /@compilecat/core-darwin-arm64@0.0.8:
-    resolution: {integrity: sha512-VkNJ/yNPNK+atkPy9oRNIQSO04TdEPaBOTT2NkSVmnbYrz/CLPud0xB2W6IVOFeTpEKldjNqAviSo0VdpCxNBA==}
+  /@compilecat/core-darwin-arm64@0.0.10:
+    resolution: {integrity: sha512-6o/+kGJolUZKtAraxM4MCUMCPG1Jc03P+f60fs6vuMlym+SMVqyg50F8arlKhAhMYbo/0JZ+gtroSkkNVyaGFQ==}
     cpu: [arm64]
     os: [darwin]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-darwin-x64@0.0.8:
-    resolution: {integrity: sha512-eilp2XXRXhhzpCBRsgK/WYKYLKZlkH6Ld+lttifptI+vuI6oc/hyeqB7zY2G1SlGrgJSB5T6lgzvTyE3+shDgw==}
+  /@compilecat/core-darwin-x64@0.0.10:
+    resolution: {integrity: sha512-mAnxy9V1ZXcVD3Z1TuIinROOmmY89PxRFo/HNDzXIMLvUBJx9hpY8I/keBJ92ITEJanCg7WudGCpa/Reu6hWww==}
     cpu: [x64]
     os: [darwin]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-linux-arm64-gnu@0.0.8:
-    resolution: {integrity: sha512-RRjDrmjKR+f/h5O0zjbWLBF5VGVR0EmghOiZ8csrjMA3VuHaKwtp7qeW7KM+ZSVKOX7psSX210NSil1cLygCYg==}
+  /@compilecat/core-linux-arm64-gnu@0.0.10:
+    resolution: {integrity: sha512-ZIWUiuK7E7qRd+Jf4ky22qYxwSMNT4+9WUI1oZB+yC9RX2KInZSUqpzSSU5S4BgQ2DM5pPwSYGx2raPl9c85/g==}
     cpu: [arm64]
     os: [linux]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-linux-x64-gnu@0.0.8:
-    resolution: {integrity: sha512-bmEuDtRiKfWm9odhPdozi+jPZCVZgKVvMYa9QOsBk6EKJ+VjUee65HV6CwGFuO2jyKoaqvBK1TOjA99EZZh1qQ==}
+  /@compilecat/core-linux-x64-gnu@0.0.10:
+    resolution: {integrity: sha512-UCahnKXJSCUTi5Tx7Et9HpOq+nU8SWnH4DOQFjV/PQpmtfw5SE9OYe0mKqMP9vKkroeNqRJfAlzTlZ3LnhEHAw==}
     cpu: [x64]
     os: [linux]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/core-wasm32-wasi@0.0.8:
-    resolution: {integrity: sha512-Y+PB2nGqtZat7HO1whAaUyD7VbC1yI4nDOawzhRqqkjcW4REPE1ZhSw1uKm+S0GUkoWlAXIurIHEYb4PYdr4Nw==}
+  /@compilecat/core-wasm32-wasi@0.0.10:
+    resolution: {integrity: sha512-RI4BA8VSGforevy/ZLSCHQ4yQlJQsYAMJ8pQzhISCZt2tTd/i9cvtSwhAh0pHPN9lDWPkVpnrD2LnB2nyQVgIQ==}
     engines: {node: '>=14.0.0'}
     requiresBuild: true
     dependencies:
@@ -277,16 +277,16 @@ packages:
     dev: true
     optional: true
 
-  /@compilecat/core-win32-x64-msvc@0.0.8:
-    resolution: {integrity: sha512-JqECEIyq9uhHaKgySlCxTg5qj6Xmzz0CSJDguVFBVZA6qNGX+OvBECo0TewH4jG4UiIIEBy3u9a+cvhJehARbw==}
+  /@compilecat/core-win32-x64-msvc@0.0.10:
+    resolution: {integrity: sha512-CawyHJ0NRlV0hJahnQCveDXlho9d2HmDq6cj05bAMtdBHWLK715n/xXNR/9LSAgBxZEISTlHjfsKEJuhoQNdiQ==}
     cpu: [x64]
     os: [win32]
     requiresBuild: true
     dev: true
     optional: true
 
-  /@compilecat/wasm@0.0.8:
-    resolution: {integrity: sha512-yRX/UkOMNgo/7l7UdmYFuKT60WkyJZfYjio4sDLlPFnfptw7XZto8BVQXMDGhe7zy2Z+oM+NRPRMNqjBGXAERQ==}
+  /@compilecat/wasm@0.0.10:
+    resolution: {integrity: sha512-tlI/CwCPKfnmJN1uUJIDNdFlHq8NziQht4vIJS2z3jlshhgn2wzMyqThJoJj+kqz2t415HTF7/oNvksFzDZCpw==}
     requiresBuild: true
     dev: true
     optional: true
@@ -1828,21 +1828,21 @@ packages:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
     dev: true
 
-  /compilecat@0.0.8(rolldown@1.0.2)(rollup@4.46.2):
-    resolution: {integrity: sha512-xD20EJe3TQxTUfT8NnGg0fcyplSJ8vtWnG9VFfmEZKe5XUX5Eji8Nv9aIjKtL1G3vobOAAA1ZJ63DxliiXdutg==}
+  /compilecat@0.0.10(rolldown@1.0.2)(rollup@4.46.2):
+    resolution: {integrity: sha512-qJBodUiJHotXO6U+uluofUcz0vz6KfCEbMjMm+fa4PtAUmiQRTqdbeCvbp0nhFp1Q5/w/qGelCsgVurMvklyIw==}
     peerDependencies:
       rollup: ^4.0.0
     dependencies:
       rollup: 4.46.2
       unplugin: 3.3.0(rolldown@1.0.2)(rollup@4.46.2)
     optionalDependencies:
-      '@compilecat/core-darwin-arm64': 0.0.8
-      '@compilecat/core-darwin-x64': 0.0.8
-      '@compilecat/core-linux-arm64-gnu': 0.0.8
-      '@compilecat/core-linux-x64-gnu': 0.0.8
-      '@compilecat/core-wasm32-wasi': 0.0.8
-      '@compilecat/core-win32-x64-msvc': 0.0.8
-      '@compilecat/wasm': 0.0.8
+      '@compilecat/core-darwin-arm64': 0.0.10
+      '@compilecat/core-darwin-x64': 0.0.10
+      '@compilecat/core-linux-arm64-gnu': 0.0.10
+      '@compilecat/core-linux-x64-gnu': 0.0.10
+      '@compilecat/core-wasm32-wasi': 0.0.10
+      '@compilecat/core-win32-x64-msvc': 0.0.10
+      '@compilecat/wasm': 0.0.10
     transitivePeerDependencies:
       - '@farmfe/core'
       - '@rspack/core'

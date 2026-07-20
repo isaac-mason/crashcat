@@ -39,7 +39,7 @@ export default [
             stripDebug(),
             compilecat({
                 sourcemap: true,
-                
+
                 // Scope: crashcat's own src + the mathcat package (so @optimize
                 // functions can inline mathcat vec3/etc.). Nothing else in
                 // node_modules is read.
