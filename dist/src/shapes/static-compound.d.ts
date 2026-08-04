@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 import type { CompoundShapeChild } from './compound.js';
 import { ShapeType } from './shapes.js';
 import type { BvhBuildSettings, StaticCompoundBVH } from './utils/static-compound-bvh.js';

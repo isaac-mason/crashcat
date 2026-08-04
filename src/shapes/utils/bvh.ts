@@ -1,4 +1,5 @@
-import type { Box3, Vec3 } from 'mathcat';
+import type { Vec3 } from 'mathcat';
+import type { Box3 } from 'mathcat/shapes';
 
 /**
  * common BVH node utilities for binary tree structures.

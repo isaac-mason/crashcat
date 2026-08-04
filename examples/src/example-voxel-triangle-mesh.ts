@@ -1,4 +1,5 @@
-import { createSimplex2D, quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
+import { simplex2d } from 'mathcat/noise';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import type { RigidBody, Shape } from 'crashcat';
@@ -301,16 +302,16 @@ const TERRAIN_SIZE = 32;
 const TERRAIN_HEIGHT = 16;
 const BASE_HEIGHT = 4;
 
-const simplexNoise = createSimplex2D(42);
+const simplexNoise = simplex2d.create(42);
 
 for (let x = -TERRAIN_SIZE; x < TERRAIN_SIZE; x++) {
     for (let z = -TERRAIN_SIZE; z < TERRAIN_SIZE; z++) {
         // Layer 1: Large scale hills
-        const noise1 = simplexNoise(x * 0.02, z * 0.02) * 0.5 + 0.5; // 0-1
+        const noise1 = simplex2d.sample(simplexNoise, x * 0.02, z * 0.02) * 0.5 + 0.5; // 0-1
         // Layer 2: Medium details
-        const noise2 = simplexNoise(x * 0.08, z * 0.08) * 0.5 + 0.5; // 0-1
+        const noise2 = simplex2d.sample(simplexNoise, x * 0.08, z * 0.08) * 0.5 + 0.5; // 0-1
         // Layer 3: Small details
-        const noise3 = simplexNoise(x * 0.2, z * 0.2) * 0.5 + 0.5; // 0-1
+        const noise3 = simplex2d.sample(simplexNoise, x * 0.2, z * 0.2) * 0.5 + 0.5; // 0-1
 
         // Combine layers with different weights
         const combinedNoise = noise1 * 0.6 + noise2 * 0.3 + noise3 * 0.1;

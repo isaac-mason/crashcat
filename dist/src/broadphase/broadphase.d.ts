@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import type { Vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 import type { RigidBody } from '../body/rigid-body.js';
 import type { Filter } from '../filter.js';
 import type { Layers } from '../layers.js';

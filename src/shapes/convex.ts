@@ -1,5 +1,6 @@
 import type { Mat4, Vec3 } from 'mathcat';
-import { box3, mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'mathcat';
+import { box3 } from 'mathcat/shapes';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';

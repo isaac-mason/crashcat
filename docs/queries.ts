@@ -29,7 +29,7 @@ import {
     sphere,
     type World,
 } from 'crashcat';
-import type { Box3 } from 'mathcat';
+import type { Box3 } from 'mathcat/shapes';
 import { quat, vec3 } from 'mathcat';
 
 declare const world: World;

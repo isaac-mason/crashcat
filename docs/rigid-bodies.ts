@@ -16,7 +16,8 @@ import {
     sphere,
     type Listener,
 } from 'crashcat';
-import { type Box3, quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 
 const worldSettings = createWorldSettings();
 const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);

@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import type { Vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 import { ShapeType } from './shapes.js';
 /** settings for creating a cylinder shape */
 export type CylinderShapeSettings = {

@@ -1,4 +1,5 @@
-import type { Box3, Vec3 } from 'mathcat';
+import type { Vec3 } from 'mathcat';
+import type { Box3 } from 'mathcat/shapes';
 
 // triangle buffer stride
 export const TRIANGLE_STRIDE = 8;

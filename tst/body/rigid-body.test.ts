@@ -1,4 +1,5 @@
-import { type Box3, mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'mathcat';
+import type { Box3 } from 'mathcat/shapes';
 import { describe, expect, test } from 'vitest';
 import {
     box,

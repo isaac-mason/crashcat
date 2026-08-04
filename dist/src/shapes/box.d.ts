@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape.js';
 import { type Shape, ShapeType } from './shapes.js';

@@ -1,4 +1,5 @@
-import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { box3 } from 'mathcat/shapes';
 import type { RigidBody } from './body/rigid-body';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import * as broadphase from './broadphase/broadphase';

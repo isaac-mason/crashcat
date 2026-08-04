@@ -1,4 +1,5 @@
-import { type Box3, type Quat, type Vec3 } from 'mathcat';
+import { type Quat, type Vec3 } from 'mathcat';
+import { type Box3 } from 'mathcat/shapes';
 import { type Shape, ShapeType } from './shapes.js';
 /** settings for creating a transformed shape */
 export type TransformedShapeSettings = {

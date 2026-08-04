@@ -1,4 +1,5 @@
-import { box3, type Quat, type Vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'mathcat';
+import { box3 } from 'mathcat/shapes';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
 import { INACTIVE_BODY_INDEX } from './body/sleep';

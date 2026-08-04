@@ -95,11 +95,31 @@ type HullCase = {
 };
 
 const HULLS: HullCase[] = [
-    { name: 'fibonacci 60', shape: convexHull.create({ positions: fibonacciSphere(60), convexRadius: 0.05 }), strictlyConvex: true },
-    { name: 'fibonacci 100', shape: convexHull.create({ positions: fibonacciSphere(100), convexRadius: 0.05 }), strictlyConvex: true },
-    { name: 'fibonacci 256', shape: convexHull.create({ positions: fibonacciSphere(256), convexRadius: 0.05 }), strictlyConvex: true },
-    { name: 'box (forced bake)', shape: convexHull.create({ positions: BOX_POINTS, convexRadius: 0.05, bakeSupportAdjacency: true }), strictlyConvex: false },
-    { name: 'slab grid (forced bake)', shape: convexHull.create({ positions: slabGrid(), convexRadius: 0.02, bakeSupportAdjacency: true }), strictlyConvex: false },
+    {
+        name: 'fibonacci 60',
+        shape: convexHull.create({ positions: fibonacciSphere(60), convexRadius: 0.05 }),
+        strictlyConvex: true,
+    },
+    {
+        name: 'fibonacci 100',
+        shape: convexHull.create({ positions: fibonacciSphere(100), convexRadius: 0.05 }),
+        strictlyConvex: true,
+    },
+    {
+        name: 'fibonacci 256',
+        shape: convexHull.create({ positions: fibonacciSphere(256), convexRadius: 0.05 }),
+        strictlyConvex: true,
+    },
+    {
+        name: 'box (forced bake)',
+        shape: convexHull.create({ positions: BOX_POINTS, convexRadius: 0.05, bakeSupportAdjacency: true }),
+        strictlyConvex: false,
+    },
+    {
+        name: 'slab grid (forced bake)',
+        shape: convexHull.create({ positions: slabGrid(), convexRadius: 0.02, bakeSupportAdjacency: true }),
+        strictlyConvex: false,
+    },
 ];
 
 describe('convex hull support — hill climb vs brute equivalence', () => {

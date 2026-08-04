@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Plane3, plane3, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { type Box3, box3, type Plane3, plane3 } from 'mathcat/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { type CastRayCollector, type CastRaySettings, CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import {
