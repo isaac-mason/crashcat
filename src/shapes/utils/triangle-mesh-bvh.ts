@@ -1,5 +1,5 @@
-import { type Vec3, vec3 } from 'mathcat';
-import { type Box3, box3 } from 'mathcat/shapes';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import {
     NODE_AXIS_OR_COUNT,
     NODE_MAX_X,

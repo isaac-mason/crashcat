@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addPositionStep, addRotationStep, subPositionStep, subRotationStep } from '../../body/rigid-body-step';

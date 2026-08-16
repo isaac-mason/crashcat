@@ -1,5 +1,5 @@
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import { type Box3, box3 } from 'mathcat/shapes';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';

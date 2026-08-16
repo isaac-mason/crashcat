@@ -1,4 +1,4 @@
-import { euler, quat, vec3, type Vec3 } from 'mathcat';
+import { euler, quat, vec3, type Vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import {

@@ -1,4 +1,4 @@
-import { degreesToRadians, type Mat4, type Vec3, vec3 } from 'mathcat';
+import { degreesToRadians, type Mat4, type Vec3, vec3 } from 'math';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';

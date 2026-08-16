@@ -1,5 +1,5 @@
-import { type Mat4, type Quat, type Vec3 } from 'mathcat';
-import { type Box3 } from 'mathcat/shapes';
+import { type Mat4, type Quat, type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import { MaterialCombineMode } from '../constraints/combine-material.js';
 import type { ConstraintId } from '../constraints/constraint-id.js';
 import { type GetLeafShapeResult, type GetSubShapeTransformedShapeResult, type Shape } from '../shapes/shapes.js';

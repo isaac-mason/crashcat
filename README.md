@@ -367,7 +367,7 @@ import {
     rigidBody,
     updateWorld,
 } from 'crashcat';
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 // register all shapes
 registerAll();

@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { convexHull } from '../../src';
 import { createSupport, getSupport, type Support, SupportFunctionMode, setHullSupport } from '../../src/collision/support';

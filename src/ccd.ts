@@ -1,7 +1,7 @@
-import type { Vec3 } from 'mathcat';
-import { vec3 } from 'mathcat';
-import type { Box3 } from 'mathcat/shapes';
-import { box3 } from 'mathcat/shapes';
+import type { Vec3 } from 'math';
+import { vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
+import { box3 } from 'math/shapes';
 import type { Bodies } from './body/bodies';
 import type { RigidBody } from './body/rigid-body';
 import type { ContactSettings } from './constraints/contact-constraints';

@@ -1,4 +1,4 @@
-import { mat4, type Quat, quat, type Vec3, type Vec4, vec3, vec4 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, type Vec4, vec3, vec4 } from 'math';
 import type { BodyId } from '../body/body-id';
 import { INVALID_BODY_ID } from '../body/body-id';
 import * as motionProperties from '../body/motion-properties';

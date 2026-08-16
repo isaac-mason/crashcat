@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { dof, MotionType, rigidBody, sphere, updateWorld } from '../../src';
 import { createTestWorld } from '../helpers';

@@ -1,5 +1,5 @@
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import { type Box3, box3 } from 'mathcat/shapes';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -164,7 +164,7 @@ const _collideSphereVsBox_faceDirection: Vec3 = /* @__PURE__ */ vec3.create();
  * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
  * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
  *
- * The mathcat frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
+ * The math frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
  * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
  * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
  * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)

@@ -1,4 +1,4 @@
-import { type Mat4, mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { convexHull } from '../../src';
 import { createSupportingFaceResult, type SupportingFaceResult } from '../../src/shapes/shapes';

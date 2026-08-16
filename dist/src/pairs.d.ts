@@ -1,4 +1,4 @@
-import type { Quat, Vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
 import type { RigidBody } from './body/rigid-body.js';
 import { type Contacts } from './contacts.js';
 import type { Listener } from './listener.js';

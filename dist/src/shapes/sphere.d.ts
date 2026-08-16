@@ -1,5 +1,5 @@
-import { type Vec3 } from 'mathcat';
-import { type Box3 } from 'mathcat/shapes';
+import { type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import { type CollideShapeCollector, type CollideShapeSettings } from '../collision/collide-shape-vs-shape.js';
 import type { Shape } from './shapes.js';
 import { ShapeType } from './shapes.js';

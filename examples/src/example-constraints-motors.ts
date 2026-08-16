@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import type { HingeConstraint, Listener, RigidBody, SliderConstraint } from 'crashcat';

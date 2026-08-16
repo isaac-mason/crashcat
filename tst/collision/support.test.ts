@@ -1,4 +1,4 @@
-import { mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, convexHull, cylinder, sphere } from '../../src';
 import {

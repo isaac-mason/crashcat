@@ -1,5 +1,5 @@
-import { vec3 } from 'mathcat';
-import { box3 } from 'mathcat/shapes';
+import { vec3 } from 'math';
+import { box3 } from 'math/shapes';
 import { describe, expect, it } from 'vitest';
 import { type BodyVisitor, box, dbvt, filter, MotionType, type RigidBody, rigidBody, type World } from '../src';
 import { createTestWorld } from './helpers';

@@ -1,5 +1,5 @@
-import type { Vec3 } from 'mathcat';
-import type { Box3 } from 'mathcat/shapes';
+import type { Vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 export declare const TRIANGLE_STRIDE = 8;
 export declare const OFFSET_INDEX_A = 0;
 export declare const OFFSET_INDEX_B = 1;

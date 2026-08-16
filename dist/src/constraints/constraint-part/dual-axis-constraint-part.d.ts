@@ -1,4 +1,4 @@
-import type { Mat2, Mat4, Vec2, Vec3 } from 'mathcat';
+import type { Mat2, Mat4, Vec2, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * Constrains movement on 2 axes perpendicular to a sliding axis.

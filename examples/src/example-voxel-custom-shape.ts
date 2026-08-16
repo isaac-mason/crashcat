@@ -41,10 +41,10 @@ import {
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
-import { mat4, quat, type Vec3, vec3 } from 'mathcat';
-import { simplex2d } from 'mathcat/noise';
-import { random } from 'mathcat/random';
-import { type Box3, box3 } from 'mathcat/shapes';
+import { mat4, quat, type Vec3, vec3 } from 'math';
+import { simplex2d } from 'math/noise';
+import { random } from 'math/random';
+import { type Box3, box3 } from 'math/shapes';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';

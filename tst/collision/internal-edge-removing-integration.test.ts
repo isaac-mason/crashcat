@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import * as crashcat from '../../src';
 

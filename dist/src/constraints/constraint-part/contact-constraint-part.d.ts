@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import type { AxisConstraintPart } from './axis-constraint-part.js';
 /**
  * contact-specific constraint part functions that operate on cached velocity locals

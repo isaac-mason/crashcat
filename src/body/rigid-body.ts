@@ -1,5 +1,5 @@
-import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import { type Box3, box3 } from 'mathcat/shapes';
+import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import * as broadphase from '../broadphase/broadphase';
 import { MaterialCombineMode } from '../constraints/combine-material';
 import type { ConstraintId } from '../constraints/constraint-id';

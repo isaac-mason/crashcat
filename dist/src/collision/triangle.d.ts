@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 /**
  * Feature bits for getClosestPointOnTriangle result.
  * Indicates which part of the triangle contains the closest point.

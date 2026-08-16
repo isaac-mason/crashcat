@@ -1,5 +1,5 @@
-import { type Vec3 } from 'mathcat';
-import { type Box3 } from 'mathcat/shapes';
+import { type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import { type Shape, ShapeType } from './shapes.js';
 /** settings for creating an offset center of mass shape */
 export type OffsetCenterOfMassShapeSettings = {

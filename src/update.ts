@@ -1,5 +1,5 @@
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
-import { box3 } from 'mathcat/shapes';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { box3 } from 'math/shapes';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';

@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { Bodies } from '../body/bodies.js';
 import * as body from '../body/rigid-body.js';
 import * as contacts from '../contacts.js';

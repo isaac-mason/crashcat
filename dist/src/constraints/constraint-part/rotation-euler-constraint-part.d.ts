@@ -1,4 +1,4 @@
-import type { Mat4, Quat, Vec3 } from 'mathcat';
+import type { Mat4, Quat, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * RotationEulerConstraintPart removes 3 rotational degrees of freedom.

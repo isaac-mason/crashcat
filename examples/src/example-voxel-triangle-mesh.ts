@@ -1,5 +1,5 @@
-import { quat, vec3 } from 'mathcat';
-import { simplex2d } from 'mathcat/noise';
+import { quat, vec3 } from 'math';
+import { simplex2d } from 'math/noise';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import type { RigidBody, Shape } from 'crashcat';

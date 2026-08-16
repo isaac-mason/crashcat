@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * Constrains rotation around 2 axes so that it only allows rotation around 1 axis (the hinge axis).

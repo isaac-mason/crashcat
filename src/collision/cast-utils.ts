@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 export const INITIAL_EARLY_OUT_FRACTION = 1.0 + 1e-4;
 export const SHOULD_EARLY_OUT_FRACTION = 0.0;

@@ -1,5 +1,5 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { World } from '../world';

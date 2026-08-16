@@ -1,5 +1,5 @@
-import { type Mat3, mat3, type Vec3, vec3 } from 'mathcat';
-import { box3 } from 'mathcat/shapes';
+import { type Mat3, mat3, type Vec3, vec3 } from 'math';
+import { box3 } from 'math/shapes';
 import type { World } from '../world';
 import type { MotionProperties } from './motion-properties';
 import { MotionType } from './motion-type';

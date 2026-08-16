@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 /**
  * Test ray against infinite cylinder, returning smallest positive fraction in [0, 1].

@@ -66,7 +66,7 @@ function dof(translationX, translationY, translationZ, rotationX, rotationY, rot
 	return dof;
 }
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/rolldown-runtime-D7D4PA-g.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/rolldown-runtime-D7D4PA-g.js
 var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
 	let target = {};
@@ -78,7 +78,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/scalar-BGTmo5GO.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/scalar-BGTmo5GO.js
 const EPSILON$1 = 1e-6;
 /**
 * Symmetric round
@@ -107,636 +107,39 @@ const clamp = (value, min, max) => {
 	return Math.max(min, Math.min(max, value));
 };
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/vec2-DrUkSXim.js
-var vec2_exports = /* @__PURE__ */ __exportAll({
-	add: () => add$6,
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/mat3-BRz_EKyg.js
+var vec3_exports = /* @__PURE__ */ __exportAll({
+	add: () => add$2,
 	addScalar: () => addScalar$1,
 	angle: () => angle$1,
+	bezier: () => bezier,
 	ceil: () => ceil$2,
-	clone: () => clone$6,
-	copy: () => copy$7,
-	create: () => create$40,
+	clone: () => clone$2$2,
+	copy: () => copy$2$3,
+	create: () => create$2$3,
 	cross: () => cross$2,
 	dist: () => dist$2,
 	distance: () => distance$2,
 	div: () => div$2,
 	divide: () => divide$2,
-	dot: () => dot$3,
-	equals: () => equals$8,
-	exactEquals: () => exactEquals$7,
-	finite: () => finite$2,
-	floor: () => floor$2,
-	fromBuffer: () => fromBuffer$3,
-	fromValues: () => fromValues$3,
-	inverse: () => inverse$2,
-	len: () => len$3,
-	length: () => length$3,
-	lerp: () => lerp$1,
-	max: () => max$3,
-	min: () => min$3,
-	mul: () => mul$5,
-	multiply: () => multiply$5,
-	negate: () => negate$3,
-	normalize: () => normalize$4,
-	rotate: () => rotate$3,
-	round: () => round$2,
-	scale: () => scale$6,
-	scaleAndAdd: () => scaleAndAdd$2,
-	set: () => set$3,
-	sqrDist: () => sqrDist$2,
-	sqrLen: () => sqrLen$3,
-	squaredDistance: () => squaredDistance$2,
-	squaredLength: () => squaredLength$3,
-	str: () => str$3,
-	sub: () => sub$3,
-	subtract: () => subtract$3,
-	subtractScalar: () => subtractScalar$1,
-	toBuffer: () => toBuffer$3,
-	transformMat2: () => transformMat2,
-	transformMat2d: () => transformMat2d,
-	transformMat3: () => transformMat3$1,
-	transformMat4: () => transformMat4$3,
-	zero: () => zero$4
-});
-/**
-* Creates a new, empty vec2
-*
-* @returns a new 2D vector
-*/
-function create$40() {
-	return [0, 0];
-}
-/**
-* Creates a new vec2 initialized with values from an existing vector
-*
-* @param a vector to clone
-* @returns a new 2D vector
-*/
-function clone$6(a) {
-	return [a[0], a[1]];
-}
-/**
-* Creates a new vec2 initialized with the given values
-*
-* @param x X component
-* @param y Y component
-* @returns a new 2D vector
-*/
-function fromValues$3(x, y) {
-	return [x, y];
-}
-/**
-* Copy the values from one vec2 to another
-*
-* @param out the receiving vector
-* @param a the source vector
-* @returns out
-*/
-function copy$7(out, a) {
-	out[0] = a[0];
-	out[1] = a[1];
-	return out;
-}
-/**
-* Set the components of a vec2 to the given values
-*
-* @param out the receiving vector
-* @param x X component
-* @param y Y component
-* @returns out
-*/
-function set$3(out, x, y) {
-	out[0] = x;
-	out[1] = y;
-	return out;
-}
-/**
-* Sets the components of a vec2 from a buffer
-* @param out the receiving vector
-* @param buffer the source buffer
-* @param startIndex the starting index in the buffer
-* @returns out
-*/
-function fromBuffer$3(out, buffer, startIndex) {
-	out[0] = buffer[startIndex];
-	out[1] = buffer[startIndex + 1];
-	return out;
-}
-/**
-* Writes the components of a vec2 to a buffer
-* @param outBuffer The output buffer
-* @param vec The source vector
-* @param startIndex The starting index in the buffer
-* @returns The output buffer
-*/
-function toBuffer$3(outBuffer, vec, startIndex) {
-	outBuffer[startIndex] = vec[0];
-	outBuffer[startIndex + 1] = vec[1];
-	return outBuffer;
-}
-/**
-* Adds two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function add$6(out, a, b) {
-	out[0] = a[0] + b[0];
-	out[1] = a[1] + b[1];
-	return out;
-}
-/**
-* Adds a scalar value to all components of a vec2
-*
-* @param out the receiving vector
-* @param a the source vector
-* @param b the scalar value to add
-* @returns out
-*/
-function addScalar$1(out, a, b) {
-	out[0] = a[0] + b;
-	out[1] = a[1] + b;
-	return out;
-}
-/**
-* Subtracts vector b from vector a
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function subtract$3(out, a, b) {
-	out[0] = a[0] - b[0];
-	out[1] = a[1] - b[1];
-	return out;
-}
-/**
-* Subtracts a scalar value from all components of a vec2
-*
-* @param out the receiving vector
-* @param a the source vector
-* @param b the scalar value to subtract
-* @returns out
-*/
-function subtractScalar$1(out, a, b) {
-	out[0] = a[0] - b;
-	out[1] = a[1] - b;
-	return out;
-}
-/**
-* Multiplies two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function multiply$5(out, a, b) {
-	out[0] = a[0] * b[0];
-	out[1] = a[1] * b[1];
-	return out;
-}
-/**
-* Divides two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function divide$2(out, a, b) {
-	out[0] = a[0] / b[0];
-	out[1] = a[1] / b[1];
-	return out;
-}
-/**
-* Math.ceil the components of a vec2
-*
-* @param out the receiving vector
-* @param a vector to ceil
-* @returns out
-*/
-function ceil$2(out, a) {
-	out[0] = Math.ceil(a[0]);
-	out[1] = Math.ceil(a[1]);
-	return out;
-}
-/**
-* Math.floor the components of a vec2
-*
-* @param out the receiving vector
-* @param a vector to floor
-* @returns out
-*/
-function floor$2(out, a) {
-	out[0] = Math.floor(a[0]);
-	out[1] = Math.floor(a[1]);
-	return out;
-}
-/**
-* Returns the minimum of two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function min$3(out, a, b) {
-	out[0] = Math.min(a[0], b[0]);
-	out[1] = Math.min(a[1], b[1]);
-	return out;
-}
-/**
-* Returns the maximum of two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function max$3(out, a, b) {
-	out[0] = Math.max(a[0], b[0]);
-	out[1] = Math.max(a[1], b[1]);
-	return out;
-}
-/**
-* symmetric round the components of a vec2
-*
-* @param out the receiving vector
-* @param a vector to round
-* @returns out
-*/
-function round$2(out, a) {
-	out[0] = round$3(a[0]);
-	out[1] = round$3(a[1]);
-	return out;
-}
-/**
-* Scales a vec2 by a scalar number
-*
-* @param out the receiving vector
-* @param a the vector to scale
-* @param b amount to scale the vector by
-* @returns out
-*/
-function scale$6(out, a, b) {
-	out[0] = a[0] * b;
-	out[1] = a[1] * b;
-	return out;
-}
-/**
-* Adds two vec2's after scaling the second operand by a scalar value
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @param scale the amount to scale b by before adding
-* @returns out
-*/
-function scaleAndAdd$2(out, a, b, scale) {
-	out[0] = a[0] + b[0] * scale;
-	out[1] = a[1] + b[1] * scale;
-	return out;
-}
-/**
-* Calculates the euclidian distance between two vec2's
-*
-* @param a the first operand
-* @param b the second operand
-* @returns distance between a and b
-*/
-function distance$2(a, b) {
-	const x = b[0] - a[0];
-	const y = b[1] - a[1];
-	return Math.sqrt(x * x + y * y);
-}
-/**
-* Calculates the squared euclidian distance between two vec2's
-*
-* @param a the first operand
-* @param b the second operand
-* @returns squared distance between a and b
-*/
-function squaredDistance$2(a, b) {
-	const x = b[0] - a[0];
-	const y = b[1] - a[1];
-	return x * x + y * y;
-}
-/**
-* Calculates the length of a vec2
-*
-* @param a vector to calculate length of
-* @returns length of a
-*/
-function length$3(a) {
-	const x = a[0];
-	const y = a[1];
-	return Math.sqrt(x * x + y * y);
-}
-/**
-* Calculates the squared length of a vec2
-*
-* @param a vector to calculate squared length of
-* @returns squared length of a
-*/
-function squaredLength$3(a) {
-	const x = a[0];
-	const y = a[1];
-	return x * x + y * y;
-}
-/**
-* Negates the components of a vec2
-*
-* @param out the receiving vector
-* @param a vector to negate
-* @returns out
-*/
-function negate$3(out, a) {
-	out[0] = -a[0];
-	out[1] = -a[1];
-	return out;
-}
-/**
-* Returns the inverse of the components of a vec2
-*
-* @param out the receiving vector
-* @param a vector to invert
-* @returns out
-*/
-function inverse$2(out, a) {
-	out[0] = 1 / a[0];
-	out[1] = 1 / a[1];
-	return out;
-}
-/**
-* Normalize a vec2
-*
-* @param out the receiving vector
-* @param a vector to normalize
-* @returns out
-*/
-function normalize$4(out, a) {
-	const x = a[0];
-	const y = a[1];
-	let len = x * x + y * y;
-	if (len > 0) len = 1 / Math.sqrt(len);
-	out[0] = a[0] * len;
-	out[1] = a[1] * len;
-	return out;
-}
-/**
-* Calculates the dot product of two vec2's
-*
-* @param a the first operand
-* @param b the second operand
-* @returns dot product of a and b
-*/
-function dot$3(a, b) {
-	return a[0] * b[0] + a[1] * b[1];
-}
-/**
-* Computes the cross product of two vec2's
-* Note that the cross product must by definition produce a 3D vector
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @returns out
-*/
-function cross$2(out, a, b) {
-	const z = a[0] * b[1] - a[1] * b[0];
-	out[0] = out[1] = 0;
-	out[2] = z;
-	return out;
-}
-/**
-* Performs a linear interpolation between two vec2's
-*
-* @param out the receiving vector
-* @param a the first operand
-* @param b the second operand
-* @param t interpolation amount, in the range [0-1], between the two inputs
-* @returns out
-*/
-function lerp$1(out, a, b, t) {
-	const ax = a[0];
-	const ay = a[1];
-	out[0] = ax + t * (b[0] - ax);
-	out[1] = ay + t * (b[1] - ay);
-	return out;
-}
-/**
-* Transforms the vec2 with a mat2
-*
-* @param out the receiving vector
-* @param a the vector to transform
-* @param m matrix to transform with
-* @returns out
-*/
-function transformMat2(out, a, m) {
-	const x = a[0];
-	const y = a[1];
-	out[0] = m[0] * x + m[2] * y;
-	out[1] = m[1] * x + m[3] * y;
-	return out;
-}
-/**
-* Transforms the vec2 with a mat2d
-*
-* @param out the receiving vector
-* @param a the vector to transform
-* @param m matrix to transform with
-* @returns out
-*/
-function transformMat2d(out, a, m) {
-	const x = a[0];
-	const y = a[1];
-	out[0] = m[0] * x + m[2] * y + m[4];
-	out[1] = m[1] * x + m[3] * y + m[5];
-	return out;
-}
-/**
-* Transforms the vec2 with a mat3
-* 3rd vector component is implicitly '1'
-*
-* @param out the receiving vector
-* @param a the vector to transform
-* @param m matrix to transform with
-* @returns out
-*/
-function transformMat3$1(out, a, m) {
-	const x = a[0];
-	const y = a[1];
-	out[0] = m[0] * x + m[3] * y + m[6];
-	out[1] = m[1] * x + m[4] * y + m[7];
-	return out;
-}
-/**
-* Transforms the vec2 with a mat4
-* 3rd vector component is implicitly '0'
-* 4th vector component is implicitly '1'
-*
-* @param out the receiving vector
-* @param a the vector to transform
-* @param m matrix to transform with
-* @returns out
-*/
-function transformMat4$3(out, a, m) {
-	const x = a[0];
-	const y = a[1];
-	out[0] = m[0] * x + m[4] * y + m[12];
-	out[1] = m[1] * x + m[5] * y + m[13];
-	return out;
-}
-/**
-* Rotate a 2D vector
-* @param out The receiving vec2
-* @param a The vec2 point to rotate
-* @param b The origin of the rotation
-* @param rad The angle of rotation in radians
-* @returns out
-*/
-function rotate$3(out, a, b, rad) {
-	const p0 = a[0] - b[0];
-	const p1 = a[1] - b[1];
-	const sinC = Math.sin(rad);
-	const cosC = Math.cos(rad);
-	out[0] = p0 * cosC - p1 * sinC + b[0];
-	out[1] = p0 * sinC + p1 * cosC + b[1];
-	return out;
-}
-/**
-* Get the angle between two 2D vectors
-* @param a The first operand
-* @param b The second operand
-* @returns The angle in radians
-*/
-function angle$1(a, b) {
-	const x1 = a[0];
-	const y1 = a[1];
-	const x2 = b[0];
-	const y2 = b[1];
-	const mag = Math.sqrt((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2));
-	const cosine = mag && (x1 * x2 + y1 * y2) / mag;
-	return Math.acos(Math.min(Math.max(cosine, -1), 1));
-}
-/**
-* Set the components of a vec2 to zero
-*
-* @param out the receiving vector
-* @returns out
-*/
-function zero$4(out) {
-	out[0] = 0;
-	out[1] = 0;
-	return out;
-}
-/**
-* Returns a string representation of a vector
-*
-* @param a vector to represent as a string
-* @returns string representation of the vector
-*/
-function str$3(a) {
-	return `vec2(${a[0]}, ${a[1]})`;
-}
-/**
-* Returns whether or not the vectors exactly have the same elements in the same position (when compared with ===)
-*
-* @param a The first vector.
-* @param b The second vector.
-* @returns True if the vectors are equal, false otherwise.
-*/
-function exactEquals$7(a, b) {
-	return a[0] === b[0] && a[1] === b[1];
-}
-/**
-* Returns whether or not the vectors have approximately the same elements in the same position.
-*
-* @param a The first vector.
-* @param b The second vector.
-* @returns True if the vectors are equal, false otherwise.
-*/
-function equals$8(a, b) {
-	const a0 = a[0];
-	const a1 = a[1];
-	const b0 = b[0];
-	const b1 = b[1];
-	return Math.abs(a0 - b0) <= 1e-6 * Math.max(1, Math.abs(a0), Math.abs(b0)) && Math.abs(a1 - b1) <= 1e-6 * Math.max(1, Math.abs(a1), Math.abs(b1));
-}
-/**
-* Returns whether or not the vector is finite
-* @param a vector to test
-* @returns whether or not the vector is finite
-*/
-function finite$2(a) {
-	return Number.isFinite(a[0]) && Number.isFinite(a[1]);
-}
-/**
-* Alias for {@link length}
-*/
-const len$3 = length$3;
-/**
-* Alias for {@link subtract}
-*/
-const sub$3 = subtract$3;
-/**
-* Alias for {@link multiply}
-*/
-const mul$5 = multiply$5;
-/**
-* Alias for {@link divide}
-*/
-const div$2 = divide$2;
-/**
-* Alias for {@link distance}
-*/
-const dist$2 = distance$2;
-/**
-* Alias for {@link squaredDistance}
-*/
-const sqrDist$2 = squaredDistance$2;
-/**
-* Alias for {@link squaredLength}
-*/
-const sqrLen$3 = squaredLength$3;
-//#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/mat3-BRz_EKyg.js
-var vec3_exports = /* @__PURE__ */ __exportAll({
-	add: () => add$2,
-	addScalar: () => addScalar,
-	angle: () => angle,
-	bezier: () => bezier,
-	ceil: () => ceil$1,
-	clone: () => clone$2$2,
-	copy: () => copy$2$3,
-	create: () => create$2$3,
-	cross: () => cross$1,
-	dist: () => dist$1,
-	distance: () => distance$1,
-	div: () => div$1,
-	divide: () => divide$1,
 	dot: () => dot,
 	equals: () => equals$2,
 	exactEquals: () => exactEquals$2$1,
-	finite: () => finite$1,
-	floor: () => floor$1,
-	fromBuffer: () => fromBuffer$2,
+	finite: () => finite$2,
+	floor: () => floor$2,
+	fromBuffer: () => fromBuffer$3,
 	fromValues: () => fromValues$2$1,
 	hermite: () => hermite,
-	inverse: () => inverse$1,
+	inverse: () => inverse$2,
 	isScaleInsideOut: () => isScaleInsideOut$1,
 	len: () => len,
 	length: () => length,
 	lerp: () => lerp,
-	max: () => max$2,
-	min: () => min$2,
+	max: () => max$3,
+	min: () => min$3,
 	mul: () => mul$2,
 	multiply: () => multiply$2,
-	negate: () => negate$2,
+	negate: () => negate$3,
 	normalize: () => normalize$1,
 	perpendicular: () => perpendicular,
 	rotateX: () => rotateX$1$1,
@@ -744,21 +147,21 @@ var vec3_exports = /* @__PURE__ */ __exportAll({
 	rotateZ: () => rotateZ$1$1,
 	round: () => round,
 	scale: () => scale$2$1,
-	scaleAndAdd: () => scaleAndAdd$1,
+	scaleAndAdd: () => scaleAndAdd$2,
 	set: () => set$2$1,
 	setScalar: () => setScalar,
 	slerp: () => slerp$1,
-	sqrDist: () => sqrDist$1,
+	sqrDist: () => sqrDist$2,
 	sqrLen: () => sqrLen,
-	squaredDistance: () => squaredDistance$1,
+	squaredDistance: () => squaredDistance$2,
 	squaredLength: () => squaredLength,
 	str: () => str$2$1,
 	sub: () => sub$2$1,
 	subtract: () => subtract$2$1,
-	subtractScalar: () => subtractScalar,
-	toBuffer: () => toBuffer$2,
-	transformMat3: () => transformMat3,
-	transformMat4: () => transformMat4$2,
+	subtractScalar: () => subtractScalar$1,
+	toBuffer: () => toBuffer$3,
+	transformMat3: () => transformMat3$1,
+	transformMat4: () => transformMat4$3,
 	transformQuat: () => transformQuat$1,
 	zero: () => zero$2
 });
@@ -870,7 +273,7 @@ function setScalar(out, s) {
 * @param startIndex the starting index in the buffer
 * @returns out
 */
-function fromBuffer$2(out, buffer, startIndex) {
+function fromBuffer$3(out, buffer, startIndex) {
 	out[0] = buffer[startIndex];
 	out[1] = buffer[startIndex + 1];
 	out[2] = buffer[startIndex + 2];
@@ -883,7 +286,7 @@ function fromBuffer$2(out, buffer, startIndex) {
 * @param startIndex The starting index in the buffer
 * @returns The output buffer
 */
-function toBuffer$2(outBuffer, vec, startIndex) {
+function toBuffer$3(outBuffer, vec, startIndex) {
 	outBuffer[startIndex] = vec[0];
 	outBuffer[startIndex + 1] = vec[1];
 	outBuffer[startIndex + 2] = vec[2];
@@ -911,7 +314,7 @@ function add$2(out, a, b) {
 * @param b the scalar value to add
 * @returns out
 */
-function addScalar(out, a, b) {
+function addScalar$1(out, a, b) {
 	out[0] = a[0] + b;
 	out[1] = a[1] + b;
 	out[2] = a[2] + b;
@@ -939,7 +342,7 @@ function subtract$2$1(out, a, b) {
 * @param b the scalar value to subtract
 * @returns out
 */
-function subtractScalar(out, a, b) {
+function subtractScalar$1(out, a, b) {
 	out[0] = a[0] - b;
 	out[1] = a[1] - b;
 	out[2] = a[2] - b;
@@ -967,7 +370,7 @@ function multiply$2(out, a, b) {
 * @param b the second operand
 * @returns out
 */
-function divide$1(out, a, b) {
+function divide$2(out, a, b) {
 	out[0] = a[0] / b[0];
 	out[1] = a[1] / b[1];
 	out[2] = a[2] / b[2];
@@ -980,7 +383,7 @@ function divide$1(out, a, b) {
 * @param a vector to ceil
 * @returns out
 */
-function ceil$1(out, a) {
+function ceil$2(out, a) {
 	out[0] = Math.ceil(a[0]);
 	out[1] = Math.ceil(a[1]);
 	out[2] = Math.ceil(a[2]);
@@ -993,7 +396,7 @@ function ceil$1(out, a) {
 * @param a vector to floor
 * @returns out
 */
-function floor$1(out, a) {
+function floor$2(out, a) {
 	out[0] = Math.floor(a[0]);
 	out[1] = Math.floor(a[1]);
 	out[2] = Math.floor(a[2]);
@@ -1007,7 +410,7 @@ function floor$1(out, a) {
 * @param b the second operand
 * @returns out
 */
-function min$2(out, a, b) {
+function min$3(out, a, b) {
 	out[0] = Math.min(a[0], b[0]);
 	out[1] = Math.min(a[1], b[1]);
 	out[2] = Math.min(a[2], b[2]);
@@ -1021,7 +424,7 @@ function min$2(out, a, b) {
 * @param b the second operand
 * @returns out
 */
-function max$2(out, a, b) {
+function max$3(out, a, b) {
 	out[0] = Math.max(a[0], b[0]);
 	out[1] = Math.max(a[1], b[1]);
 	out[2] = Math.max(a[2], b[2]);
@@ -1063,7 +466,7 @@ function scale$2$1(out, a, b) {
 * @param scale the amount to scale b by before adding
 * @returns out
 */
-function scaleAndAdd$1(out, a, b, scale) {
+function scaleAndAdd$2(out, a, b, scale) {
 	out[0] = a[0] + b[0] * scale;
 	out[1] = a[1] + b[1] * scale;
 	out[2] = a[2] + b[2] * scale;
@@ -1076,7 +479,7 @@ function scaleAndAdd$1(out, a, b, scale) {
 * @param b the second operand
 * @returns distance between a and b
 */
-function distance$1(a, b) {
+function distance$2(a, b) {
 	const x = b[0] - a[0];
 	const y = b[1] - a[1];
 	const z = b[2] - a[2];
@@ -1089,7 +492,7 @@ function distance$1(a, b) {
 * @param b the second operand
 * @returns squared distance between a and b
 */
-function squaredDistance$1(a, b) {
+function squaredDistance$2(a, b) {
 	const x = b[0] - a[0];
 	const y = b[1] - a[1];
 	const z = b[2] - a[2];
@@ -1114,7 +517,7 @@ function squaredLength(a) {
 * @param a vector to negate
 * @returns out
 */
-function negate$2(out, a) {
+function negate$3(out, a) {
 	out[0] = -a[0];
 	out[1] = -a[1];
 	out[2] = -a[2];
@@ -1127,7 +530,7 @@ function negate$2(out, a) {
 * @param a vector to invert
 * @returns out
 */
-function inverse$1(out, a) {
+function inverse$2(out, a) {
 	out[0] = 1 / a[0];
 	out[1] = 1 / a[1];
 	out[2] = 1 / a[2];
@@ -1169,7 +572,7 @@ function dot(a, b) {
 * @param b the second operand
 * @returns out
 */
-function cross$1(out, a, b) {
+function cross$2(out, a, b) {
 	const ax = a[0];
 	const ay = a[1];
 	const az = a[2];
@@ -1295,7 +698,7 @@ function bezier(out, a, b, c, d, t) {
 * @param m matrix to transform with
 * @returns out
 */
-function transformMat4$2(out, a, m) {
+function transformMat4$3(out, a, m) {
 	const x = a[0];
 	const y = a[1];
 	const z = a[2];
@@ -1314,7 +717,7 @@ function transformMat4$2(out, a, m) {
 * @param m the 3x3 matrix to transform with
 * @returns out
 */
-function transformMat3(out, a, m) {
+function transformMat3$1(out, a, m) {
 	const x = a[0];
 	const y = a[1];
 	const z = a[2];
@@ -1430,7 +833,7 @@ function rotateZ$1$1(out, a, b, rad) {
 * @param b The second operand
 * @returns The angle in radians
 */
-function angle(a, b) {
+function angle$1(a, b) {
 	const ax = a[0];
 	const ay = a[1];
 	const az = a[2];
@@ -1493,7 +896,7 @@ function equals$2(a, b) {
 * @param a vector to test
 * @returns whether or not the vector is finite
 */
-function finite$1(a) {
+function finite$2(a) {
 	return Number.isFinite(a[0]) && Number.isFinite(a[1]) && Number.isFinite(a[2]);
 }
 /**
@@ -1524,15 +927,15 @@ const mul$2 = multiply$2;
 /**
 * Alias for {@link divide}
 */
-const div$1 = divide$1;
+const div$2 = divide$2;
 /**
 * Alias for {@link distance}
 */
-const dist$1 = distance$1;
+const dist$2 = distance$2;
 /**
 * Alias for {@link squaredDistance}
 */
-const sqrDist$1 = squaredDistance$1;
+const sqrDist$2 = squaredDistance$2;
 /**
 * Alias for {@link length}
 */
@@ -1600,7 +1003,7 @@ var mat4_exports = /* @__PURE__ */ __exportAll({
 	targetTo: () => targetTo,
 	translate: () => translate$1,
 	transpose: () => transpose$1,
-	zero: () => zero$1
+	zero: () => zero$1$1
 });
 /**
 * Creates a new identity mat4
@@ -1792,7 +1195,7 @@ function identity$1$1(out) {
 * @param out the receiving matrix
 * @returns out
 */
-function zero$1(out) {
+function zero$1$1(out) {
 	out[0] = 0;
 	out[1] = 0;
 	out[2] = 0;
@@ -3761,10 +3164,10 @@ const mul$1$1 = multiply$1$1;
 */
 const sub$1$1 = subtract$1$1;
 var mat3_exports = /* @__PURE__ */ __exportAll({
-	add: () => add$5,
+	add: () => add$6,
 	adjoint: () => adjoint$2,
 	clone: () => clone$3,
-	copy: () => copy$6,
+	copy: () => copy$7,
 	create: () => create$39,
 	determinant: () => determinant,
 	equals: () => equals$4,
@@ -3785,7 +3188,7 @@ var mat3_exports = /* @__PURE__ */ __exportAll({
 	multiplyScalarAndAdd: () => multiplyScalarAndAdd,
 	normalFromMat4: () => normalFromMat4,
 	projection: () => projection,
-	rotate: () => rotate$2,
+	rotate: () => rotate$3,
 	scale: () => scale$3,
 	set: () => set,
 	str: () => str,
@@ -3858,7 +3261,7 @@ function clone$3(a) {
 * @param a the source matrix
 * @returns out
 */
-function copy$6(out, a) {
+function copy$7(out, a) {
 	out[0] = a[0];
 	out[1] = a[1];
 	out[2] = a[2];
@@ -4148,7 +3551,7 @@ function translate$2(out, a, v) {
 * @param rad the angle to rotate the matrix by
 * @returns out
 */
-function rotate$2(out, a, rad) {
+function rotate$3(out, a, rad) {
 	const a00 = a[0];
 	const a01 = a[1];
 	const a02 = a[2];
@@ -4416,7 +3819,7 @@ function frob(a) {
 * @param b the second operand
 * @returns out
 */
-function add$5(out, a, b) {
+function add$6(out, a, b) {
 	out[0] = a[0] + b[0];
 	out[1] = a[1] + b[1];
 	out[2] = a[2] + b[2];
@@ -4538,7 +3941,602 @@ const mul = multiply;
 */
 const sub = subtract;
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/index.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/index.js
+var vec2_exports = /* @__PURE__ */ __exportAll({
+	add: () => add$5,
+	addScalar: () => addScalar,
+	angle: () => angle,
+	ceil: () => ceil$1,
+	clone: () => clone$6,
+	copy: () => copy$6,
+	create: () => create$7$1,
+	cross: () => cross$1,
+	dist: () => dist$1,
+	distance: () => distance$1,
+	div: () => div$1,
+	divide: () => divide$1,
+	dot: () => dot$3,
+	equals: () => equals$8,
+	exactEquals: () => exactEquals$7,
+	finite: () => finite$1,
+	floor: () => floor$1,
+	fromBuffer: () => fromBuffer$2,
+	fromValues: () => fromValues$7,
+	inverse: () => inverse$1,
+	len: () => len$3,
+	length: () => length$3,
+	lerp: () => lerp$5,
+	max: () => max$1,
+	min: () => min$1,
+	mul: () => mul$5,
+	multiply: () => multiply$5,
+	negate: () => negate$1,
+	normalize: () => normalize$4,
+	rotate: () => rotate$2,
+	round: () => round$2,
+	scale: () => scale$6,
+	scaleAndAdd: () => scaleAndAdd$1,
+	set: () => set$7,
+	sqrDist: () => sqrDist$1,
+	sqrLen: () => sqrLen$3,
+	squaredDistance: () => squaredDistance$1,
+	squaredLength: () => squaredLength$3,
+	str: () => str$6,
+	sub: () => sub$3,
+	subtract: () => subtract$3,
+	subtractScalar: () => subtractScalar,
+	toBuffer: () => toBuffer$2,
+	transformMat2: () => transformMat2,
+	transformMat2d: () => transformMat2d,
+	transformMat3: () => transformMat3,
+	transformMat4: () => transformMat4$1,
+	zero: () => zero$1
+});
+/**
+* Creates a new, empty vec2
+*
+* @returns a new 2D vector
+*/
+function create$7$1() {
+	return [0, 0];
+}
+/**
+* Creates a new vec2 initialized with values from an existing vector
+*
+* @param a vector to clone
+* @returns a new 2D vector
+*/
+function clone$6(a) {
+	return [a[0], a[1]];
+}
+/**
+* Creates a new vec2 initialized with the given values
+*
+* @param x X component
+* @param y Y component
+* @returns a new 2D vector
+*/
+function fromValues$7(x, y) {
+	return [x, y];
+}
+/**
+* Copy the values from one vec2 to another
+*
+* @param out the receiving vector
+* @param a the source vector
+* @returns out
+*/
+function copy$6(out, a) {
+	out[0] = a[0];
+	out[1] = a[1];
+	return out;
+}
+/**
+* Set the components of a vec2 to the given values
+*
+* @param out the receiving vector
+* @param x X component
+* @param y Y component
+* @returns out
+*/
+function set$7(out, x, y) {
+	out[0] = x;
+	out[1] = y;
+	return out;
+}
+/**
+* Sets the components of a vec2 from a buffer
+* @param out the receiving vector
+* @param buffer the source buffer
+* @param startIndex the starting index in the buffer
+* @returns out
+*/
+function fromBuffer$2(out, buffer, startIndex) {
+	out[0] = buffer[startIndex];
+	out[1] = buffer[startIndex + 1];
+	return out;
+}
+/**
+* Writes the components of a vec2 to a buffer
+* @param outBuffer The output buffer
+* @param vec The source vector
+* @param startIndex The starting index in the buffer
+* @returns The output buffer
+*/
+function toBuffer$2(outBuffer, vec, startIndex) {
+	outBuffer[startIndex] = vec[0];
+	outBuffer[startIndex + 1] = vec[1];
+	return outBuffer;
+}
+/**
+* Adds two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function add$5(out, a, b) {
+	out[0] = a[0] + b[0];
+	out[1] = a[1] + b[1];
+	return out;
+}
+/**
+* Adds a scalar value to all components of a vec2
+*
+* @param out the receiving vector
+* @param a the source vector
+* @param b the scalar value to add
+* @returns out
+*/
+function addScalar(out, a, b) {
+	out[0] = a[0] + b;
+	out[1] = a[1] + b;
+	return out;
+}
+/**
+* Subtracts vector b from vector a
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function subtract$3(out, a, b) {
+	out[0] = a[0] - b[0];
+	out[1] = a[1] - b[1];
+	return out;
+}
+/**
+* Subtracts a scalar value from all components of a vec2
+*
+* @param out the receiving vector
+* @param a the source vector
+* @param b the scalar value to subtract
+* @returns out
+*/
+function subtractScalar(out, a, b) {
+	out[0] = a[0] - b;
+	out[1] = a[1] - b;
+	return out;
+}
+/**
+* Multiplies two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function multiply$5(out, a, b) {
+	out[0] = a[0] * b[0];
+	out[1] = a[1] * b[1];
+	return out;
+}
+/**
+* Divides two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function divide$1(out, a, b) {
+	out[0] = a[0] / b[0];
+	out[1] = a[1] / b[1];
+	return out;
+}
+/**
+* Math.ceil the components of a vec2
+*
+* @param out the receiving vector
+* @param a vector to ceil
+* @returns out
+*/
+function ceil$1(out, a) {
+	out[0] = Math.ceil(a[0]);
+	out[1] = Math.ceil(a[1]);
+	return out;
+}
+/**
+* Math.floor the components of a vec2
+*
+* @param out the receiving vector
+* @param a vector to floor
+* @returns out
+*/
+function floor$1(out, a) {
+	out[0] = Math.floor(a[0]);
+	out[1] = Math.floor(a[1]);
+	return out;
+}
+/**
+* Returns the minimum of two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function min$1(out, a, b) {
+	out[0] = Math.min(a[0], b[0]);
+	out[1] = Math.min(a[1], b[1]);
+	return out;
+}
+/**
+* Returns the maximum of two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function max$1(out, a, b) {
+	out[0] = Math.max(a[0], b[0]);
+	out[1] = Math.max(a[1], b[1]);
+	return out;
+}
+/**
+* symmetric round the components of a vec2
+*
+* @param out the receiving vector
+* @param a vector to round
+* @returns out
+*/
+function round$2(out, a) {
+	out[0] = round$3(a[0]);
+	out[1] = round$3(a[1]);
+	return out;
+}
+/**
+* Scales a vec2 by a scalar number
+*
+* @param out the receiving vector
+* @param a the vector to scale
+* @param b amount to scale the vector by
+* @returns out
+*/
+function scale$6(out, a, b) {
+	out[0] = a[0] * b;
+	out[1] = a[1] * b;
+	return out;
+}
+/**
+* Adds two vec2's after scaling the second operand by a scalar value
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param scale the amount to scale b by before adding
+* @returns out
+*/
+function scaleAndAdd$1(out, a, b, scale) {
+	out[0] = a[0] + b[0] * scale;
+	out[1] = a[1] + b[1] * scale;
+	return out;
+}
+/**
+* Calculates the euclidian distance between two vec2's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns distance between a and b
+*/
+function distance$1(a, b) {
+	const x = b[0] - a[0];
+	const y = b[1] - a[1];
+	return Math.sqrt(x * x + y * y);
+}
+/**
+* Calculates the squared euclidian distance between two vec2's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns squared distance between a and b
+*/
+function squaredDistance$1(a, b) {
+	const x = b[0] - a[0];
+	const y = b[1] - a[1];
+	return x * x + y * y;
+}
+/**
+* Calculates the length of a vec2
+*
+* @param a vector to calculate length of
+* @returns length of a
+*/
+function length$3(a) {
+	const x = a[0];
+	const y = a[1];
+	return Math.sqrt(x * x + y * y);
+}
+/**
+* Calculates the squared length of a vec2
+*
+* @param a vector to calculate squared length of
+* @returns squared length of a
+*/
+function squaredLength$3(a) {
+	const x = a[0];
+	const y = a[1];
+	return x * x + y * y;
+}
+/**
+* Negates the components of a vec2
+*
+* @param out the receiving vector
+* @param a vector to negate
+* @returns out
+*/
+function negate$1(out, a) {
+	out[0] = -a[0];
+	out[1] = -a[1];
+	return out;
+}
+/**
+* Returns the inverse of the components of a vec2
+*
+* @param out the receiving vector
+* @param a vector to invert
+* @returns out
+*/
+function inverse$1(out, a) {
+	out[0] = 1 / a[0];
+	out[1] = 1 / a[1];
+	return out;
+}
+/**
+* Normalize a vec2
+*
+* @param out the receiving vector
+* @param a vector to normalize
+* @returns out
+*/
+function normalize$4(out, a) {
+	const x = a[0];
+	const y = a[1];
+	let len = x * x + y * y;
+	if (len > 0) len = 1 / Math.sqrt(len);
+	out[0] = a[0] * len;
+	out[1] = a[1] * len;
+	return out;
+}
+/**
+* Calculates the dot product of two vec2's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns dot product of a and b
+*/
+function dot$3(a, b) {
+	return a[0] * b[0] + a[1] * b[1];
+}
+/**
+* Computes the cross product of two vec2's
+* Note that the cross product must by definition produce a 3D vector
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function cross$1(out, a, b) {
+	const z = a[0] * b[1] - a[1] * b[0];
+	out[0] = out[1] = 0;
+	out[2] = z;
+	return out;
+}
+/**
+* Performs a linear interpolation between two vec2's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function lerp$5(out, a, b, t) {
+	const ax = a[0];
+	const ay = a[1];
+	out[0] = ax + t * (b[0] - ax);
+	out[1] = ay + t * (b[1] - ay);
+	return out;
+}
+/**
+* Transforms the vec2 with a mat2
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m matrix to transform with
+* @returns out
+*/
+function transformMat2(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	out[0] = m[0] * x + m[2] * y;
+	out[1] = m[1] * x + m[3] * y;
+	return out;
+}
+/**
+* Transforms the vec2 with a mat2d
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m matrix to transform with
+* @returns out
+*/
+function transformMat2d(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	out[0] = m[0] * x + m[2] * y + m[4];
+	out[1] = m[1] * x + m[3] * y + m[5];
+	return out;
+}
+/**
+* Transforms the vec2 with a mat3
+* 3rd vector component is implicitly '1'
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m matrix to transform with
+* @returns out
+*/
+function transformMat3(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	out[0] = m[0] * x + m[3] * y + m[6];
+	out[1] = m[1] * x + m[4] * y + m[7];
+	return out;
+}
+/**
+* Transforms the vec2 with a mat4
+* 3rd vector component is implicitly '0'
+* 4th vector component is implicitly '1'
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m matrix to transform with
+* @returns out
+*/
+function transformMat4$1(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	out[0] = m[0] * x + m[4] * y + m[12];
+	out[1] = m[1] * x + m[5] * y + m[13];
+	return out;
+}
+/**
+* Rotate a 2D vector
+* @param out The receiving vec2
+* @param a The vec2 point to rotate
+* @param b The origin of the rotation
+* @param rad The angle of rotation in radians
+* @returns out
+*/
+function rotate$2(out, a, b, rad) {
+	const p0 = a[0] - b[0];
+	const p1 = a[1] - b[1];
+	const sinC = Math.sin(rad);
+	const cosC = Math.cos(rad);
+	out[0] = p0 * cosC - p1 * sinC + b[0];
+	out[1] = p0 * sinC + p1 * cosC + b[1];
+	return out;
+}
+/**
+* Get the angle between two 2D vectors
+* @param a The first operand
+* @param b The second operand
+* @returns The angle in radians
+*/
+function angle(a, b) {
+	const x1 = a[0];
+	const y1 = a[1];
+	const x2 = b[0];
+	const y2 = b[1];
+	const mag = Math.sqrt((x1 * x1 + y1 * y1) * (x2 * x2 + y2 * y2));
+	const cosine = mag && (x1 * x2 + y1 * y2) / mag;
+	return Math.acos(Math.min(Math.max(cosine, -1), 1));
+}
+/**
+* Set the components of a vec2 to zero
+*
+* @param out the receiving vector
+* @returns out
+*/
+function zero$1(out) {
+	out[0] = 0;
+	out[1] = 0;
+	return out;
+}
+/**
+* Returns a string representation of a vector
+*
+* @param a vector to represent as a string
+* @returns string representation of the vector
+*/
+function str$6(a) {
+	return `vec2(${a[0]}, ${a[1]})`;
+}
+/**
+* Returns whether or not the vectors exactly have the same elements in the same position (when compared with ===)
+*
+* @param a The first vector.
+* @param b The second vector.
+* @returns True if the vectors are equal, false otherwise.
+*/
+function exactEquals$7(a, b) {
+	return a[0] === b[0] && a[1] === b[1];
+}
+/**
+* Returns whether or not the vectors have approximately the same elements in the same position.
+*
+* @param a The first vector.
+* @param b The second vector.
+* @returns True if the vectors are equal, false otherwise.
+*/
+function equals$8(a, b) {
+	const a0 = a[0];
+	const a1 = a[1];
+	const b0 = b[0];
+	const b1 = b[1];
+	return Math.abs(a0 - b0) <= 1e-6 * Math.max(1, Math.abs(a0), Math.abs(b0)) && Math.abs(a1 - b1) <= 1e-6 * Math.max(1, Math.abs(a1), Math.abs(b1));
+}
+/**
+* Returns whether or not the vector is finite
+* @param a vector to test
+* @returns whether or not the vector is finite
+*/
+function finite$1(a) {
+	return Number.isFinite(a[0]) && Number.isFinite(a[1]);
+}
+/**
+* Alias for {@link length}
+*/
+const len$3 = length$3;
+/**
+* Alias for {@link subtract}
+*/
+const sub$3 = subtract$3;
+/**
+* Alias for {@link multiply}
+*/
+const mul$5 = multiply$5;
+/**
+* Alias for {@link divide}
+*/
+const div$1 = divide$1;
+/**
+* Alias for {@link distance}
+*/
+const dist$1 = distance$1;
+/**
+* Alias for {@link squaredDistance}
+*/
+const sqrDist$1 = squaredDistance$1;
+/**
+* Alias for {@link squaredLength}
+*/
+const sqrLen$3 = squaredLength$3;
 var vec4_exports = /* @__PURE__ */ __exportAll({
 	add: () => add$4,
 	ceil: () => ceil,
@@ -4561,11 +4559,11 @@ var vec4_exports = /* @__PURE__ */ __exportAll({
 	len: () => len$2,
 	length: () => length$2,
 	lerp: () => lerp$4,
-	max: () => max$1,
-	min: () => min$1,
+	max: () => max$2,
+	min: () => min$2,
 	mul: () => mul$4,
 	multiply: () => multiply$4,
-	negate: () => negate$1,
+	negate: () => negate$2,
 	normalize: () => normalize$3,
 	round: () => round$1,
 	scale: () => scale$5,
@@ -4579,7 +4577,7 @@ var vec4_exports = /* @__PURE__ */ __exportAll({
 	sub: () => sub$2,
 	subtract: () => subtract$2,
 	toBuffer: () => toBuffer$1,
-	transformMat4: () => transformMat4$1,
+	transformMat4: () => transformMat4$2,
 	transformQuat: () => transformQuat,
 	zero: () => zero
 });
@@ -4782,7 +4780,7 @@ function floor(out, a) {
 * @param b the second operand
 * @returns out
 */
-function min$1(out, a, b) {
+function min$2(out, a, b) {
 	out[0] = Math.min(a[0], b[0]);
 	out[1] = Math.min(a[1], b[1]);
 	out[2] = Math.min(a[2], b[2]);
@@ -4797,7 +4795,7 @@ function min$1(out, a, b) {
 * @param b the second operand
 * @returns out
 */
-function max$1(out, a, b) {
+function max$2(out, a, b) {
 	out[0] = Math.max(a[0], b[0]);
 	out[1] = Math.max(a[1], b[1]);
 	out[2] = Math.max(a[2], b[2]);
@@ -4910,7 +4908,7 @@ function squaredLength$2(a) {
 * @param a vector to negate
 * @returns out
 */
-function negate$1(out, a) {
+function negate$2(out, a) {
 	out[0] = -a[0];
 	out[1] = -a[1];
 	out[2] = -a[2];
@@ -5015,7 +5013,7 @@ function lerp$4(out, a, b, t) {
 * @param m matrix to transform with
 * @returns out
 */
-function transformMat4$1(out, a, m) {
+function transformMat4$2(out, a, m) {
 	const x = a[0];
 	const y = a[1];
 	const z = a[2];
@@ -5819,8 +5817,8 @@ const rotationTo = /* @__PURE__ */ (() => {
 	return (out, a, b) => {
 		const dot$4 = dot(a, b);
 		if (dot$4 < -.999999) {
-			cross$1(tmpvec3, xUnitVec3, a);
-			if (length(tmpvec3) < 1e-6) cross$1(tmpvec3, yUnitVec3, a);
+			cross$2(tmpvec3, xUnitVec3, a);
+			if (length(tmpvec3) < 1e-6) cross$2(tmpvec3, yUnitVec3, a);
 			normalize$1(tmpvec3, tmpvec3);
 			setAxisAngle(out, tmpvec3, Math.PI);
 			return out;
@@ -5832,7 +5830,7 @@ const rotationTo = /* @__PURE__ */ (() => {
 			out[3] = 1;
 			return out;
 		}
-		cross$1(tmpvec3, a, b);
+		cross$2(tmpvec3, a, b);
 		out[0] = tmpvec3[0];
 		out[1] = tmpvec3[1];
 		out[2] = tmpvec3[2];
@@ -6506,6 +6504,7 @@ const mul$1 = multiply$1;
 * Alias for {@link mat2.subtract}
 */
 const sub$1 = subtract$1;
+Math.PI * 2;
 //#endregion
 //#region src/body/mass-properties.ts
 var mass_properties_exports = /* @__PURE__ */ __exportAll$1({
@@ -7244,7 +7243,7 @@ let MotionType = /* @__PURE__ */ function(MotionType) {
 	return MotionType;
 }({});
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/shapes.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/shapes.js
 var box3_exports = /* @__PURE__ */ __exportAll({
 	center: () => center,
 	clone: () => clone$2,
@@ -7801,7 +7800,7 @@ function intersectsTriangle3(box, a, b, c) {
 	_axesCross[26] = 0;
 	if (!_satForAxes(_axesCross, 9)) return false;
 	if (!_satForAxes(_axesBoxFaces, 3)) return false;
-	cross$1(_triangleNormal$1, _f0, _f1);
+	cross$2(_triangleNormal$1, _f0, _f1);
 	_axisTriangle[0] = _triangleNormal$1[0];
 	_axisTriangle[1] = _triangleNormal$1[1];
 	_axisTriangle[2] = _triangleNormal$1[2];
@@ -7979,7 +7978,7 @@ function normalize(out, plane) {
 * @returns The negated plane
 */
 function negate(out, plane) {
-	negate$2(out.normal, plane.normal);
+	negate$3(out.normal, plane.normal);
 	out.constant = -plane.constant;
 	return out;
 }
@@ -8013,7 +8012,7 @@ function distanceToPoint(plane, point) {
 */
 function projectPoint(out, plane, point) {
 	const distance = distanceToPoint(plane, point);
-	return scaleAndAdd$1(out, point, plane.normal, -distance);
+	return scaleAndAdd$2(out, point, plane.normal, -distance);
 }
 /**
 * Transforms a plane by a 4x4 matrix
@@ -11443,34 +11442,34 @@ function updateShape(world, body) {
 /**
 * Sets the body's position and recomputes the world-space center of mass and AABB.
 */
-function setPosition$1(world, body, position, wake$1) {
+function setPosition$1(world, body, position, wake$3) {
 	vec3_exports.copy(body.position, position);
+	updateCenterOfMassPosition(body);
+	updateAABB(body);
+	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
+	if (wake$3) wake(world, body);
+}
+/**
+* Sets the body's orientation and recomputes the world-space center of mass and AABB.
+*/
+function setQuaternion$1(world, body, quaternion, wake$1) {
+	quat_exports.copy(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
 	if (wake$1) wake(world, body);
 }
 /**
-* Sets the body's orientation and recomputes the world-space center of mass and AABB.
-*/
-function setQuaternion$1(world, body, quaternion, wake$6) {
-	quat_exports.copy(body.quaternion, quaternion);
-	updateCenterOfMassPosition(body);
-	updateAABB(body);
-	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
-	if (wake$6) wake(world, body);
-}
-/**
 * Sets both the body's position and orientation, then recomputes the world-space center of mass and AABB.
 * This is the most efficient way to update both transform components in one operation.
 */
-function setTransform(world, body, position, quaternion, wake$5) {
+function setTransform(world, body, position, quaternion, wake$7) {
 	vec3_exports.copy(body.position, position);
 	quat_exports.copy(body.quaternion, quaternion);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
-	if (wake$5) wake(world, body);
+	if (wake$7) wake(world, body);
 }
 /**
 * Sets the body's object layer and updates broadphase accordingly.
@@ -11487,7 +11486,7 @@ function setObjectLayer(world, body, layer) {
 * @param motionType the new motion type
 * @param wake if true and changing to dynamic/kinematic, wakes the body
 */
-function setMotionType(world, body, motionType, wake$2) {
+function setMotionType(world, body, motionType, wake$4) {
 	const oldMotionType = body.motionType;
 	if (oldMotionType === motionType) return;
 	body.motionType = motionType;
@@ -11499,7 +11498,7 @@ function setMotionType(world, body, motionType, wake$2) {
 		if (!body.sleeping) addBodyToActiveBodies(world, body);
 		if (motionType === 2) resetSleepTimer(body);
 	}
-	if (wake$2 && motionType !== 0) wake(world, body);
+	if (wake$4 && motionType !== 0) wake(world, body);
 	if (motionType !== 0 && oldMotionType === 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
 }
 /**
@@ -11511,10 +11510,10 @@ function setMotionType(world, body, motionType, wake$2) {
 * @param force Force vector in world space
 * @param wake If true, wakes the body if sleeping
 */
-function addForce(world, body, force, wake$7) {
+function addForce(world, body, force, wake$2) {
 	if (body.motionType !== 2) return;
 	addForce$1(body.motionProperties, force);
-	if (wake$7) wake(world, body);
+	if (wake$2) wake(world, body);
 }
 /**
 * Adds a torque (angular force) directly.
@@ -11525,10 +11524,10 @@ function addForce(world, body, force, wake$7) {
 * @param torque torque vector in world space
 * @param wake if true, wakes the body if sleeping
 */
-function addTorque(world, body, torque, wake$3) {
+function addTorque(world, body, torque, wake$5) {
 	if (body.motionType !== 2) return;
 	addTorque$1(body.motionProperties, torque);
-	if (wake$3) wake(world, body);
+	if (wake$5) wake(world, body);
 }
 /**
 * Adds a force at a specific world-space position.
@@ -11541,10 +11540,10 @@ function addTorque(world, body, torque, wake$3) {
 * @param worldPosition position in world space where force is applied
 * @param wake if true, wakes the body if sleeping
 */
-function addForceAtPosition(world, body, force, worldPosition, wake$4) {
+function addForceAtPosition(world, body, force, worldPosition, wake$6) {
 	if (body.motionType !== 2) return;
 	addForceAtPosition$1(body.motionProperties, force, worldPosition, body.centerOfMassPosition);
-	if (wake$4) wake(world, body);
+	if (wake$6) wake(world, body);
 }
 /**
 * Applies an impulse at the body's center of mass.
@@ -27504,7 +27503,7 @@ const _collideSphereVsBox_faceDirection = /* @__PURE__ */ vec3_exports.create();
 * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
 * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
 *
-* The mathcat frame transforms are written idiomatically; compilecat's `` (flatten +
+* The math frame transforms are written idiomatically; compilecat's `` (flatten +
 * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
 * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
 * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)

@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { Face } from '../utils/face.js';
 /** Maximum number of contact points in a manifold after reduction */
 export declare const MAX_CONTACT_POINTS = 4;

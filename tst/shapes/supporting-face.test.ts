@@ -1,4 +1,4 @@
-import { mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, compound, convexHull, createFace, getShapeSupportingFace, scaled, sphere, transformed } from '../../src';
 

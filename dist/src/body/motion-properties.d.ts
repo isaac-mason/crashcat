@@ -1,4 +1,4 @@
-import type { Mat3, Mat4, Quat, Vec3 } from 'mathcat';
+import type { Mat3, Mat4, Quat, Vec3 } from 'math';
 import type { MassProperties } from './mass-properties.js';
 /** motion quality options for collision detection */
 export declare enum MotionQuality {

@@ -1,6 +1,6 @@
-import type { Mat4 } from 'mathcat';
-import { type Quat, type Vec3 } from 'mathcat';
-import type { Box3 } from 'mathcat/shapes';
+import type { Mat4 } from 'math';
+import { type Quat, type Vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties.js';
 import type { SubShapeId } from '../body/sub-shape.js';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';

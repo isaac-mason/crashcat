@@ -1,5 +1,5 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { euler, mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getInverseInertiaForRotation } from '../body/motion-properties';

@@ -12,7 +12,7 @@ var __exportAll$1 = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/rolldown-runtime-D7D4PA-g.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/rolldown-runtime-D7D4PA-g.js
 var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
 	let target = {};
@@ -24,7 +24,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/scalar-BGTmo5GO.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/scalar-BGTmo5GO.js
 const EPSILON = 1e-6;
 /**
 * Symmetric round
@@ -39,7 +39,7 @@ function round$1(a) {
 Math.PI / 180;
 180 / Math.PI;
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/mat3-BRz_EKyg.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/mat3-BRz_EKyg.js
 var vec3_exports = /* @__PURE__ */ __exportAll({
 	add: () => add$2,
 	addScalar: () => addScalar,
@@ -914,7 +914,7 @@ function fromMat4(out, a) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/github.com+isaac-mason+mathcat@c25a32156b50b228a9d846e0ec835396343b7a73/node_modules/mathcat/dist/index.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/index.js
 /**
 * Creates a new, empty vec4
 *
@@ -1854,6 +1854,7 @@ const setAxes = /* @__PURE__ */ (() => {
 		return normalize$2(out, fromMat3(out, matr));
 	};
 })();
+Math.PI * 2;
 //#endregion
 //#region three/debug-renderer.ts
 var debug_renderer_exports = /* @__PURE__ */ __exportAll$1({
