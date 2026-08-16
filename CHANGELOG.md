@@ -6,6 +6,7 @@
 - refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards dropped from traversals (body destroy removes the leaf before it is pooled), redundant node reset on free-list reuse removed, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
 - perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) to replace GJK/EPA convex collide for sphere/box pairs
 - feat: update mathcat
+- chore: rename `mathcat` dependency to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
 
 ## v0.0.5
 
