@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import type { AxisConstraintPart } from './axis-constraint-part';
 import { getSpringBias } from './spring-part';
 

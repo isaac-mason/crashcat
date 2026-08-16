@@ -1,5 +1,5 @@
-import type { Mat3, Mat4, Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Mat3, Mat4, Quat, Vec3 } from 'math';
+import { mat3, mat4, quat, vec3 } from 'math';
 import { assert } from '../utils/assert';
 import { DOF_ALL } from './dof';
 import type { MassProperties } from './mass-properties';

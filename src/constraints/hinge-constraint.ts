@@ -1,5 +1,5 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
@@ -192,7 +192,7 @@ function getInvInitialOrientationXZ(normalAxis1: Vec3, hingeAxis1: Vec3, normalA
     const y2 = vec3.create();
     vec3.cross(y2, hingeAxis2, normalAxis2);
 
-    // create rotation matrices (column-major in mathcat)
+    // create rotation matrices (column-major in math)
     const mat1 = mat3.fromValues(
         normalAxis1[0],
         normalAxis1[1],

@@ -1,4 +1,5 @@
-import { type Box3, type Plane3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
+import { type Box3, type Plane3 } from 'math/shapes';
 import { type CastShapeCollector, type CastShapeSettings } from '../collision/cast-shape-vs-shape.js';
 import { type Shape, ShapeType } from './shapes.js';
 export declare const DEFAULT_PLANE_HALF_EXTENT = 1000;

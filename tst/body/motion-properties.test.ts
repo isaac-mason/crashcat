@@ -1,4 +1,4 @@
-import { mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { DOF_ALL } from '../../src/body/dof';
 import * as motionProperties from '../../src/body/motion-properties';

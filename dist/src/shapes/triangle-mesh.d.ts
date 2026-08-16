@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import { ShapeType } from './shapes.js';
 import type { BvhSplitStrategy, TriangleMeshBVH } from './utils/triangle-mesh-bvh.js';
 import type { TriangleMeshData } from './utils/triangle-mesh-data.js';

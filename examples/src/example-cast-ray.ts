@@ -1,6 +1,6 @@
 import GUI from 'lil-gui';
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { euler, quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import {
@@ -161,7 +161,7 @@ function updateRaycasterObject(rc: RaycasterObject) {
     );
     quat.multiply(rc.quaternion, rc.quaternion, _deltaQuat);
 
-    // Set Three.js rootObject from mathcat quaternion
+    // Set Three.js rootObject from math quaternion
     rc.rootObject.quaternion.set(rc.quaternion[0], rc.quaternion[1], rc.quaternion[2], rc.quaternion[3]);
 
     // Get origin position in world space
@@ -475,7 +475,7 @@ function render() {
     const worldPosVec3 = vec3.create();
     const worldQuatVec4 = quat.create();
 
-    // Update mesh objects (source of truth: mathcat position/quaternion)
+    // Update mesh objects (source of truth: math position/quaternion)
     for (const meshObj of state.meshObjects) {
         // Update quaternion based on rotation speed
         quat.fromEuler(
@@ -489,7 +489,7 @@ function render() {
         );
         quat.multiply(meshObj.quaternion, meshObj.quaternion, _deltaQuat);
 
-        // Set Three.js mesh from mathcat quaternion (local space)
+        // Set Three.js mesh from math quaternion (local space)
         meshObj.visualMesh.quaternion.set(
             meshObj.quaternion[0],
             meshObj.quaternion[1],
@@ -502,7 +502,7 @@ function render() {
         meshObj.visualMesh.updateMatrixWorld();
         meshObj.visualMesh.matrixWorld.decompose(worldPos, worldQuat, worldScale);
 
-        // Convert to mathcat types
+        // Convert to math types
         vec3.set(worldPosVec3, worldPos.x, worldPos.y, worldPos.z);
         quat.set(worldQuatVec4, worldQuat.x, worldQuat.y, worldQuat.z, worldQuat.w);
 

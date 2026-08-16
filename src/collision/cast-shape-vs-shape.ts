@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import type { CastShapeVsShapeFn, Shape } from '../shapes/shapes';
 import { createFace, type Face } from '../utils/face';
 import { pool } from '../utils/pool';

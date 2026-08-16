@@ -1,5 +1,5 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec2, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat4, quat, vec2, vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body';
 import type { AngleConstraintPart } from './angle-constraint-part';
 import * as angleConstraintPart from './angle-constraint-part';

@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import type { BoxShape } from '../shapes/box';
 import type { CapsuleShape } from '../shapes/capsule';
 import type { ConvexHullShape } from '../shapes/convex-hull';
@@ -262,7 +262,8 @@ export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
                 const vertexCount = hull.vertexCount;
                 let cur = hull.lastVertex;
                 let curBase = cur * 3;
-                let bestDot = vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
+                let bestDot =
+                    vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
                 let steps = 0;
                 let prev: number;
                 do {

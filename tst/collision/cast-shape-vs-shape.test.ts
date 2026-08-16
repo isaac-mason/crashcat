@@ -1,5 +1,5 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { quat, vec3 } from 'math';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
     box,

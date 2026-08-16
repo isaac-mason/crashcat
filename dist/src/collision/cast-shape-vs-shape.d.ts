@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { CastShapeVsShapeFn } from '../shapes/shapes.js';
 import { type Face } from '../utils/face.js';
 export declare enum CastShapeStatus {

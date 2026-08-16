@@ -1,5 +1,5 @@
-import type { Vec3 } from 'mathcat';
-import { vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { vec3 } from 'math';
 import { assert } from '../../utils/assert';
 import { createConvexHullBuilder2D, EResult as EResult2D, initialize as initialize2D } from './convex-hull-builder-2d';
 

@@ -1,4 +1,4 @@
-import { type Mat4, type Vec3 } from 'mathcat';
+import { type Mat4, type Vec3 } from 'math';
 import type { BoxShape } from '../shapes/box.js';
 import type { CapsuleShape } from '../shapes/capsule.js';
 import type { ConvexHullShape } from '../shapes/convex-hull.js';

@@ -1,6 +1,18 @@
 import { ConstraintType, MotionType, ShapeType, bvh, dbvt, rigidBody } from "crashcat";
 import * as THREE from "three";
 //#region \0rolldown/runtime.js
+var __defProp$1 = Object.defineProperty;
+var __exportAll$1 = (all, no_symbols) => {
+	let target = {};
+	for (var name in all) __defProp$1(target, name, {
+		get: all[name],
+		enumerable: true
+	});
+	if (!no_symbols) __defProp$1(target, Symbol.toStringTag, { value: "Module" });
+	return target;
+};
+//#endregion
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/rolldown-runtime-D7D4PA-g.js
 var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
 	let target = {};
@@ -12,18 +24,138 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/vec3.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/scalar-BGTmo5GO.js
+const EPSILON = 1e-6;
+/**
+* Symmetric round
+* see https://www.npmjs.com/package/round-half-up-symmetric#user-content-detailed-background
+*
+* @param a value to round
+*/
+function round$1(a) {
+	if (a >= 0) return Math.round(a);
+	return a % .5 === 0 ? Math.floor(a) : Math.round(a);
+}
+Math.PI / 180;
+180 / Math.PI;
+//#endregion
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/mat3-BRz_EKyg.js
+var vec3_exports = /* @__PURE__ */ __exportAll({
+	add: () => add$2,
+	addScalar: () => addScalar,
+	angle: () => angle,
+	bezier: () => bezier,
+	ceil: () => ceil,
+	clone: () => clone$2,
+	copy: () => copy$2,
+	create: () => create$2,
+	cross: () => cross,
+	dist: () => dist,
+	distance: () => distance,
+	div: () => div,
+	divide: () => divide,
+	dot: () => dot,
+	equals: () => equals$2,
+	exactEquals: () => exactEquals$2,
+	finite: () => finite,
+	floor: () => floor,
+	fromBuffer: () => fromBuffer$1,
+	fromValues: () => fromValues$2,
+	hermite: () => hermite,
+	inverse: () => inverse,
+	isScaleInsideOut: () => isScaleInsideOut,
+	len: () => len,
+	length: () => length,
+	lerp: () => lerp,
+	max: () => max,
+	min: () => min,
+	mul: () => mul$2,
+	multiply: () => multiply$2,
+	negate: () => negate,
+	normalize: () => normalize,
+	perpendicular: () => perpendicular,
+	rotateX: () => rotateX$1$1,
+	rotateY: () => rotateY$1$1,
+	rotateZ: () => rotateZ$1$1,
+	round: () => round,
+	scale: () => scale$2,
+	scaleAndAdd: () => scaleAndAdd,
+	set: () => set$2,
+	setScalar: () => setScalar,
+	slerp: () => slerp$1,
+	sqrDist: () => sqrDist,
+	sqrLen: () => sqrLen,
+	squaredDistance: () => squaredDistance,
+	squaredLength: () => squaredLength,
+	str: () => str$2,
+	sub: () => sub$2,
+	subtract: () => subtract$2,
+	subtractScalar: () => subtractScalar,
+	toBuffer: () => toBuffer$1,
+	transformMat3: () => transformMat3,
+	transformMat4: () => transformMat4,
+	transformQuat: () => transformQuat,
+	zero: () => zero$2
+});
 /**
 * Creates a new, empty vec3
 *
 * @returns a new 3D vector
 */
-function create$1() {
+function create$2() {
 	return [
 		0,
 		0,
 		0
 	];
+}
+/**
+* Creates a new vec3 initialized with values from an existing vector
+*
+* @param a vector to clone
+* @returns a new 3D vector
+*/
+function clone$2(a) {
+	const out = [
+		0,
+		0,
+		0
+	];
+	out[0] = a[0];
+	out[1] = a[1];
+	out[2] = a[2];
+	return out;
+}
+/**
+* Calculates the length of a vec3
+*
+* @param a vector to calculate length of
+* @returns length of a
+*/
+function length(a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	return Math.sqrt(x * x + y * y + z * z);
+}
+/**
+* Creates a new vec3 initialized with the given values
+*
+* @param x X component
+* @param y Y component
+* @param z Z component
+* @returns a new 3D vector
+*/
+function fromValues$2(x, y, z) {
+	const out = [
+		0,
+		0,
+		0
+	];
+	out[0] = x;
+	out[1] = y;
+	out[2] = z;
+	return out;
 }
 /**
 * Copy the values from one vec3 to another
@@ -32,7 +164,7 @@ function create$1() {
 * @param a the source vector
 * @returns out
 */
-function copy(out, a) {
+function copy$2(out, a) {
 	out[0] = a[0];
 	out[1] = a[1];
 	out[2] = a[2];
@@ -47,11 +179,50 @@ function copy(out, a) {
 * @param z Z component
 * @returns out
 */
-function set(out, x, y, z) {
+function set$2(out, x, y, z) {
 	out[0] = x;
 	out[1] = y;
 	out[2] = z;
 	return out;
+}
+/**
+* Sets all components of a vec3 to the given scalar value
+*
+* @param out the receiving vector
+* @param s scalar value to set
+* @returns out
+*/
+function setScalar(out, s) {
+	out[0] = s;
+	out[1] = s;
+	out[2] = s;
+	return out;
+}
+/**
+* Sets the components of a vec3 from a buffer
+* @param out the receiving vector
+* @param buffer the source buffer
+* @param startIndex the starting index in the buffer
+* @returns out
+*/
+function fromBuffer$1(out, buffer, startIndex) {
+	out[0] = buffer[startIndex];
+	out[1] = buffer[startIndex + 1];
+	out[2] = buffer[startIndex + 2];
+	return out;
+}
+/**
+* Writes the components of a vec3 to a buffer
+* @param outBuffer The output buffer
+* @param vec The source vector
+* @param startIndex The starting index in the buffer
+* @returns The output buffer
+*/
+function toBuffer$1(outBuffer, vec, startIndex) {
+	outBuffer[startIndex] = vec[0];
+	outBuffer[startIndex + 1] = vec[1];
+	outBuffer[startIndex + 2] = vec[2];
+	return outBuffer;
 }
 /**
 * Adds two vec3's
@@ -61,10 +232,430 @@ function set(out, x, y, z) {
 * @param b the second operand
 * @returns out
 */
-function add(out, a, b) {
+function add$2(out, a, b) {
 	out[0] = a[0] + b[0];
 	out[1] = a[1] + b[1];
 	out[2] = a[2] + b[2];
+	return out;
+}
+/**
+* Adds a scalar value to all components of a vec3
+*
+* @param out the receiving vector
+* @param a the source vector
+* @param b the scalar value to add
+* @returns out
+*/
+function addScalar(out, a, b) {
+	out[0] = a[0] + b;
+	out[1] = a[1] + b;
+	out[2] = a[2] + b;
+	return out;
+}
+/**
+* Subtracts vector b from vector a
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function subtract$2(out, a, b) {
+	out[0] = a[0] - b[0];
+	out[1] = a[1] - b[1];
+	out[2] = a[2] - b[2];
+	return out;
+}
+/**
+* Subtracts a scalar value from all components of a vec3
+*
+* @param out the receiving vector
+* @param a the source vector
+* @param b the scalar value to subtract
+* @returns out
+*/
+function subtractScalar(out, a, b) {
+	out[0] = a[0] - b;
+	out[1] = a[1] - b;
+	out[2] = a[2] - b;
+	return out;
+}
+/**
+* Multiplies two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function multiply$2(out, a, b) {
+	out[0] = a[0] * b[0];
+	out[1] = a[1] * b[1];
+	out[2] = a[2] * b[2];
+	return out;
+}
+/**
+* Divides two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function divide(out, a, b) {
+	out[0] = a[0] / b[0];
+	out[1] = a[1] / b[1];
+	out[2] = a[2] / b[2];
+	return out;
+}
+/**
+* Math.ceil the components of a vec3
+*
+* @param out the receiving vector
+* @param a vector to ceil
+* @returns out
+*/
+function ceil(out, a) {
+	out[0] = Math.ceil(a[0]);
+	out[1] = Math.ceil(a[1]);
+	out[2] = Math.ceil(a[2]);
+	return out;
+}
+/**
+* Math.floor the components of a vec3
+*
+* @param out the receiving vector
+* @param a vector to floor
+* @returns out
+*/
+function floor(out, a) {
+	out[0] = Math.floor(a[0]);
+	out[1] = Math.floor(a[1]);
+	out[2] = Math.floor(a[2]);
+	return out;
+}
+/**
+* Returns the minimum of two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function min(out, a, b) {
+	out[0] = Math.min(a[0], b[0]);
+	out[1] = Math.min(a[1], b[1]);
+	out[2] = Math.min(a[2], b[2]);
+	return out;
+}
+/**
+* Returns the maximum of two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function max(out, a, b) {
+	out[0] = Math.max(a[0], b[0]);
+	out[1] = Math.max(a[1], b[1]);
+	out[2] = Math.max(a[2], b[2]);
+	return out;
+}
+/**
+* symmetric round the components of a vec3
+*
+* @param out the receiving vector
+* @param a vector to round
+* @returns out
+*/
+function round(out, a) {
+	out[0] = round$1(a[0]);
+	out[1] = round$1(a[1]);
+	out[2] = round$1(a[2]);
+	return out;
+}
+/**
+* Scales a vec3 by a scalar number
+*
+* @param out the receiving vector
+* @param a the vector to scale
+* @param b amount to scale the vector by
+* @returns out
+*/
+function scale$2(out, a, b) {
+	out[0] = a[0] * b;
+	out[1] = a[1] * b;
+	out[2] = a[2] * b;
+	return out;
+}
+/**
+* Adds two vec3's after scaling the second operand by a scalar value
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param scale the amount to scale b by before adding
+* @returns out
+*/
+function scaleAndAdd(out, a, b, scale) {
+	out[0] = a[0] + b[0] * scale;
+	out[1] = a[1] + b[1] * scale;
+	out[2] = a[2] + b[2] * scale;
+	return out;
+}
+/**
+* Calculates the euclidian distance between two vec3's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns distance between a and b
+*/
+function distance(a, b) {
+	const x = b[0] - a[0];
+	const y = b[1] - a[1];
+	const z = b[2] - a[2];
+	return Math.sqrt(x * x + y * y + z * z);
+}
+/**
+* Calculates the squared euclidian distance between two vec3's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns squared distance between a and b
+*/
+function squaredDistance(a, b) {
+	const x = b[0] - a[0];
+	const y = b[1] - a[1];
+	const z = b[2] - a[2];
+	return x * x + y * y + z * z;
+}
+/**
+* Calculates the squared length of a vec3
+*
+* @param a vector to calculate squared length of
+* @returns squared length of a
+*/
+function squaredLength(a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	return x * x + y * y + z * z;
+}
+/**
+* Negates the components of a vec3
+*
+* @param out the receiving vector
+* @param a vector to negate
+* @returns out
+*/
+function negate(out, a) {
+	out[0] = -a[0];
+	out[1] = -a[1];
+	out[2] = -a[2];
+	return out;
+}
+/**
+* Returns the inverse of the components of a vec3
+*
+* @param out the receiving vector
+* @param a vector to invert
+* @returns out
+*/
+function inverse(out, a) {
+	out[0] = 1 / a[0];
+	out[1] = 1 / a[1];
+	out[2] = 1 / a[2];
+	return out;
+}
+/**
+* Normalize a vec3
+*
+* @param out the receiving vector
+* @param a vector to normalize
+* @returns out
+*/
+function normalize(out, a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	let len = x * x + y * y + z * z;
+	if (len > 0) len = 1 / Math.sqrt(len);
+	out[0] = a[0] * len;
+	out[1] = a[1] * len;
+	out[2] = a[2] * len;
+	return out;
+}
+/**
+* Calculates the dot product of two vec3's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns dot product of a and b
+*/
+function dot(a, b) {
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+/**
+* Computes the cross product of two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function cross(out, a, b) {
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const bx = b[0];
+	const by = b[1];
+	const bz = b[2];
+	out[0] = ay * bz - az * by;
+	out[1] = az * bx - ax * bz;
+	out[2] = ax * by - ay * bx;
+	return out;
+}
+/**
+* Calculates a normalized perpendicular vector to the given vector.
+* Useful for finding an arbitrary orthogonal basis vector.
+*
+* @param out the receiving vector
+* @param a the source vector
+* @returns the out vector
+*/
+function perpendicular(out, a) {
+	if (Math.abs(a[0]) > Math.abs(a[1])) {
+		const invLen = 1 / Math.sqrt(a[0] * a[0] + a[2] * a[2]);
+		out[0] = a[2] * invLen;
+		out[1] = 0;
+		out[2] = -a[0] * invLen;
+	} else {
+		const invLen = 1 / Math.sqrt(a[1] * a[1] + a[2] * a[2]);
+		out[0] = 0;
+		out[1] = a[2] * invLen;
+		out[2] = -a[1] * invLen;
+	}
+	return out;
+}
+/**
+* Performs a linear interpolation between two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function lerp(out, a, b, t) {
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	out[0] = ax + t * (b[0] - ax);
+	out[1] = ay + t * (b[1] - ay);
+	out[2] = az + t * (b[2] - az);
+	return out;
+}
+/**
+* Performs a spherical linear interpolation between two vec3's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function slerp$1(out, a, b, t) {
+	const angle = Math.acos(Math.min(Math.max(dot(a, b), -1), 1));
+	const sinTotal = Math.sin(angle);
+	const ratioA = Math.sin((1 - t) * angle) / sinTotal;
+	const ratioB = Math.sin(t * angle) / sinTotal;
+	out[0] = ratioA * a[0] + ratioB * b[0];
+	out[1] = ratioA * a[1] + ratioB * b[1];
+	out[2] = ratioA * a[2] + ratioB * b[2];
+	return out;
+}
+/**
+* Performs a hermite interpolation with two control points
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param c the third operand
+* @param d the fourth operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function hermite(out, a, b, c, d, t) {
+	const factorTimes2 = t * t;
+	const factor1 = factorTimes2 * (2 * t - 3) + 1;
+	const factor2 = factorTimes2 * (t - 2) + t;
+	const factor3 = factorTimes2 * (t - 1);
+	const factor4 = factorTimes2 * (3 - 2 * t);
+	out[0] = a[0] * factor1 + b[0] * factor2 + c[0] * factor3 + d[0] * factor4;
+	out[1] = a[1] * factor1 + b[1] * factor2 + c[1] * factor3 + d[1] * factor4;
+	out[2] = a[2] * factor1 + b[2] * factor2 + c[2] * factor3 + d[2] * factor4;
+	return out;
+}
+/**
+* Performs a bezier interpolation with two control points
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param c the third operand
+* @param d the fourth operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function bezier(out, a, b, c, d, t) {
+	const inverseFactor = 1 - t;
+	const inverseFactorTimesTwo = inverseFactor * inverseFactor;
+	const factorTimes2 = t * t;
+	const factor1 = inverseFactorTimesTwo * inverseFactor;
+	const factor2 = 3 * t * inverseFactorTimesTwo;
+	const factor3 = 3 * factorTimes2 * inverseFactor;
+	const factor4 = factorTimes2 * t;
+	out[0] = a[0] * factor1 + b[0] * factor2 + c[0] * factor3 + d[0] * factor4;
+	out[1] = a[1] * factor1 + b[1] * factor2 + c[1] * factor3 + d[1] * factor4;
+	out[2] = a[2] * factor1 + b[2] * factor2 + c[2] * factor3 + d[2] * factor4;
+	return out;
+}
+/**
+* Transforms the vec3 with a mat4.
+* 4th vector component is implicitly '1'
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m matrix to transform with
+* @returns out
+*/
+function transformMat4(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	let w = m[3] * x + m[7] * y + m[11] * z + m[15];
+	w = w || 1;
+	out[0] = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+	out[1] = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+	out[2] = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+	return out;
+}
+/**
+* Transforms the vec3 with a mat3.
+*
+* @param out the receiving vector
+* @param a the vector to transform
+* @param m the 3x3 matrix to transform with
+* @returns out
+*/
+function transformMat3(out, a, m) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	out[0] = x * m[0] + y * m[3] + z * m[6];
+	out[1] = x * m[1] + y * m[4] + z * m[7];
+	out[2] = x * m[2] + y * m[5] + z * m[8];
 	return out;
 }
 /**
@@ -102,20 +693,516 @@ function transformQuat(out, a, q) {
 	out[2] = z + uvz + uuvz;
 	return out;
 }
+/**
+* Rotate a 3D vector around the x-axis
+* @param out The receiving vec3
+* @param a The vec3 point to rotate
+* @param b The origin of the rotation
+* @param rad The angle of rotation in radians
+* @returns out
+*/
+function rotateX$1$1(out, a, b, rad) {
+	const p = [];
+	const r = [];
+	p[0] = a[0] - b[0];
+	p[1] = a[1] - b[1];
+	p[2] = a[2] - b[2];
+	r[0] = p[0];
+	r[1] = p[1] * Math.cos(rad) - p[2] * Math.sin(rad);
+	r[2] = p[1] * Math.sin(rad) + p[2] * Math.cos(rad);
+	out[0] = r[0] + b[0];
+	out[1] = r[1] + b[1];
+	out[2] = r[2] + b[2];
+	return out;
+}
+/**
+* Rotate a 3D vector around the y-axis
+* @param out The receiving vec3
+* @param a The vec3 point to rotate
+* @param b The origin of the rotation
+* @param rad The angle of rotation in radians
+* @returns out
+*/
+function rotateY$1$1(out, a, b, rad) {
+	const p = [];
+	const r = [];
+	p[0] = a[0] - b[0];
+	p[1] = a[1] - b[1];
+	p[2] = a[2] - b[2];
+	r[0] = p[2] * Math.sin(rad) + p[0] * Math.cos(rad);
+	r[1] = p[1];
+	r[2] = p[2] * Math.cos(rad) - p[0] * Math.sin(rad);
+	out[0] = r[0] + b[0];
+	out[1] = r[1] + b[1];
+	out[2] = r[2] + b[2];
+	return out;
+}
+/**
+* Rotate a 3D vector around the z-axis
+* @param out The receiving vec3
+* @param a The vec3 point to rotate
+* @param b The origin of the rotation
+* @param rad The angle of rotation in radians
+* @returns out
+*/
+function rotateZ$1$1(out, a, b, rad) {
+	const p = [];
+	const r = [];
+	p[0] = a[0] - b[0];
+	p[1] = a[1] - b[1];
+	p[2] = a[2] - b[2];
+	r[0] = p[0] * Math.cos(rad) - p[1] * Math.sin(rad);
+	r[1] = p[0] * Math.sin(rad) + p[1] * Math.cos(rad);
+	r[2] = p[2];
+	out[0] = r[0] + b[0];
+	out[1] = r[1] + b[1];
+	out[2] = r[2] + b[2];
+	return out;
+}
+/**
+* Get the angle between two 3D vectors
+* @param a The first operand
+* @param b The second operand
+* @returns The angle in radians
+*/
+function angle(a, b) {
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const bx = b[0];
+	const by = b[1];
+	const bz = b[2];
+	const mag = Math.sqrt((ax * ax + ay * ay + az * az) * (bx * bx + by * by + bz * bz));
+	const cosine = mag && dot(a, b) / mag;
+	return Math.acos(Math.min(Math.max(cosine, -1), 1));
+}
+/**
+* Set the components of a vec3 to zero
+*
+* @param out the receiving vector
+* @returns out
+*/
+function zero$2(out) {
+	out[0] = 0;
+	out[1] = 0;
+	out[2] = 0;
+	return out;
+}
+/**
+* Returns a string representation of a vector
+*
+* @param a vector to represent as a string
+* @returns string representation of the vector
+*/
+function str$2(a) {
+	return `vec3(${a[0]}, ${a[1]}, ${a[2]})`;
+}
+/**
+* Returns whether or not the vectors have exactly the same elements in the same position (when compared with ===)
+*
+* @param a The first vector.
+* @param b The second vector.
+* @returns True if the vectors are equal, false otherwise.
+*/
+function exactEquals$2(a, b) {
+	return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+}
+/**
+* Returns whether or not the vectors have approximately the same elements in the same position.
+*
+* @param a The first vector.
+* @param b The second vector.
+* @returns True if the vectors are equal, false otherwise.
+*/
+function equals$2(a, b) {
+	const a0 = a[0];
+	const a1 = a[1];
+	const a2 = a[2];
+	const b0 = b[0];
+	const b1 = b[1];
+	const b2 = b[2];
+	return Math.abs(a0 - b0) <= 1e-6 * Math.max(1, Math.abs(a0), Math.abs(b0)) && Math.abs(a1 - b1) <= 1e-6 * Math.max(1, Math.abs(a1), Math.abs(b1)) && Math.abs(a2 - b2) <= 1e-6 * Math.max(1, Math.abs(a2), Math.abs(b2));
+}
+/**
+* Returns whether or not the vector is finite
+* @param a vector to test
+* @returns whether or not the vector is finite
+*/
+function finite(a) {
+	return Number.isFinite(a[0]) && Number.isFinite(a[1]) && Number.isFinite(a[2]);
+}
+/**
+* Determines if a scale vector represents an inside-out transformation (reflection)
+* Returns true if an odd number of scale components are negative
+*
+* @param scale The scale vector to test
+* @returns true if the scale represents a reflection (odd number of negative components)
+*/
+function isScaleInsideOut(scale) {
+	const mask = (scale[0] < 0 ? 1 : 0) | (scale[1] < 0 ? 2 : 0) | (scale[2] < 0 ? 4 : 0);
+	let count = 0;
+	let m = mask;
+	while (m) {
+		count += m & 1;
+		m >>= 1;
+	}
+	return (count & 1) !== 0;
+}
+/**
+* Alias for {@link subtract}
+*/
+const sub$2 = subtract$2;
+/**
+* Alias for {@link multiply}
+*/
+const mul$2 = multiply$2;
+/**
+* Alias for {@link divide}
+*/
+const div = divide;
+/**
+* Alias for {@link distance}
+*/
+const dist = distance;
+/**
+* Alias for {@link squaredDistance}
+*/
+const sqrDist = squaredDistance;
+/**
+* Alias for {@link length}
+*/
+const len = length;
+/**
+* Alias for {@link squaredLength}
+*/
+const sqrLen = squaredLength;
+/**
+* Creates a new identity mat3
+*
+* @returns a new 3x3 matrix
+*/
+function create() {
+	return [
+		1,
+		0,
+		0,
+		0,
+		1,
+		0,
+		0,
+		0,
+		1
+	];
+}
+/**
+* Copies the upper-left 3x3 values into the given mat3.
+*
+* @param out the receiving 3x3 matrix
+* @param a   the source 4x4 matrix
+* @returns out
+*/
+function fromMat4(out, a) {
+	out[0] = a[0];
+	out[1] = a[1];
+	out[2] = a[2];
+	out[3] = a[4];
+	out[4] = a[5];
+	out[5] = a[6];
+	out[6] = a[8];
+	out[7] = a[9];
+	out[8] = a[10];
+	return out;
+}
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/quat.js
+//#region node_modules/.pnpm/math@1.0.0-canary-872f3be9-20260816/node_modules/math/dist/index.js
+/**
+* Creates a new, empty vec4
+*
+* @returns a new 4D vector
+*/
+function create$6() {
+	return [
+		0,
+		0,
+		0,
+		0
+	];
+}
+/**
+* Creates a new vec4 initialized with values from an existing vector
+*
+* @param a vector to clone
+* @returns a new 4D vector
+*/
+function clone$5(a) {
+	const out = create$6();
+	out[0] = a[0];
+	out[1] = a[1];
+	out[2] = a[2];
+	out[3] = a[3];
+	return out;
+}
+/**
+* Creates a new vec4 initialized with the given values
+*
+* @param x X component
+* @param y Y component
+* @param z Z component
+* @param w W component
+* @returns a new 4D vector
+*/
+function fromValues$6(x, y, z, w) {
+	const out = create$6();
+	out[0] = x;
+	out[1] = y;
+	out[2] = z;
+	out[3] = w;
+	return out;
+}
+/**
+* Copy the values from one vec4 to another
+*
+* @param out the receiving vector
+* @param a the source vector
+* @returns out
+*/
+function copy$5(out, a) {
+	out[0] = a[0];
+	out[1] = a[1];
+	out[2] = a[2];
+	out[3] = a[3];
+	return out;
+}
+/**
+* Set the components of a vec4 to the given values
+*
+* @param out the receiving vector
+* @param x X component
+* @param y Y component
+* @param z Z component
+* @param w W component
+* @returns out
+*/
+function set$6(out, x, y, z, w) {
+	out[0] = x;
+	out[1] = y;
+	out[2] = z;
+	out[3] = w;
+	return out;
+}
+/**
+* Adds two vec4's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+function add$4(out, a, b) {
+	out[0] = a[0] + b[0];
+	out[1] = a[1] + b[1];
+	out[2] = a[2] + b[2];
+	out[3] = a[3] + b[3];
+	return out;
+}
+/**
+* Scales a vec4 by a scalar number
+*
+* @param out the receiving vector
+* @param a the vector to scale
+* @param b amount to scale the vector by
+* @returns out
+*/
+function scale$5(out, a, b) {
+	out[0] = a[0] * b;
+	out[1] = a[1] * b;
+	out[2] = a[2] * b;
+	out[3] = a[3] * b;
+	return out;
+}
+/**
+* Calculates the length of a vec4
+*
+* @param a vector to calculate length of
+* @returns length of a
+*/
+function length$2(a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	const w = a[3];
+	return Math.sqrt(x * x + y * y + z * z + w * w);
+}
+/**
+* Calculates the squared length of a vec4
+*
+* @param a vector to calculate squared length of
+* @returns squared length of a
+*/
+function squaredLength$2(a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	const w = a[3];
+	return x * x + y * y + z * z + w * w;
+}
+/**
+* Normalize a vec4
+*
+* @param out the receiving vector
+* @param a vector to normalize
+* @returns out
+*/
+function normalize$3(out, a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	const w = a[3];
+	let len = x * x + y * y + z * z + w * w;
+	if (len > 0) len = 1 / Math.sqrt(len);
+	out[0] = x * len;
+	out[1] = y * len;
+	out[2] = z * len;
+	out[3] = w * len;
+	return out;
+}
+/**
+* Calculates the dot product of two vec4's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns dot product of a and b
+*/
+function dot$2(a, b) {
+	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
+}
+/**
+* Performs a linear interpolation between two vec4's
+*
+* @param out the receiving vector
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function lerp$4(out, a, b, t) {
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const aw = a[3];
+	out[0] = ax + t * (b[0] - ax);
+	out[1] = ay + t * (b[1] - ay);
+	out[2] = az + t * (b[2] - az);
+	out[3] = aw + t * (b[3] - aw);
+	return out;
+}
+/**
+* Returns whether or not the vectors have exactly the same elements in the same position (when compared with ===)
+*
+* @param a The first vector.
+* @param b The second vector.
+* @returns True if the vectors are equal, false otherwise.
+*/
+function exactEquals$6(a, b) {
+	return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+}
+var quat_exports = /* @__PURE__ */ __exportAll({
+	add: () => add$3,
+	calculateW: () => calculateW,
+	clone: () => clone$4,
+	conjugate: () => conjugate$1,
+	copy: () => copy$4,
+	create: () => create$5,
+	dot: () => dot$1,
+	equals: () => equals$6,
+	exactEquals: () => exactEquals$5,
+	exp: () => exp,
+	fromBuffer: () => fromBuffer,
+	fromDegrees: () => fromDegrees$1,
+	fromEuler: () => fromEuler,
+	fromMat3: () => fromMat3,
+	fromMat4: () => fromMat4$1,
+	fromValues: () => fromValues$5,
+	getAngle: () => getAngle,
+	getAxisAngle: () => getAxisAngle,
+	identity: () => identity$3,
+	invert: () => invert$3,
+	len: () => len$1,
+	length: () => length$1,
+	lerp: () => lerp$3,
+	ln: () => ln,
+	mul: () => mul$3,
+	multiply: () => multiply$3,
+	normalize: () => normalize$2,
+	pow: () => pow,
+	rotateX: () => rotateX$1,
+	rotateY: () => rotateY$1,
+	rotateZ: () => rotateZ$1,
+	rotationTo: () => rotationTo,
+	scale: () => scale$4,
+	set: () => set$5,
+	setAxes: () => setAxes,
+	setAxisAngle: () => setAxisAngle,
+	slerp: () => slerp,
+	sqlerp: () => sqlerp,
+	sqrLen: () => sqrLen$1,
+	squaredLength: () => squaredLength$1,
+	str: () => str$4,
+	toBuffer: () => toBuffer
+});
 /**
 * Creates a new identity quat
 *
 * @returns a new quaternion
 */
-function create() {
+function create$5() {
 	return [
 		0,
 		0,
 		0,
 		1
 	];
+}
+/**
+* Sets the components of a quat from a buffer
+* @param out the receiving quaternion
+* @param buffer the source buffer
+* @param startIndex the starting index in the buffer
+* @returns out
+*/
+function fromBuffer(out, buffer, startIndex) {
+	out[0] = buffer[startIndex];
+	out[1] = buffer[startIndex + 1];
+	out[2] = buffer[startIndex + 2];
+	out[3] = buffer[startIndex + 3];
+	return out;
+}
+/**
+* Writes the components of a quat to a buffer
+* @param outBuffer The output buffer
+* @param q The source quaternion
+* @param startIndex The starting index in the buffer
+* @returns The output buffer
+*/
+function toBuffer(outBuffer, q, startIndex) {
+	outBuffer[startIndex] = q[0];
+	outBuffer[startIndex + 1] = q[1];
+	outBuffer[startIndex + 2] = q[2];
+	outBuffer[startIndex + 3] = q[3];
+	return outBuffer;
+}
+/**
+* Set a quat to the identity quaternion
+*
+* @param out the receiving quaternion
+* @returns out
+*/
+function identity$3(out) {
+	out[0] = 0;
+	out[1] = 0;
+	out[2] = 0;
+	out[3] = 1;
+	return out;
 }
 /**
 * Sets a quat from the given angle and rotation axis,
@@ -136,6 +1223,44 @@ function setAxisAngle(out, axis, rad) {
 	return out;
 }
 /**
+* Gets the rotation axis and angle for a given
+*  quaternion. If a quaternion is created with
+*  setAxisAngle, this method will return the same
+*  values as providied in the original parameter list
+*  OR functionally equivalent values.
+* Example: The quaternion formed by axis [0, 0, 1] and
+*  angle -90 is the same as the quaternion formed by
+*  [0, 0, 1] and 270. This method favors the latter.
+* @param  out_axis  Vector receiving the axis of rotation
+* @param  q     Quaternion to be decomposed
+* @return     Angle, in radians, of the rotation
+*/
+function getAxisAngle(out_axis, q) {
+	const rad = Math.acos(q[3]) * 2;
+	const s = Math.sin(rad / 2);
+	if (s > 1e-6) {
+		out_axis[0] = q[0] / s;
+		out_axis[1] = q[1] / s;
+		out_axis[2] = q[2] / s;
+	} else {
+		out_axis[0] = 1;
+		out_axis[1] = 0;
+		out_axis[2] = 0;
+	}
+	return rad;
+}
+/**
+* Gets the angular distance between two unit quaternions
+*
+* @param  a     Origin unit quaternion
+* @param  b     Destination unit quaternion
+* @return     Angle, in radians, between the two quaternions
+*/
+function getAngle(a, b) {
+	const dotproduct = dot$1(a, b);
+	return Math.acos(2 * dotproduct * dotproduct - 1);
+}
+/**
 * Multiplies two quat's
 *
 * @param out the receiving quaternion
@@ -143,7 +1268,7 @@ function setAxisAngle(out, axis, rad) {
 * @param b the second operand
 * @returns out
 */
-function multiply(out, a, b) {
+function multiply$3(out, a, b) {
 	const ax = a[0];
 	const ay = a[1];
 	const az = a[2];
@@ -158,9 +1283,581 @@ function multiply(out, a, b) {
 	out[3] = aw * bw - ax * bx - ay * by - az * bz;
 	return out;
 }
+/**
+* Rotates a quaternion by the given angle about the X axis
+*
+* @param out quat receiving operation result
+* @param a quat to rotate
+* @param rad angle (in radians) to rotate
+* @returns out
+*/
+function rotateX$1(out, a, rad) {
+	rad *= .5;
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const aw = a[3];
+	const bx = Math.sin(rad);
+	const bw = Math.cos(rad);
+	out[0] = ax * bw + aw * bx;
+	out[1] = ay * bw + az * bx;
+	out[2] = az * bw - ay * bx;
+	out[3] = aw * bw - ax * bx;
+	return out;
+}
+/**
+* Rotates a quaternion by the given angle about the Y axis
+*
+* @param out quat receiving operation result
+* @param a quat to rotate
+* @param rad angle (in radians) to rotate
+* @returns out
+*/
+function rotateY$1(out, a, rad) {
+	rad *= .5;
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const aw = a[3];
+	const by = Math.sin(rad);
+	const bw = Math.cos(rad);
+	out[0] = ax * bw - az * by;
+	out[1] = ay * bw + aw * by;
+	out[2] = az * bw + ax * by;
+	out[3] = aw * bw - ay * by;
+	return out;
+}
+/**
+* Rotates a quaternion by the given angle about the Z axis
+*
+* @param out quat receiving operation result
+* @param a quat to rotate
+* @param rad angle (in radians) to rotate
+* @returns out
+*/
+function rotateZ$1(out, a, rad) {
+	rad *= .5;
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const aw = a[3];
+	const bz = Math.sin(rad);
+	const bw = Math.cos(rad);
+	out[0] = ax * bw + ay * bz;
+	out[1] = ay * bw - ax * bz;
+	out[2] = az * bw + aw * bz;
+	out[3] = aw * bw - az * bz;
+	return out;
+}
+/**
+* Calculates the W component of a quat from the X, Y, and Z components.
+* Assumes that quaternion is 1 unit in length.
+* Any existing W component will be ignored.
+*
+* @param out the receiving quaternion
+* @param a quat to calculate W component of
+* @returns out
+*/
+function calculateW(out, a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	out[0] = x;
+	out[1] = y;
+	out[2] = z;
+	out[3] = Math.sqrt(Math.abs(1 - x * x - y * y - z * z));
+	return out;
+}
+/**
+* Calculate the exponential of a unit quaternion.
+*
+* @param out the receiving quaternion
+* @param a quat to calculate the exponential of
+* @returns out
+*/
+function exp(out, a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	const w = a[3];
+	const r = Math.sqrt(x * x + y * y + z * z);
+	const et = Math.exp(w);
+	const s = r > 0 ? et * Math.sin(r) / r : 0;
+	out[0] = x * s;
+	out[1] = y * s;
+	out[2] = z * s;
+	out[3] = et * Math.cos(r);
+	return out;
+}
+/**
+* Calculate the natural logarithm of a unit quaternion.
+*
+* @param out the receiving quaternion
+* @param a quat to calculate the exponential of
+* @returns out
+*/
+function ln(out, a) {
+	const x = a[0];
+	const y = a[1];
+	const z = a[2];
+	const w = a[3];
+	const r = Math.sqrt(x * x + y * y + z * z);
+	const t = r > 0 ? Math.atan2(r, w) / r : 0;
+	out[0] = x * t;
+	out[1] = y * t;
+	out[2] = z * t;
+	out[3] = .5 * Math.log(x * x + y * y + z * z + w * w);
+	return out;
+}
+/**
+* Calculate the scalar power of a unit quaternion.
+*
+* @param out the receiving quaternion
+* @param a quat to calculate the exponential of
+* @param b amount to scale the quaternion by
+* @returns out
+*/
+function pow(out, a, b) {
+	ln(out, a);
+	scale$4(out, out, b);
+	exp(out, out);
+	return out;
+}
+/**
+* Performs a spherical linear interpolation between two quat
+*
+* @param out the receiving quaternion
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+function slerp(out, a, b, t) {
+	const ax = a[0];
+	const ay = a[1];
+	const az = a[2];
+	const aw = a[3];
+	let bx = b[0];
+	let by = b[1];
+	let bz = b[2];
+	let bw = b[3];
+	let omega;
+	let cosom;
+	let sinom;
+	let scale0;
+	let scale1;
+	cosom = ax * bx + ay * by + az * bz + aw * bw;
+	if (cosom < 0) {
+		cosom = -cosom;
+		bx = -bx;
+		by = -by;
+		bz = -bz;
+		bw = -bw;
+	}
+	if (1 - cosom > 1e-6) {
+		omega = Math.acos(cosom);
+		sinom = Math.sin(omega);
+		scale0 = Math.sin((1 - t) * omega) / sinom;
+		scale1 = Math.sin(t * omega) / sinom;
+	} else {
+		scale0 = 1 - t;
+		scale1 = t;
+	}
+	out[0] = scale0 * ax + scale1 * bx;
+	out[1] = scale0 * ay + scale1 * by;
+	out[2] = scale0 * az + scale1 * bz;
+	out[3] = scale0 * aw + scale1 * bw;
+	return out;
+}
+/**
+* Calculates the inverse of a quat
+*
+* @param out the receiving quaternion
+* @param a quat to calculate inverse of
+* @returns out
+*/
+function invert$3(out, a) {
+	const a0 = a[0];
+	const a1 = a[1];
+	const a2 = a[2];
+	const a3 = a[3];
+	const dot = a0 * a0 + a1 * a1 + a2 * a2 + a3 * a3;
+	const invDot = dot ? 1 / dot : 0;
+	out[0] = -a0 * invDot;
+	out[1] = -a1 * invDot;
+	out[2] = -a2 * invDot;
+	out[3] = a3 * invDot;
+	return out;
+}
+/**
+* Calculates the conjugate of a quat
+* If the quaternion is normalized, this function is faster than quat.inverse and produces the same result.
+*
+* @param out the receiving quaternion
+* @param a quat to calculate conjugate of
+* @returns out
+*/
+function conjugate$1(out, a) {
+	out[0] = -a[0];
+	out[1] = -a[1];
+	out[2] = -a[2];
+	out[3] = a[3];
+	return out;
+}
+/**
+* Creates a quaternion from the given 3x3 rotation matrix.
+*
+* NOTE: The resultant quaternion is not normalized, so you should be sure
+* to renormalize the quaternion yourself where necessary.
+*
+* @param out the receiving quaternion
+* @param m rotation matrix
+* @returns out
+*/
+function fromMat3(out, m) {
+	const fTrace = m[0] + m[4] + m[8];
+	let fRoot;
+	if (fTrace > 0) {
+		fRoot = Math.sqrt(fTrace + 1);
+		out[3] = .5 * fRoot;
+		fRoot = .5 / fRoot;
+		out[0] = (m[5] - m[7]) * fRoot;
+		out[1] = (m[6] - m[2]) * fRoot;
+		out[2] = (m[1] - m[3]) * fRoot;
+	} else {
+		let i = 0;
+		if (m[4] > m[0]) i = 1;
+		if (m[8] > m[i * 3 + i]) i = 2;
+		const j = (i + 1) % 3;
+		const k = (i + 2) % 3;
+		fRoot = Math.sqrt(m[i * 3 + i] - m[j * 3 + j] - m[k * 3 + k] + 1);
+		out[i] = .5 * fRoot;
+		fRoot = .5 / fRoot;
+		out[3] = (m[j * 3 + k] - m[k * 3 + j]) * fRoot;
+		out[j] = (m[j * 3 + i] + m[i * 3 + j]) * fRoot;
+		out[k] = (m[k * 3 + i] + m[i * 3 + k]) * fRoot;
+	}
+	return out;
+}
+/**
+* Calculates a quaternion from a 4x4 rotation matrix
+* Extracts the 3x3 rotation part and calls fromMat3
+*
+* @param out the receiving quaternion
+* @param m rotation matrix
+* @returns out
+*/
+function fromMat4$1(out, m) {
+	const m3 = create();
+	fromMat4(m3, m);
+	return fromMat3(out, m3);
+}
+/**
+* Creates a quaternion from the given euler
+* @param out the receiving quaternion
+* @param euler the euler to create the quaternion from
+* @returns out
+*/
+function fromEuler(out, euler) {
+	const x = euler[0];
+	const y = euler[1];
+	const z = euler[2];
+	const order = euler[3] || "xyz";
+	const cos = Math.cos;
+	const sin = Math.sin;
+	const c1 = cos(x / 2);
+	const c2 = cos(y / 2);
+	const c3 = cos(z / 2);
+	const s1 = sin(x / 2);
+	const s2 = sin(y / 2);
+	const s3 = sin(z / 2);
+	switch (order) {
+		case "xyz":
+			out[0] = s1 * c2 * c3 + c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 - s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 + s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 - s1 * s2 * s3;
+			break;
+		case "yxz":
+			out[0] = s1 * c2 * c3 + c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 - s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 - s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 + s1 * s2 * s3;
+			break;
+		case "zxy":
+			out[0] = s1 * c2 * c3 - c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 + s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 + s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 - s1 * s2 * s3;
+			break;
+		case "zyx":
+			out[0] = s1 * c2 * c3 - c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 + s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 - s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 + s1 * s2 * s3;
+			break;
+		case "yzx":
+			out[0] = s1 * c2 * c3 + c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 + s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 - s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 - s1 * s2 * s3;
+			break;
+		case "xzy":
+			out[0] = s1 * c2 * c3 - c1 * s2 * s3;
+			out[1] = c1 * s2 * c3 - s1 * c2 * s3;
+			out[2] = c1 * c2 * s3 + s1 * s2 * c3;
+			out[3] = c1 * c2 * c3 + s1 * s2 * s3;
+			break;
+		default: console.warn(`fromEuler() encountered an unknown order: ${order}`);
+	}
+	return out;
+}
+const _fromDegrees_euler = [
+	0,
+	0,
+	0,
+	"xyz"
+];
+/**
+* Creates a quaternion from euler angles specified in degrees.
+* Shorthand for converting degrees to radians and then creating a quaternion from euler.
+*
+* @param out the receiving quaternion
+* @param x The x euler rotation in degrees
+* @param y The y euler rotation in degrees
+* @param z The z euler rotation in degrees
+* @param order The order of rotation
+* @returns out
+*/
+function fromDegrees$1(out, x, y, z, order) {
+	_fromDegrees_euler[0] = x * Math.PI / 180;
+	_fromDegrees_euler[1] = y * Math.PI / 180;
+	_fromDegrees_euler[2] = z * Math.PI / 180;
+	_fromDegrees_euler[3] = order;
+	return fromEuler(out, _fromDegrees_euler);
+}
+/**
+* Returns a string representation of a quaternion
+*
+* @param a vector to represent as a string
+* @returns string representation of the vector
+*/
+function str$4(a) {
+	return `quat(${a[0]}, ${a[1]}, ${a[2]}, ${a[3]})`;
+}
+/**
+* Creates a new quat initialized with values from an existing quaternion
+*
+* @param a quaternion to clone
+* @returns a new quaternion
+*/
+const clone$4 = clone$5;
+/**
+* Creates a new quat initialized with the given values
+*
+* @param x X component
+* @param y Y component
+* @param z Z component
+* @param w W component
+* @returns a new quaternion
+*/
+const fromValues$5 = fromValues$6;
+/**
+* Copy the values from one quat to another
+*
+* @param out the receiving quaternion
+* @param a the source quaternion
+* @returns out
+*/
+const copy$4 = copy$5;
+/**
+* Set the components of a quat to the given values
+*
+* @param out the receiving quaternion
+* @param x X component
+* @param y Y component
+* @param z Z component
+* @param w W component
+* @returns out
+*/
+const set$5 = set$6;
+/**
+* Adds two quat's
+*
+* @param out the receiving quaternion
+* @param a the first operand
+* @param b the second operand
+* @returns out
+*/
+const add$3 = add$4;
+/**
+* Scales a quat by a scalar number
+*
+* @param out the receiving quaternion
+* @param a the quaternion to scale
+* @param b amount to scale the quaternion by
+* @returns out
+*/
+const scale$4 = scale$5;
+/**
+* Calculates the dot product of two quat's
+*
+* @param a the first operand
+* @param b the second operand
+* @returns dot product of a and b
+*/
+const dot$1 = dot$2;
+/**
+* Performs a linear interpolation between two quat's
+*
+* @param out the receiving quaternion
+* @param a the first operand
+* @param b the second operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+const lerp$3 = lerp$4;
+/**
+* Calculates the length of a quat
+*
+* @param a quaternion to calculate length of
+* @returns length of a
+*/
+const length$1 = length$2;
+/**
+* Alias for {@link length}
+*/
+const len$1 = length$1;
+/**
+* Calculates the squared length of a quat
+*
+* @param a quaternion to calculate squared length of
+* @returns squared length of a
+*/
+const squaredLength$1 = squaredLength$2;
+/**
+* Alias for {@link squaredLength}
+*/
+const sqrLen$1 = squaredLength$1;
+/**
+* Alias for {@link multiply}
+*/
+const mul$3 = multiply$3;
+/**
+* Normalize a quat
+*
+* @param out the receiving quaternion
+* @param a quaternion to normalize
+* @returns out
+*/
+const normalize$2 = normalize$3;
+/**
+* Returns whether or not the quaternions have exactly the same elements in the same position (when compared with ===)
+*
+* @param a The first quaternion.
+* @param b The second quaternion.
+* @returns True if the quaternions are equal, false otherwise.
+*/
+const exactEquals$5 = exactEquals$6;
+/**
+* Returns whether or not the quaternions have approximately the same elements in the same position.
+*
+* @param a The first quaternion.
+* @param b The second quaternion.
+* @returns True if the quaternions are equal, false otherwise.
+*/
+function equals$6(a, b) {
+	return Math.abs(dot$2(a, b)) >= 1 - EPSILON;
+}
+/**
+* Sets a quaternion to represent the shortest rotation from one
+* vector to another.
+*
+* Both vectors are assumed to be unit length.
+*
+* @param out the receiving quaternion.
+* @param a the initial vector
+* @param b the destination vector
+* @returns out
+*/
+const rotationTo = /* @__PURE__ */ (() => {
+	const tmpvec3 = create$2();
+	const xUnitVec3 = fromValues$2(1, 0, 0);
+	const yUnitVec3 = fromValues$2(0, 1, 0);
+	return (out, a, b) => {
+		const dot$3 = dot(a, b);
+		if (dot$3 < -.999999) {
+			cross(tmpvec3, xUnitVec3, a);
+			if (length(tmpvec3) < 1e-6) cross(tmpvec3, yUnitVec3, a);
+			normalize(tmpvec3, tmpvec3);
+			setAxisAngle(out, tmpvec3, Math.PI);
+			return out;
+		}
+		if (dot$3 > .999999) {
+			out[0] = 0;
+			out[1] = 0;
+			out[2] = 0;
+			out[3] = 1;
+			return out;
+		}
+		cross(tmpvec3, a, b);
+		out[0] = tmpvec3[0];
+		out[1] = tmpvec3[1];
+		out[2] = tmpvec3[2];
+		out[3] = 1 + dot$3;
+		return normalize$2(out, out);
+	};
+})();
+/**
+* Performs a spherical linear interpolation with two control points
+*
+* @param out the receiving quaternion
+* @param a the first operand
+* @param b the second operand
+* @param c the third operand
+* @param d the fourth operand
+* @param t interpolation amount, in the range [0-1], between the two inputs
+* @returns out
+*/
+const sqlerp = /* @__PURE__ */ (() => {
+	const temp1 = create$5();
+	const temp2 = create$5();
+	return (out, a, b, c, d, t) => {
+		slerp(temp1, a, d, t);
+		slerp(temp2, b, c, t);
+		slerp(out, temp1, temp2, 2 * t * (1 - t));
+		return out;
+	};
+})();
+/**
+* Sets the specified quaternion with values corresponding to the given
+* axes. Each axis is a vec3 and is expected to be unit length and
+* perpendicular to all other specified axes.
+*
+* @param view  the vector representing the viewing direction
+* @param right the vector representing the local "right" direction
+* @param up    the vector representing the local "up" direction
+* @returns out
+*/
+const setAxes = /* @__PURE__ */ (() => {
+	const matr = create();
+	return (out, view, right, up) => {
+		matr[0] = right[0];
+		matr[3] = right[1];
+		matr[6] = right[2];
+		matr[1] = up[0];
+		matr[4] = up[1];
+		matr[7] = up[2];
+		matr[2] = -view[0];
+		matr[5] = -view[1];
+		matr[8] = -view[2];
+		return normalize$2(out, fromMat3(out, matr));
+	};
+})();
+Math.PI * 2;
 //#endregion
 //#region three/debug-renderer.ts
-var debug_renderer_exports = /* @__PURE__ */ __exportAll({
+var debug_renderer_exports = /* @__PURE__ */ __exportAll$1({
 	BodyColorMode: () => BodyColorMode,
 	clear: () => clear,
 	createDefaultOptions: () => createDefaultOptions,
@@ -2238,45 +3935,45 @@ function addConstraintMarker(positions, colors, pos, size, color) {
 		pos[2] + size
 	], color);
 }
-const _transformPointOut = create$1();
-const _transformDirOut = create$1();
-const _transformPointOut2 = create$1();
-const _transformPoint_rotated = create$1();
-const _constraint_twistAxis = create$1();
-const _constraint_planeAxis = create$1();
-const _constraint_normalAxis = create$1();
-const _constraint_xAxis = create$1();
-const _constraint_yAxis = create$1();
-const _constraint_zAxis = create$1();
-const _constraint_quat = create();
-const _constraint_normal1 = create$1();
+const _transformPointOut = vec3_exports.create();
+const _transformDirOut = vec3_exports.create();
+const _transformPointOut2 = vec3_exports.create();
+const _transformPoint_rotated = vec3_exports.create();
+const _constraint_twistAxis = vec3_exports.create();
+const _constraint_planeAxis = vec3_exports.create();
+const _constraint_normalAxis = vec3_exports.create();
+const _constraint_xAxis = vec3_exports.create();
+const _constraint_yAxis = vec3_exports.create();
+const _constraint_zAxis = vec3_exports.create();
+const _constraint_quat = quat_exports.create();
+const _constraint_normal1 = vec3_exports.create();
 function transformPointToWorld(out, localPos, bodyTransform) {
 	if (!bodyTransform) {
-		set(out, 0, 0, 0);
+		vec3_exports.set(out, 0, 0, 0);
 		return;
 	}
-	transformQuat(_transformPoint_rotated, localPos, bodyTransform.quaternion);
-	add(out, _transformPoint_rotated, bodyTransform.centerOfMassPosition);
+	vec3_exports.transformQuat(_transformPoint_rotated, localPos, bodyTransform.quaternion);
+	vec3_exports.add(out, _transformPoint_rotated, bodyTransform.centerOfMassPosition);
 }
 function transformDirectionToWorld(out, localDir, bodyTransform) {
 	if (!bodyTransform) {
-		set(out, 0, 0, 0);
+		vec3_exports.set(out, 0, 0, 0);
 		return;
 	}
-	transformQuat(out, localDir, bodyTransform.quaternion);
+	vec3_exports.transformQuat(out, localDir, bodyTransform.quaternion);
 }
-const _pieRotationQuat = create();
-const _pieAxisVec = create$1();
-const _pieRotatedAxis = create$1();
+const _pieRotationQuat = quat_exports.create();
+const _pieAxisVec = vec3_exports.create();
+const _pieRotatedAxis = vec3_exports.create();
 function rotateVectorAroundAxis(out, vector, axis, angle) {
-	setAxisAngle(_pieRotationQuat, axis, angle);
-	transformQuat(out, vector, _pieRotationQuat);
+	quat_exports.setAxisAngle(_pieRotationQuat, axis, angle);
+	vec3_exports.transformQuat(out, vector, _pieRotationQuat);
 }
 function drawPie(positions, colors, center, radius, normal, axis, minAngle, maxAngle, color) {
 	if (minAngle >= maxAngle) return;
 	const numSegments = 32;
 	const angleStep = (maxAngle - minAngle) / numSegments;
-	copy(_pieAxisVec, axis);
+	vec3_exports.copy(_pieAxisVec, axis);
 	let prevPoint = null;
 	for (let i = 0; i <= numSegments; i++) {
 		rotateVectorAroundAxis(_pieRotatedAxis, _pieAxisVec, normal, minAngle + i * angleStep);
@@ -2386,7 +4083,7 @@ function drawConstraints(state, world) {
 		], redColor);
 		addConstraintMarker(positions, colors, pos2, size * .1, greenColor);
 		if (drawLimits && constraint.hasLimits && constraint.limitsMax > constraint.limitsMin) {
-			set(_constraint_normal1, constraint.localSpaceNormalAxis1[0], constraint.localSpaceNormalAxis1[1], constraint.localSpaceNormalAxis1[2]);
+			vec3_exports.set(_constraint_normal1, constraint.localSpaceNormalAxis1[0], constraint.localSpaceNormalAxis1[1], constraint.localSpaceNormalAxis1[2]);
 			transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
 			addConstraintLine(positions, colors, pos2, [
 				pos2[0] + _constraint_normal1[0] * size,
@@ -2395,7 +4092,7 @@ function drawConstraints(state, world) {
 			], whiteColor);
 			drawPie(positions, colors, pos1, size, axis1, _constraint_normal1, constraint.limitsMin, constraint.limitsMax, purpleColor);
 		} else {
-			set(_constraint_normal1, constraint.localSpaceNormalAxis1[0], constraint.localSpaceNormalAxis1[1], constraint.localSpaceNormalAxis1[2]);
+			vec3_exports.set(_constraint_normal1, constraint.localSpaceNormalAxis1[0], constraint.localSpaceNormalAxis1[1], constraint.localSpaceNormalAxis1[2]);
 			transformDirectionToWorld(_constraint_normal1, _constraint_normal1, bodyA);
 			addConstraintLine(positions, colors, pos2, [
 				pos2[0] + _constraint_normal1[0] * size,
@@ -2420,14 +4117,14 @@ function drawConstraints(state, world) {
 		if (drawLimits) {
 			const c2b1 = constraint.constraintToBody1;
 			const qA = bodyA.quaternion;
-			multiply(_constraint_quat, qA, c2b1);
+			quat_exports.multiply(_constraint_quat, qA, c2b1);
 			const constraintTransform = {
 				...bodyA,
 				quaternion: _constraint_quat
 			};
-			set(_constraint_xAxis, 1, 0, 0);
-			set(_constraint_yAxis, 0, 1, 0);
-			set(_constraint_zAxis, 0, 0, 1);
+			vec3_exports.set(_constraint_xAxis, 1, 0, 0);
+			vec3_exports.set(_constraint_yAxis, 0, 1, 0);
+			vec3_exports.set(_constraint_zAxis, 0, 0, 1);
 			transformDirectionToWorld(_constraint_twistAxis, _constraint_xAxis, constraintTransform);
 			transformDirectionToWorld(_constraint_planeAxis, _constraint_yAxis, constraintTransform);
 			transformDirectionToWorld(_constraint_normalAxis, _constraint_zAxis, constraintTransform);

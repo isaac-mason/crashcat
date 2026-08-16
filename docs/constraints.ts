@@ -15,7 +15,7 @@ import {
     sliderConstraint,
     sphere,
 } from 'crashcat';
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 
 /* SNIPPET_START: basic */
 const world = createWorld(createWorldSettings());

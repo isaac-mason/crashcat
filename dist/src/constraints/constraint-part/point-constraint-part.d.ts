@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * PointConstraintPart removes 3 translational degrees of freedom.

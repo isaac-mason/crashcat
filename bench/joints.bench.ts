@@ -37,7 +37,7 @@ import {
     type World,
     type WorldSettings,
 } from 'crashcat';
-import { quat, type Vec3, vec3 } from 'mathcat';
+import { quat, type Vec3, vec3 } from 'math';
 
 registerAll();
 

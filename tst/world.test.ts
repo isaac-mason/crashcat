@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { getBodyIdIndex, getBodyIdSequence, INVALID_BODY_ID } from '../src/body/body-id';

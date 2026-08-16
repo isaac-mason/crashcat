@@ -43,7 +43,7 @@ import {
     type World,
     type WorldSettings,
 } from 'crashcat';
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 registerAll();
 

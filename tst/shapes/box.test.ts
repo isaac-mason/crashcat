@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, computeMassProperties, ShapeType } from '../../src';
 import * as massProperties from '../../src/body/mass-properties';

@@ -1,4 +1,4 @@
-import { euler, quat, vec3 } from 'mathcat';
+import { euler, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,

@@ -1,5 +1,5 @@
-import type { Mat2, Mat4, Vec2, Vec3 } from 'mathcat';
-import { mat2, mat4, vec2, vec3 } from 'mathcat';
+import type { Mat2, Mat4, Vec2, Vec3 } from 'math';
+import { mat2, mat4, vec2, vec3 } from 'math';
 import {
     addAngularVelocityStep,
     addLinearVelocityStep,

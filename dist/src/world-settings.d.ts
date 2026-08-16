@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import * as layers from './layers.js';
 export type WorldSettings = {
     /** Collision layers */

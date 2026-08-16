@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
 import { type ConstraintId } from './constraint-id.js';

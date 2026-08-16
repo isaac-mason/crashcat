@@ -40,10 +40,10 @@ export default [
             compilecat({
                 sourcemap: true,
 
-                // Scope: crashcat's own src + the mathcat package (so @optimize
-                // functions can inline mathcat vec3/etc.). Nothing else in
+                // Scope: crashcat's own src + the math package (so @optimize
+                // functions can inline math vec3/etc.). Nothing else in
                 // node_modules is read.
-                include: [/\/src\//, /\/node_modules\/mathcat\//],
+                include: [/\/src\//, /\/node_modules\/math\//],
             }),
             filesize(),
         ],

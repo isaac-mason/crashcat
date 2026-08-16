@@ -18,8 +18,8 @@ import {
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
-import type { Mat4, Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Mat4, Quat, Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';

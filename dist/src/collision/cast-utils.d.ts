@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 export declare const INITIAL_EARLY_OUT_FRACTION: number;
 export declare const SHOULD_EARLY_OUT_FRACTION = 0;
 /** result of a {@link rayIntersectsTriangle} test */

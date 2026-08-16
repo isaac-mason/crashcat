@@ -1,4 +1,5 @@
-import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { box3 } from 'math/shapes';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';
@@ -8,6 +9,7 @@ import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import type { BodyVisitor } from './broadphase/body-visitor';
 import * as broadphase from './broadphase/broadphase';
 import * as ccd from './ccd';
+import { rayHitsBox3 } from './collision/cast-utils';
 import {
     type CastShapeCollector,
     type CastShapeHit,
@@ -22,7 +24,6 @@ import {
     createDefaultCastShapeSettings,
     createDefaultCollideShapeSettings,
 } from './collision/narrowphase';
-import { rayHitsBox3 } from './collision/cast-utils';
 import { combineMaterial } from './constraints/combine-material';
 import type { ConstraintType } from './constraints/constraint-id';
 import * as axisConstraintPart from './constraints/constraint-part/axis-constraint-part';

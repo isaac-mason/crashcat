@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { createTestWorld } from './helpers';
