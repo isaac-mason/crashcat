@@ -1,11 +1,10 @@
-import { defineConfig } from '@pmndrs/labs'
+import { defineConfig } from '@pmndrs/labs';
 
 export default defineConfig({
-  benchDir: '.',
-  // Macro physics benches need bigger budgets than the 5s default — one
-  // sample is a multi-hundred-ms world.step loop, so reaching the 14-sample
-  // floor for statistical comparison needs a large CPU budget per bench.
-  // This is a CAP, not a floor: adaptive sampling stops at convergence, so
-  // only benches that stay noisy (pyramid at ~1.5s/iter) run this long.
-  maxCpuTime: 120,
-})
+    benchDir: './benches',
+    // one op builds a whole scenario and runs its steps, so an op is tens of milliseconds rather
+    // than the microseconds labs defaults assume. the block time is raised to reach the sample
+    // floor without stretching a full suite run past a couple of minutes.
+    blockTime: 2,
+    minSamples: 12,
+});

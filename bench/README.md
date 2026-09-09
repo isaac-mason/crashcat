@@ -1,175 +1,101 @@
-# crashcat bench + perf rig
+# crashcat bench
 
-CPU-profile attribution for the macro physics scenarios. The bench imports the
-built `dist/index.js` bundle, so the rig decodes `dist/index.js.map` to map every
-hotspot back to its `src/**/*.ts` origin.
-
-## workflow
-
-```
-build → bench → report → diff
-```
-
-> Thermal caveat (Apple Silicon): batch runs drift — a scenario late in a hot batch
-> can read ±10% vs the same code on a cool machine (measured 2026-07-04: a "+9.8%
-> p<.001" single-scenario regression dissolved to parity under interleaved A/B).
-> For a suspicious single-scenario delta, verify with interleaved old/new runs
-> (alternate processes importing the two bundles) before believing it.
-
-1. **build** — the rig profiles the built bundle, so build first (from repo root):
-
-   ```
-   pnpm build
-   ```
-
-2. **bench** — throughput numbers via labs (adaptive sampling):
-
-   ```
-   pnpm bench
-   ```
-
-3. **report** — CPU-prof attribution → committed markdown + machine-readable json:
-
-   ```
-   pnpm perf:report <scenario>            # e.g. cube-heap
-   pnpm perf:report <scenario> -- --keep  # also leave the .cpuprofile on disk
-   ```
-
-   Writes `bench/reports/<scenario>.md` and `bench/reports/<scenario>.summary.json`,
-   and prints the report. The `.md` is the human view (metadata, category
-   roll-up, top-30 self-time hotspots with `src/…:line`); the `.summary.json`
-   is the diff input.
-
-   For a quick stdout-only dump (no files written) use the legacy wrapper:
-
-   ```
-   pnpm perf:profile <scenario> [-- --keep]
-   ```
-
-4. **diff** — compare two summaries (before/after a change):
-
-   ```
-   pnpm perf:diff bench/reports/before.summary.json bench/reports/after.summary.json
-   ```
-
-   Prints and writes `bench/reports/<before>__vs__<after>.diff.md`: per-category
-   ms/pct-point/relative deltas, per-function hotspot deltas (matched by
-   name + file, including appeared/gone functions), and the total attributed-time
-   delta. Deltas below 0.5 ms are hidden as noise.
-
-   Typical before/after loop: `perf:report` on the baseline, copy the summary
-   aside (or commit it), make your change, `pnpm build`, `perf:report` again,
-   then `perf:diff` the two summaries.
-
-## scenarios
-
-Each scenario is `bench/<name>.bench.ts` exporting `runForProfiling()`, run via
-`bench/run-scenario.ts`. Every scenario additionally exports
-
-```
-createScenario(): { world: World; warmupSteps: number; stepOnce(stepIndex: number): void }
-```
-
-which is the single source of truth for construction + per-step work: `stepOnce`
-performs exactly one simulated step (including any per-step scenario work — KCC
-input, projectile relaunch, churn spawn/remove, the wake-waves sweeper). Both the
-labs bench and `runForProfiling` are expressed in terms of it. `stepIndex` is a
-global step counter — the first `warmupSteps` calls are the warmup, and per-op
-rng re-seeding happens at the op boundaries inside `stepOnce`, so a labs op
-(which replays the same window) and the continuous profiling/hitch run both fall
-out of the one implementation with identical measured behaviour.
-
-- **cube-heap** — 200 dynamic boxes on a static plane, one box re-spawned per
-  frame to keep contacts churning. Stresses broadphase under motion + the
-  contact solver.
-- **hull-heap** — same harness with a shared 100-vertex convex hull instead of a
-  box. Puts real weight on the support machinery (`getSupport` vertex scan,
-  per-pair convex-radius shrink) and EPA.
-- **pyramid** — 385 dynamic boxes stacked into a height-10 pyramid, sleeping
-  disabled so every step does a full solve. Stresses the solver + contact cache
-  under dense persistent stacking.
-- **kcc-mesh** — 16 kinematic character controllers roaming a procedural sine/cos
-  triangle-mesh terrain (64×64 quads, ~50×50m) with 20 dynamic box props.
-  Stresses the KCC shape-cast / collide-shape path against a triangle-mesh BVH.
-- **mesh-field** — 200 mixed-shape dynamic bodies (box/sphere/capsule/hull)
-  scattered over a big triangle-mesh terrain (128×128 quads, ~200×200m) with
-  gentle churn tuned so ~40-60% sleep at steady state. Stresses the sleeping
-  system + broadphase coverage across a large static mesh.
-- **joints** — 24 ragdoll-ish chains of 6-8 capsules linked with a mix of
-  swing-twist / hinge / point constraints, dropped on a plane, sleeping disabled
-  and one chain teleported back up every ~2s. Stresses the constraint solver.
-- **projectiles-terrain** — ~50 LINEAR_CAST (CCD) projectiles ricocheting around a
-  blocky voxel-style triangle-mesh arena at ~25 m/s, relaunched on settle. The
-  only scenario that exercises continuous collision detection (swept-AABB
-  broadphase + shape-cast vs the terrain BVH every step).
-- **scaled-hulls** — one shared ~40-vertex convex hull instanced 150 times at 10
-  distinct uniform scales (0.4×–2.5×) via `scaled` shapes, heaped like cube-heap.
-  Isolates the scaled-convex-hull support path (before/after oracle for a
-  uniform-scale fast path).
-- **collapse** — a transient (not steady-state): a 10×6×2 wall of 120 dynamic
-  boxes on a static ground, hit at t=0 by a heavy dense sphere. Each op builds a
-  fresh world and runs the whole 360-step topple with no warmup. Measures contact
-  churn + island merging + mass sleep transitions during a transient.
-- **body-churn** — spawn/despawn lifecycle: a seeded emitter spawns 2-3 small
-  boxes/step and removes bodies older than 75 steps, holding a steady ~188-body
-  population bouncing on a static ground. Measures body create/remove, pair-purge
-  cascades, freelist reuse, discovery pressure.
-- **wake-waves** — periodic sleep/wake: a settle-sleep-style 8×8 grid of box
-  stacks (wide spacing so lanes are isolated) with a kinematic sphere sweeping
-  through lanes at constant velocity, waking each lane and letting it re-sleep
-  behind. Measures the repeated sleep-transition machinery (contact-chain
-  destroy/re-add, island rebuild, wake discovery) rather than static rest.
-- **compound-heap** — 60 dynamic compound bodies (3-5 child boxes/spheres:
-  hammer / L-bracket / small table) heaped into a static box container,
-  cube-heap-style churn. Measures the compound sub-shape narrowphase and the
-  multi-contact pair chains it produces.
-
-## hitch — per-step worst-case frame times
-
-Where `perf:report` answers "where does the average step spend its time",
-`hitch` answers "how bad is the worst step" — the tail that shows up as a dropped
-frame.
-
-Read the distribution (p99/p99.9), not the max: measured attribution (2026-07-04,
-hull-heap) showed the extreme outlier steps perform the same simulation work as
-median steps with zero GC overlap, arriving in consecutive-step clusters — an
-OS/runtime artifact (Apple Silicon core migration / JIT deopt), not the engine.
-A real algorithmic hitch shows up as elevated work at the outlier, not just
-elevated wall time.
-
-```
-pnpm hitch <scenario> [--steps N]      # default N = 1200
-```
-
-Builds the scenario via `createScenario()`, runs its warmup, then times each of
-N post-warmup steps with `performance.now()` and writes
-`bench/reports/hitch-<scenario>.md` + `bench/reports/hitch-<scenario>.json`:
-p50/p90/p99/p99.9/max step time, a text histogram, and the 5 worst steps. Raw
-timings are kept **exactly as measured, GC pauses included** — a GC pause landing
-inside a step is a real hitch, so it is the metric here, not noise to filter.
-
-## focus — cross-scenario focus map
-
-```
-pnpm focus
-```
-
-Reads every `bench/reports/<scenario>.summary.json` present and writes (and
-prints) `bench/reports/focus-map.md`: (a) a categories × scenarios matrix of
-self-time percentages (rows = category, columns = scenario, plus a mean column,
-sorted by mean) and (b) a top-15 cross-scenario hotspot table (function+file,
-summed self-ms across scenarios, and which scenarios it is hot in). This rolls
-the per-scenario reports up into "which subsystem / function dominates the whole
-suite" — the thing worth optimizing first.
+Macro physics scenarios ported from real physics benchmark suites, run headless through
+[`@pmndrs/labs`](https://www.npmjs.com/package/@pmndrs/labs) or watched in a browser with the debug
+renderer attached. Both read the same scenario files.
 
 ## layout
 
-- `perf-report.mjs` — the `run` / `diff` CLI.
-- `profile.mjs` — legacy stdout-only wrapper (same output as before, now over the lib).
-- `hitch.mjs` / `hitch-run.ts` — the per-step hitch tool (node CLI + its tsx runner).
-- `focus.mjs` — the cross-scenario focus-map aggregator.
-- `lib/cpuprofile.mjs` — pure analysis: source-map VLQ decode, self-time
-  aggregation, categorization, display helpers.
-- `lib/run.mjs` — spawns a scenario under `--cpu-prof` and collects the profile.
-- `reports/` — committed baseline reports + summaries.
-- `.profiles/` — scratch `.cpuprofile` output; auto-cleaned unless `--keep`.
+```
+scenarios/          scenario definitions. plain crashcat, no labs and no three
+benches/            three lines each, wiring one scenario into labs
+viewer/             vite page that runs a scenario with the debug renderer
+smoke.ts            one untimed pass over every scenario, for sanity and for sizing steps
+```
+
+A scenario is a name, a description, a `steps` count and a `create()` that returns
+`{ world, step(stepIndex) }`. `step` advances exactly one simulated step **including any per-step
+scenario work** — the wrecking ball pyramid drops its weight on a given step, raycast-mesh fires its
+ray fan before stepping, character-terrain drives every character controller. Anything PEEL does in
+`CommonUpdate` goes there.
+
+## running headless
+
+The engine is consumed from `dist`, so build first from the repo root:
+
+```
+pnpm build
+```
+
+Then, in `bench/`:
+
+```
+pnpm bench                        # every scenario, saved under the current commit
+pnpm bench pyramid                # one scenario
+pnpm bench "convex-pile pyramid"  # several
+pnpm bench "@physics"             # by tag
+pnpm bench -n 'before-my-change'  # save under a name
+pnpm bench --no-save              # throwaway run
+pnpm bench:list                   # what has been saved
+pnpm bench:baseline <name>        # pin a saved run as the baseline
+pnpm bench:compare <name>         # compare a saved run against the baseline
+```
+
+`pnpm smoke` prints body counts and rough ms/step for every scenario in a single cold pass. It is
+not a measurement — it exists to sanity-check a scenario and to size its `steps`.
+
+## running with the renderer
+
+```
+pnpm viewer
+```
+
+Pick a scenario from the dropdown, or link straight to one with `#pyramid`. Pause, single-step and
+restart are there for watching a scenario behave rather than for timing it. Nothing in `viewer/` is
+imported by `benches/`, so attaching a renderer cannot change what is measured.
+
+## what a measured op is
+
+One op builds a whole world and runs its `steps`. Building every time is deliberate: labs samples an
+op many times, and a physics scenario that kept stepping one long-lived world would get cheaper as
+it settled, so every sample would be measuring a different simulation. Rebuilding keeps the workload
+stationary, at the cost of folding a fixed construction cost into every sample — which is the right
+call for scenarios like sea-of-static-boxes, where the broadphase build *is* the thing under test.
+
+`steps` is sized so an op lands around 100-350ms. That is large for labs, so `labs.config.ts` raises
+`blockTime` and lowers `minSamples` to reach the sample floor without a run taking all afternoon.
+
+## the scenarios
+
+Every scenario is a port of a named test from PEEL (Pierre Terdiman's Physics Engine Evaluation Lab)
+or from Jolt's `PerformanceTest`, with the source named in the file header along with any deviation.
+
+| scenario | source | loads |
+| --- | --- | --- |
+| `box-stacks` | PEEL `ManySmallBoxStacks10` | stacking stability, many small islands |
+| `pyramid` | Jolt `PyramidScene` | one deep contact island, plus an impact |
+| `convex-pile` | PEEL `PileOfMediumConvexes` | GJK/EPA, convex hull support |
+| `compound-pile` | PEEL `PileOfSmallCompounds` | compound dispatch, sub-shape ids |
+| `ten-thousand-boxes` | PEEL `TenThousandsBoxes` | broadphase and sleeping at 10k bodies |
+| `sea-of-static-boxes` | PEEL `SeaOfStaticBoxes` | static broadphase build, idle step cost |
+| `convex-vs-mesh` | Jolt `ConvexVsMeshScene` | mesh BVH traversal, per-triangle collide |
+| `raycast-mesh` | PEEL raycast-vs-static-mesh | broadphase castRay, castRayVsTriangleMesh |
+| `ragdoll-pile` | PEEL `PileOfRagdolls_16` | swing-twist constraints, island building |
+| `hinge-chain` | PEEL `HingeJointChain` | long serial constraint chains |
+| `ccd-cascade` | PEEL `CCDTest_DynamicDynamic_ConvexCascade` | the linear-cast CCD sweep |
+| `character-terrain` | Jolt `CharacterVirtualScene` | KCC shape casts against a mesh |
+
+## adding one
+
+1. Write `scenarios/<name>.ts` exporting a `defineScenario({...})`. Name the suite and test it comes
+   from in the file header, and spell out any deviation from it.
+2. Add it to `SCENARIOS` in `scenarios/index.ts`.
+3. Add `benches/<name>.bench.ts` — copy any existing one, it is three lines.
+4. Run `pnpm smoke <name>` and set `steps` so the op lands in the 100-350ms band.
+
+## a note on the machine
+
+Apple Silicon drifts under sustained load: a scenario late in a hot batch can read meaningfully
+slower than the same code on a cool machine. labs runs each bench in eight fresh interleaved
+processes and judges on block medians precisely to absorb this, and it flags a run whose clock
+probes vary too much. Believe a flagged verdict only after re-running.
