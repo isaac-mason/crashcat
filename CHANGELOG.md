@@ -2,6 +2,7 @@
 
 ## v0.0.6 (Unreleased)
 
+- fix: `gjkCastShape` kept the rejected support point in the simplex when it gave up after its one restart, so contact points were reconstructed from a point gjk had already discarded (port of jolt #2108)
 - feat: `dbvt.walk` now takes `world` first (`walk(world, dbvt, visitor)`), matching the other dbvt traversals
 - refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards dropped from traversals (body destroy removes the leaf before it is pooled), redundant node reset on free-list reuse removed, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
 - perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) to replace GJK/EPA convex collide for sphere/box pairs

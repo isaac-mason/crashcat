@@ -11,6 +11,7 @@ import {
     createAllCastShapeCollector,
     createClosestCastShapeCollector,
     createDefaultCastShapeSettings,
+    cylinder,
     EMPTY_SUB_SHAPE_ID,
     plane,
     sphere,
@@ -2224,5 +2225,46 @@ describe('castShapeVsShape - Sphere vs Plane', () => {
         expect(hits[0].fraction).toBeLessThan(1);
         // fraction should be approximately (3-1)/5 = 0.4
         expect(hits[0].fraction).toBeCloseTo(0.4, 2);
+    });
+});
+
+describe('castShapeVsShape - GJK restart', () => {
+    const collector = createAllCastShapeCollector();
+
+    beforeEach(() => {
+        collector.reset();
+    });
+
+    it('reconstructs touching contact points when the cast gives up without restarting', () => {
+        // this configuration takes the branch where gjk fails to find a closer simplex and
+        // has already used its one restart. the contact points must come out of the previous
+        // valid simplex, not the rejected support point.
+        const cylinderA = cylinder.create({ halfHeight: 0.3, radius: 0.4975 });
+        const capsuleB = capsule.create({ halfHeightOfCylinder: 2.03114343, radius: 7.19732189 });
+
+        const settings = createDefaultCastShapeSettings();
+        settings.useShrunkenShapeAndConvexRadius = true;
+
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            settings,
+            cylinderA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -0.951660156, -2.09155273, -7.63574218, // posA
+            0, 0, 0, 1, // quatA
+            1, 1, 1, // scaleA
+            0.00244140625, -0.0068359375, 0.0029296875, // dispA
+            capsuleB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0, // posB
+            0, 0, 0, 1, // quatB
+            1, 1, 1, // scaleB
+        );
+
+        const hits = collector.hits;
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBe(0);
+        expect(vec3.distance(hits[0].pointA, hits[0].pointB)).toBeLessThan(1.0e-4);
     });
 });

@@ -1055,6 +1055,9 @@ export function gjkCastShape(
         if (!found) {
             // only allow 1 restart, if we still can't get a closest point we're so close that we return this as a hit
             if (!allowRestart) {
+                // the last support point did not produce a closer simplex, remove it so that the
+                // contact points below are reconstructed from the previous valid simplex
+                _simplex.size--;
                 break;
             }
 
