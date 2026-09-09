@@ -1,6 +1,7 @@
 import { type Mat4, type Vec3, vec3 } from 'math';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
+import { MIN_NORMAL } from '../../utils/float';
 
 /**
  * Angular friction constraint part: 1-DOF angular constraint around the contact normal.
@@ -117,7 +118,7 @@ export function calculateConstraintProperties(
         part.invI2_Axis[2] = 0;
     }
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
