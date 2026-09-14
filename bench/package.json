@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "bench": "labs",
+        "bench:quick": "labs --blocks 3 --no-save",
         "smoke": "tsx smoke.ts",
         "bench:baseline": "labs baseline",
         "bench:compare": "labs compare",

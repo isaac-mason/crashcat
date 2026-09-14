@@ -1,6 +1,16 @@
 import { box, capsule, filter, type KCC, kcc, MotionType, rigidBody, type Shape, updateWorld } from 'crashcat';
 import { quat, vec3, vec4 } from 'math';
-import { createStandardWorld, createTerrainShape, LAYER_MOVING, LAYER_STATIC, makeRng, TIME_STEP, terrainHeight } from './common';
+import {
+    captureBodyState,
+    createStandardWorld,
+    createTerrainShape,
+    LAYER_MOVING,
+    LAYER_STATIC,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+    terrainHeight,
+} from './common';
 import { defineScenario } from './scenario';
 
 // Jolt's PerformanceTest CharacterVirtualScene: kinematic characters roaming a triangle-mesh
@@ -18,6 +28,7 @@ const AGENT_HALF_HEIGHT = 0.5;
 const AGENT_SPEED = 3;
 const GRAVITY: [number, number, number] = [0, -20, 0];
 const RNG_SEED = 0x94d049bb;
+const ROAM_SEED = 0x1b873593;
 
 const agentShape: Shape = capsule.create({ halfHeightOfCylinder: AGENT_HALF_HEIGHT, radius: AGENT_RADIUS });
 const propShape: Shape = box.create({ halfExtents: [0.3, 0.3, 0.3] });
@@ -25,7 +36,7 @@ const propShape: Shape = box.create({ halfExtents: [0.3, 0.3, 0.3] });
 export const characterTerrain = defineScenario({
     name: 'character-terrain',
     description: 'Jolt PerformanceTest CharacterVirtualScene — 24 KCC agents roaming a triangle mesh',
-    steps: 60,
+    steps: 120,
     create() {
         const rng = makeRng(RNG_SEED);
         const world = createStandardWorld(GRAVITY);
@@ -42,7 +53,14 @@ export const characterTerrain = defineScenario({
         const characterFilter = filter.create(world.settings.layers);
         const updateSettings = kcc.createDefaultUpdateSettings();
 
-        const agents: { character: KCC; heading: number; turnTimer: number }[] = [];
+        const agents: {
+            character: KCC;
+            heading: number;
+            turnTimer: number;
+            spawn: [number, number, number];
+            spawnHeading: number;
+            spawnTurnTimer: number;
+        }[] = [];
         for (let i = 0; i < CHARACTER_COUNT; i++) {
             const x = (rng() * 2 - 1) * ROAM_HALF;
             const z = (rng() * 2 - 1) * ROAM_HALF;
@@ -60,7 +78,16 @@ export const characterTerrain = defineScenario({
                 quat.create(),
             );
             kcc.add(world, character);
-            agents.push({ character, heading: rng() * Math.PI * 2, turnTimer: rng() * 2 });
+            const heading = rng() * Math.PI * 2;
+            const turnTimer = rng() * 2;
+            agents.push({
+                character,
+                heading,
+                turnTimer,
+                spawn: [x, terrainHeight(x, z) + 0.5, z],
+                spawnHeading: heading,
+                spawnTurnTimer: turnTimer,
+            });
         }
 
         for (let i = 0; i < PROP_COUNT; i++) {
@@ -78,17 +105,31 @@ export const characterTerrain = defineScenario({
         }
 
         const velocity: [number, number, number] = [0, 0, 0];
+        const captured = captureBodyState(world);
+
+        // characters roam under a seeded rng, so a window only repeats if the stream restarts too
+        let roamRng = makeRng(ROAM_SEED);
 
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+                roamRng = makeRng(ROAM_SEED);
+                for (const agent of agents) {
+                    vec3.copy(agent.character.position, agent.spawn);
+                    vec3.zero(agent.character.linearVelocity);
+                    agent.heading = agent.spawnHeading;
+                    agent.turnTimer = agent.spawnTurnTimer;
+                }
+            },
             step() {
                 for (const agent of agents) {
                     const character = agent.character;
 
                     agent.turnTimer -= TIME_STEP;
                     if (agent.turnTimer <= 0) {
-                        agent.heading += (rng() - 0.5) * 1.5;
-                        agent.turnTimer = 0.5 + rng() * 1.5;
+                        agent.heading += (roamRng() - 0.5) * 1.5;
+                        agent.turnTimer = 0.5 + roamRng() * 1.5;
                     }
                     // turn back before walking off the edge of the terrain
                     if (Math.abs(character.position[0]) > ROAM_HALF || Math.abs(character.position[2]) > ROAM_HALF) {

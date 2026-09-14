@@ -1,5 +1,13 @@
 import { box, ConstraintSpace, hingeConstraint, MotionType, type RigidBody, rigidBody, type Shape, updateWorld } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, LAYER_STATIC, TIME_STEP } from './common';
+import {
+    addGroundPlane,
+    captureBodyState,
+    createStandardWorld,
+    LAYER_MOVING,
+    LAYER_STATIC,
+    restoreBodyState,
+    TIME_STEP,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "HingeJointChain" (CATEGORY_JOINTS): 20 rows of 20 hinged boxes, each row anchored by a
@@ -65,8 +73,13 @@ export const hingeChain = defineScenario({
             }
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

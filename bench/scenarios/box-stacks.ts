@@ -1,5 +1,5 @@
 import { box, MotionType, rigidBody, type Shape, updateWorld } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, TIME_STEP } from './common';
+import { addGroundPlane, captureBodyState, createStandardWorld, LAYER_MOVING, restoreBodyState, TIME_STEP } from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "ManySmallBoxStacks10" (CATEGORY_PERFORMANCE), via its CreateBoxStack(nb_stacks, base=10)
@@ -43,8 +43,13 @@ export const boxStacks = defineScenario({
             }
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

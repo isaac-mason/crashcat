@@ -1,5 +1,13 @@
 import { box, MotionType, rigidBody, type Shape, updateWorld } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, makeRng, TIME_STEP } from './common';
+import {
+    addGroundPlane,
+    captureBodyState,
+    createStandardWorld,
+    LAYER_MOVING,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "TenThousandsBoxes" (CATEGORY_PERFORMANCE): a 16x16 footprint stacked 40 layers deep with
@@ -55,8 +63,13 @@ export const tenThousandBoxes = defineScenario({
             }
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

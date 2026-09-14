@@ -8,7 +8,17 @@ import {
     sphere,
     updateWorld,
 } from 'crashcat';
-import { createStandardWorld, createTerrainShape, LAYER_MOVING, LAYER_STATIC, makeRng, TIME_STEP, terrainHeight } from './common';
+import {
+    captureBodyState,
+    createStandardWorld,
+    createTerrainShape,
+    LAYER_MOVING,
+    LAYER_STATIC,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+    terrainHeight,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL's raycast category (SceneRaycastVsStaticMeshes_Terrain and friends): a fan of closest-hit
@@ -60,8 +70,13 @@ export const raycastMesh = defineScenario({
         const origin: [number, number, number] = [0, 0, 0];
         const direction: [number, number, number] = [0, 0, 0];
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step(stepIndex: number) {
                 // a sensor rig orbiting above the terrain, firing a fan of mostly-downward rays
                 const t = stepIndex * TIME_STEP;

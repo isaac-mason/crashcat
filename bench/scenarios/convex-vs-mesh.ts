@@ -1,11 +1,13 @@
 import { box, capsule, convexHull, MotionType, rigidBody, type Shape, sphere, updateWorld } from 'crashcat';
 import {
+    captureBodyState,
     convexBlobPositions,
     createStandardWorld,
     createTerrainShape,
     LAYER_MOVING,
     LAYER_STATIC,
     makeRng,
+    restoreBodyState,
     TIME_STEP,
     terrainHeight,
 } from './common';
@@ -60,8 +62,13 @@ export const convexVsMesh = defineScenario({
             });
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

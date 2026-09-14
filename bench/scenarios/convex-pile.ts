@@ -1,5 +1,13 @@
 import { convexHull, MotionType, rigidBody, type Shape, updateWorld } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, makeRng, TIME_STEP } from './common';
+import {
+    addGroundPlane,
+    captureBodyState,
+    createStandardWorld,
+    LAYER_MOVING,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "PileOfMediumConvexes" (CATEGORY_PERFORMANCE), via GenerateConvexPile(5, 5, 20, 2, 16):
@@ -51,8 +59,13 @@ export const convexPile = defineScenario({
             }
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

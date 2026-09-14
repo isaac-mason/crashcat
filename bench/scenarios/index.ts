@@ -13,7 +13,7 @@ import { seaOfStaticBoxes } from './sea-of-static-boxes';
 import { tenThousandBoxes } from './ten-thousand-boxes';
 
 export type { Scenario, ScenarioInstance } from './scenario';
-export { runScenario } from './scenario';
+export { runWindow, warm } from './scenario';
 
 export const SCENARIOS: Scenario[] = [
     boxStacks,

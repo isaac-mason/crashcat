@@ -1,11 +1,24 @@
 import { box, convexHull, MotionQuality, MotionType, rigidBody, type Shape, updateWorld } from 'crashcat';
-import { addGroundPlane, convexBlobPositions, createStandardWorld, LAYER_MOVING, makeRng, TIME_STEP } from './common';
+import {
+    addGroundPlane,
+    captureBodyState,
+    convexBlobPositions,
+    createStandardWorld,
+    LAYER_MOVING,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "CCDTest_DynamicDynamic_ConvexCascade" (CATEGORY_CCD): a column of 100 dynamic bodies
 // alternating between a wide thin box and a convex hull, spaced two apart, all falling into each
 // other at once. Thin plates are exactly what discrete collision tunnels through, so every body
 // runs on linear-cast motion quality and the post-solve CCD sweep is the point of the scenario.
+//
+// `steps` stops at 150 on purpose. The column takes about 385 steps to finish falling, and past
+// that the window is dominated by a deep pile of interleaved plates rather than by bodies moving
+// fast enough for CCD to do anything — which cost 8x as much per step and measured the wrong thing.
 
 const BODY_COUNT = 100;
 const SPACING = 2;
@@ -40,8 +53,13 @@ export const ccdCascade = defineScenario({
             });
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

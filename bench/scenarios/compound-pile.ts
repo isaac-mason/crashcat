@@ -1,5 +1,13 @@
 import { box, MotionType, rigidBody, type Shape, staticCompound, updateWorld } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, makeRng, TIME_STEP } from './common';
+import {
+    addGroundPlane,
+    captureBodyState,
+    createStandardWorld,
+    LAYER_MOVING,
+    makeRng,
+    restoreBodyState,
+    TIME_STEP,
+} from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "PileOfSmallCompounds" (CATEGORY_PERFORMANCE): a heap of multi-part compound bodies. Every
@@ -54,8 +62,13 @@ export const compoundPile = defineScenario({
             });
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

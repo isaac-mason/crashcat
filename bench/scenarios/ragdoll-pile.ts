@@ -8,7 +8,7 @@ import {
     swingTwistConstraint,
     updateWorld,
 } from 'crashcat';
-import { addGroundPlane, createStandardWorld, LAYER_MOVING, TIME_STEP } from './common';
+import { addGroundPlane, captureBodyState, createStandardWorld, LAYER_MOVING, restoreBodyState, TIME_STEP } from './common';
 import { defineScenario } from './scenario';
 
 // PEEL "PileOfRagdolls_16" (CATEGORY_JOINTS), via GenerateColumnOfRagdolls(16, 1): a column of 16
@@ -99,8 +99,13 @@ export const ragdollPile = defineScenario({
             }
         }
 
+        const captured = captureBodyState(world);
+
         return {
             world,
+            reset() {
+                restoreBodyState(world, captured);
+            },
             step() {
                 updateWorld(world, undefined, TIME_STEP);
             },

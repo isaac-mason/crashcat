@@ -76,7 +76,11 @@ function advance(): void {
 }
 
 scenarioSelect.addEventListener('change', () => load(scenarioSelect.value));
-restartButton.addEventListener('click', () => load(scenario.name));
+// the same reset the measured window starts from, so this shows exactly what the bench replays
+restartButton.addEventListener('click', () => {
+    instance.reset();
+    stepIndex = 0;
+});
 pauseButton.addEventListener('click', () => {
     paused = !paused;
     pauseButton.textContent = paused ? 'resume' : 'pause';
@@ -97,6 +101,7 @@ function frame(): void {
     debugRenderer.update(debugState, instance.world);
     orbitControls.update();
     renderer.render(scene, camera);
-    readout.textContent = `step ${stepIndex} / ${scenario.steps} measured  ${lastStepMs.toFixed(2)} ms  ${instance.world.bodies.activeBodyCount} awake`;
+    const inWindow = stepIndex < scenario.steps ? '' : ' (past the measured window)';
+    readout.textContent = `step ${stepIndex} / ${scenario.steps}${inWindow}  ${lastStepMs.toFixed(2)} ms  ${instance.world.bodies.activeBodyCount} awake`;
 }
 frame();

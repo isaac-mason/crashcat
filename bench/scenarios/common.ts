@@ -5,14 +5,16 @@ import {
     createWorldSettings,
     enableCollision,
     MotionType,
+    motionProperties,
     plane,
+    type RigidBody,
     registerAll,
     rigidBody,
     type Shape,
     triangleMesh,
     type World,
 } from 'crashcat';
-import type { Vec3 } from 'math';
+import { type Quat, quat, type Vec3, vec3 } from 'math';
 
 registerAll();
 
@@ -111,3 +113,44 @@ export function convexBlobPositions(pointCount: number, radius: number, rng: () 
     }
     return positions;
 }
+
+/** the per-body state a scenario reset has to put back */
+export type BodyState = {
+    body: RigidBody;
+    position: Vec3;
+    quaternion: Quat;
+};
+
+/** record every non-static body's initial placement, for restoreBodyState to put back */
+export function captureBodyState(world: World): BodyState[] {
+    const captured: BodyState[] = [];
+    for (const body of rigidBody.iterate(world)) {
+        if (body.motionType === MotionType.STATIC) continue;
+        captured.push({
+            body,
+            position: vec3.clone(body.position),
+            quaternion: quat.clone(body.quaternion),
+        });
+    }
+    return captured;
+}
+
+/**
+ * put every captured body back where it started, at rest and awake.
+ *
+ * this is the reset that runs inside the timed region, so it walks the bodies once and does no
+ * allocation. it does not clear the contact cache or rewind the broadphase tree — see `warm`.
+ */
+export function restoreBodyState(world: World, captured: BodyState[]): void {
+    for (let i = 0; i < captured.length; i++) {
+        const entry = captured[i];
+        // velocities go straight through motionProperties: the rigidBody setters each wake the
+        // body, and setTransform below already does that once
+        motionProperties.setLinearVelocity(entry.body.motionProperties, ZERO);
+        motionProperties.setAngularVelocity(entry.body.motionProperties, ZERO);
+        rigidBody.clearForces(entry.body);
+        rigidBody.setTransform(world, entry.body, entry.position, entry.quaternion, true);
+    }
+}
+
+const ZERO: Vec3 = [0, 0, 0];
