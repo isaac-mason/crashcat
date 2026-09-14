@@ -1,4 +1,4 @@
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
 import { type Box3, box3, triangle3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -642,6 +642,17 @@ function divideBoxByScale(box: Box3, scaleX: number, scaleY: number, scaleZ: num
     box[5] = z0 < z1 ? z1 : z0;
 }
 
+/** transform a point by an affine matrix (rotation, scale, translation): no projective divide */
+function transformPointAffine(out: Vec3, m: Mat4, p: Vec3): Vec3 {
+    const x = p[0];
+    const y = p[1];
+    const z = p[2];
+    out[0] = m[0] * x + m[4] * y + m[8] * z + m[12];
+    out[1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+    out[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    return out;
+}
+
 /* cast shape */
 
 const _castConvexVsTriangleMesh_castShapeHit = /* @__PURE__ */ createCastShapeHit();
@@ -1227,10 +1238,6 @@ const _collideConvexVsTriangleMesh_triangleA_inA = /* @__PURE__ */ vec3.create()
 const _collideConvexVsTriangleMesh_triangleB_inA = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_triangleC_inA = /* @__PURE__ */ vec3.create();
 
-const _collideConvexVsTriangleMesh_triangleA = /* @__PURE__ */ vec3.create();
-const _collideConvexVsTriangleMesh_triangleB = /* @__PURE__ */ vec3.create();
-const _collideConvexVsTriangleMesh_triangleC = /* @__PURE__ */ vec3.create();
-
 const _collideConvexVsTriangleMesh_getTriangleVertices_a = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_getTriangleVertices_b = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_getTriangleVertices_c = /* @__PURE__ */ vec3.create();
@@ -1387,11 +1394,13 @@ function collideConvexVsTriangleMesh(
         _collideConvexVsTriangleMesh_posA,
     );
 
-    // B-to-A matrix (rotation + translation only, no scale - vertices are scaled separately)
-    const mat4_BtoA = mat4.fromRotationTranslation(
+    // B-to-A matrix with the mesh scale folded in (scale first, then rotation and translation), so
+    // each vertex is one affine transform (jolt: mTransform2To1 * (mScale2 * v))
+    const mat4_BtoA = mat4.fromRotationTranslationScale(
         _collideConvexVsTriangleMesh_mat4_BtoA,
         _collideConvexVsTriangleMesh_transform2To1Quat,
         _collideConvexVsTriangleMesh_transform2To1Pos,
+        _collideConvexVsTriangleMesh_scaleB,
     );
 
     // determine if mesh is inside-out
@@ -1400,6 +1409,9 @@ function collideConvexVsTriangleMesh(
     // get support function for shape A (shrunk core; filled once, reused across the triangle loop)
     const supportA = _collideConvexVsTriangleMesh_supportA;
     setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
+    // the inflated support is filled once per pair, the first time a triangle reaches epa
+    const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
+    let supportAWithRadiusFilled = false;
 
     // bvh traversal
     let stackSize = 0;
@@ -1446,28 +1458,22 @@ function collideConvexVsTriangleMesh(
                     triangleIndex,
                 );
 
-                // scale triangle in mesh local space, then transform to shape A's local space
-                // using pre-computed mat4_BtoA matrix
-                const a = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleA,
+                // scaled and transformed into shape A's local space in one affine multiply each
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_a,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-                const b = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleB,
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_b,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-                const c = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleC,
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_c,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-
-                // transform scaled triangle vertices to shape A's local space using mat4
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleA_inA, a, mat4_BtoA);
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleB_inA, b, mat4_BtoA);
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleC_inA, c, mat4_BtoA);
 
                 // compute triangle AABB in shape A's local space
                 const triangleAABB = _collideConvexVsTriangleMesh_triangleAABB;
@@ -1555,14 +1561,15 @@ function collideConvexVsTriangleMesh(
                     // clamp max separation distance to avoid excessive inflation
                     maxSeparationDistance = Math.min(maxSeparationDistance, 1.0);
 
-                    // fill the inflated A (include convex radius + separation distance) for EPA
-                    const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
-                    setShapeSupport(
-                        supportAWithRadius,
-                        shapeA,
-                        SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
-                        _collideConvexVsTriangleMesh_scaleA,
-                    );
+                    if (!supportAWithRadiusFilled) {
+                        setShapeSupport(
+                            supportAWithRadius,
+                            shapeA,
+                            SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
+                            _collideConvexVsTriangleMesh_scaleA,
+                        );
+                        supportAWithRadiusFilled = true;
+                    }
                     supportAWithRadius.addRadius = maxSeparationDistance;
 
                     // perform EPA step

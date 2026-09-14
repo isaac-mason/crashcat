@@ -15,6 +15,7 @@
 - perf(raycast): ray vs bvh node tests use reciprocals precomputed once per query and read node bounds in place (`rayFractionToBox3`), the mesh ray cast keeps the collector's early-out in a local and rejects triangles against the current best hit before dividing; ~20% on the raycast-mesh bench
 - fix(compound): compound and static compound queries ignored the compound's scale when placing children (a child at local (5, 0, 0) under scale 2 sat at 5 instead of 10), the static compound walked its bvh with the query in scaled space, and static compound ray casts handed children a compound-local ray with world transforms so any compound away from the origin missed
 - fix(triangle-mesh): convex collide, convex cast, sphere collide and sphere cast against a scaled triangle mesh walked the bvh with the query in scaled space, so contacts and hits were missed for any non-unit mesh scale; the walks now run in the mesh's unscaled local space
+- perf(triangle-mesh): convex vs mesh folds the mesh scale into the mesh-to-convex matrix and transforms triangle vertices with one affine multiply each instead of a scale plus a projective transform, and fills the inflated epa support once per pair instead of per triangle
 
 ## v0.0.5
 
