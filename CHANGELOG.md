@@ -17,6 +17,7 @@
 - fix(triangle-mesh): convex collide, convex cast, sphere collide and sphere cast against a scaled triangle mesh walked the bvh with the query in scaled space, so contacts and hits were missed for any non-unit mesh scale; the walks now run in the mesh's unscaled local space
 - perf(triangle-mesh): convex vs mesh folds the mesh scale into the mesh-to-convex matrix and transforms triangle vertices with one affine multiply each instead of a scale plus a projective transform, and fills the inflated epa support once per pair instead of per triangle
 - perf(step): bodies derive position, world aabb and broadphase leaf once per step after the position solver instead of twice, in the same per-island pass as the sleep test and force reset; island objects are reused across steps; the sleep test takes its two rotated axes straight from the quaternion
+- perf(solver): the contact velocity solver skips the velocity write-back for constraints that applied no impulse this iteration, sums the friction caps only when a friction part is active, and reads the contact bias directly
 
 ## v0.0.5
 

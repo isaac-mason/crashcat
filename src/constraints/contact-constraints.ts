@@ -1433,22 +1433,29 @@ export function solveVelocityConstraintsForIsland(
             _angularVelocityB[2] = 0;
         }
 
+        // impulses applied by this constraint this iteration; velocities are only written back if any
+        let applied = false;
+
+        const linearFrictionActive =
+            axisConstraintPart.isActive(constraint.frictionConstraint1) ||
+            axisConstraintPart.isActive(constraint.frictionConstraint2);
+        const angularFrictionActive = angularFrictionConstraintPart.isActive(constraint.angularFrictionConstraint);
+
         // manifold-level friction: caps derived from the previous iteration's accumulated
         // non-penetration impulses. Σ(λ_n) for the linear cap, Σ(d_i · λ_n_i) for angular.
         let sumNormalLambda = 0;
         let sumDistanceWeightedNormalLambda = 0;
-        for (let i = 0; i < constraint.numContactPoints; i++) {
-            const cp = constraint.contactPoints[i];
-            const ln = cp.normalConstraint.totalLambda;
-            sumNormalLambda += ln;
-            sumDistanceWeightedNormalLambda += cp.distanceToFrictionCenter * ln;
+        if (linearFrictionActive || angularFrictionActive) {
+            for (let i = 0; i < constraint.numContactPoints; i++) {
+                const cp = constraint.contactPoints[i];
+                const ln = cp.normalConstraint.totalLambda;
+                sumNormalLambda += ln;
+                sumDistanceWeightedNormalLambda += cp.distanceToFrictionCenter * ln;
+            }
         }
 
         // 2 linear friction parts with joint friction-cone clamp
-        if (
-            axisConstraintPart.isActive(constraint.frictionConstraint1) ||
-            axisConstraintPart.isActive(constraint.frictionConstraint2)
-        ) {
+        if (linearFrictionActive) {
             let lambda1 = contactConstraintPart.getTotalLambda(
                 constraint.frictionConstraint1,
                 _linearVelocityA,
@@ -1493,7 +1500,7 @@ export function solveVelocityConstraintsForIsland(
                 tangent1,
                 lambda1,
             );
-            anyImpulseApplied = anyImpulseApplied || appliedFriction1;
+            applied = applied || appliedFriction1;
 
             const appliedFriction2 = contactConstraintPart.applyLambda(
                 constraint.frictionConstraint2,
@@ -1508,11 +1515,11 @@ export function solveVelocityConstraintsForIsland(
                 tangent2,
                 lambda2,
             );
-            anyImpulseApplied = anyImpulseApplied || appliedFriction2;
+            applied = applied || appliedFriction2;
         }
 
         // 1 angular friction part with symmetric clamp around the contact normal
-        if (angularFrictionConstraintPart.isActive(constraint.angularFrictionConstraint)) {
+        if (angularFrictionActive) {
             const unclamped = angularFrictionConstraintPart.getTotalLambda(
                 constraint.angularFrictionConstraint,
                 _angularVelocityA,
@@ -1531,7 +1538,7 @@ export function solveVelocityConstraintsForIsland(
                 isDynamicB,
                 clamped,
             );
-            anyImpulseApplied = anyImpulseApplied || appliedAngular;
+            applied = applied || appliedAngular;
         }
 
         // solve normal (non-penetration) constraints
@@ -1563,8 +1570,12 @@ export function solveVelocityConstraintsForIsland(
                 normal,
                 clampedLambda,
             );
-            anyImpulseApplied = anyImpulseApplied || appliedNormal;
+            applied = applied || appliedNormal;
         }
+
+        // converged this iteration: the locals equal the body velocities, nothing to write back
+        if (!applied) continue;
+        anyImpulseApplied = true;
 
         // write back velocities + DOF masking once per constraint
         if (isDynamicA) {
