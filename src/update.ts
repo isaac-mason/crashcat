@@ -276,20 +276,17 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             }
         }
 
-        /* update body positions after position solver (derive position from centerOfMassPosition) */
-        updateBodyPositions(world);
-
-        /* update body sleeping for each island */
+        /* finish the step per island: derive positions and bounds, clear forces, sleep test */
         for (const island of world.islands.islands) {
-            islands.checkIslandSleep(island, world, timeStep);
+            islands.finishIslandStep(island, world, timeStep);
         }
+    } else {
+        /* nothing moved, but the forces applied for this step are still consumed */
+        resetForces(world);
     }
 
     /* flip cached manifold buffers: this step's writes become next step's reads */
     contacts.flipManifoldCache(world.contacts);
-
-    /* clear all forces */
-    resetForces(world);
 }
 
 const _acceleration_angularDelta = /* @__PURE__ */ vec3.create();
@@ -376,15 +373,6 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         if (!(allowedRotation & 0b001)) mp.angularVelocity[0] = 0; // x rotation locked
         if (!(allowedRotation & 0b010)) mp.angularVelocity[1] = 0; // y rotation locked
         if (!(allowedRotation & 0b100)) mp.angularVelocity[2] = 0; // z rotation locked
-    }
-}
-
-/** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
-function updateBodyPositions(world: World): void {
-    for (let i = 0; i < world.bodies.activeBodyCount; i++) {
-        const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
-        if (body.sleeping) continue;
-        rigidBody.updatePositionFromCenterOfMass(world, body);
     }
 }
 
@@ -1186,9 +1174,9 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
         }
 
         if (updatePosition) {
-            // move the body now (using center of mass)
+            // move the centre of mass now; position, world aabb and broadphase leaf are derived once
+            // after the position solver, in finishIslandStep
             vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
-            rigidBody.updatePositionFromCenterOfMass(world, body);
         }
     }
 }

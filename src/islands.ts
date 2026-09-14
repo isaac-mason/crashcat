@@ -1,6 +1,7 @@
 import type { Bodies } from './body/bodies';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
+import * as rigidBody from './body/rigid-body';
 import { INACTIVE_BODY_INDEX, sleep, updateSleepState } from './body/sleep';
 import type { ConstraintId, ConstraintType } from './constraints/constraint-id';
 import type { Constraints } from './constraints/constraints';
@@ -256,18 +257,29 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
         }
     }
 
-    // build islands array
-    const islands: Island[] = [];
+    // island objects and their arrays are reused across steps
+    const islands = state.islands;
     for (let i = 0; i < numIslands; i++) {
-        islands.push({
-            index: i,
-            bodyIndices: [],
-            contactIndices: [],
-            constraintIds: [],
-            numVelocitySteps: 0,
-            numPositionSteps: 0,
-        });
+        const island = islands[i];
+        if (island === undefined) {
+            islands[i] = {
+                index: i,
+                bodyIndices: [],
+                contactIndices: [],
+                constraintIds: [],
+                numVelocitySteps: 0,
+                numPositionSteps: 0,
+            };
+        } else {
+            island.index = i;
+            island.bodyIndices.length = 0;
+            island.contactIndices.length = 0;
+            island.constraintIds.length = 0;
+            island.numVelocitySteps = 0;
+            island.numPositionSteps = 0;
+        }
     }
+    islands.length = numIslands;
 
     // group bodies by island using the active body list.
     // bodies in activeBodyIndices are guaranteed non-pooled (active bodies never include pooled slots)
@@ -372,29 +384,33 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
         island.numVelocitySteps = numVelocitySteps;
         island.numPositionSteps = numPositionSteps;
     }
-
-    state.islands = islands;
 }
 
-/** check if an island can sleep and deactivate all bodies in it if so, called after solving constraints for an island */
-export function checkIslandSleep(island: Island, world: World, deltaTime: number): void {
-    if (!world.settings.sleeping.allowSleeping) {
-        return;
-    }
-
+/**
+ * finish the step for an island's bodies once the position solver is done: derive each body's
+ * position, world aabb and broadphase leaf from its centre of mass, clear its forces, run the sleep
+ * test, and put the island to sleep if every dynamic body in it can. one pass per island in place
+ * of three over all active bodies (jolt: PhysicsSystem::CheckSleepAndUpdateBounds)
+ */
+export function finishIslandStep(island: Island, world: World, deltaTime: number): void {
+    const allowSleeping = world.settings.sleeping.allowSleeping;
     const timeBeforeSleep = world.settings.sleeping.timeBeforeSleep;
     const maxMovement = world.settings.sleeping.pointVelocitySleepThreshold * timeBeforeSleep;
 
-    let allCanSleep = true;
+    let allCanSleep = allowSleeping;
 
-    // check each body in island (sleeping bodies are excluded from islands during init)
+    // sleeping bodies are excluded from islands during init
     const bodyIndices = island.bodyIndices;
     for (let i = 0; i < bodyIndices.length; i++) {
         const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
-        if (body.motionType !== MotionType.DYNAMIC) continue;
 
-        if (!updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep)) {
-            allCanSleep = false;
+        rigidBody.updatePositionFromCenterOfMass(world, body);
+        rigidBody.clearForces(body);
+
+        if (allowSleeping && body.motionType === MotionType.DYNAMIC) {
+            if (!updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep)) {
+                allCanSleep = false;
+            }
         }
     }
 
