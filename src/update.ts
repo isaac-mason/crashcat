@@ -149,7 +149,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         wakeBodiesInUserConstraints(world);
 
         /* build islands */
-        islands.prepare(world.islands, world.bodies, world.contacts.contacts.length);
+        islands.prepare(world.islands, world.bodies, world.contactConstraints.count);
         islands.linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
         islands.linkUserConstraints(world.islands, world.constraints, world.bodies);
         islands.finalize(world.islands, world.bodies, world.constraints, world.settings);

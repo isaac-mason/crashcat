@@ -11,8 +11,6 @@ import { assert } from './utils/assert';
 import type { World } from './world';
 import type { WorldSettings } from './world-settings';
 
-const NO_ISLAND = -1;
-
 /** temporary object for reading constraint iteration overrides */
 const _finalize_constraintOverrides = /* @__PURE__ */ constraints.createConstraintIterationOverrides();
 
@@ -61,21 +59,21 @@ export function init(): Islands {
 }
 
 /** initialize island builder with active bodies (dynamic + kinematic), each active body starts as its own island */
-export function prepare(state: Islands, bodies: Bodies, maxContacts: number): void {
-    // reset all bodies' island to -1 (not in any island)
-    for (const body of bodies.pool) {
-        if (body && !body._pooled) {
-            body.islandIndex = NO_ISLAND;
-        }
-    }
+/**
+ * @param numContactConstraints number of contact constraints this step: contactLinks is indexed by
+ * contact constraint index, so this bounds both its reset here and the scan in finalize
+ */
+export function prepare(state: Islands, bodies: Bodies, numContactConstraints: number): void {
+    // body.islandIndex is assigned for every active body in finalize and cleared when a body leaves
+    // the active set (sleep.removeBodyFromActiveBodies), so there is no pool-wide reset here
 
     const numActiveBodies = bodies.activeBodyCount;
     state.bodyLinks.length = numActiveBodies;
     state.bodyIslands.length = numActiveBodies;
 
-    // allocate contactLinks to maxContacts size and initialize to INACTIVE_INDEX
-    state.contactLinks.length = maxContacts;
-    for (let i = 0; i < maxContacts; i++) {
+    // size contactLinks to this step's contact constraints and initialize to INACTIVE_INDEX
+    state.contactLinks.length = numContactConstraints;
+    for (let i = 0; i < numContactConstraints; i++) {
         state.contactLinks[i] = INACTIVE_BODY_INDEX;
     }
 

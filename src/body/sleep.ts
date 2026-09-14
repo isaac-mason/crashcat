@@ -162,8 +162,10 @@ export function removeBodyFromActiveBodies(world: World, body: RigidBody): void 
         lastBody.activeIndex = body.activeIndex;
     }
 
-    // mark as inactive
+    // mark as inactive. islands are only built over active bodies, so the island index goes stale
+    // here; clearing it on exit keeps islands.prepare from resetting the whole body pool every step
     body.activeIndex = INACTIVE_BODY_INDEX;
+    body.islandIndex = -1;
     bodies.activeBodyCount--;
 }
 
