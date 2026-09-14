@@ -66,6 +66,14 @@ export type MotionProperties = {
     allowSleeping: boolean;
     /** timer for sleeping test */
     sleepTestTimer: number;
+
+    /**
+     * per-step memo of the world space inverse inertia, see getWorldInverseInertia. only meaningful
+     * while worldInverseInertiaStamp matches the current step stamp.
+     */
+    worldInverseInertia: Mat4;
+    /** step stamp the memo was computed for, STEP_STAMP_NONE when it holds nothing usable */
+    worldInverseInertiaStamp: number;
 };
 
 export function create(): MotionProperties {
@@ -98,6 +106,8 @@ export function create(): MotionProperties {
         ],
         allowSleeping: true,
         sleepTestTimer: 0,
+        worldInverseInertia: mat4.zero(mat4.create()),
+        worldInverseInertiaStamp: STEP_STAMP_NONE,
     };
 }
 
@@ -417,6 +427,9 @@ const _setMassProperties_rotation = /* @__PURE__ */ mat3.create();
 const _setMassProperties_diagonal = /* @__PURE__ */ vec3.create();
 
 export function setMassProperties(motionProperties: MotionProperties, allowedDOFs: number, massProperties: MassProperties) {
+    // the local inertia is about to change, so a memoised world inverse inertia is stale
+    motionProperties.worldInverseInertiaStamp = STEP_STAMP_NONE;
+
     // store allowed DOFs
     motionProperties.allowedDegreesOfFreedom = allowedDOFs;
 
@@ -536,6 +549,46 @@ export function getInverseInertiaForRotation(out: Mat4, motionProperties: Motion
     }
 
     return out;
+}
+
+/** step stamp that bypasses the per-step memo in getWorldInverseInertia: compute fresh into `out` */
+export const STEP_STAMP_NONE = -1;
+
+const _getWorldInverseInertia_rotation = /* @__PURE__ */ mat4.create();
+
+/**
+ * world space inverse inertia of a dynamic body, memoised per step.
+ *
+ * with a step stamp >= 0 the matrix is computed at most once per body per step: the first call for
+ * a new stamp computes it into the body's own storage, later calls return that. the returned matrix
+ * is the body's storage, read it, don't write it. this is sound for velocity constraint setup
+ * because nothing rotates a body between force integration and the end of the velocity solve, and
+ * every rotation write that can happen outside the step resets the stamp.
+ *
+ * with STEP_STAMP_NONE the matrix is computed fresh into `out` and `out` is returned. use that where
+ * bodies rotate between calls: the position solver, ccd, and public getters.
+ *
+ * the caller checks that the body is dynamic; non-dynamic bodies contribute a zero matrix and never
+ * reach this.
+ */
+export function getWorldInverseInertia(
+    out: Mat4,
+    motionProperties: MotionProperties,
+    bodyQuaternion: Quat,
+    stepStamp: number,
+): Mat4 {
+    if (stepStamp < 0) {
+        mat4.fromQuat(_getWorldInverseInertia_rotation, bodyQuaternion);
+        return getInverseInertiaForRotation(out, motionProperties, _getWorldInverseInertia_rotation);
+    }
+
+    if (motionProperties.worldInverseInertiaStamp !== stepStamp) {
+        mat4.fromQuat(_getWorldInverseInertia_rotation, bodyQuaternion);
+        getInverseInertiaForRotation(motionProperties.worldInverseInertia, motionProperties, _getWorldInverseInertia_rotation);
+        motionProperties.worldInverseInertiaStamp = stepStamp;
+    }
+
+    return motionProperties.worldInverseInertia;
 }
 
 /** Clamps linear velocity to the maximum allowed value */

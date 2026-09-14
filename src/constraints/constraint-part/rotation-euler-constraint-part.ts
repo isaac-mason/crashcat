@@ -154,16 +154,23 @@ export function calculateConstraintProperties(
     _rotationA: Mat4,
     bodyB: RigidBody,
     _rotationB: Mat4,
+    stepStamp: number,
 ): void {
     // get inverse inertia in world space for both bodies
     if (bodyA.motionType === MotionType.DYNAMIC) {
-        motionProperties.getInverseInertiaForRotation(part.invI1, bodyA.motionProperties, _rotationA);
+        mat4.copy(
+            part.invI1,
+            motionProperties.getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp),
+        );
     } else {
         mat4.zero(part.invI1);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
-        motionProperties.getInverseInertiaForRotation(part.invI2, bodyB.motionProperties, _rotationB);
+        mat4.copy(
+            part.invI2,
+            motionProperties.getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp),
+        );
     } else {
         mat4.zero(part.invI2);
     }

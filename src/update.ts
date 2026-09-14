@@ -59,6 +59,10 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
        this replaces the old O(total-contacts) "mark all unprocessed" reset walk. */
     world.contacts.frameStamp++;
 
+    /* advance the body step stamp: keys the per-step world inverse inertia memo (see
+       motionProperties.getWorldInverseInertia) */
+    world.bodies.stepStamp++;
+
     /* integrate forces into velocities */
     accelerationIntegrationUpdate(world, timeStep);
 
@@ -288,8 +292,7 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     resetForces(world);
 }
 
-const _acceleration_rotation = /* @__PURE__ */ mat4.create();
-const _acceleration_worldInverseInertia = /* @__PURE__ */ mat4.create();
+const _acceleration_angularDelta = /* @__PURE__ */ vec3.create();
 
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world: World, timeStep: number): void {
@@ -334,19 +337,20 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         if (!(allowedTranslation & 0b010)) mp.linearVelocity[1] = 0; // y locked
         if (!(allowedTranslation & 0b100)) mp.linearVelocity[2] = 0; // z locked
 
-        // angular acceleration: α = I^-1 * τ
-        mat4.fromQuat(_acceleration_rotation, body.quaternion);
-        const worldInverseInertia = _acceleration_worldInverseInertia;
-        motionProperties.getInverseInertiaForRotation(worldInverseInertia, mp, _acceleration_rotation);
-
-        // integrate angular velocity: ω += α * dt, where α = I^-1 * τ
-        const m = worldInverseInertia;
-        const tx = mp.torque[0],
-            ty = mp.torque[1],
-            tz = mp.torque[2];
-        mp.angularVelocity[0] += (m[0] * tx + m[4] * ty + m[8] * tz) * timeStep;
-        mp.angularVelocity[1] += (m[1] * tx + m[5] * ty + m[9] * tz) * timeStep;
-        mp.angularVelocity[2] += (m[2] * tx + m[6] * ty + m[10] * tz) * timeStep;
+        // angular acceleration: α = I^-1 * τ, integrated as ω += α * dt.
+        // gravity applies no torque, so most bodies have none and skip this entirely. the vector
+        // form rotates τ into inertia space and back without building the world inverse inertia.
+        if (mp.torque[0] !== 0 || mp.torque[1] !== 0 || mp.torque[2] !== 0) {
+            const angularDelta = motionProperties.multiplyWorldSpaceInverseInertiaByVector(
+                _acceleration_angularDelta,
+                mp,
+                body.quaternion,
+                mp.torque,
+            );
+            mp.angularVelocity[0] += angularDelta[0] * timeStep;
+            mp.angularVelocity[1] += angularDelta[1] * timeStep;
+            mp.angularVelocity[2] += angularDelta[2] * timeStep;
+        }
 
         // apply angular damping: ω *= max(0, 1 - damping * dt)
         const angularDampingFactor = Math.max(0, 1 - mp.angularDamping * timeStep);
@@ -628,6 +632,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                     this.world.settings,
                     this.listener,
                     this.deltaTime,
+                    this.world.bodies.stepStamp,
                 );
                 constraintsCreated = constraintsCreated || created;
             }
@@ -787,6 +792,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
                 this.world.settings,
                 this.listener,
                 this.deltaTime,
+                this.world.bodies.stepStamp,
             );
             this.constraintsCreated = this.constraintsCreated || created;
         }
@@ -812,13 +818,6 @@ const _bodyPairCache_deltaRot = /* @__PURE__ */ quat.create();
 const _bodyPairCache_diff = /* @__PURE__ */ vec3.create();
 const _bodyPairCache_cachedPos = /* @__PURE__ */ vec3.create();
 const _bodyPairCache_cachedRot = /* @__PURE__ */ quat.create();
-const _bodyPairCache_rotA = /* @__PURE__ */ mat4.create();
-const _bodyPairCache_rotB = /* @__PURE__ */ mat4.create();
-const _bodyPairCache_relA = /* @__PURE__ */ vec3.create();
-const _bodyPairCache_relB = /* @__PURE__ */ vec3.create();
-const _bodyPairCache_comDelta = /* @__PURE__ */ vec3.create();
-const _bodyPairCache_diffAB = /* @__PURE__ */ vec3.create();
-const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ manifold.createContactManifold();
 
 /**
  * Compute the relative pose of body B in body A's local frame.
@@ -834,72 +833,6 @@ function computeBodyPairDelta(outDeltaPos: Vec3, outDeltaRot: Quat, bodyA: Rigid
 
     // outDeltaRot = inv_rA * rB
     quat.multiply(outDeltaRot, _bodyPairCache_invRA, bodyB.quaternion);
-}
-
-/**
- * Reconstruct a ContactManifold from a contact's read-side CachedManifold and
- * the current body transforms.
- *
- * Preconditions: physA.id <= physB.id (matches contact's stored ordering).
- * Lambdas will transfer perfectly through addContactConstraint because the
- * reconstructed local positions evaluate back to the cached position1/position2.
- */
-function reconstructManifoldFromCache(
-    out: manifold.ContactManifold,
-    contact: contacts.Contact,
-    physA: RigidBody,
-    physB: RigidBody,
-    cached: contacts.CachedManifold,
-): void {
-    manifold.resetContactManifold(out);
-
-    const rotA = mat4.fromQuat(_bodyPairCache_rotA, physA.quaternion);
-    const rotB = mat4.fromQuat(_bodyPairCache_rotB, physB.quaternion);
-
-    // worldSpaceNormal = rotB * cachedNormal (normal is stored in B-local)
-    mat4.multiply3x3Vec(out.worldSpaceNormal, rotB, cached.contactNormal);
-    vec3.normalize(out.worldSpaceNormal, out.worldSpaceNormal);
-
-    // baseOffset = physA.com
-    vec3.copy(out.baseOffset, physA.centerOfMassPosition);
-
-    // (bodyB.com - bodyA.com) — used to offset body-B contact points to be
-    // baseOffset-relative (since baseOffset = bodyA.com)
-    vec3.sub(_bodyPairCache_comDelta, physB.centerOfMassPosition, physA.centerOfMassPosition);
-
-    let maxPenetration = -Number.MAX_VALUE;
-
-    for (let i = 0; i < cached.numContactPoints; i++) {
-        const cp = cached.contactPoints[i];
-
-        // relA = rotA * cp.position1   (A-local → baseOffset-relative world)
-        mat4.multiply3x3Vec(_bodyPairCache_relA, rotA, cp.position1);
-
-        // relB = (physB.com - physA.com) + rotB * cp.position2
-        mat4.multiply3x3Vec(_bodyPairCache_relB, rotB, cp.position2);
-        vec3.add(_bodyPairCache_relB, _bodyPairCache_relB, _bodyPairCache_comDelta);
-
-        const o = i * 3;
-        out.relativeContactPointsOnA[o] = _bodyPairCache_relA[0];
-        out.relativeContactPointsOnA[o + 1] = _bodyPairCache_relA[1];
-        out.relativeContactPointsOnA[o + 2] = _bodyPairCache_relA[2];
-        out.relativeContactPointsOnB[o] = _bodyPairCache_relB[0];
-        out.relativeContactPointsOnB[o + 1] = _bodyPairCache_relB[1];
-        out.relativeContactPointsOnB[o + 2] = _bodyPairCache_relB[2];
-
-        // penetrationDepth = max((relA - relB) . worldSpaceNormal)
-        // (we no longer have the EPA depth — estimate from the cached points)
-        vec3.sub(_bodyPairCache_diffAB, _bodyPairCache_relA, _bodyPairCache_relB);
-        const d = vec3.dot(_bodyPairCache_diffAB, out.worldSpaceNormal);
-        if (d > maxPenetration) maxPenetration = d;
-    }
-
-    out.numContactPoints = cached.numContactPoints;
-    out.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
-    out.subShapeIdA = contact.subShapeIdA;
-    out.subShapeIdB = contact.subShapeIdB;
-    // materialIds are derived from body.friction/restitution in addContactConstraint,
-    // not from the manifold — leave as default.
 }
 
 /**
@@ -967,18 +900,16 @@ function getContactsFromCache(
             // addContactConstraint's internal swap is a no-op.
             const orderedA = world.bodies.pool[contact.bodyIndexA];
             const orderedB = world.bodies.pool[contact.bodyIndexB];
-            reconstructManifoldFromCache(_bodyPairCache_reconstructedManifold, contact, orderedA, orderedB, cachedManifold);
-            contactConstraints.addContactConstraint(
+            contactConstraints.addContactConstraintFromCache(
                 world.contactConstraints,
                 world.contacts,
-                world.pairs,
-                pairRecordIndex,
                 orderedA,
                 orderedB,
-                _bodyPairCache_reconstructedManifold,
+                contact,
                 world.settings,
                 listener,
                 deltaTime,
+                world.bodies.stepStamp,
             );
         }
 

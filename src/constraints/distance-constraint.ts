@@ -2,7 +2,7 @@ import type { Vec3 } from 'math';
 import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
-import { getInverseInertiaForRotation } from '../body/motion-properties';
+import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
@@ -244,8 +244,6 @@ export function get(world: World, id: ConstraintId): DistanceConstraint | undefi
     return constraint;
 }
 
-const _distanceConstraint_rotA = /* @__PURE__ */ mat4.create();
-const _distanceConstraint_rotB = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_r1PlusU = /* @__PURE__ */ vec3.create();
@@ -258,6 +256,7 @@ function calculateDistanceConstraintProperties(
     bodyA: RigidBody,
     bodyB: RigidBody,
     deltaTime: number,
+    stepStamp: number,
 ): void {
     // update world space positions (the bodies may have moved)
     // worldPos = centerOfMassPosition + rotation * localPos
@@ -296,15 +295,11 @@ function calculateDistanceConstraintProperties(
     const invInertiaB = _distanceConstraint_invInertiaB;
 
     if (mpA) {
-        const rotA = _distanceConstraint_rotA;
-        mat4.fromQuat(rotA, bodyA.quaternion);
-        getInverseInertiaForRotation(invInertiaA, mpA, rotA);
+        mat4.copy(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, stepStamp));
     }
 
     if (mpB) {
-        const rotB = _distanceConstraint_rotB;
-        mat4.fromQuat(rotB, bodyB.quaternion);
-        getInverseInertiaForRotation(invInertiaB, mpB, rotB);
+        mat4.copy(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, stepStamp));
     }
 
     // determine constraint mode based on current distance vs limits
@@ -380,7 +375,7 @@ function setupVelocity(constraint: DistanceConstraint, bodies: Bodies, deltaTime
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 
-    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 }
 
 function warmStartVelocity(constraint: DistanceConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
@@ -453,7 +448,7 @@ function solvePosition(constraint: DistanceConstraint, bodies: Bodies, deltaTime
     }
 
     // recalculate constraint properties (bodies may have moved during position solve)
-    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, STEP_STAMP_NONE);
 
     return axisConstraintPart.solvePositionConstraint(
         constraint.axisConstraint,

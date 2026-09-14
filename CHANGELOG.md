@@ -9,6 +9,8 @@
 - perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) to replace GJK/EPA convex collide for sphere/box pairs
 - feat: update mathcat
 - chore: rename `mathcat` dependency to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
+- perf: body-pair cache hits feed the cached manifold straight into contact constraint setup (`addContactConstraintFromCache`, port of jolt `GetContactsFromCache`) instead of reconstructing a world-space manifold and re-matching points
+- perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`, keyed on `bodies.stepStamp`) for contact and user constraint velocity setup; torque integration uses the vector form and skips torque-free bodies
 
 ## v0.0.5
 

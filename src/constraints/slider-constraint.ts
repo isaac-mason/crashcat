@@ -2,7 +2,7 @@ import type { Mat4, Quat, Vec2, Vec3 } from 'math';
 import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
-import { getInverseInertiaForRotation } from '../body/motion-properties';
+import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
@@ -588,7 +588,7 @@ function calculatePositionConstraintProperties(
     bodyA: RigidBody,
     bodyB: RigidBody,
     rotationA: Mat4,
-    rotationB: Mat4,
+    stepStamp: number,
 ): void {
     // calculate world space normals (perpendicular to slider)
     mat4.multiply3x3Vec(constraint.n1, rotationA, constraint.localSpaceNormalA);
@@ -604,13 +604,12 @@ function calculatePositionConstraintProperties(
     dualAxisConstraintPart.calculateConstraintProperties(
         constraint.positionConstraintPart,
         bodyA,
-        rotationA,
         _sliderConstraint_r1PlusU,
         bodyB,
-        rotationB,
         constraint.r2,
         constraint.n1,
         constraint.n2,
+        stepStamp,
     );
 }
 
@@ -619,9 +618,8 @@ function calculatePositionLimitsConstraintProperties(
     constraint: SliderConstraint,
     bodyA: RigidBody,
     bodyB: RigidBody,
-    rotationA: Mat4,
-    rotationB: Mat4,
     deltaTime: number,
+    stepStamp: number,
 ): void {
     if (!constraint.hasLimits) {
         axisConstraintPart.deactivate(constraint.positionLimitsConstraintPart);
@@ -645,11 +643,17 @@ function calculatePositionLimitsConstraintProperties(
             const invMassB = bodyB.motionType === MotionType.DYNAMIC ? mpB.invMass : 0;
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
-                getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
+                mat4.copy(
+                    _sliderConstraint_invInertiaA,
+                    getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp),
+                );
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
-                getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+                mat4.copy(
+                    _sliderConstraint_invInertiaB,
+                    getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp),
+                );
             }
 
             axisConstraintPart.calculateConstraintPropertiesWithSettings(
@@ -675,11 +679,17 @@ function calculatePositionLimitsConstraintProperties(
             const invMassB = bodyB.motionType === MotionType.DYNAMIC ? mpB.invMass : 0;
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
-                getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
+                mat4.copy(
+                    _sliderConstraint_invInertiaA,
+                    getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp),
+                );
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
-                getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+                mat4.copy(
+                    _sliderConstraint_invInertiaB,
+                    getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp),
+                );
             }
 
             axisConstraintPart.calculateConstraintProperties(
@@ -706,9 +716,8 @@ function calculateMotorConstraintProperties(
     constraint: SliderConstraint,
     bodyA: RigidBody,
     bodyB: RigidBody,
-    rotationA: Mat4,
-    rotationB: Mat4,
     deltaTime: number,
+    stepStamp: number,
 ): void {
     const mpA = bodyA.motionProperties;
     const mpB = bodyB.motionProperties;
@@ -716,10 +725,16 @@ function calculateMotorConstraintProperties(
     const invMassB = bodyB.motionType === MotionType.DYNAMIC ? mpB.invMass : 0;
 
     if (bodyA.motionType === MotionType.DYNAMIC) {
-        getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
+        mat4.copy(
+            _sliderConstraint_invInertiaA,
+            getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp),
+        );
     }
     if (bodyB.motionType === MotionType.DYNAMIC) {
-        getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+        mat4.copy(
+            _sliderConstraint_invInertiaB,
+            getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp),
+        );
     }
 
     // r1 + u for the axis constraint
@@ -805,7 +820,7 @@ function setupVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
     calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
 
     // setup position constraint (2 DOF perpendicular to slider)
-    calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
+    calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, bodies.stepStamp);
 
     // setup rotation constraint (3 DOF)
     rotationEulerConstraintPart.calculateConstraintProperties(
@@ -814,23 +829,17 @@ function setupVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
         _sliderConstraint_rotA,
         bodyB,
         _sliderConstraint_rotB,
+        bodies.stepStamp,
     );
 
     // calculate slider axis and position
     calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
 
     // setup limits constraint
-    calculatePositionLimitsConstraintProperties(
-        constraint,
-        bodyA,
-        bodyB,
-        _sliderConstraint_rotA,
-        _sliderConstraint_rotB,
-        deltaTime,
-    );
+    calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 
     // setup motor constraint
-    calculateMotorConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB, deltaTime);
+    calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 }
 
 function warmStartVelocity(constraint: SliderConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
@@ -976,7 +985,7 @@ function solvePosition(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
     mat4.fromQuat(_sliderConstraint_rotA, bodyA.quaternion);
     mat4.fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
     calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
-    calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
+    calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, STEP_STAMP_NONE);
 
     // solve position constraint (2 axes)
     const pos = dualAxisConstraintPart.solvePositionConstraint(
@@ -996,6 +1005,7 @@ function solvePosition(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
         mat4.fromQuat(_sliderConstraint_rotA, bodyA.quaternion),
         bodyB,
         mat4.fromQuat(_sliderConstraint_rotB, bodyB.quaternion),
+        STEP_STAMP_NONE,
     );
     const rot = rotationEulerConstraintPart.solvePositionConstraint(
         constraint.rotationConstraintPart,
@@ -1013,14 +1023,7 @@ function solvePosition(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
         mat4.fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
         calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
         calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
-        calculatePositionLimitsConstraintProperties(
-            constraint,
-            bodyA,
-            bodyB,
-            _sliderConstraint_rotA,
-            _sliderConstraint_rotB,
-            deltaTime,
-        );
+        calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, STEP_STAMP_NONE);
 
         if (axisConstraintPart.isActive(constraint.positionLimitsConstraintPart)) {
             let positionError: number;

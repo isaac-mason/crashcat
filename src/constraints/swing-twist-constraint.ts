@@ -1,4 +1,5 @@
 import type { Quat, Vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
@@ -507,6 +508,7 @@ function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTi
         bodyB,
         _setup_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // calculate constraint rotation: q = (q1 * c1)^-1 * (q2 * c2)
@@ -788,6 +790,7 @@ function solvePosition(constraint: SwingTwistConstraint, bodies: Bodies, _deltaT
         bodyB,
         _solvePosition_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     impulse =

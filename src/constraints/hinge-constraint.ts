@@ -1,4 +1,5 @@
 import type { Quat, Vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
@@ -635,6 +636,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // setup rotation constraint (keeps hinge axes aligned)
@@ -644,6 +646,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        bodies.stepStamp,
     );
 
     // calculate current angle
@@ -765,6 +768,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
@@ -782,6 +786,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        STEP_STAMP_NONE,
     );
 
     const rot = hingeRotationConstraintPart.solvePositionConstraint(
