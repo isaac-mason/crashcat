@@ -5,7 +5,7 @@ import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
-import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
@@ -357,8 +357,6 @@ const _castRayVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 
 const _castRayVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
-const _castRayVsStaticCompound_nodeBounds = /* @__PURE__ */ box3.create();
-
 function castRay(
     collector: CastRayCollector,
     settings: CastRaySettings,
@@ -422,23 +420,27 @@ function castRay(
     const localDirY = _castRayVsStaticCompound_localRayDir[1];
     const localDirZ = _castRayVsStaticCompound_localRayDir[2];
 
+    // reciprocals of the local displacement, once per query, for the fraction-space slab tests
+    const invDispX = safeReciprocal(localDirX * length);
+    const invDispY = safeReciprocal(localDirY * length);
+    const invDispZ = safeReciprocal(localDirZ * length);
+
+    // the collector's early-out fraction, held in a local and refreshed after each child cast
+    let earlyOut = collector.earlyOutFraction;
+
     let stackSize = 0;
     _castRayVsStaticCompound_stackNodes[stackSize] = 0;
     _castRayVsStaticCompound_stackDist[stackSize] = -Infinity; // root always visited
     stackSize++;
 
     while (stackSize > 0) {
-        // early out: very close hit
-        if (collector.earlyOutFraction <= 0) {
-            break;
-        }
-
         stackSize--;
         const nodeOffset = _castRayVsStaticCompound_stackNodes[stackSize];
         const nodeDistance = _castRayVsStaticCompound_stackDist[stackSize];
 
-        // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        // early out: if fraction to this node >= closest hit, skip it. a node is only ever pushed
+        // with a finite entry fraction, so no re-test of its bounds is needed here
+        if (nodeDistance >= earlyOut) {
             continue;
         }
 
@@ -453,6 +455,9 @@ function castRay(
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
             for (let i = 0; i < childCount; i++) {
+                // an any-hit collector drops its early-out to zero: nothing further can qualify
+                if (earlyOut <= 0) break;
+
                 const childIndex = childStart + i;
                 const child = shape.children[childIndex];
 
@@ -502,6 +507,8 @@ function castRay(
                     scaleY,
                     scaleZ,
                 );
+
+                earlyOut = collector.earlyOutFraction;
             }
         } else {
             // internal node: compute distances to both children and sort by distance
@@ -509,61 +516,56 @@ function castRay(
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, leftOffset);
-            const leftDist = rayDistanceToBox3(
+            const leftDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsStaticCompound_nodeBounds[0],
-                _castRayVsStaticCompound_nodeBounds[1],
-                _castRayVsStaticCompound_nodeBounds[2],
-                _castRayVsStaticCompound_nodeBounds[3],
-                _castRayVsStaticCompound_nodeBounds[4],
-                _castRayVsStaticCompound_nodeBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[leftOffset + bvh.NODE_MIN_X],
+                buffer[leftOffset + bvh.NODE_MIN_Y],
+                buffer[leftOffset + bvh.NODE_MIN_Z],
+                buffer[leftOffset + bvh.NODE_MAX_X],
+                buffer[leftOffset + bvh.NODE_MAX_Y],
+                buffer[leftOffset + bvh.NODE_MAX_Z],
             );
-
-            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
-            const rightDist = rayDistanceToBox3(
+            const rightDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsStaticCompound_nodeBounds[0],
-                _castRayVsStaticCompound_nodeBounds[1],
-                _castRayVsStaticCompound_nodeBounds[2],
-                _castRayVsStaticCompound_nodeBounds[3],
-                _castRayVsStaticCompound_nodeBounds[4],
-                _castRayVsStaticCompound_nodeBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[rightOffset + bvh.NODE_MIN_X],
+                buffer[rightOffset + bvh.NODE_MIN_Y],
+                buffer[rightOffset + bvh.NODE_MIN_Z],
+                buffer[rightOffset + bvh.NODE_MAX_X],
+                buffer[rightOffset + bvh.NODE_MAX_Y],
+                buffer[rightOffset + bvh.NODE_MAX_Z],
             );
 
             // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;

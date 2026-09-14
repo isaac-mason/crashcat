@@ -23,8 +23,10 @@ import {
     createRayIntersectsTriangleResult,
     INITIAL_EARLY_OUT_FRACTION,
     rayDistanceToBox3,
+    rayFractionToBox3,
     rayHitsBox3,
     rayIntersectsTriangle,
+    safeReciprocal,
 } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
@@ -248,22 +250,13 @@ function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, sha
 
 /* cast ray */
 
-const _castRayVsTriangleMesh_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_quat = /* @__PURE__ */ quat.create();
-const _castRayVsTriangleMesh_scale = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
-const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
-const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ createRayIntersectsTriangleResult();
 const _castRayVsTriangleMesh_stackNodes: number[] = [];
 const _castRayVsTriangleMesh_stackDist: number[] = [];
-const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
-const _castRayVsTriangleMesh_rightBounds = /* @__PURE__ */ box3.create();
-const _castRayVsTriangleMesh_a = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_b = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_c = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_hit = /* @__PURE__ */ createCastRayHit();
 const _castRayVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
@@ -291,56 +284,6 @@ function castRayVsTriangleMesh(
     scaleY: number,
     scaleZ: number,
 ): void {
-    vec3.set(_castRayVsTriangleMesh_pos, posX, posY, posZ);
-    quat.set(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
-    vec3.set(_castRayVsTriangleMesh_scale, scaleX, scaleY, scaleZ);
-
-    // pre-compute world-to-B matrix (inverse of B's transform)
-    // inverse transform: conjugate rotation, then negate-rotated position
-    quat.conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
-    vec3.negate(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_pos);
-    vec3.transformQuat(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_invQuat);
-    mat4.fromRotationTranslation(
-        _castRayVsTriangleMesh_mat4_WorldToB,
-        _castRayVsTriangleMesh_invQuat,
-        _castRayVsTriangleMesh_negPos,
-    );
-
-    // set ray origin from parameters
-    vec3.set(_castRayVsTriangleMesh_rayOriginLocal, originX, originY, originZ);
-    // transform ray from world space to mesh local space using pre-computed matrix
-    vec3.transformMat4(
-        _castRayVsTriangleMesh_rayOriginLocal,
-        _castRayVsTriangleMesh_rayOriginLocal,
-        _castRayVsTriangleMesh_mat4_WorldToB,
-    );
-
-    // set ray direction from parameters
-    vec3.set(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
-    mat4.multiply3x3Vec(
-        _castRayVsTriangleMesh_rayDirectionLocal,
-        _castRayVsTriangleMesh_mat4_WorldToB,
-        _castRayVsTriangleMesh_rayDirectionLocal,
-    );
-
-    // the bvh and the vertices are in the mesh's unscaled local space, so bring the ray there: divide
-    // both origin and direction by the scale. the hit parameter t is unchanged by rescaling origin
-    // and direction together, so the fraction needs no correction (jolt: ScaledShape::CastRay)
-    _castRayVsTriangleMesh_rayOriginLocal[0] /= _castRayVsTriangleMesh_scale[0];
-    _castRayVsTriangleMesh_rayOriginLocal[1] /= _castRayVsTriangleMesh_scale[1];
-    _castRayVsTriangleMesh_rayOriginLocal[2] /= _castRayVsTriangleMesh_scale[2];
-    _castRayVsTriangleMesh_rayDirectionLocal[0] /= _castRayVsTriangleMesh_scale[0];
-    _castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
-    _castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
-
-    // hoisted scalars for the per-node slab tests and per-triangle intersections
-    const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0];
-    const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1];
-    const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2];
-    const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0];
-    const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1];
-    const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2];
-
     const buffer = shape.bvh.buffer;
     const meshData = shape.data;
 
@@ -349,6 +292,53 @@ function castRayVsTriangleMesh(
         return;
     }
 
+    // transform the ray into the mesh's unscaled local space: rigid inverse, then divide origin and
+    // direction by the scale. the bvh and the vertices are unscaled, so nothing is scaled per
+    // triangle; the hit parameter t is unchanged by rescaling origin and direction together, so the
+    // fraction needs no correction either (jolt: ScaledShape::CastRay)
+    quat.set(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
+    quat.conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
+
+    vec3.set(_castRayVsTriangleMesh_rayOriginLocal, originX - posX, originY - posY, originZ - posZ);
+    vec3.transformQuat(
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_invQuat,
+    );
+    vec3.set(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
+    vec3.transformQuat(
+        _castRayVsTriangleMesh_rayDirectionLocal,
+        _castRayVsTriangleMesh_rayDirectionLocal,
+        _castRayVsTriangleMesh_invQuat,
+    );
+
+    const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0] / scaleX;
+    const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1] / scaleY;
+    const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2] / scaleZ;
+    const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0] / scaleX;
+    const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1] / scaleY;
+    const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2] / scaleZ;
+
+    // reciprocals of the local displacement, once per query, for the fraction-space slab tests
+    const invDispX = safeReciprocal(localDirX * length);
+    const invDispY = safeReciprocal(localDirY * length);
+    const invDispZ = safeReciprocal(localDirZ * length);
+
+    // a mirrored scale needs no winding fix-up: the ray was mirrored into local space with the
+    // mesh, so the local front-face test already answers for the world-space surface side
+    // (jolt: ScaledShape::CastRay rescales the ray and casts against the inner shape as is)
+    const backfaceCulling = !settings.collideWithBackfaces;
+
+    const positions = meshData.positions;
+    const triangleBuffer = meshData.triangleBuffer;
+
+    // the collector's early-out fraction, held in a local and refreshed after each hit so the node
+    // loop does one polymorphic property read per hit instead of several per node. the triangle
+    // test gets the same bound in ray units, clamped to the ray length: the initial early-out sits
+    // a hair above 1 so that a hit at the very end still counts, but nothing beyond the segment may
+    let earlyOut = collector.earlyOutFraction;
+    let maxT = earlyOut < 1 ? earlyOut * length : length;
+
     let foundHit = false;
     let stackSize = 0;
     _castRayVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -356,45 +346,34 @@ function castRayVsTriangleMesh(
     stackSize++;
 
     while (stackSize > 0) {
-        // early out: very close hit
-        if (collector.earlyOutFraction <= 0) {
-            break;
-        }
-
         stackSize--;
         const nodeOffset = _castRayVsTriangleMesh_stackNodes[stackSize];
         const nodeDistance = _castRayVsTriangleMesh_stackDist[stackSize];
 
-        // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        // early out: if fraction to this node >= closest hit, skip it. a node is only ever pushed
+        // with a finite entry fraction, so no re-test of its bounds is needed here
+        if (nodeDistance >= earlyOut) {
             continue;
         }
-
-        // note: no need to test ray x triangle bounds intersection here - we already proved the ray
-        // intersects this node's bounds when we computed the distance during push.
-        // if the ray didn't intersect, rayDistanceToBox3 would have returned Infinity
-        // and we wouldn't have pushed this node onto the stack.
 
         if (bvh.nodeIsLeaf(buffer, nodeOffset)) {
             // leaf: check triangles
             const triStart = triangleMeshBvh.nodeTriStart(buffer, nodeOffset);
             const triCount = triangleMeshBvh.nodeTriCount(buffer, nodeOffset);
             for (let i = 0; i < triCount; i++) {
+                // an any-hit collector drops its early-out to zero: nothing further can qualify
+                if (earlyOut <= 0) break;
+
                 const triangleIndex = triStart + i;
 
-                // get triangle vertices from interleaved buffer
-                getTriangleVertices(
-                    _castRayVsTriangleMesh_a,
-                    _castRayVsTriangleMesh_b,
-                    _castRayVsTriangleMesh_c,
-                    meshData,
-                    triangleIndex,
-                );
+                // triangle vertices straight from the interleaved buffer, no scratch copy
+                const triOffset = triangleIndex * triangleMeshData.TRIANGLE_STRIDE;
+                const ia = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_A] * 3;
+                const ib = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_B] * 3;
+                const ic = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_C] * 3;
 
-                // note: we don't do a per-triangle aabb test, the bvh node aabb already provides tight culling
-                // and the ray x triangle test is not so expensive as gjk/epa collision or shapecast.
-
-                // test ray vs triangle
+                // note: no per-triangle aabb test, the bvh node aabb already provides tight culling
+                // and the ray x triangle test is cheap next to gjk/epa or a shape cast
                 rayIntersectsTriangle(
                     _castRayVsTriangleMesh_hitResult,
                     localOriginX,
@@ -404,16 +383,21 @@ function castRayVsTriangleMesh(
                     localDirY,
                     localDirZ,
                     length,
-                    _castRayVsTriangleMesh_a,
-                    _castRayVsTriangleMesh_b,
-                    _castRayVsTriangleMesh_c,
-                    !settings.collideWithBackfaces,
+                    maxT,
+                    positions[ia],
+                    positions[ia + 1],
+                    positions[ia + 2],
+                    positions[ib],
+                    positions[ib + 1],
+                    positions[ib + 2],
+                    positions[ic],
+                    positions[ic + 1],
+                    positions[ic + 2],
+                    backfaceCulling,
                 );
 
-                if (
-                    _castRayVsTriangleMesh_hitResult.hit &&
-                    _castRayVsTriangleMesh_hitResult.fraction < collector.earlyOutFraction
-                ) {
+                // the triangle test already rejected anything beyond maxT
+                if (_castRayVsTriangleMesh_hitResult.hit) {
                     foundHit = true;
 
                     _castRayVsTriangleMesh_subShapeIdBuilder.value = subShapeId;
@@ -431,69 +415,64 @@ function castRayVsTriangleMesh(
                     _castRayVsTriangleMesh_hit.materialId = triangleMeshData.getMaterialId(meshData, triangleIndex);
                     _castRayVsTriangleMesh_hit.bodyIdB = collector.bodyIdB;
                     collector.addHit(_castRayVsTriangleMesh_hit);
+
+                    earlyOut = collector.earlyOutFraction;
+                    maxT = earlyOut < 1 ? earlyOut * length : length;
                 }
             }
         } else {
-            // internal node: compute distances to both children and sort by distance
-            // push farther child first so closer is popped first
+            // internal node: entry fractions of both children, bounds read straight from the buffer;
+            // push the farther child first so the closer one is popped first
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(_castRayVsTriangleMesh_leftBounds, buffer, leftOffset);
-            bvh.nodeGetBounds(_castRayVsTriangleMesh_rightBounds, buffer, rightOffset);
-
-            const leftDist = rayDistanceToBox3(
+            const leftDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsTriangleMesh_leftBounds[0],
-                _castRayVsTriangleMesh_leftBounds[1],
-                _castRayVsTriangleMesh_leftBounds[2],
-                _castRayVsTriangleMesh_leftBounds[3],
-                _castRayVsTriangleMesh_leftBounds[4],
-                _castRayVsTriangleMesh_leftBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[leftOffset + bvh.NODE_MIN_X],
+                buffer[leftOffset + bvh.NODE_MIN_Y],
+                buffer[leftOffset + bvh.NODE_MIN_Z],
+                buffer[leftOffset + bvh.NODE_MAX_X],
+                buffer[leftOffset + bvh.NODE_MAX_Y],
+                buffer[leftOffset + bvh.NODE_MAX_Z],
             );
-            const rightDist = rayDistanceToBox3(
+            const rightDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsTriangleMesh_rightBounds[0],
-                _castRayVsTriangleMesh_rightBounds[1],
-                _castRayVsTriangleMesh_rightBounds[2],
-                _castRayVsTriangleMesh_rightBounds[3],
-                _castRayVsTriangleMesh_rightBounds[4],
-                _castRayVsTriangleMesh_rightBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[rightOffset + bvh.NODE_MIN_X],
+                buffer[rightOffset + bvh.NODE_MIN_Y],
+                buffer[rightOffset + bvh.NODE_MIN_Z],
+                buffer[rightOffset + bvh.NODE_MAX_X],
+                buffer[rightOffset + bvh.NODE_MAX_Y],
+                buffer[rightOffset + bvh.NODE_MAX_Z],
             );
 
-            // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
-                // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
-                // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
