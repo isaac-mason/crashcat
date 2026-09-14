@@ -28,6 +28,10 @@ import {
  * note that some shapes only support uniform scaling:
  * - sphere
  *
+ * compound shapes scale their children's offsets as well as the children themselves. under a
+ * non-uniform scale the children must not be rotated: a rotated child would need its scale rotated
+ * into its own frame, which only exists for axis-aligned rotations and is not done here.
+ *
  * non-uniform scaling of a convex hull is supported but significantly slower than uniform scaling:
  * the convex-radius-shrunk vertex set is rebaked per collision pair every frame. prefer uniform scale,
  * or bake the scaled geometry into the hull points directly.

@@ -13,6 +13,7 @@
 - perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`, keyed on `bodies.stepStamp`) for contact and user constraint velocity setup; torque integration uses the vector form and skips torque-free bodies
 - fix(triangle-mesh): ray casts against a scaled triangle mesh returned wrong fractions for any non-unit scale (the direction was divided by the scale but the origin was not, while the vertices were scaled too); the ray is now cast in the mesh's unscaled local space
 - perf(raycast): ray vs bvh node tests use reciprocals precomputed once per query and read node bounds in place (`rayFractionToBox3`), the mesh ray cast keeps the collector's early-out in a local and rejects triangles against the current best hit before dividing; ~20% on the raycast-mesh bench
+- fix(compound): compound and static compound queries ignored the compound's scale when placing children (a child at local (5, 0, 0) under scale 2 sat at 5 instead of 10), the static compound walked its bvh with the query in scaled space, and static compound ray casts handed children a compound-local ray with world transforms so any compound away from the origin missed
 
 ## v0.0.5
 
