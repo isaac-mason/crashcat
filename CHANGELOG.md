@@ -11,6 +11,7 @@
 - chore: rename `mathcat` dependency to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
 - perf: body-pair cache hits feed the cached manifold straight into contact constraint setup (`addContactConstraintFromCache`, port of jolt `GetContactsFromCache`) instead of reconstructing a world-space manifold and re-matching points
 - perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`, keyed on `bodies.stepStamp`) for contact and user constraint velocity setup; torque integration uses the vector form and skips torque-free bodies
+- fix(triangle-mesh): ray casts against a scaled triangle mesh returned wrong fractions for any non-unit scale (the direction was divided by the scale but the origin was not, while the vertices were scaled too); the ray is now cast in the mesh's unscaled local space
 
 ## v0.0.5
 

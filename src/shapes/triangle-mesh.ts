@@ -323,8 +323,12 @@ function castRayVsTriangleMesh(
         _castRayVsTriangleMesh_rayDirectionLocal,
     );
 
-    // handle scale by dividing ray direction components by scale
-    // (scale affects how far we need to go in local space to reach world distance)
+    // the bvh and the vertices are in the mesh's unscaled local space, so bring the ray there: divide
+    // both origin and direction by the scale. the hit parameter t is unchanged by rescaling origin
+    // and direction together, so the fraction needs no correction (jolt: ScaledShape::CastRay)
+    _castRayVsTriangleMesh_rayOriginLocal[0] /= _castRayVsTriangleMesh_scale[0];
+    _castRayVsTriangleMesh_rayOriginLocal[1] /= _castRayVsTriangleMesh_scale[1];
+    _castRayVsTriangleMesh_rayOriginLocal[2] /= _castRayVsTriangleMesh_scale[2];
     _castRayVsTriangleMesh_rayDirectionLocal[0] /= _castRayVsTriangleMesh_scale[0];
     _castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
     _castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
@@ -387,11 +391,6 @@ function castRayVsTriangleMesh(
                     triangleIndex,
                 );
 
-                // apply scale to vertices (mesh is in local space)
-                const a = vec3.mul(_castRayVsTriangleMesh_a, _castRayVsTriangleMesh_a, _castRayVsTriangleMesh_scale);
-                const b = vec3.mul(_castRayVsTriangleMesh_b, _castRayVsTriangleMesh_b, _castRayVsTriangleMesh_scale);
-                const c = vec3.mul(_castRayVsTriangleMesh_c, _castRayVsTriangleMesh_c, _castRayVsTriangleMesh_scale);
-
                 // note: we don't do a per-triangle aabb test, the bvh node aabb already provides tight culling
                 // and the ray x triangle test is not so expensive as gjk/epa collision or shapecast.
 
@@ -405,9 +404,9 @@ function castRayVsTriangleMesh(
                     localDirY,
                     localDirZ,
                     length,
-                    a,
-                    b,
-                    c,
+                    _castRayVsTriangleMesh_a,
+                    _castRayVsTriangleMesh_b,
+                    _castRayVsTriangleMesh_c,
                     !settings.collideWithBackfaces,
                 );
 
