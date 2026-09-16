@@ -2,22 +2,22 @@
 
 ## v0.0.6 (Unreleased)
 
-- fix: constraint parts treated an inverse effective mass below the smallest normal double as invertible, so a body with restricted dofs could get an infinite effective mass from a tiny rotation about a locked axis (port of jolt #2105)
-- fix: `gjkCastShape` kept the rejected support point in the simplex when it gave up after its one restart, so contact points were reconstructed from a point gjk had already discarded (port of jolt #2108)
+- fix: an inverse effective mass below the smallest normal double was treated as invertible, so a body with restricted dofs could get an infinite effective mass from a tiny rotation about a locked axis
+- fix: `gjkCastShape` reconstructed contact points from a support point it had already rejected
 - feat: `dbvt.walk` now takes `world` first (`walk(world, dbvt, visitor)`), matching the other dbvt traversals
-- refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards dropped from traversals (body destroy removes the leaf before it is pooled), redundant node reset on free-list reuse removed, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
-- perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) to replace GJK/EPA convex collide for sphere/box pairs
-- feat: update mathcat
-- chore: rename `mathcat` dependency to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
-- perf: body-pair cache hits feed the cached manifold straight into contact constraint setup (`addContactConstraintFromCache`, port of jolt `GetContactsFromCache`) instead of reconstructing a world-space manifold and re-matching points
-- perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`, keyed on `bodies.stepStamp`) for contact and user constraint velocity setup; torque integration uses the vector form and skips torque-free bodies
-- fix(triangle-mesh): ray casts against a scaled triangle mesh returned wrong fractions for any non-unit scale (the direction was divided by the scale but the origin was not, while the vertices were scaled too); the ray is now cast in the mesh's unscaled local space
-- perf(raycast): ray vs bvh node tests use reciprocals precomputed once per query and read node bounds in place (`rayFractionToBox3`), the mesh ray cast keeps the collector's early-out in a local and rejects triangles against the current best hit before dividing; ~20% on the raycast-mesh bench
-- fix(compound): compound and static compound queries ignored the compound's scale when placing children (a child at local (5, 0, 0) under scale 2 sat at 5 instead of 10), the static compound walked its bvh with the query in scaled space, and static compound ray casts handed children a compound-local ray with world transforms so any compound away from the origin missed
-- fix(triangle-mesh): convex collide, convex cast, sphere collide and sphere cast against a scaled triangle mesh walked the bvh with the query in scaled space, so contacts and hits were missed for any non-unit mesh scale; the walks now run in the mesh's unscaled local space
-- perf(triangle-mesh): convex vs mesh folds the mesh scale into the mesh-to-convex matrix and transforms triangle vertices with one affine multiply each instead of a scale plus a projective transform, and fills the inflated epa support once per pair instead of per triangle
-- perf(step): bodies derive position, world aabb and broadphase leaf once per step after the position solver instead of twice, in the same per-island pass as the sleep test and force reset; island objects are reused across steps; the sleep test takes its two rotated axes straight from the quaternion
-- perf(solver): the contact velocity solver skips the velocity write-back for constraints that applied no impulse this iteration, sums the friction caps only when a friction part is active, and reads the contact bias directly
+- refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards and a redundant free-list node reset dropped, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
+- perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) replaces GJK/EPA for sphere/box pairs
+- chore: `mathcat` dependency renamed to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
+- perf: body-pair cache hits build contact constraints straight from the cached manifold (`addContactConstraintFromCache`) instead of rebuilding and re-matching a world-space one
+- perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`); torque integration uses the vector form and skips torque-free bodies
+- fix(triangle-mesh): every query against a scaled mesh ran in the wrong space — ray casts returned wrong fractions, and convex and sphere collides and casts missed hits entirely. all of them now run in the mesh's unscaled local space
+- perf(raycast): ray vs bvh node tests use reciprocals precomputed once per query and read node bounds in place; the mesh ray cast rejects triangles against the current best hit before dividing
+- fix(compound): compound queries ignored the compound's scale when placing children (a child at local (5, 0, 0) under scale 2 sat at 5 instead of 10), static compound bvh walks ran with the query in scaled space, and static compound ray casts missed for any compound away from the origin
+- perf(triangle-mesh): convex vs mesh transforms each triangle vertex with one affine multiply, the mesh scale folded into the matrix, and fills each support for the convex shape once per pair on first use instead of per triangle
+- perf(step): the post-solve position, world aabb and broadphase update runs per island alongside the sleep test and force reset instead of a separate pass over every active body; island objects are reused across steps; the sleep test takes its two rotated axes straight from the quaternion
+- perf(solver): contact velocity solving and warm starting skip the velocity write-back for constraints that applied no impulse, and the friction caps are summed only when a friction part is active
+- fix(body): a locked translation dof snapped the body to zero on that axis during the position solver instead of only stopping motion along it
+- refactor(body): `rigidBody.updatePositionFromCenterOfMass` is removed - deriving a body's cached `position` and `aabb` and publishing its bounds to the broadphase (`broadphase.notifyBodyBoundsChanged`) are separate steps now
 
 ## v0.0.5
 
