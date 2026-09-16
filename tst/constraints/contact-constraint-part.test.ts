@@ -1,11 +1,13 @@
 import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
+import { box, MotionType as PublicMotionType, rigidBody, updateWorld } from '../../src';
 import { DOF_ALL } from '../../src/body/dof';
 import * as motionPropertiesModule from '../../src/body/motion-properties';
 import { MotionType } from '../../src/body/motion-type';
 import type { RigidBody } from '../../src/body/rigid-body';
 import * as axisConstraintPart from '../../src/constraints/constraint-part/axis-constraint-part';
 import * as contactConstraintPart from '../../src/constraints/constraint-part/contact-constraint-part';
+import { createTestWorld } from '../helpers';
 
 /**
  * create a minimal rigid body for testing constraint parts.
@@ -483,5 +485,42 @@ describe('contactConstraintPart vs axisConstraintPart equivalence', () => {
 
         // body A should have changed
         expect(linVelA[1]).not.toBe(2);
+    });
+});
+
+describe('contact part spring softness', () => {
+    // contactConstraintPart.getTotalLambda reads springPart.bias directly instead of calling
+    // getSpringBias, which is only equivalent while every contact part has zero softness. contact
+    // parts reach the solver through calculateConstraintProperties, its mass-override variant, or
+    // deactivate, and all three go through calculateSpringPropertiesWithBias. if a soft contact path
+    // ever sets a softness, the fold silently drops the softness * totalLambda term, so pin it here.
+    test('every contact part in a real step has zero spring softness', () => {
+        const { world, layers } = createTestWorld();
+
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(5, 0.5, 5) }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: PublicMotionType.STATIC,
+            position: vec3.fromValues(0, -0.5, 0),
+        });
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5) }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: PublicMotionType.DYNAMIC,
+            position: vec3.fromValues(0, 0.49, 0),
+        });
+
+        for (let i = 0; i < 4; i++) updateWorld(world, undefined, 1 / 60);
+
+        expect(world.contactConstraints.count).toBeGreaterThan(0);
+        for (let i = 0; i < world.contactConstraints.count; i++) {
+            const constraint = world.contactConstraints.pool[i];
+            expect(constraint.frictionConstraint1.springPart.softness).toBe(0);
+            expect(constraint.frictionConstraint2.springPart.softness).toBe(0);
+            expect(constraint.numContactPoints).toBeGreaterThan(0);
+            for (let j = 0; j < constraint.numContactPoints; j++) {
+                expect(constraint.contactPoints[j].normalConstraint.springPart.softness).toBe(0);
+            }
+        }
     });
 });
