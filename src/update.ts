@@ -3,6 +3,7 @@ import { box3 } from 'math/shapes';
 import * as motionProperties from './body/motion-properties';
 import { MotionQuality } from './body/motion-properties';
 import { MotionType } from './body/motion-type';
+import * as rigidBodyStep from './body/rigid-body-step';
 import type { RigidBody } from './body/rigid-body';
 import * as rigidBody from './body/rigid-body';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
@@ -1174,9 +1175,10 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
         }
 
         if (updatePosition) {
-            // move the centre of mass now; position, world aabb and broadphase leaf are derived once
-            // after the position solver, in finishIslandStep
-            vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
+            // ccd below reads the target's position and aabb, so derive now. the broadphase leaf
+            // waits for finishIslandStep - the tree only has to be current for the next step
+            rigidBodyStep.addPositionStep(body, displacement);
+            rigidBodyStep.deriveTransform(body);
         }
     }
 }
