@@ -17,7 +17,7 @@ import {
     sphere,
     triangleMesh,
 } from 'crashcat';
-import { quat } from 'mathcat';
+import { quat } from 'math';
 
 const worldSettings = createWorldSettings();
 const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);

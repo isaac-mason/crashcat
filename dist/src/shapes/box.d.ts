@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape.js';
 import { type Shape, ShapeType } from './shapes.js';
@@ -37,7 +38,7 @@ export declare const def: import("./shapes").ShapeDef<BoxShape>;
  * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
  * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
  *
- * The mathcat frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
+ * The math frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
  * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
  * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
  * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)

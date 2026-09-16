@@ -1,5 +1,5 @@
-import type { Vec3 } from 'mathcat';
-import { vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { vec3 } from 'math';
 import {
     addAngularVelocityStep,
     multiplyWorldSpaceInverseInertiaByVector,
@@ -8,6 +8,7 @@ import {
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addRotationStep, subRotationStep } from '../../body/rigid-body-step';
+import { MIN_NORMAL } from '../../utils/float';
 import {
     calculateSpringPropertiesWithBias,
     calculateSpringPropertiesWithFrequencyAndDamping,
@@ -145,7 +146,7 @@ export function calculateConstraintProperties(
 ): void {
     const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
@@ -178,7 +179,7 @@ export function calculateConstraintPropertiesWithFrequencyAndDamping(
 ): void {
     const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithFrequencyAndDamping(
@@ -218,7 +219,7 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
 ): void {
     const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithStiffnessAndDamping(
@@ -257,7 +258,7 @@ export function calculateConstraintPropertiesWithSettings(
 ): void {
     const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithSettings(

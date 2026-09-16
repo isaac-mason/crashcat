@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { CollideShapeVsShapeFn } from '../shapes/shapes.js';
 import { type Face } from '../utils/face.js';
 export type CollideShapeHit = {

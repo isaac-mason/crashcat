@@ -22,8 +22,8 @@ import {
 } from 'crashcat';
 import { createShapeHelper, debugRenderer } from 'crashcat/three';
 import GUI from 'lil-gui';
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { euler, quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import * as debugUI from './debug/debug-ui';
@@ -192,7 +192,7 @@ function updateShapeCasterObject(sc: ShapeCasterObject) {
     );
     quat.multiply(sc.quaternion, sc.quaternion, _deltaQuat);
 
-    // Set Three.js rootObject from mathcat quaternion (for tracking the orbit point)
+    // Set Three.js rootObject from math quaternion (for tracking the orbit point)
     sc.rootObject.quaternion.set(sc.quaternion[0], sc.quaternion[1], sc.quaternion[2], sc.quaternion[3]);
 
     // position originMesh at pointDist along the rootObject's local X axis
@@ -543,7 +543,7 @@ function render() {
     const worldPosVec3 = vec3.create();
     const worldQuatVec4 = quat.create();
 
-    // Update mesh objects (source of truth: mathcat position/quaternion)
+    // Update mesh objects (source of truth: math position/quaternion)
     for (const meshObj of state.meshObjects) {
         // Update quaternion based on rotation speed
         quat.fromEuler(
@@ -557,7 +557,7 @@ function render() {
         );
         quat.multiply(meshObj.quaternion, meshObj.quaternion, _deltaQuat);
 
-        // Set Three.js mesh from mathcat quaternion (local space)
+        // Set Three.js mesh from math quaternion (local space)
         meshObj.visualMesh.quaternion.set(
             meshObj.quaternion[0],
             meshObj.quaternion[1],
@@ -570,7 +570,7 @@ function render() {
         meshObj.visualMesh.updateMatrixWorld();
         meshObj.visualMesh.matrixWorld.decompose(worldPos, worldQuat, worldScale);
 
-        // Convert to mathcat types
+        // Convert to math types
         vec3.set(worldPosVec3, worldPos.x, worldPos.y, worldPos.z);
         quat.set(worldQuatVec4, worldQuat.x, worldQuat.y, worldQuat.z, worldQuat.w);
 

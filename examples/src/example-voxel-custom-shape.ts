@@ -41,7 +41,10 @@ import {
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
-import { type Box3, box3, createSimplex2D, mat4, quat, randomFloat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'math';
+import { simplex2d } from 'math/noise';
+import { random } from 'math/random';
+import { type Box3, box3 } from 'math/shapes';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
@@ -1428,16 +1431,16 @@ const chunkBounds: Box3 = [CHUNKS_MIN_X, CHUNKS_MIN_Y, CHUNKS_MIN_Z, CHUNKS_MAX_
 
 const voxelShape = createVoxelShape({ chunkBounds });
 
-const simplexNoise = createSimplex2D(42);
+const simplexNoise = simplex2d.create(42);
 
 for (let x = -TERRAIN_SIZE; x < TERRAIN_SIZE; x++) {
     for (let z = -TERRAIN_SIZE; z < TERRAIN_SIZE; z++) {
         // Layer 1: Large scale hills
-        const noise1 = simplexNoise(x * 0.02, z * 0.02) * 0.5 + 0.5; // 0-1
+        const noise1 = simplex2d.sample(simplexNoise, x * 0.02, z * 0.02) * 0.5 + 0.5; // 0-1
         // Layer 2: Medium details
-        const noise2 = simplexNoise(x * 0.08, z * 0.08) * 0.5 + 0.5; // 0-1
+        const noise2 = simplex2d.sample(simplexNoise, x * 0.08, z * 0.08) * 0.5 + 0.5; // 0-1
         // Layer 3: Small details
-        const noise3 = simplexNoise(x * 0.2, z * 0.2) * 0.5 + 0.5; // 0-1
+        const noise3 = simplex2d.sample(simplexNoise, x * 0.2, z * 0.2) * 0.5 + 0.5; // 0-1
 
         // Combine layers with different weights
         const combinedNoise = noise1 * 0.6 + noise2 * 0.3 + noise3 * 0.1;
@@ -1700,8 +1703,8 @@ function spawnShape(config: ShapeConfig): void {
     const shape = config.createShape();
 
     // Random position above the ground
-    const x = randomFloat(-SPAWN_AREA, SPAWN_AREA, Math.random());
-    const z = randomFloat(-SPAWN_AREA, SPAWN_AREA, Math.random());
+    const x = random.float(Math.random, -SPAWN_AREA, SPAWN_AREA);
+    const z = random.float(Math.random, -SPAWN_AREA, SPAWN_AREA);
     const position = vec3.fromValues(x, SPAWN_HEIGHT, z);
 
     // Random rotation
@@ -1853,8 +1856,8 @@ function animate() {
         const newConfig = shapeConfigs[Math.floor(Math.random() * shapeConfigs.length)];
         const newShape = newConfig.createShape();
 
-        const x = randomFloat(-SPAWN_AREA, SPAWN_AREA);
-        const z = randomFloat(-SPAWN_AREA, SPAWN_AREA);
+        const x = random.float(Math.random, -SPAWN_AREA, SPAWN_AREA);
+        const z = random.float(Math.random, -SPAWN_AREA, SPAWN_AREA);
         const position = vec3.fromValues(x, SPAWN_HEIGHT, z);
 
         const axis = vec3.fromValues(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5);

@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import type { BvhSplitStrategy } from './triangle-mesh-bvh';
 import * as triangleMeshBvh from './triangle-mesh-bvh';
 import type { TriangleMeshData } from './triangle-mesh-data';

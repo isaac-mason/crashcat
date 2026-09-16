@@ -1,7 +1,8 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addPositionStep, addRotationStep, subPositionStep, subRotationStep } from '../../body/rigid-body-step';
+import { MIN_NORMAL } from '../../utils/float';
 import {
     calculateSpringPropertiesWithBias,
     calculateSpringPropertiesWithFrequencyAndDamping,
@@ -187,7 +188,7 @@ export function calculateConstraintProperties(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
@@ -255,7 +256,7 @@ export function calculateConstraintPropertiesWithMassOverride(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
@@ -312,7 +313,7 @@ export function calculateConstraintPropertiesWithFrequencyAndDamping(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithFrequencyAndDamping(
@@ -375,7 +376,7 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithStiffnessAndDamping(
@@ -437,7 +438,7 @@ export function calculateConstraintPropertiesWithSettings(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithSettings(

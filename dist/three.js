@@ -12,7 +12,7 @@ var __exportAll = (all, no_symbols) => {
 	return target;
 };
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/vec3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/vec3.js
 /**
 * Creates a new, empty vec3
 *
@@ -103,7 +103,7 @@ function transformQuat(out, a, q) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/mathcat@0.0.13/node_modules/mathcat/dist/quat.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/quat.js
 /**
 * Creates a new identity quat
 *

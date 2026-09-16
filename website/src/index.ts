@@ -19,7 +19,7 @@ import {
     updateWorld,
 } from 'crashcat';
 import { debugRenderer } from 'crashcat/three';
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { GLTFLoader } from 'three/examples/jsm/Addons.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { array, cameraPosition, Discard, float, Fn, If, positionWorld, screenCoordinate, vec3 as tslVec3 } from 'three/tsl';

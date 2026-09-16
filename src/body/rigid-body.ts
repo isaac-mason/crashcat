@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import * as broadphase from '../broadphase/broadphase';
 import { MaterialCombineMode } from '../constraints/combine-material';
 import type { ConstraintId } from '../constraints/constraint-id';
@@ -513,8 +514,6 @@ export function* iterate(world: World): Generator<RigidBody> {
     }
 }
 
-const _getInverseInertia_rot = /* @__PURE__ */ mat4.create();
-
 /**
  * get the world-space inverse inertia matrix for a body.
  * for non-dynamic bodies, returns zero matrix.
@@ -526,8 +525,7 @@ export function getInverseInertia(out: Mat4, body: RigidBody): Mat4 {
     if (body.motionType !== MotionType.DYNAMIC) {
         return mat4.zero(out);
     }
-    mat4.fromQuat(_getInverseInertia_rot, body.quaternion);
-    return motionProperties.getInverseInertiaForRotation(out, body.motionProperties, _getInverseInertia_rot);
+    return motionProperties.getWorldInverseInertia(out, body.motionProperties, body.quaternion, motionProperties.STEP_STAMP_NONE);
 }
 
 /**
@@ -655,6 +653,7 @@ export function setQuaternion(world: World, body: RigidBody, quaternion: Quat, w
     quat.copy(body.quaternion, quaternion);
 
     // update body properties
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
     updateCenterOfMassPosition(body);
     updateAABB(body);
 
@@ -680,6 +679,7 @@ export function setTransform(world: World, body: RigidBody, position: Vec3, quat
     quat.copy(body.quaternion, quaternion);
 
     // update body properties
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
     updateCenterOfMassPosition(body);
     updateAABB(body);
 
@@ -751,6 +751,9 @@ export function setMotionType(world: World, body: RigidBody, motionType: MotionT
             body.massProperties,
         );
     }
+
+    // a memoised world inverse inertia from the previous motion type is stale
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_SUB_SHAPE_ID } from '../../src/body/sub-shape';
 import {

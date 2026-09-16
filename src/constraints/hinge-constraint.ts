@@ -1,5 +1,6 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
+import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import type { RigidBody } from '../body/rigid-body';
@@ -192,7 +193,7 @@ function getInvInitialOrientationXZ(normalAxis1: Vec3, hingeAxis1: Vec3, normalA
     const y2 = vec3.create();
     vec3.cross(y2, hingeAxis2, normalAxis2);
 
-    // create rotation matrices (column-major in mathcat)
+    // create rotation matrices (column-major in math)
     const mat1 = mat3.fromValues(
         normalAxis1[0],
         normalAxis1[1],
@@ -635,6 +636,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // setup rotation constraint (keeps hinge axes aligned)
@@ -644,6 +646,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        bodies.stepStamp,
     );
 
     // calculate current angle
@@ -765,6 +768,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
@@ -782,6 +786,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        STEP_STAMP_NONE,
     );
 
     const rot = hingeRotationConstraintPart.solvePositionConstraint(

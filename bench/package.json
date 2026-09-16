@@ -4,21 +4,23 @@
     "type": "module",
     "scripts": {
         "bench": "labs",
-        "bench:save": "labs -b",
-        "bench:compare": "labs -c",
-        "perf:profile": "node profile.mjs",
-        "perf:report": "node perf-report.mjs run",
-        "perf:diff": "node perf-report.mjs diff",
-        "hitch": "node hitch.mjs",
-        "focus": "node focus.mjs"
+        "bench:quick": "labs --blocks 3 --no-save",
+        "smoke": "tsx smoke.ts",
+        "bench:baseline": "labs baseline",
+        "bench:compare": "labs compare",
+        "bench:list": "labs list",
+        "viewer": "vite --config viewer/vite.config.ts"
     },
     "dependencies": {
         "crashcat": "workspace:^"
     },
     "devDependencies": {
-        "@pmndrs/labs": "^0.6.0",
+        "@pmndrs/labs": "^0.9.0",
         "@types/node": "^22.0.0",
+        "@types/three": "^0.183.0",
+        "three": "^0.183.0",
         "tsx": "^4.21.0",
-        "typescript": "^5.9.2"
+        "typescript": "^5.9.2",
+        "vite": "^7.3.1"
     }
 }

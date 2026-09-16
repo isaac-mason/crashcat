@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 /**
  * Test ray against infinite cylinder, returning smallest positive fraction in [0, 1].
  * Based on "Real Time Collision Detection" by Christer Ericson, Chapter 5.3.7.

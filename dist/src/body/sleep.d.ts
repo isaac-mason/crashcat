@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { World } from '../world.js';
 import type { MotionProperties } from './motion-properties.js';
 import type { RigidBody } from './rigid-body.js';

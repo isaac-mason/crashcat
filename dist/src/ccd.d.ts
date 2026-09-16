@@ -1,4 +1,5 @@
-import type { Box3, Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 import type { Bodies } from './body/bodies.js';
 import type { RigidBody } from './body/rigid-body.js';
 import type { ContactSettings } from './constraints/contact-constraints.js';

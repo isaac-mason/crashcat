@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { DOF_ALL } from '../../src/body/dof';
 import * as motionPropertiesModule from '../../src/body/motion-properties';

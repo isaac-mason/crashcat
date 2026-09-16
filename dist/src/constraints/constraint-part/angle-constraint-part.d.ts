@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 import { type SpringPart } from './spring-part.js';
 import type { SpringSettings } from './spring-settings.js';

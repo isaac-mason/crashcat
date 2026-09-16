@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { CastRayStatus, createAnyCastRayCollector, createDefaultCastRaySettings } from '../../src/collision/cast-ray-vs-shape';
 import { castRayVsShape } from '../../src/collision/narrowphase';

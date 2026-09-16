@@ -19,7 +19,7 @@ import {
 } from 'crashcat';
 import { createShapeHelper } from 'crashcat/three';
 import GUI from 'lil-gui';
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';

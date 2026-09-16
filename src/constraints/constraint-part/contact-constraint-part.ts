@@ -1,6 +1,5 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import type { AxisConstraintPart } from './axis-constraint-part';
-import { getSpringBias } from './spring-part';
 
 /**
  * contact-specific constraint part functions that operate on cached velocity locals
@@ -68,8 +67,9 @@ export function getTotalLambda(
         jv -= part.r2xAxis[0] * angVelB[0] + part.r2xAxis[1] * angVelB[1] + part.r2xAxis[2] * angVelB[2];
     }
 
-    // calculate lambda
-    const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+    // calculate lambda. contact parts are set up with calculateSpringPropertiesWithBias, so the
+    // spring softness is always zero and the spring bias is just the stored bias
+    const lambda = part.effectiveMass * (jv - part.springPart.bias);
 
     return part.totalLambda + lambda;
 }

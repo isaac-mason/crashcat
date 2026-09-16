@@ -1,4 +1,5 @@
-import { type Box3, box3, mat4, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { CompoundShapeChild } from '../compound';
 import {
     NODE_AXIS_OR_COUNT,

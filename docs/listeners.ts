@@ -14,7 +14,7 @@ import {
     rigidBody,
     updateWorld
 } from 'crashcat';
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 
 const worldSettings = createWorldSettings();
 const BROADPHASE_LAYER_MOVING = addBroadphaseLayer(worldSettings);

@@ -1,9 +1,9 @@
-import type { Mat2, Mat4, Vec2, Vec3 } from 'mathcat';
-import { mat2, mat4, vec2, vec3 } from 'mathcat';
+import type { Mat2, Vec2, Vec3 } from 'math';
+import { mat2, mat4, vec2, vec3 } from 'math';
 import {
     addAngularVelocityStep,
     addLinearVelocityStep,
-    getInverseInertiaForRotation,
+    getWorldInverseInertia,
     subAngularVelocityStep,
     subLinearVelocityStep,
 } from '../../body/motion-properties';
@@ -118,13 +118,12 @@ const _calc_invI_crossN2 = /* @__PURE__ */ vec3.create();
 export function calculateConstraintProperties(
     part: DualAxisConstraintPart,
     bodyA: RigidBody,
-    rotationA: Mat4,
     r1PlusU: Vec3,
     bodyB: RigidBody,
-    rotationB: Mat4,
     r2: Vec3,
     n1: Vec3,
     n2: Vec3,
+    stepStamp: number,
 ): void {
     // initialize inverse effective mass to zero
     mat2.set(_calc_invEffectiveMass, 0, 0, 0, 0);
@@ -140,11 +139,11 @@ export function calculateConstraintProperties(
         vec3.copy(part.r1PlusUxN2, _calc_crossN2);
 
         // get inverse inertia in world space
-        getInverseInertiaForRotation(_calc_invI, mpA, rotationA);
+        const invIA = getWorldInverseInertia(_calc_invI, mpA, bodyA.quaternion, stepStamp);
 
         // calculate I^-1 × (r × n) (3x3 only)
-        mat4.multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-        mat4.multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+        mat4.multiply3x3Vec(_calc_invI_crossN1, invIA, _calc_crossN1);
+        mat4.multiply3x3Vec(_calc_invI_crossN2, invIA, _calc_crossN2);
         vec3.copy(part.invI1_r1PlusUxN1, _calc_invI_crossN1);
         vec3.copy(part.invI1_r1PlusUxN2, _calc_invI_crossN2);
 
@@ -171,11 +170,11 @@ export function calculateConstraintProperties(
         vec3.copy(part.r2xN2, _calc_crossN2);
 
         // get inverse inertia in world space
-        getInverseInertiaForRotation(_calc_invI, mpB, rotationB);
+        const invIB = getWorldInverseInertia(_calc_invI, mpB, bodyB.quaternion, stepStamp);
 
         // calculate I^-1 × (r × n) (3x3 only)
-        mat4.multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-        mat4.multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+        mat4.multiply3x3Vec(_calc_invI_crossN1, invIB, _calc_crossN1);
+        mat4.multiply3x3Vec(_calc_invI_crossN2, invIB, _calc_crossN2);
         vec3.copy(part.invI2_r2xN1, _calc_invI_crossN1);
         vec3.copy(part.invI2_r2xN2, _calc_invI_crossN2);
 

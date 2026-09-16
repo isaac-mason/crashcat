@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { clipPolyVsEdge, clipPolyVsPlane, clipPolyVsPoly } from '../../src/manifold/clip';
 import { createFace, type Face } from '../../src/utils/face';

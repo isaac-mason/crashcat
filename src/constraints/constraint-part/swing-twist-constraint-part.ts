@@ -1,5 +1,6 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec2, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../../body/motion-properties';
+import { mat4, quat, vec2, vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body';
 import type { AngleConstraintPart } from './angle-constraint-part';
 import * as angleConstraintPart from './angle-constraint-part';
@@ -775,7 +776,14 @@ export function solvePositionConstraint(
         // create a fresh rotation euler constraint part
         mat4.fromQuat(_pos_rotA, bodyA.quaternion);
         mat4.fromQuat(_pos_rotB, bodyB.quaternion);
-        rotationEulerConstraintPart.calculateConstraintProperties(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB);
+        rotationEulerConstraintPart.calculateConstraintProperties(
+            _pos_rotation_part,
+            bodyA,
+            _pos_rotA,
+            bodyB,
+            _pos_rotB,
+            STEP_STAMP_NONE,
+        );
 
         return rotationEulerConstraintPart.solvePositionConstraint(_pos_rotation_part, bodyA, bodyB, _pos_inv_initial, baumgarte);
     }

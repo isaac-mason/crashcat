@@ -12,7 +12,7 @@ import type {
     World,
 } from 'crashcat';
 import { bvh, ConstraintType, dbvt as dbvtNs, MotionType, rigidBody, ShapeType } from 'crashcat';
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Quat, quat, type Vec3, vec3 } from 'math';
 import * as THREE from 'three';
 
 export enum BodyColorMode {

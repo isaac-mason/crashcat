@@ -1,4 +1,5 @@
-import { type Box3, box3, quat, type Vec3, vec3 } from 'mathcat';
+import { quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { defineShape, ShapeCategory, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
 

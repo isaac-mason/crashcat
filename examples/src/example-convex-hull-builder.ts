@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';

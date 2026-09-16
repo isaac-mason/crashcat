@@ -1,13 +1,13 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": {
-    "moduleResolution": "nodenext",
-    "module": "nodenext",
+    "moduleResolution": "bundler",
+    "module": "preserve",
     "noEmit": true,
     "skipLibCheck": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": ["./*.ts"],
+  "include": ["./benches/**/*.ts", "./scenarios/**/*.ts", "./viewer/**/*.ts", "./labs.config.ts"],
   "exclude": []
 }
