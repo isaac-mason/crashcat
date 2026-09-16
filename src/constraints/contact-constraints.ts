@@ -1258,12 +1258,15 @@ export function warmStartVelocityConstraints(
             _angularVelocityB[2] = 0;
         }
 
+        // impulses applied by this constraint; velocities are only written back if any
+        let applied = false;
+
         // manifold-level friction warm-start (once per constraint, not per point)
         if (
             axisConstraintPart.isActive(constraint.frictionConstraint1) ||
             axisConstraintPart.isActive(constraint.frictionConstraint2)
         ) {
-            contactConstraintPart.warmStart(
+            applied = contactConstraintPart.warmStart(
                 constraint.frictionConstraint1,
                 _linearVelocityA,
                 _angularVelocityA,
@@ -1277,7 +1280,7 @@ export function warmStartVelocityConstraints(
                 warmStartRatio,
             );
 
-            contactConstraintPart.warmStart(
+            const appliedFriction2 = contactConstraintPart.warmStart(
                 constraint.frictionConstraint2,
                 _linearVelocityA,
                 _angularVelocityA,
@@ -1290,10 +1293,11 @@ export function warmStartVelocityConstraints(
                 tangent2,
                 warmStartRatio,
             );
+            applied = applied || appliedFriction2;
         }
 
         if (angularFrictionConstraintPart.isActive(constraint.angularFrictionConstraint)) {
-            angularFrictionConstraintPart.warmStart(
+            const appliedAngular = angularFrictionConstraintPart.warmStart(
                 constraint.angularFrictionConstraint,
                 _angularVelocityA,
                 _angularVelocityB,
@@ -1301,13 +1305,14 @@ export function warmStartVelocityConstraints(
                 isDynamicB,
                 warmStartRatio,
             );
+            applied = applied || appliedAngular;
         }
 
         for (let j = 0; j < constraint.numContactPoints; j++) {
             const cp = constraint.contactPoints[j];
 
             // always warm start normal constraint (non-penetration)
-            contactConstraintPart.warmStart(
+            const appliedNormal = contactConstraintPart.warmStart(
                 cp.normalConstraint,
                 _linearVelocityA,
                 _angularVelocityA,
@@ -1320,7 +1325,11 @@ export function warmStartVelocityConstraints(
                 normal,
                 warmStartRatio,
             );
+            applied = applied || appliedNormal;
         }
+
+        // nothing stored from last frame: the locals equal the body velocities, nothing to write back
+        if (!applied) continue;
 
         // write back velocities + DOF masking once
         if (isDynamicA) {
