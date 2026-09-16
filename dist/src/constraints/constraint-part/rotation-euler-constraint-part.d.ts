@@ -62,7 +62,7 @@ export declare function getInvInitialOrientationXY(axisX1: Vec3, axisY1: Vec3, a
  *
  * We then invert K to get the effective mass.
  */
-export declare function calculateConstraintProperties(part: RotationEulerConstraintPart, bodyA: RigidBody, _rotationA: Mat4, bodyB: RigidBody, _rotationB: Mat4): void;
+export declare function calculateConstraintProperties(part: RotationEulerConstraintPart, bodyA: RigidBody, _rotationA: Mat4, bodyB: RigidBody, _rotationB: Mat4, stepStamp: number): void;
 /**
  * Warm start the velocity constraint by applying cached impulses.
  * Scales the previous frame's impulses by the warm start ratio.

@@ -156,9 +156,20 @@ export declare function createContactSettings(): ContactSettings;
 /** copy contact settings properties from a source object */
 export declare function copyContactSettings(out: ContactSettings, source: ContactSettings): ContactSettings;
 /**
- * add a contact constraint from a new manifold
+ * add a contact constraint from a new manifold.
+ * stepStamp keys the per-step world inverse inertia memo (bodies.stepStamp).
  */
-export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, pairs: Pairs, pairRecordIndex: number, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number): boolean;
+export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, pairs: Pairs, pairRecordIndex: number, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number, stepStamp: number): boolean;
+/**
+ * add a contact constraint for a contact whose body pair hit the body-pair cache: the previous
+ * step's cached manifold is carried forward verbatim and its body-local points and lambdas feed
+ * constraint setup directly. no narrowphase, no world-to-local round trip, no point matching. a
+ * ContactManifold is only reconstructed when a listener wants onContactPersisted.
+ * jolt: ContactConstraintManager::GetContactsFromCache.
+ *
+ * bodyA / bodyB must be in the contact's stored (id-sorted) order.
+ */
+export declare function addContactConstraintFromCache(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, bodyA: body.RigidBody, bodyB: body.RigidBody, contact: contacts.Contact, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number, stepStamp: number): boolean;
 /**
  * apply warm start impulses from previous frame to give solver a good initial guess.
  * significantly improves convergence speed (~3x faster).

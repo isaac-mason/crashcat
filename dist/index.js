@@ -83,7 +83,7 @@ function degreesToRadians(degrees) {
 	return degrees * DEGREES_TO_RADIANS;
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/vec2.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/vec2.js
 /**
 * Creates a new, empty vec2
 *
@@ -132,7 +132,7 @@ function zero$2(out) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/vec3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/vec3.js
 /**
 * Creates a new, empty vec3
 *
@@ -603,7 +603,7 @@ const mul = multiply$2;
 */
 const len = length;
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/vec4.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/vec4.js
 /**
 * Creates a new, empty vec4
 *
@@ -708,7 +708,7 @@ function dot$1(a, b) {
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/mat3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/mat3.js
 /**
 * Creates a new identity mat3
 *
@@ -905,7 +905,7 @@ function fromQuat$1(out, q) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/quat.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/quat.js
 /**
 * Creates a new identity quat
 *
@@ -1189,7 +1189,7 @@ function set$3(out, x, y, z, order) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/mat2.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/mat2.js
 /**
 * Creates a new identity mat2
 *
@@ -1242,7 +1242,7 @@ function invert$1(out, a) {
 	return out;
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/core/mat4.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/core/mat4.js
 /**
 * Creates a new identity mat4
 *
@@ -2327,6 +2327,7 @@ function scaleToMass$1(massProperties, newMass) {
 //#region src/body/motion-properties.ts
 var motion_properties_exports = /* @__PURE__ */ __exportAll({
 	MotionQuality: () => MotionQuality,
+	STEP_STAMP_NONE: () => -1,
 	addAngularImpulse: () => addAngularImpulse$1,
 	addAngularVelocity: () => addAngularVelocity$1,
 	addAngularVelocityStep: () => addAngularVelocityStep,
@@ -2345,6 +2346,7 @@ var motion_properties_exports = /* @__PURE__ */ __exportAll({
 	create: () => create$39,
 	decomposePrincipalMomentsOfInertia: () => decomposePrincipalMomentsOfInertia,
 	getInverseInertiaForRotation: () => getInverseInertiaForRotation,
+	getWorldInverseInertia: () => getWorldInverseInertia,
 	moveKinematic: () => moveKinematic$1,
 	multiplyWorldSpaceInverseInertiaByVector: () => multiplyWorldSpaceInverseInertiaByVector,
 	scaleToMass: () => scaleToMass,
@@ -2403,7 +2405,9 @@ function create$39() {
 			}
 		],
 		allowSleeping: true,
-		sleepTestTimer: 0
+		sleepTestTimer: 0,
+		worldInverseInertia: zero(create$41()),
+		worldInverseInertiaStamp: -1
 	};
 }
 const _momentArm = /* @__PURE__ */ create$47();
@@ -2602,6 +2606,7 @@ function decomposePrincipalMomentsOfInertia(inertia, outRotation, outDiagonal) {
 const _setMassProperties_rotation = /* @__PURE__ */ create$45();
 const _setMassProperties_diagonal = /* @__PURE__ */ create$47();
 function setMassProperties(motionProperties, allowedDOFs, massProperties) {
+	motionProperties.worldInverseInertiaStamp = -1;
 	motionProperties.allowedDegreesOfFreedom = allowedDOFs;
 	const allowed_translation_axis = allowedDOFs & 7;
 	const allowed_rotation_axis = allowedDOFs >> 3 & 7;
@@ -2781,6 +2786,34 @@ function getInverseInertiaForRotation(out, motionProperties, bodyRotation) {
 		out[10] *= maskZ * maskZ;
 	}
 	return out;
+}
+const _getWorldInverseInertia_rotation = /* @__PURE__ */ create$41();
+/**
+* world space inverse inertia of a dynamic body, memoised per step.
+*
+* with a step stamp >= 0 the matrix is computed at most once per body per step: the first call for
+* a new stamp computes it into the body's own storage, later calls return that. the returned matrix
+* is the body's storage, read it, don't write it. this is sound for velocity constraint setup
+* because nothing rotates a body between force integration and the end of the velocity solve, and
+* every rotation write that can happen outside the step resets the stamp.
+*
+* with STEP_STAMP_NONE the matrix is computed fresh into `out` and `out` is returned. use that where
+* bodies rotate between calls: the position solver, ccd, and public getters.
+*
+* the caller checks that the body is dynamic; non-dynamic bodies contribute a zero matrix and never
+* reach this.
+*/
+function getWorldInverseInertia(out, motionProperties, bodyQuaternion, stepStamp) {
+	if (stepStamp < 0) {
+		fromQuat(_getWorldInverseInertia_rotation, bodyQuaternion);
+		return getInverseInertiaForRotation(out, motionProperties, _getWorldInverseInertia_rotation);
+	}
+	if (motionProperties.worldInverseInertiaStamp !== stepStamp) {
+		fromQuat(_getWorldInverseInertia_rotation, bodyQuaternion);
+		getInverseInertiaForRotation(motionProperties.worldInverseInertia, motionProperties, _getWorldInverseInertia_rotation);
+		motionProperties.worldInverseInertiaStamp = stepStamp;
+	}
+	return motionProperties.worldInverseInertia;
 }
 /** Clamps linear velocity to the maximum allowed value */
 function clampLinearVelocity(motionProperties) {
@@ -3059,7 +3092,7 @@ let MotionType = /* @__PURE__ */ function(MotionType) {
 	return MotionType;
 }({});
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/shapes/box3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/shapes/box3.js
 /**
 * Create a new empty Box3 with "min" set to positive infinity and "max" set to negative infinity
 * @returns A new Box3
@@ -3318,7 +3351,7 @@ function intersectsBox3(boxA, boxB) {
 	return boxA[0] <= boxB[3] && boxA[3] >= boxB[0] && boxA[1] <= boxB[4] && boxA[4] >= boxB[1] && boxA[2] <= boxB[5] && boxA[5] >= boxB[2];
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/shapes/plane3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/shapes/plane3.js
 /**
 * Creates a new plane with normal (0, 1, 0) and constant 0
 * @returns A new plane
@@ -3354,7 +3387,7 @@ function projectPoint(out, plane, point) {
 	return scaleAndAdd(out, point, plane.normal, -distance);
 }
 //#endregion
-//#region node_modules/.pnpm/math@1.0.0-canary-5e895055-20260907/node_modules/math/dist/shapes/triangle3.js
+//#region node_modules/.pnpm/math@0.1.0/node_modules/math/dist/shapes/triangle3.js
 /**
 * Computes the axis-aligned bounding box of a triangle defined by three vertices.
 * @param out the output box to store the result.
@@ -4125,79 +4158,86 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 		const originX = origin[0];
 		const originY = origin[1];
 		const originZ = origin[2];
-		const dirX = direction[0];
-		const dirY = direction[1];
-		const dirZ = direction[2];
+		const invDispX = direction[0] * length > 1e-30 || direction[0] * length < -1e-30 ? 1 / (direction[0] * length) : 0;
+		const invDispY = direction[1] * length > 1e-30 || direction[1] * length < -1e-30 ? 1 / (direction[1] * length) : 0;
+		const invDispZ = direction[2] * length > 1e-30 || direction[2] * length < -1e-30 ? 1 / (direction[2] * length) : 0;
 		let bestFraction = visitor.earlyOutFraction ?? Infinity;
 		let stackSize = 0;
 		_castStackNode[stackSize] = dbvt.root;
 		const rootB = dbvt.root * 6;
-		let _rayDistanceToBox3__result_3;
-		_inline_rayDistanceToBox3_3: {
+		let _rayFractionToBox3__result_3;
+		_inline_rayFractionToBox3_3: {
 			const minX$3 = bounds[rootB];
 			const minY$3 = bounds[rootB + 1];
 			const minZ$3 = bounds[rootB + 2];
 			const maxX$3 = bounds[rootB + 3];
 			const maxY$3 = bounds[rootB + 4];
 			const maxZ$3 = bounds[rootB + 5];
-			let tMin$2 = 0;
-			let tMax$2 = length;
-			if (Math.abs(dirX) < 1e-10) {
+			let tMin$3 = 0;
+			let tMax$3 = 1;
+			if (invDispX === 0) {
 				if (originX < minX$3 || originX > maxX$3) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			} else {
-				const invD = 1 / dirX;
-				const t0 = (minX$3 - originX) * invD;
-				const t1 = (maxX$3 - originX) * invD;
-				const tNear = t0 < t1 ? t0 : t1;
-				const tFar = t0 < t1 ? t1 : t0;
-				tMin$2 = tNear > tMin$2 ? tNear : tMin$2;
-				tMax$2 = tFar < tMax$2 ? tFar : tMax$2;
-				if (tMax$2 < tMin$2) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+				const t0 = (minX$3 - originX) * invDispX;
+				const t1 = (maxX$3 - originX) * invDispX;
+				if (t0 < t1) {
+					if (t0 > tMin$3) tMin$3 = t0;
+					if (t1 < tMax$3) tMax$3 = t1;
+				} else {
+					if (t1 > tMin$3) tMin$3 = t1;
+					if (t0 < tMax$3) tMax$3 = t0;
+				}
+				if (tMax$3 < tMin$3) {
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			}
-			if (Math.abs(dirY) < 1e-10) {
+			if (invDispY === 0) {
 				if (originY < minY$3 || originY > maxY$3) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			} else {
-				const invD = 1 / dirY;
-				const t0 = (minY$3 - originY) * invD;
-				const t1 = (maxY$3 - originY) * invD;
-				const tNear = t0 < t1 ? t0 : t1;
-				const tFar = t0 < t1 ? t1 : t0;
-				tMin$2 = tNear > tMin$2 ? tNear : tMin$2;
-				tMax$2 = tFar < tMax$2 ? tFar : tMax$2;
-				if (tMax$2 < tMin$2) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+				const t0 = (minY$3 - originY) * invDispY;
+				const t1 = (maxY$3 - originY) * invDispY;
+				if (t0 < t1) {
+					if (t0 > tMin$3) tMin$3 = t0;
+					if (t1 < tMax$3) tMax$3 = t1;
+				} else {
+					if (t1 > tMin$3) tMin$3 = t1;
+					if (t0 < tMax$3) tMax$3 = t0;
+				}
+				if (tMax$3 < tMin$3) {
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			}
-			if (Math.abs(dirZ) < 1e-10) {
+			if (invDispZ === 0) {
 				if (originZ < minZ$3 || originZ > maxZ$3) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			} else {
-				const invD = 1 / dirZ;
-				const t0 = (minZ$3 - originZ) * invD;
-				const t1 = (maxZ$3 - originZ) * invD;
-				const tNear = t0 < t1 ? t0 : t1;
-				const tFar = t0 < t1 ? t1 : t0;
-				tMin$2 = tNear > tMin$2 ? tNear : tMin$2;
-				if ((tFar < tMax$2 ? tFar : tMax$2) < tMin$2) {
-					_rayDistanceToBox3__result_3 = Infinity;
-					break _inline_rayDistanceToBox3_3;
+				const t0 = (minZ$3 - originZ) * invDispZ;
+				const t1 = (maxZ$3 - originZ) * invDispZ;
+				if (t0 < t1) {
+					if (t0 > tMin$3) tMin$3 = t0;
+					if (t1 < tMax$3) tMax$3 = t1;
+				} else {
+					if (t1 > tMin$3) tMin$3 = t1;
+					if (t0 < tMax$3) tMax$3 = t0;
+				}
+				if (tMax$3 < tMin$3) {
+					_rayFractionToBox3__result_3 = Infinity;
+					break _inline_rayFractionToBox3_3;
 				}
 			}
-			_rayDistanceToBox3__result_3 = tMin$2 >= 0 ? tMin$2 / length : Infinity;
+			_rayFractionToBox3__result_3 = tMin$3;
 		}
-		_castStackDist[stackSize] = _rayDistanceToBox3__result_3;
+		_castStackDist[stackSize] = _rayFractionToBox3__result_3;
 		stackSize++;
 		while (stackSize > 0) {
 			stackSize--;
@@ -4207,8 +4247,8 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 				if (left !== -1) {
 					const right = topo[nodeIndex * 5 + 2];
 					const lb = left * 6;
-					let _rayDistanceToBox3__result_0;
-					_inline_rayDistanceToBox3_0: {
+					let _rayFractionToBox3__result_0;
+					_inline_rayFractionToBox3_0: {
 						const minX = bounds[lb];
 						const minY = bounds[lb + 1];
 						const minZ = bounds[lb + 2];
@@ -4216,67 +4256,73 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 						const maxY = bounds[lb + 4];
 						const maxZ = bounds[lb + 5];
 						let tMin = 0;
-						let tMax = length;
-						if (Math.abs(dirX) < 1e-10) {
+						let tMax = 1;
+						if (invDispX === 0) {
 							if (originX < minX || originX > maxX) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						} else {
-							const invD = 1 / dirX;
-							const t0 = (minX - originX) * invD;
-							const t1 = (maxX - originX) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin = tNear > tMin ? tNear : tMin;
-							tMax = tFar < tMax ? tFar : tMax;
+							const t0 = (minX - originX) * invDispX;
+							const t1 = (maxX - originX) * invDispX;
+							if (t0 < t1) {
+								if (t0 > tMin) tMin = t0;
+								if (t1 < tMax) tMax = t1;
+							} else {
+								if (t1 > tMin) tMin = t1;
+								if (t0 < tMax) tMax = t0;
+							}
 							if (tMax < tMin) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						}
-						if (Math.abs(dirY) < 1e-10) {
+						if (invDispY === 0) {
 							if (originY < minY || originY > maxY) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						} else {
-							const invD = 1 / dirY;
-							const t0 = (minY - originY) * invD;
-							const t1 = (maxY - originY) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin = tNear > tMin ? tNear : tMin;
-							tMax = tFar < tMax ? tFar : tMax;
+							const t0 = (minY - originY) * invDispY;
+							const t1 = (maxY - originY) * invDispY;
+							if (t0 < t1) {
+								if (t0 > tMin) tMin = t0;
+								if (t1 < tMax) tMax = t1;
+							} else {
+								if (t1 > tMin) tMin = t1;
+								if (t0 < tMax) tMax = t0;
+							}
 							if (tMax < tMin) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						}
-						if (Math.abs(dirZ) < 1e-10) {
+						if (invDispZ === 0) {
 							if (originZ < minZ || originZ > maxZ) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						} else {
-							const invD = 1 / dirZ;
-							const t0 = (minZ - originZ) * invD;
-							const t1 = (maxZ - originZ) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin = tNear > tMin ? tNear : tMin;
-							tMax = tFar < tMax ? tFar : tMax;
+							const t0 = (minZ - originZ) * invDispZ;
+							const t1 = (maxZ - originZ) * invDispZ;
+							if (t0 < t1) {
+								if (t0 > tMin) tMin = t0;
+								if (t1 < tMax) tMax = t1;
+							} else {
+								if (t1 > tMin) tMin = t1;
+								if (t0 < tMax) tMax = t0;
+							}
 							if (tMax < tMin) {
-								_rayDistanceToBox3__result_0 = Infinity;
-								break _inline_rayDistanceToBox3_0;
+								_rayFractionToBox3__result_0 = Infinity;
+								break _inline_rayFractionToBox3_0;
 							}
 						}
-						_rayDistanceToBox3__result_0 = tMin >= 0 ? tMin / length : Infinity;
+						_rayFractionToBox3__result_0 = tMin;
 					}
-					const leftDist = _rayDistanceToBox3__result_0;
+					const leftDist = _rayFractionToBox3__result_0;
 					const rb = right * 6;
-					let _rayDistanceToBox3__result_1;
-					_inline_rayDistanceToBox3_1: {
+					let _rayFractionToBox3__result_1;
+					_inline_rayFractionToBox3_1: {
 						const minX$1 = bounds[rb];
 						const minY$1 = bounds[rb + 1];
 						const minZ$1 = bounds[rb + 2];
@@ -4284,64 +4330,70 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 						const maxY$1 = bounds[rb + 4];
 						const maxZ$1 = bounds[rb + 5];
 						let tMin$1 = 0;
-						let tMax$1 = length;
-						if (Math.abs(dirX) < 1e-10) {
+						let tMax$1 = 1;
+						if (invDispX === 0) {
 							if (originX < minX$1 || originX > maxX$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						} else {
-							const invD = 1 / dirX;
-							const t0 = (minX$1 - originX) * invD;
-							const t1 = (maxX$1 - originX) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin$1 = tNear > tMin$1 ? tNear : tMin$1;
-							tMax$1 = tFar < tMax$1 ? tFar : tMax$1;
+							const t0 = (minX$1 - originX) * invDispX;
+							const t1 = (maxX$1 - originX) * invDispX;
+							if (t0 < t1) {
+								if (t0 > tMin$1) tMin$1 = t0;
+								if (t1 < tMax$1) tMax$1 = t1;
+							} else {
+								if (t1 > tMin$1) tMin$1 = t1;
+								if (t0 < tMax$1) tMax$1 = t0;
+							}
 							if (tMax$1 < tMin$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						}
-						if (Math.abs(dirY) < 1e-10) {
+						if (invDispY === 0) {
 							if (originY < minY$1 || originY > maxY$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						} else {
-							const invD = 1 / dirY;
-							const t0 = (minY$1 - originY) * invD;
-							const t1 = (maxY$1 - originY) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin$1 = tNear > tMin$1 ? tNear : tMin$1;
-							tMax$1 = tFar < tMax$1 ? tFar : tMax$1;
+							const t0 = (minY$1 - originY) * invDispY;
+							const t1 = (maxY$1 - originY) * invDispY;
+							if (t0 < t1) {
+								if (t0 > tMin$1) tMin$1 = t0;
+								if (t1 < tMax$1) tMax$1 = t1;
+							} else {
+								if (t1 > tMin$1) tMin$1 = t1;
+								if (t0 < tMax$1) tMax$1 = t0;
+							}
 							if (tMax$1 < tMin$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						}
-						if (Math.abs(dirZ) < 1e-10) {
+						if (invDispZ === 0) {
 							if (originZ < minZ$1 || originZ > maxZ$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						} else {
-							const invD = 1 / dirZ;
-							const t0 = (minZ$1 - originZ) * invD;
-							const t1 = (maxZ$1 - originZ) * invD;
-							const tNear = t0 < t1 ? t0 : t1;
-							const tFar = t0 < t1 ? t1 : t0;
-							tMin$1 = tNear > tMin$1 ? tNear : tMin$1;
-							tMax$1 = tFar < tMax$1 ? tFar : tMax$1;
+							const t0 = (minZ$1 - originZ) * invDispZ;
+							const t1 = (maxZ$1 - originZ) * invDispZ;
+							if (t0 < t1) {
+								if (t0 > tMin$1) tMin$1 = t0;
+								if (t1 < tMax$1) tMax$1 = t1;
+							} else {
+								if (t1 > tMin$1) tMin$1 = t1;
+								if (t0 < tMax$1) tMax$1 = t0;
+							}
 							if (tMax$1 < tMin$1) {
-								_rayDistanceToBox3__result_1 = Infinity;
-								break _inline_rayDistanceToBox3_1;
+								_rayFractionToBox3__result_1 = Infinity;
+								break _inline_rayFractionToBox3_1;
 							}
 						}
-						_rayDistanceToBox3__result_1 = tMin$1 >= 0 ? tMin$1 / length : Infinity;
+						_rayFractionToBox3__result_1 = tMin$1;
 					}
-					const rightDist = _rayDistanceToBox3__result_1;
+					const rightDist = _rayFractionToBox3__result_1;
 					if (leftDist < rightDist) {
 						if (rightDist < bestFraction) {
 							_castStackNode[stackSize] = right;
@@ -4368,82 +4420,79 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 				} else {
 					const body = world.bodies.pool[topo[nodeIndex * 5 + 3]];
 					if ((queryFilter.collisionGroups & body.collisionMask) !== 0 && (body.collisionGroups & queryFilter.collisionMask) !== 0 && queryFilter.enabledObjectLayers[body.objectLayer] === 1 && (!queryFilter.bodyFilter || queryFilter.bodyFilter(body))) {
-						let _rayHitsBox3__result_2;
-						_inline_rayHitsBox3_2: {
+						let _rayFractionToBox3__result_2;
+						_inline_rayFractionToBox3_2: {
 							const minX$2 = body.aabb[0];
 							const minY$2 = body.aabb[1];
 							const minZ$2 = body.aabb[2];
 							const maxX$2 = body.aabb[3];
 							const maxY$2 = body.aabb[4];
 							const maxZ$2 = body.aabb[5];
-							let tNear$1 = 0;
-							let tFar$1 = length;
-							if (Math.abs(dirX) < 1e-10) {
+							let tMin$2 = 0;
+							let tMax$2 = 1;
+							if (invDispX === 0) {
 								if (originX < minX$2 || originX > maxX$2) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							} else {
-								const invX = 1 / dirX;
-								let tEnterX = (minX$2 - originX) * invX;
-								let tExitX = (maxX$2 - originX) * invX;
-								if (invX < 0) {
-									const tmp = tEnterX;
-									tEnterX = tExitX;
-									tExitX = tmp;
+								const t0 = (minX$2 - originX) * invDispX;
+								const t1 = (maxX$2 - originX) * invDispX;
+								if (t0 < t1) {
+									if (t0 > tMin$2) tMin$2 = t0;
+									if (t1 < tMax$2) tMax$2 = t1;
+								} else {
+									if (t1 > tMin$2) tMin$2 = t1;
+									if (t0 < tMax$2) tMax$2 = t0;
 								}
-								if (tEnterX > tNear$1) tNear$1 = tEnterX;
-								if (tExitX < tFar$1) tFar$1 = tExitX;
-								if (tFar$1 < tNear$1) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+								if (tMax$2 < tMin$2) {
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							}
-							if (Math.abs(dirY) < 1e-10) {
+							if (invDispY === 0) {
 								if (originY < minY$2 || originY > maxY$2) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							} else {
-								const invY = 1 / dirY;
-								let tEnterY = (minY$2 - originY) * invY;
-								let tExitY = (maxY$2 - originY) * invY;
-								if (invY < 0) {
-									const tmp = tEnterY;
-									tEnterY = tExitY;
-									tExitY = tmp;
+								const t0 = (minY$2 - originY) * invDispY;
+								const t1 = (maxY$2 - originY) * invDispY;
+								if (t0 < t1) {
+									if (t0 > tMin$2) tMin$2 = t0;
+									if (t1 < tMax$2) tMax$2 = t1;
+								} else {
+									if (t1 > tMin$2) tMin$2 = t1;
+									if (t0 < tMax$2) tMax$2 = t0;
 								}
-								if (tEnterY > tNear$1) tNear$1 = tEnterY;
-								if (tExitY < tFar$1) tFar$1 = tExitY;
-								if (tFar$1 < tNear$1) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+								if (tMax$2 < tMin$2) {
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							}
-							if (Math.abs(dirZ) < 1e-10) {
+							if (invDispZ === 0) {
 								if (originZ < minZ$2 || originZ > maxZ$2) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							} else {
-								const invZ = 1 / dirZ;
-								let tEnterZ = (minZ$2 - originZ) * invZ;
-								let tExitZ = (maxZ$2 - originZ) * invZ;
-								if (invZ < 0) {
-									const tmp = tEnterZ;
-									tEnterZ = tExitZ;
-									tExitZ = tmp;
+								const t0 = (minZ$2 - originZ) * invDispZ;
+								const t1 = (maxZ$2 - originZ) * invDispZ;
+								if (t0 < t1) {
+									if (t0 > tMin$2) tMin$2 = t0;
+									if (t1 < tMax$2) tMax$2 = t1;
+								} else {
+									if (t1 > tMin$2) tMin$2 = t1;
+									if (t0 < tMax$2) tMax$2 = t0;
 								}
-								if (tEnterZ > tNear$1) tNear$1 = tEnterZ;
-								if (tExitZ < tFar$1) tFar$1 = tExitZ;
-								if (tFar$1 < tNear$1) {
-									_rayHitsBox3__result_2 = false;
-									break _inline_rayHitsBox3_2;
+								if (tMax$2 < tMin$2) {
+									_rayFractionToBox3__result_2 = Infinity;
+									break _inline_rayFractionToBox3_2;
 								}
 							}
-							_rayHitsBox3__result_2 = true;
+							_rayFractionToBox3__result_2 = tMin$2;
 						}
-						if (_rayHitsBox3__result_2) {
+						if (_rayFractionToBox3__result_2 !== Infinity) {
 							visitor.visit(body);
 							if (visitor.shouldExit) return;
 							bestFraction = visitor.earlyOutFraction ?? Infinity;
@@ -5282,7 +5331,6 @@ function makeConstraintBase() {
 //#region src/body/sleep.ts
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
-const _rot = /* @__PURE__ */ create$45();
 /**
 * get the 3 test points for sleep detection:
 * - center of mass
@@ -5292,7 +5340,6 @@ const _rot = /* @__PURE__ */ create$45();
 */
 function getSleepTestPoints(body, outPoints) {
 	let _extents_0, _extents_1, _extents_2;
-	let _axis_0, _axis_1, _axis_2;
 	const com = body.centerOfMassPosition;
 	const out = outPoints[0];
 	out[0] = com[0];
@@ -5305,66 +5352,34 @@ function getSleepTestPoints(body, outPoints) {
 	const ex = _extents_0;
 	const ey = _extents_1;
 	const ez = _extents_2;
-	const q = body.quaternion;
-	const x = q[0];
-	const y = q[1];
-	const z = q[2];
-	const w = q[3];
-	const x2 = x + x;
-	const y2 = y + y;
-	const z2 = z + z;
-	const xx = x * x2;
-	const yx = y * x2;
-	const yy = y * y2;
-	const zx = z * x2;
-	const zy = z * y2;
-	const zz = z * z2;
-	const wx = w * x2;
-	const wy = w * y2;
-	const wz = w * z2;
-	_rot[0] = 1 - yy - zz;
-	_rot[3] = yx - wz;
-	_rot[6] = zx + wy;
-	_rot[1] = yx + wz;
-	_rot[4] = 1 - xx - zz;
-	_rot[7] = zy - wx;
-	_rot[2] = zx - wy;
-	_rot[5] = zy + wx;
-	_rot[8] = 1 - xx - yy;
-	let c1;
-	let s1;
-	let c2;
-	let s2;
+	const qx = body.quaternion[0];
+	const qy = body.quaternion[1];
+	const qz = body.quaternion[2];
+	const qw = body.quaternion[3];
+	const p1 = outPoints[1];
+	const p2 = outPoints[2];
 	if (ex <= ey && ex <= ez) {
-		c1 = 3;
-		s1 = ey;
-		c2 = 6;
-		s2 = ez;
+		p1[0] = com[0] + 2 * (qx * qy - qw * qz) * ey;
+		p1[1] = com[1] + (1 - 2 * (qx * qx + qz * qz)) * ey;
+		p1[2] = com[2] + 2 * (qy * qz + qw * qx) * ey;
+		p2[0] = com[0] + 2 * (qx * qz + qw * qy) * ez;
+		p2[1] = com[1] + 2 * (qy * qz - qw * qx) * ez;
+		p2[2] = com[2] + (1 - 2 * (qx * qx + qy * qy)) * ez;
 	} else if (ey <= ez) {
-		c1 = 0;
-		s1 = ex;
-		c2 = 6;
-		s2 = ez;
+		p1[0] = com[0] + (1 - 2 * (qy * qy + qz * qz)) * ex;
+		p1[1] = com[1] + 2 * (qx * qy + qw * qz) * ex;
+		p1[2] = com[2] + 2 * (qx * qz - qw * qy) * ex;
+		p2[0] = com[0] + 2 * (qx * qz + qw * qy) * ez;
+		p2[1] = com[1] + 2 * (qy * qz - qw * qx) * ez;
+		p2[2] = com[2] + (1 - 2 * (qx * qx + qy * qy)) * ez;
 	} else {
-		c1 = 0;
-		s1 = ex;
-		c2 = 3;
-		s2 = ey;
+		p1[0] = com[0] + (1 - 2 * (qy * qy + qz * qz)) * ex;
+		p1[1] = com[1] + 2 * (qx * qy + qw * qz) * ex;
+		p1[2] = com[2] + 2 * (qx * qz - qw * qy) * ex;
+		p2[0] = com[0] + 2 * (qx * qy - qw * qz) * ey;
+		p2[1] = com[1] + (1 - 2 * (qx * qx + qz * qz)) * ey;
+		p2[2] = com[2] + 2 * (qy * qz + qw * qx) * ey;
 	}
-	_axis_0 = _rot[c1];
-	_axis_1 = _rot[c1 + 1];
-	_axis_2 = _rot[c1 + 2];
-	const out$1 = outPoints[1];
-	out$1[0] = com[0] + _axis_0 * s1;
-	out$1[1] = com[1] + _axis_1 * s1;
-	out$1[2] = com[2] + _axis_2 * s1;
-	_axis_0 = _rot[c2];
-	_axis_1 = _rot[c2 + 1];
-	_axis_2 = _rot[c2 + 2];
-	const out$2 = outPoints[2];
-	out$2[0] = com[0] + _axis_0 * s2;
-	out$2[1] = com[1] + _axis_1 * s2;
-	out$2[2] = com[2] + _axis_2 * s2;
 }
 /** reset the sleep test spheres to center around the given points with radius 0 */
 function resetSleepTestSpheres(mp, points) {
@@ -5427,6 +5442,7 @@ function removeBodyFromActiveBodies(world, body) {
 		lastBody.activeIndex = body.activeIndex;
 	}
 	body.activeIndex = INACTIVE_BODY_INDEX;
+	body.islandIndex = -1;
 	bodies.activeBodyCount--;
 }
 /** puts a body to sleep, sleeping bodies are excluded from physics simulation until woken */
@@ -6599,7 +6615,6 @@ function get$8(world, bodyId) {
 function* iterate(world) {
 	for (const body of world.bodies.pool) if (body && !body._pooled) yield body;
 }
-const _getInverseInertia_rot = /* @__PURE__ */ create$41();
 /**
 * get the world-space inverse inertia matrix for a body.
 * for non-dynamic bodies, returns zero matrix.
@@ -6609,8 +6624,7 @@ const _getInverseInertia_rot = /* @__PURE__ */ create$41();
 */
 function getInverseInertia(out, body) {
 	if (body.motionType !== 2) return zero(out);
-	fromQuat(_getInverseInertia_rot, body.quaternion);
-	return getInverseInertiaForRotation(out, body.motionProperties, _getInverseInertia_rot);
+	return getWorldInverseInertia(out, body.motionProperties, body.quaternion, -1);
 }
 /**
 * Updates the world-space center of mass position based on the body's transform and shape.
@@ -6725,22 +6739,23 @@ function updateShape(world, body) {
 /**
 * Sets the body's position and recomputes the world-space center of mass and AABB.
 */
-function setPosition$1(world, body, position, wake$7) {
+function setPosition$1(world, body, position, wake$5) {
 	copy$9(body.position, position);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
-	if (wake$7) wake(world, body);
+	if (wake$5) wake(world, body);
 }
 /**
 * Sets the body's orientation and recomputes the world-space center of mass and AABB.
 */
-function setQuaternion$1(world, body, quaternion, wake$5) {
+function setQuaternion$1(world, body, quaternion, wake$7) {
 	copy$6(body.quaternion, quaternion);
+	body.motionProperties.worldInverseInertiaStamp = -1;
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
-	if (wake$5) wake(world, body);
+	if (wake$7) wake(world, body);
 }
 /**
 * Sets both the body's position and orientation, then recomputes the world-space center of mass and AABB.
@@ -6749,6 +6764,7 @@ function setQuaternion$1(world, body, quaternion, wake$5) {
 function setTransform(world, body, position, quaternion, wake$3) {
 	copy$9(body.position, position);
 	copy$6(body.quaternion, quaternion);
+	body.motionProperties.worldInverseInertiaStamp = -1;
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	if (updateBody(world.broadphase, body)) markMoved(world.pairs, body);
@@ -6769,7 +6785,7 @@ function setObjectLayer(world, body, layer) {
 * @param motionType the new motion type
 * @param wake if true and changing to dynamic/kinematic, wakes the body
 */
-function setMotionType(world, body, motionType, wake$4) {
+function setMotionType(world, body, motionType, wake$6) {
 	const oldMotionType = body.motionType;
 	if (oldMotionType === motionType) return;
 	body.motionType = motionType;
@@ -6781,8 +6797,9 @@ function setMotionType(world, body, motionType, wake$4) {
 		if (!body.sleeping) addBodyToActiveBodies(world, body);
 		if (motionType === 2) resetSleepTimer(body);
 	}
-	if (wake$4 && motionType !== 0) wake(world, body);
+	if (wake$6 && motionType !== 0) wake(world, body);
 	if (motionType !== 0 && oldMotionType === 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
+	body.motionProperties.worldInverseInertiaStamp = -1;
 }
 /**
 * Adds a force at the body's center of mass.
@@ -6793,10 +6810,10 @@ function setMotionType(world, body, motionType, wake$4) {
 * @param force Force vector in world space
 * @param wake If true, wakes the body if sleeping
 */
-function addForce(world, body, force, wake$6) {
+function addForce(world, body, force, wake$4) {
 	if (body.motionType !== 2) return;
 	addForce$1(body.motionProperties, force);
-	if (wake$6) wake(world, body);
+	if (wake$4) wake(world, body);
 }
 /**
 * Adds a torque (angular force) directly.
@@ -7204,16 +7221,19 @@ function createRayIntersectsTriangleResult() {
 	};
 }
 /**
-* Ray-triangle intersection test with scalar ray args (no ray struct).
+* Ray-triangle intersection test with scalar ray and vertex args (no ray struct, no Vec3 copies).
 * Based on https://github.com/pmjoniak/GeometricTools/blob/master/GTEngine/Include/Mathematics/GteIntrRay3Triangle3.h
+*
+* `maxT` is the largest hit distance still of interest (ray units, at most `length`): a closest-hit
+* traversal passes the current best hit so triangles behind it are rejected before the divide.
 */
-function rayIntersectsTriangle(out, originX, originY, originZ, directionX, directionY, directionZ, length, a, b, c, backfaceCulling) {
-	const e1x = b[0] - a[0];
-	const e1y = b[1] - a[1];
-	const e1z = b[2] - a[2];
-	const e2x = c[0] - a[0];
-	const e2y = c[1] - a[1];
-	const e2z = c[2] - a[2];
+function rayIntersectsTriangle(out, originX, originY, originZ, directionX, directionY, directionZ, length, maxT, ax, ay, az, bx, by, bz, cx, cy, cz, backfaceCulling) {
+	const e1x = bx - ax;
+	const e1y = by - ay;
+	const e1z = bz - az;
+	const e2x = cx - ax;
+	const e2y = cy - ay;
+	const e2z = cz - az;
 	const nx = e1y * e2z - e1z * e2y;
 	const ny = e1z * e2x - e1x * e2z;
 	const nz = e1x * e2y - e1y * e2x;
@@ -7236,9 +7256,9 @@ function rayIntersectsTriangle(out, originX, originY, originZ, directionX, direc
 		out.frontFacing = false;
 		return;
 	}
-	const diffx = originX - a[0];
-	const diffy = originY - a[1];
-	const diffz = originZ - a[2];
+	const diffx = originX - ax;
+	const diffy = originY - ay;
+	const diffz = originZ - az;
 	const diffCrossE2x = diffy * e2z - diffz * e2y;
 	const diffCrossE2y = diffz * e2x - diffx * e2z;
 	const diffCrossE2z = diffx * e2y - diffy * e2x;
@@ -7272,16 +7292,79 @@ function rayIntersectsTriangle(out, originX, originY, originZ, directionX, direc
 		out.frontFacing = false;
 		return;
 	}
-	const t = QdN / DdN;
-	if (t <= length) {
-		out.hit = true;
-		out.fraction = t / length;
-		out.frontFacing = sign < 0;
-	} else {
+	if (QdN > DdN * maxT) {
 		out.hit = false;
 		out.fraction = 0;
 		out.frontFacing = false;
+		return;
 	}
+	out.hit = true;
+	out.fraction = QdN / DdN / length;
+	out.frontFacing = sign < 0;
+}
+/**
+* Reciprocal of a ray displacement component for {@link rayFractionToBox3}, computed once per query.
+* A (nearly) zero component yields 0, which no finite displacement can produce, and marks the axis
+* as parallel: the slab test then checks the origin against the slab instead of multiplying.
+*/
+function safeReciprocal(d) {
+	return d > 1e-30 || d < -1e-30 ? 1 / d : 0;
+}
+/**
+* Entry fraction of a ray segment into a box, in [0, 1] of the segment, or Infinity when the segment
+* misses the box or the box lies entirely behind the origin.
+*
+* The ray is given as an origin and the reciprocals of its displacement (`direction * length`,
+* see {@link safeReciprocal}), precomputed once per query, so the per-box work is six multiplies and
+* the compares: no divides, and the parallel-axis branches are constant per query. Box args are
+* scalars so callers read them straight out of flat node arrays.
+*/
+function rayFractionToBox3(originX, originY, originZ, invDispX, invDispY, invDispZ, minX, minY, minZ, maxX, maxY, maxZ) {
+	let tMin = 0;
+	let tMax = 1;
+	if (invDispX === 0) {
+		if (originX < minX || originX > maxX) return Infinity;
+	} else {
+		const t0 = (minX - originX) * invDispX;
+		const t1 = (maxX - originX) * invDispX;
+		if (t0 < t1) {
+			if (t0 > tMin) tMin = t0;
+			if (t1 < tMax) tMax = t1;
+		} else {
+			if (t1 > tMin) tMin = t1;
+			if (t0 < tMax) tMax = t0;
+		}
+		if (tMax < tMin) return Infinity;
+	}
+	if (invDispY === 0) {
+		if (originY < minY || originY > maxY) return Infinity;
+	} else {
+		const t0 = (minY - originY) * invDispY;
+		const t1 = (maxY - originY) * invDispY;
+		if (t0 < t1) {
+			if (t0 > tMin) tMin = t0;
+			if (t1 < tMax) tMax = t1;
+		} else {
+			if (t1 > tMin) tMin = t1;
+			if (t0 < tMax) tMax = t0;
+		}
+		if (tMax < tMin) return Infinity;
+	}
+	if (invDispZ === 0) {
+		if (originZ < minZ || originZ > maxZ) return Infinity;
+	} else {
+		const t0 = (minZ - originZ) * invDispZ;
+		const t1 = (maxZ - originZ) * invDispZ;
+		if (t0 < t1) {
+			if (t0 > tMin) tMin = t0;
+			if (t1 < tMax) tMax = t1;
+		} else {
+			if (t1 > tMin) tMin = t1;
+			if (t0 < tMax) tMax = t0;
+		}
+		if (tMax < tMin) return Infinity;
+	}
+	return tMin;
 }
 /**
 * Compute normalized distance fraction along the ray to a box's entry point. Fully-scalar box args
@@ -10891,7 +10974,10 @@ function gjkCastShape(out, transformAtoB, shapeASupport, shapeBSupport, displace
 			_v[2] = a[2];
 		}
 		if (!found) {
-			if (!allowRestart) break;
+			if (!allowRestart) {
+				_simplex.size--;
+				break;
+			}
 			allowRestart = false;
 			_simplex.p[0] = _p[0];
 			_simplex.p[1] = _p[1];
@@ -16177,7 +16263,7 @@ function calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis) {
 */
 function calculateConstraintProperties$7(part, bodyA, bodyB, worldSpaceAxis, bias = 0) {
 	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis);
-	if (invEffectiveMass === 0) deactivate$7(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
 		calculateSpringPropertiesWithBias(part.springPart, bias);
@@ -16197,7 +16283,7 @@ function calculateConstraintProperties$7(part, bodyA, bodyB, worldSpaceAxis, bia
 */
 function calculateConstraintPropertiesWithSettings$1(part, deltaTime, bodyA, bodyB, worldSpaceAxis, bias, C, settings) {
 	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis);
-	if (invEffectiveMass === 0) deactivate$7(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
 	else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
 }
 const _ws_angularDelta$1 = /* @__PURE__ */ create$47();
@@ -16308,7 +16394,7 @@ const _calc_invInertia2 = /* @__PURE__ */ create$41();
 *
 * We then invert K^-1 to get the effective mass K.
 */
-function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB, rotationB, r2Local) {
+function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB, rotationB, r2Local, stepStamp) {
 	multiply3x3Vec(part.r1, rotationA, r1Local);
 	multiply3x3Vec(part.r2, rotationB, r2Local);
 	const invEffectiveMass = _calc_invEffectiveMass$2;
@@ -16317,8 +16403,7 @@ function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB,
 	if (bodyA.motionType === 2) {
 		const mp1 = bodyA.motionProperties;
 		summedInvMass += mp1.invMass;
-		const invInertia1 = _calc_invInertia1;
-		getInverseInertiaForRotation(invInertia1, mp1, rotationA);
+		const invInertia1 = getWorldInverseInertia(_calc_invInertia1, mp1, bodyA.quaternion, stepStamp);
 		const r1Cross = _calc_r1Cross;
 		crossProductMatrix(r1Cross, part.r1);
 		multiply3x3(part.invI1_r1X, invInertia1, r1Cross);
@@ -16331,8 +16416,7 @@ function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB,
 	if (bodyB.motionType === 2) {
 		const mp2 = bodyB.motionProperties;
 		summedInvMass += mp2.invMass;
-		const invInertia2 = _calc_invInertia2;
-		getInverseInertiaForRotation(invInertia2, mp2, rotationB);
+		const invInertia2 = getWorldInverseInertia(_calc_invInertia2, mp2, bodyB.quaternion, stepStamp);
 		const r2Cross = _calc_r2Cross;
 		crossProductMatrix(r2Cross, part.r2);
 		multiply3x3(part.invI2_r2X, invInertia2, r2Cross);
@@ -16629,7 +16713,7 @@ function setupVelocity$7(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_cone_rotA, bodyA.quaternion);
 	fromQuat(_cone_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 	calculateRotationConstraintProperties(constraint, bodyA, bodyB);
 }
 function warmStartVelocity$7(constraint, bodies, warmStartImpulseRatio) {
@@ -16654,7 +16738,7 @@ function solvePosition$7(constraint, bodies, _deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_cone_rotA, bodyA.quaternion);
 	fromQuat(_cone_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, -1);
 	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	calculateRotationConstraintProperties(constraint, bodyA, bodyB);
 	let rot = false;
@@ -16859,10 +16943,10 @@ const _calc_invEffectiveMass$1 = /* @__PURE__ */ create$41();
 *
 * We then invert K to get the effective mass.
 */
-function calculateConstraintProperties$5(part, bodyA, _rotationA, bodyB, _rotationB) {
-	if (bodyA.motionType === 2) getInverseInertiaForRotation(part.invI1, bodyA.motionProperties, _rotationA);
+function calculateConstraintProperties$5(part, bodyA, _rotationA, bodyB, _rotationB, stepStamp) {
+	if (bodyA.motionType === 2) copy$5(part.invI1, getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp));
 	else zero(part.invI1);
-	if (bodyB.motionType === 2) getInverseInertiaForRotation(part.invI2, bodyB.motionProperties, _rotationB);
+	if (bodyB.motionType === 2) copy$5(part.invI2, getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp));
 	else zero(part.invI2);
 	const invEffectiveMass = _calc_invEffectiveMass$1;
 	add$2(invEffectiveMass, part.invI1, part.invI2);
@@ -17397,7 +17481,7 @@ function solvePositionConstraint$3(part, bodyA, bodyB, constraintRotation, const
 		multiply$1(_pos_inv_initial, constraintToBody2, temp);
 		fromQuat(_pos_rotA, bodyA.quaternion);
 		fromQuat(_pos_rotB, bodyB.quaternion);
-		calculateConstraintProperties$5(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB);
+		calculateConstraintProperties$5(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB, -1);
 		return solvePositionConstraint$4(_pos_rotation_part, bodyA, bodyB, _pos_inv_initial, baumgarte);
 	}
 	return false;
@@ -17490,7 +17574,7 @@ function calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, i
 */
 function calculateConstraintProperties$3(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
 	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
-	if (invEffectiveMass === 0) deactivate$3(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
 		calculateSpringPropertiesWithBias(part.springPart, bias);
@@ -17527,7 +17611,7 @@ function calculateConstraintPropertiesWithMassOverride(part, bodyA, bodyB, invMa
 		invIB = _acp_scaledInvInertiaB;
 	}
 	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invIA, invIB, r1PlusU, r2, axis);
-	if (invEffectiveMass === 0) deactivate$3(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
 		calculateSpringPropertiesWithBias(part.springPart, bias);
@@ -17553,7 +17637,7 @@ function calculateConstraintPropertiesWithMassOverride(part, bodyA, bodyB, invMa
 */
 function calculateConstraintPropertiesWithSettings(part, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias, C, settings) {
 	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
-	if (invEffectiveMass === 0) deactivate$3(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
 	else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
 }
 /** Check if constraint is active (has non-zero effective mass) */
@@ -17917,15 +18001,13 @@ function get$6(world, id) {
 	if (!constraint || constraint._pooled || constraint.sequence !== getConstraintIdSequence(id)) return;
 	return constraint;
 }
-const _distanceConstraint_rotA = /* @__PURE__ */ create$41();
-const _distanceConstraint_rotB = /* @__PURE__ */ create$41();
 const _distanceConstraint_invInertiaA = /* @__PURE__ */ create$41();
 const _distanceConstraint_invInertiaB = /* @__PURE__ */ create$41();
 const _distanceConstraint_r1PlusU = /* @__PURE__ */ create$47();
 const _distanceConstraint_r2 = /* @__PURE__ */ create$47();
 const _distanceConstraint_delta = /* @__PURE__ */ create$47();
 /** calculate distance constraint properties. Updates world positions, normal, and sets up axis constraint part */
-function calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime) {
+function calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, stepStamp) {
 	transformQuat(constraint.worldSpacePosition1, constraint.localSpacePosition1, bodyA.quaternion);
 	add$3(constraint.worldSpacePosition1, constraint.worldSpacePosition1, bodyA.centerOfMassPosition);
 	transformQuat(constraint.worldSpacePosition2, constraint.localSpacePosition2, bodyB.quaternion);
@@ -17944,16 +18026,8 @@ function calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTi
 	const invMassB = mpB ? mpB.invMass : 0;
 	const invInertiaA = _distanceConstraint_invInertiaA;
 	const invInertiaB = _distanceConstraint_invInertiaB;
-	if (mpA) {
-		const rotA = _distanceConstraint_rotA;
-		fromQuat(rotA, bodyA.quaternion);
-		getInverseInertiaForRotation(invInertiaA, mpA, rotA);
-	}
-	if (mpB) {
-		const rotB = _distanceConstraint_rotB;
-		fromQuat(rotB, bodyB.quaternion);
-		getInverseInertiaForRotation(invInertiaB, mpB, rotB);
-	}
+	if (mpA) copy$5(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, stepStamp));
+	if (mpB) copy$5(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, stepStamp));
 	if (constraint.minDistance === constraint.maxDistance) {
 		calculateConstraintPropertiesWithSettings(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.minDistance, constraint.limitsSpringSettings);
 		constraint.minLambda = -Infinity;
@@ -17972,7 +18046,7 @@ function setupVelocity$6(constraint, bodies, deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+	calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 }
 function warmStartVelocity$6(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -17999,7 +18073,7 @@ function solvePosition$6(constraint, bodies, deltaTime, baumgarteFactor) {
 	if (distance < constraint.minDistance) positionError = distance - constraint.minDistance;
 	else if (distance > constraint.maxDistance) positionError = distance - constraint.maxDistance;
 	if (positionError === 0) return false;
-	calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+	calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, -1);
 	return solvePositionConstraint$2(constraint.axisConstraint, bodyA, bodyB, constraint.worldSpaceNormal, positionError, baumgarteFactor);
 }
 function resetWarmStart$6(constraint) {
@@ -18188,8 +18262,8 @@ function setupVelocity$5(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, bodies.stepStamp);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 }
 function warmStartVelocity$5(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -18212,11 +18286,11 @@ function solvePosition$5(constraint, bodies, _deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB);
+	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, -1);
 	const rot = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, -1);
 	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	return rot || pos;
 }
@@ -18294,8 +18368,6 @@ const _calc_perp = /* @__PURE__ */ create$47();
 const _calc_summedInvInertia = /* @__PURE__ */ create$41();
 const _calc_temp = /* @__PURE__ */ create$47();
 const _calc_invEffMass = /* @__PURE__ */ create$42();
-const _calc_rotA = /* @__PURE__ */ create$41();
-const _calc_rotB = /* @__PURE__ */ create$41();
 /**
 * Calculate constraint properties for the hinge rotation constraint.
 * This sets up the effective mass matrix and cached cross products.
@@ -18305,7 +18377,7 @@ const _calc_rotB = /* @__PURE__ */ create$41();
 * @param worldSpaceHingeAxis1 hinge axis for body A in world space (normalized)
 * @param worldSpaceHingeAxis2 hinge axis for body B in world space (normalized)
 */
-function calculateConstraintProperties$2(part, bodyA, bodyB, worldSpaceHingeAxis1, worldSpaceHingeAxis2) {
+function calculateConstraintProperties$2(part, bodyA, bodyB, worldSpaceHingeAxis1, worldSpaceHingeAxis2, stepStamp) {
 	copy$9(part.a1, worldSpaceHingeAxis1);
 	copy$9(_calc_a2, worldSpaceHingeAxis2);
 	const dot = dot$2(part.a1, _calc_a2);
@@ -18319,14 +18391,10 @@ function calculateConstraintProperties$2(part, bodyA, bodyB, worldSpaceHingeAxis
 	}
 	getPerpendicularVector(part.b2, _calc_a2);
 	cross(part.c2, _calc_a2, part.b2);
-	if (bodyA.motionType === 2) {
-		fromQuat(_calc_rotA, bodyA.quaternion);
-		getInverseInertiaForRotation(part.invI1, bodyA.motionProperties, _calc_rotA);
-	} else zero(part.invI1);
-	if (bodyB.motionType === 2) {
-		fromQuat(_calc_rotB, bodyB.quaternion);
-		getInverseInertiaForRotation(part.invI2, bodyB.motionProperties, _calc_rotB);
-	} else zero(part.invI2);
+	if (bodyA.motionType === 2) copy$5(part.invI1, getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp));
+	else zero(part.invI1);
+	if (bodyB.motionType === 2) copy$5(part.invI2, getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp));
+	else zero(part.invI2);
 	cross(part.b2xA1, part.b2, part.a1);
 	cross(part.c2xA1, part.c2, part.a1);
 	add$2(_calc_summedInvInertia, part.invI1, part.invI2);
@@ -18729,8 +18797,8 @@ function setupVelocity$4(constraint, bodies, deltaTime) {
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis1, constraint.localSpaceHingeAxis1, bodyA.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis2, constraint.localSpaceHingeAxis2, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2);
-	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, bodies.stepStamp);
 	calculateA1AndTheta(constraint, bodyA, bodyB);
 	calculateRotationLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 	calculateMotorConstraintProperties$1(constraint, bodyA, bodyB, deltaTime);
@@ -18788,13 +18856,13 @@ function solvePosition$4(constraint, bodies, deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_hingeConstraint_rotA, bodyA.quaternion);
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, -1);
 	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	fromQuat(_hingeConstraint_rotA, bodyA.quaternion);
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis1, constraint.localSpaceHingeAxis1, bodyA.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis2, constraint.localSpaceHingeAxis2, bodyB.quaternion);
-	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2);
+	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, -1);
 	const rot = solvePositionConstraint$1(constraint.rotationConstraintPart, bodyA, bodyB, baumgarteFactor);
 	let limit = false;
 	if (constraint.hasLimits && constraint.limitsSpringSettings.frequencyOrStiffness <= 0) {
@@ -18928,7 +18996,7 @@ function setupVelocity$3(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_setupPointConstraintVelocity_rotA, bodyA.quaternion);
 	fromQuat(_setupPointConstraintVelocity_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setupPointConstraintVelocity_rotA, constraint.localSpacePosition1, bodyB, _setupPointConstraintVelocity_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setupPointConstraintVelocity_rotA, constraint.localSpacePosition1, bodyB, _setupPointConstraintVelocity_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 }
 function warmStartVelocity$3(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -18948,7 +19016,7 @@ function solvePosition$3(constraint, bodies, _deltaTime, baumgarte) {
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	fromQuat(_solvePointConstraintPosition_rotA, bodyA.quaternion);
 	fromQuat(_solvePointConstraintPosition_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePointConstraintPosition_rotA, constraint.localSpacePosition1, bodyB, _solvePointConstraintPosition_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePointConstraintPosition_rotA, constraint.localSpacePosition1, bodyB, _solvePointConstraintPosition_rotB, constraint.localSpacePosition2, -1);
 	return solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarte);
 }
 function resetWarmStart$3(constraint) {
@@ -19376,7 +19444,7 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 	multiply$1(_setup_c1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
 	fromQuat(_setup_wsAxisMat, _setup_c1ToWorld);
 	for (let i = 0; i < 3; i++) set$7(constraint.translationAxis[i], _setup_wsAxisMat[i * 4], _setup_wsAxisMat[i * 4 + 1], _setup_wsAxisMat[i * 4 + 2]);
-	if (isTranslationFullyConstrained(constraint)) calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, constraint.localSpacePosition1, bodyB, _setup_rotB$1, constraint.localSpacePosition2);
+	if (isTranslationFullyConstrained(constraint)) calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, constraint.localSpacePosition1, bodyB, _setup_rotB$1, constraint.localSpacePosition2, bodies.stepStamp);
 	else if (isTranslationConstrained(constraint) || constraint.translationMotorActive) {
 		getPositionConstraintProperties(constraint, bodies, _setup_r1PlusU, _setup_r2, _setup_u);
 		for (let i = 0; i < 3; i++) {
@@ -19390,14 +19458,8 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 			const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
 			const invInertiaA = _setup_invInertiaA;
 			const invInertiaB = _setup_invInertiaB;
-			if (bodyA.motionType === 2) {
-				fromQuat(_setup_rotA$1, bodyA.quaternion);
-				getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA$1);
-			}
-			if (bodyB.motionType === 2) {
-				fromQuat(_setup_rotB$1, bodyB.quaternion);
-				getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB$1);
-			}
+			if (bodyA.motionType === 2) copy$5(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, bodies.stepStamp));
+			if (bodyB.motionType === 2) copy$5(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, bodies.stepStamp));
 			let constraintActive = false;
 			let constraintValue = 0;
 			if (isFixedAxis(constraint, axis)) {
@@ -19433,7 +19495,7 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 	multiply$1(_setup_c2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 	conjugate(_setup_qConj, _setup_c1ToWorld);
 	multiply$1(_setup_q$1, _setup_qConj, _setup_c2ToWorld);
-	if (isRotationFullyConstrained(constraint)) calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1);
+	if (isRotationFullyConstrained(constraint)) calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, bodies.stepStamp);
 	else if (isRotationConstrained(constraint) || constraint.rotationMotorActive) {
 		if (isRotationConstrained(constraint)) calculateConstraintProperties$4(constraint.swingTwistConstraintPart, bodyA, bodyB, _setup_q$1, _setup_c1ToWorld);
 		else deactivate$4(constraint.swingTwistConstraintPart);
@@ -19591,7 +19653,7 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 		multiply$1(constraintToBody1WithOffset, constraint.constraintToBody1, rotLimitsMin);
 		conjugate(_pos_invInitialOrientation, constraintToBody1WithOffset);
 		multiply$1(_pos_invInitialOrientation, constraint.constraintToBody2, _pos_invInitialOrientation);
-		calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1);
+		calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, -1);
 		impulse = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, _pos_invInitialOrientation, baumgarte) || impulse;
 	} else if (isRotationConstrained(constraint)) {
 		multiply$1(_pos_c1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
@@ -19605,7 +19667,7 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 		set$7(_pos_transLimitsMin, constraint.limitMin[0], constraint.limitMin[1], constraint.limitMin[2]);
 		transformQuat(_pos_localSpacePosition1WithOffset, _pos_transLimitsMin, constraint.constraintToBody1);
 		add$3(_pos_localSpacePosition1WithOffset, constraint.localSpacePosition1, _pos_localSpacePosition1WithOffset);
-		calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, _pos_localSpacePosition1WithOffset, bodyB, _setup_rotB$1, constraint.localSpacePosition2);
+		calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, _pos_localSpacePosition1WithOffset, bodyB, _setup_rotB$1, constraint.localSpacePosition2, -1);
 		impulse = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarte) || impulse;
 	} else if (isTranslationConstrained(constraint)) {
 		for (let i = 0; i < 3; i++) if (constraint.limitsSpringSettings[i].frequencyOrStiffness <= 0) {
@@ -19629,14 +19691,8 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 				const invInertiaB = _setup_invInertiaB;
 				identity(invInertiaA);
 				identity(invInertiaB);
-				if (bodyA.motionType === 2) {
-					fromQuat(_setup_rotA$1, bodyA.quaternion);
-					getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA$1);
-				}
-				if (bodyB.motionType === 2) {
-					fromQuat(_setup_rotB$1, bodyB.quaternion);
-					getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB$1);
-				}
+				if (bodyA.motionType === 2) getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, -1);
+				if (bodyB.motionType === 2) getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, -1);
 				calculateConstraintProperties$3(constraint.translationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, _pos_translationAxis, 0);
 				impulse = solvePositionConstraint$2(constraint.translationConstraintPart[i], bodyA, bodyB, _pos_translationAxis, error, baumgarte) || impulse;
 			}
@@ -19788,7 +19844,7 @@ const _calc_invI_crossN2 = /* @__PURE__ */ create$47();
 * @param n1 First constraint axis (normalized, perpendicular to slider axis)
 * @param n2 Second constraint axis (normalized, perpendicular to slider axis and n1)
 */
-function calculateConstraintProperties$1(part, bodyA, rotationA, r1PlusU, bodyB, rotationB, r2, n1, n2) {
+function calculateConstraintProperties$1(part, bodyA, r1PlusU, bodyB, r2, n1, n2, stepStamp) {
 	set$2(_calc_invEffectiveMass, 0, 0, 0, 0);
 	if (bodyA.motionType === 2) {
 		const mpA = bodyA.motionProperties;
@@ -19796,9 +19852,9 @@ function calculateConstraintProperties$1(part, bodyA, rotationA, r1PlusU, bodyB,
 		cross(_calc_crossN2, r1PlusU, n2);
 		copy$9(part.r1PlusUxN1, _calc_crossN1);
 		copy$9(part.r1PlusUxN2, _calc_crossN2);
-		getInverseInertiaForRotation(_calc_invI, mpA, rotationA);
-		multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-		multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+		const invIA = getWorldInverseInertia(_calc_invI, mpA, bodyA.quaternion, stepStamp);
+		multiply3x3Vec(_calc_invI_crossN1, invIA, _calc_crossN1);
+		multiply3x3Vec(_calc_invI_crossN2, invIA, _calc_crossN2);
 		copy$9(part.invI1_r1PlusUxN1, _calc_invI_crossN1);
 		copy$9(part.invI1_r1PlusUxN2, _calc_invI_crossN2);
 		_calc_invEffectiveMass[0] += mpA.invMass + dot$2(_calc_crossN1, _calc_invI_crossN1);
@@ -19812,9 +19868,9 @@ function calculateConstraintProperties$1(part, bodyA, rotationA, r1PlusU, bodyB,
 		cross(_calc_crossN2, r2, n2);
 		copy$9(part.r2xN1, _calc_crossN1);
 		copy$9(part.r2xN2, _calc_crossN2);
-		getInverseInertiaForRotation(_calc_invI, mpB, rotationB);
-		multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-		multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+		const invIB = getWorldInverseInertia(_calc_invI, mpB, bodyB.quaternion, stepStamp);
+		multiply3x3Vec(_calc_invI_crossN1, invIB, _calc_crossN1);
+		multiply3x3Vec(_calc_invI_crossN2, invIB, _calc_crossN2);
 		copy$9(part.invI2_r2xN1, _calc_invI_crossN1);
 		copy$9(part.invI2_r2xN2, _calc_invI_crossN2);
 		_calc_invEffectiveMass[0] += mpB.invMass + dot$2(_calc_crossN1, _calc_invI_crossN1);
@@ -20251,14 +20307,14 @@ function calculateSlidingAxisAndPosition(constraint, rotationA) {
 * @param rotationA rotation matrix for body A (mat4)
 * @param rotationB rotation matrix for body B (mat4)
 */
-function calculatePositionConstraintProperties(constraint, bodyA, bodyB, rotationA, rotationB) {
+function calculatePositionConstraintProperties(constraint, bodyA, bodyB, rotationA, stepStamp) {
 	multiply3x3Vec(constraint.n1, rotationA, constraint.localSpaceNormalA);
 	multiply3x3Vec(constraint.n2, rotationA, constraint.localSpaceNormalB);
 	add$3(_sliderConstraint_r1PlusU, constraint.r1, constraint.u);
-	calculateConstraintProperties$1(constraint.positionConstraintPart, bodyA, rotationA, _sliderConstraint_r1PlusU, bodyB, rotationB, constraint.r2, constraint.n1, constraint.n2);
+	calculateConstraintProperties$1(constraint.positionConstraintPart, bodyA, _sliderConstraint_r1PlusU, bodyB, constraint.r2, constraint.n1, constraint.n2, stepStamp);
 }
 /** calculate position limits constraint properties */
-function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, rotationA, rotationB, deltaTime) {
+function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, stepStamp) {
 	if (!constraint.hasLimits) {
 		deactivate$3(constraint.positionLimitsConstraintPart);
 		return;
@@ -20273,27 +20329,27 @@ function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, r
 			const mpB = bodyB.motionProperties;
 			const invMassA = bodyA.motionType === 2 ? mpA.invMass : 0;
 			const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
-			if (bodyA.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-			if (bodyB.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+			if (bodyA.motionType === 2) copy$5(_sliderConstraint_invInertiaA, getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp));
+			if (bodyB.motionType === 2) copy$5(_sliderConstraint_invInertiaB, getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp));
 			calculateConstraintPropertiesWithSettings(constraint.positionLimitsConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0, error, constraint.limitsSpringSettings);
 		} else {
 			const mpA = bodyA.motionProperties;
 			const mpB = bodyB.motionProperties;
 			const invMassA = bodyA.motionType === 2 ? mpA.invMass : 0;
 			const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
-			if (bodyA.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-			if (bodyB.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+			if (bodyA.motionType === 2) copy$5(_sliderConstraint_invInertiaA, getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp));
+			if (bodyB.motionType === 2) copy$5(_sliderConstraint_invInertiaB, getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp));
 			calculateConstraintProperties$3(constraint.positionLimitsConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0);
 		}
 	} else deactivate$3(constraint.positionLimitsConstraintPart);
 }
-function calculateMotorConstraintProperties(constraint, bodyA, bodyB, rotationA, rotationB, deltaTime) {
+function calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime, stepStamp) {
 	const mpA = bodyA.motionProperties;
 	const mpB = bodyB.motionProperties;
 	const invMassA = bodyA.motionType === 2 ? mpA.invMass : 0;
 	const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
-	if (bodyA.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaA, mpA, rotationA);
-	if (bodyB.motionType === 2) getInverseInertiaForRotation(_sliderConstraint_invInertiaB, mpB, rotationB);
+	if (bodyA.motionType === 2) copy$5(_sliderConstraint_invInertiaA, getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp));
+	if (bodyB.motionType === 2) copy$5(_sliderConstraint_invInertiaB, getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp));
 	add$3(_sliderConstraint_r1PlusU, constraint.r1, constraint.u);
 	switch (constraint.motorState) {
 		case 0:
@@ -20318,11 +20374,11 @@ function setupVelocity$1(constraint, bodies, deltaTime) {
 	fromQuat(_sliderConstraint_rotA, bodyA.quaternion);
 	fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
 	calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
-	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _sliderConstraint_rotA, bodyB, _sliderConstraint_rotB);
+	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, bodies.stepStamp);
+	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _sliderConstraint_rotA, bodyB, _sliderConstraint_rotB, bodies.stepStamp);
 	calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
-	calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB, deltaTime);
-	calculateMotorConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB, deltaTime);
+	calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
+	calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 }
 function warmStartVelocity$1(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -20386,9 +20442,9 @@ function solvePosition$1(constraint, bodies, deltaTime, baumgarteFactor) {
 	fromQuat(_sliderConstraint_rotA, bodyA.quaternion);
 	fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
 	calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
-	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
+	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, -1);
 	const pos = solvePositionConstraint(constraint.positionConstraintPart, bodyA, bodyB, constraint.u, constraint.n1, constraint.n2, baumgarteFactor);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, fromQuat(_sliderConstraint_rotA, bodyA.quaternion), bodyB, fromQuat(_sliderConstraint_rotB, bodyB.quaternion));
+	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, fromQuat(_sliderConstraint_rotA, bodyA.quaternion), bodyB, fromQuat(_sliderConstraint_rotB, bodyB.quaternion), -1);
 	const rot = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
 	let limit = false;
 	if (constraint.hasLimits && !hasStiffness$1(constraint.limitsSpringSettings)) {
@@ -20396,7 +20452,7 @@ function solvePosition$1(constraint, bodies, deltaTime, baumgarteFactor) {
 		fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
 		calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
 		calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
-		calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB, deltaTime);
+		calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, -1);
 		if (isActive$3(constraint.positionLimitsConstraintPart)) {
 			let positionError;
 			if (constraint.d <= constraint.limitsMin) positionError = constraint.d - constraint.limitsMin;
@@ -20709,7 +20765,7 @@ function setupVelocity(constraint, bodies, deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_setup_rotA, bodyA.quaternion);
 	fromQuat(_setup_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA, constraint.localSpacePosition1, bodyB, _setup_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA, constraint.localSpacePosition1, bodyB, _setup_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 	multiply$1(_setup_constraintBody1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
 	multiply$1(_setup_constraintBody2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 	conjugate(_setup_c1Conj, _setup_constraintBody1ToWorld);
@@ -20814,7 +20870,7 @@ function solvePosition(constraint, bodies, _deltaTime, baumgarteFactor) {
 	impulse = solvePositionConstraint$3(constraint.swingTwistConstraintPart, bodyA, bodyB, _solvePosition_q, constraint.constraintToBody1, constraint.constraintToBody2, baumgarteFactor) || impulse;
 	fromQuat(_solvePosition_rotA, bodyA.quaternion);
 	fromQuat(_solvePosition_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePosition_rotA, constraint.localSpacePosition1, bodyB, _solvePosition_rotB, constraint.localSpacePosition2);
+	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePosition_rotA, constraint.localSpacePosition1, bodyB, _solvePosition_rotB, constraint.localSpacePosition2, -1);
 	impulse = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor) || impulse;
 	return impulse;
 }
@@ -23829,9 +23885,9 @@ function getSubShapeTransformedShape$3(out, shape, subShapeId) {
 }
 const _castRayVsCompound_pos = /* @__PURE__ */ create$47();
 const _castRayVsCompound_quat = /* @__PURE__ */ create$44();
-const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ create$47();
 const _castRayVsCompound_worldPos = /* @__PURE__ */ create$47();
 const _castRayVsCompound_worldRot = /* @__PURE__ */ create$44();
+const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ create$47();
 const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ builder();
 function castRayVsCompound(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, shape, subShapeId, subShapeIdBits, posX, posY, posZ, quatX, quatY, quatZ, quatW, scaleX, scaleY, scaleZ) {
 	set$7(_castRayVsCompound_pos, posX, posY, posZ);
@@ -23842,7 +23898,8 @@ function castRayVsCompound(collector, settings, originX, originY, originZ, direc
 		_castRayVsCompound_subShapeIdBuilder.value = subShapeId;
 		_castRayVsCompound_subShapeIdBuilder.currentBit = subShapeIdBits;
 		pushIndex(_castRayVsCompound_subShapeIdBuilder, _castRayVsCompound_subShapeIdBuilder, childIndex, shape.children.length);
-		transformQuat(_castRayVsCompound_transformedTranslation, child.position, _castRayVsCompound_quat);
+		set$7(_castRayVsCompound_transformedTranslation, child.position[0] * scaleX, child.position[1] * scaleY, child.position[2] * scaleZ);
+		transformQuat(_castRayVsCompound_transformedTranslation, _castRayVsCompound_transformedTranslation, _castRayVsCompound_quat);
 		add$3(_castRayVsCompound_worldPos, _castRayVsCompound_pos, _castRayVsCompound_transformedTranslation);
 		multiply$1(_castRayVsCompound_worldRot, _castRayVsCompound_quat, child.quaternion);
 		shapeDefs[child.shape.type].castRay(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, child.shape, _castRayVsCompound_subShapeIdBuilder.value, _castRayVsCompound_subShapeIdBuilder.currentBit, _castRayVsCompound_worldPos[0], _castRayVsCompound_worldPos[1], _castRayVsCompound_worldPos[2], _castRayVsCompound_worldRot[0], _castRayVsCompound_worldRot[1], _castRayVsCompound_worldRot[2], _castRayVsCompound_worldRot[3], scaleX, scaleY, scaleZ);
@@ -23863,7 +23920,8 @@ function collidePointVsCompound(collector, settings, pointX, pointY, pointZ, sha
 		pushIndex(_collidePointVsCompound_subShapeIdBuilder, _collidePointVsCompound_subShapeIdBuilder, childIndex, shapeB.children.length);
 		set$7(_collidePointVsCompound_posB, posBX, posBY, posBZ);
 		set$4(_collidePointVsCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
-		transformQuat(_collidePointVsCompound_transformedTranslation, child.position, _collidePointVsCompound_quatB);
+		set$7(_collidePointVsCompound_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+		transformQuat(_collidePointVsCompound_transformedTranslation, _collidePointVsCompound_transformedTranslation, _collidePointVsCompound_quatB);
 		add$3(_collidePointVsCompound_worldPos, _collidePointVsCompound_posB, _collidePointVsCompound_transformedTranslation);
 		multiply$1(_collidePointVsCompound_worldRot, _collidePointVsCompound_quatB, child.quaternion);
 		shapeDefs[child.shape.type].collidePoint(collector, settings, pointX, pointY, pointZ, child.shape, _collidePointVsCompound_subShapeIdBuilder.value, _collidePointVsCompound_subShapeIdBuilder.currentBit, _collidePointVsCompound_worldPos[0], _collidePointVsCompound_worldPos[1], _collidePointVsCompound_worldPos[2], _collidePointVsCompound_worldRot[0], _collidePointVsCompound_worldRot[1], _collidePointVsCompound_worldRot[2], _collidePointVsCompound_worldRot[3], scaleBX, scaleBY, scaleBZ);
@@ -23880,7 +23938,8 @@ function collideCompoundVsShape(collector, settings, shapeA, subShapeIdA, subSha
 		pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, childIndex, compound.children.length);
 		set$7(_posA, posAX, posAY, posAZ);
 		set$4(_quatA, quatAX, quatAY, quatAZ, quatAW);
-		transformQuat(_transformedTranslation, child.position, _quatA);
+		set$7(_transformedTranslation, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+		transformQuat(_transformedTranslation, _transformedTranslation, _quatA);
 		add$3(_worldPos, _posA, _transformedTranslation);
 		multiply$1(_worldRot, _quatA, child.quaternion);
 		const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
@@ -23897,7 +23956,8 @@ function collideShapeVsCompound(collector, settings, shapeA, subShapeIdA, subSha
 		pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, childIndex, compound.children.length);
 		set$7(_posB, posBX, posBY, posBZ);
 		set$4(_quatB, quatBX, quatBY, quatBZ, quatBW);
-		transformQuat(_transformedTranslation, child.position, _quatB);
+		set$7(_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+		transformQuat(_transformedTranslation, _transformedTranslation, _quatB);
 		add$3(_worldPos, _posB, _transformedTranslation);
 		multiply$1(_worldRot, _quatB, child.quaternion);
 		const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
@@ -23924,7 +23984,8 @@ function castCompoundVsShape(collector, settings, shapeA, subShapeIdA, subShapeI
 		pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, childIndex, compound.children.length);
 		set$7(_posA, posAX, posAY, posAZ);
 		set$4(_quatA, quatAX, quatAY, quatAZ, quatAW);
-		transformQuat(_castDecorated_temp, child.position, _quatA);
+		set$7(_castDecorated_temp, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+		transformQuat(_castDecorated_temp, _castDecorated_temp, _quatA);
 		add$3(_worldPos, _posA, _castDecorated_temp);
 		multiply$1(_worldRot, _quatA, child.quaternion);
 		set$7(_displacementA, dispAX, dispAY, dispAZ);
@@ -23943,7 +24004,8 @@ function castShapeVsCompound(collector, settings, shapeA, subShapeIdA, subShapeI
 		pushIndex(_subShapeIdBuilder, _subShapeIdBuilder, childIndex, compound.children.length);
 		set$7(_posB, posBX, posBY, posBZ);
 		set$4(_quatB, quatBX, quatBY, quatBZ, quatBW);
-		transformQuat(_castDecorated_temp, child.position, _quatB);
+		set$7(_castDecorated_temp, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+		transformQuat(_castDecorated_temp, _castDecorated_temp, _quatB);
 		add$3(_worldPos, _posB, _castDecorated_temp);
 		multiply$1(_worldRot, _quatB, child.quaternion);
 		const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
@@ -27296,11 +27358,10 @@ const _castRayVsStaticCompound_quat = /* @__PURE__ */ create$44();
 const _castRayVsStaticCompound_invQuat = /* @__PURE__ */ create$44();
 const _castRayVsStaticCompound_localRayOrigin = /* @__PURE__ */ create$47();
 const _castRayVsStaticCompound_localRayDir = /* @__PURE__ */ create$47();
-const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ create$47();
 const _castRayVsStaticCompound_worldPos = /* @__PURE__ */ create$47();
 const _castRayVsStaticCompound_worldRot = /* @__PURE__ */ create$44();
+const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ create$47();
 const _castRayVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ builder();
-const _castRayVsStaticCompound_nodeBounds = /* @__PURE__ */ create$38();
 function castRay$1(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, shape, subShapeId, subShapeIdBits, posX, posY, posZ, quatX, quatY, quatZ, quatW, scaleX, scaleY, scaleZ) {
 	const buffer = shape.bvh.buffer;
 	if (buffer.length === 0) return;
@@ -27312,60 +27373,64 @@ function castRay$1(collector, settings, originX, originY, originZ, directionX, d
 	transformQuat(_castRayVsStaticCompound_localRayOrigin, _castRayVsStaticCompound_localRayOrigin, _castRayVsStaticCompound_invQuat);
 	set$7(_castRayVsStaticCompound_localRayDir, directionX, directionY, directionZ);
 	transformQuat(_castRayVsStaticCompound_localRayDir, _castRayVsStaticCompound_localRayDir, _castRayVsStaticCompound_invQuat);
-	const localOriginX = _castRayVsStaticCompound_localRayOrigin[0];
-	const localOriginY = _castRayVsStaticCompound_localRayOrigin[1];
-	const localOriginZ = _castRayVsStaticCompound_localRayOrigin[2];
-	const localDirX = _castRayVsStaticCompound_localRayDir[0];
-	const localDirY = _castRayVsStaticCompound_localRayDir[1];
-	const localDirZ = _castRayVsStaticCompound_localRayDir[2];
+	const localOriginX = _castRayVsStaticCompound_localRayOrigin[0] / scaleX;
+	const localOriginY = _castRayVsStaticCompound_localRayOrigin[1] / scaleY;
+	const localOriginZ = _castRayVsStaticCompound_localRayOrigin[2] / scaleZ;
+	const localDirX = _castRayVsStaticCompound_localRayDir[0] / scaleX;
+	const localDirY = _castRayVsStaticCompound_localRayDir[1] / scaleY;
+	const localDirZ = _castRayVsStaticCompound_localRayDir[2] / scaleZ;
+	const invDispX = safeReciprocal(localDirX * length);
+	const invDispY = safeReciprocal(localDirY * length);
+	const invDispZ = safeReciprocal(localDirZ * length);
+	let earlyOut = collector.earlyOutFraction;
 	let stackSize = 0;
 	_castRayVsStaticCompound_stackNodes[stackSize] = 0;
 	_castRayVsStaticCompound_stackDist[stackSize] = -Infinity;
 	stackSize++;
 	while (stackSize > 0) {
-		if (collector.earlyOutFraction <= 0) break;
 		stackSize--;
 		const nodeOffset = _castRayVsStaticCompound_stackNodes[stackSize];
-		if (_castRayVsStaticCompound_stackDist[stackSize] >= collector.earlyOutFraction) continue;
+		if (_castRayVsStaticCompound_stackDist[stackSize] >= earlyOut) continue;
 		if (nodeIsLeaf(buffer, nodeOffset)) {
 			const childStart = nodeChildStart(buffer, nodeOffset);
 			const childCount = nodeChildCount(buffer, nodeOffset);
 			for (let i = 0; i < childCount; i++) {
+				if (earlyOut <= 0) break;
 				const childIndex = childStart + i;
 				const child = shape.children[childIndex];
 				_castRayVsStaticCompound_subShapeIdBuilder.value = subShapeId;
 				_castRayVsStaticCompound_subShapeIdBuilder.currentBit = subShapeIdBits;
 				pushIndex(_castRayVsStaticCompound_subShapeIdBuilder, _castRayVsStaticCompound_subShapeIdBuilder, childIndex, shape.children.length);
-				transformQuat(_castRayVsStaticCompound_transformedTranslation, child.position, _castRayVsStaticCompound_quat);
+				set$7(_castRayVsStaticCompound_transformedTranslation, child.position[0] * scaleX, child.position[1] * scaleY, child.position[2] * scaleZ);
+				transformQuat(_castRayVsStaticCompound_transformedTranslation, _castRayVsStaticCompound_transformedTranslation, _castRayVsStaticCompound_quat);
 				add$3(_castRayVsStaticCompound_worldPos, _castRayVsStaticCompound_pos, _castRayVsStaticCompound_transformedTranslation);
 				multiply$1(_castRayVsStaticCompound_worldRot, _castRayVsStaticCompound_quat, child.quaternion);
-				shapeDefs[child.shape.type].castRay(collector, settings, localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, child.shape, _castRayVsStaticCompound_subShapeIdBuilder.value, _castRayVsStaticCompound_subShapeIdBuilder.currentBit, _castRayVsStaticCompound_worldPos[0], _castRayVsStaticCompound_worldPos[1], _castRayVsStaticCompound_worldPos[2], _castRayVsStaticCompound_worldRot[0], _castRayVsStaticCompound_worldRot[1], _castRayVsStaticCompound_worldRot[2], _castRayVsStaticCompound_worldRot[3], scaleX, scaleY, scaleZ);
+				shapeDefs[child.shape.type].castRay(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, child.shape, _castRayVsStaticCompound_subShapeIdBuilder.value, _castRayVsStaticCompound_subShapeIdBuilder.currentBit, _castRayVsStaticCompound_worldPos[0], _castRayVsStaticCompound_worldPos[1], _castRayVsStaticCompound_worldPos[2], _castRayVsStaticCompound_worldRot[0], _castRayVsStaticCompound_worldRot[1], _castRayVsStaticCompound_worldRot[2], _castRayVsStaticCompound_worldRot[3], scaleX, scaleY, scaleZ);
+				earlyOut = collector.earlyOutFraction;
 			}
 		} else {
 			const leftOffset = nodeLeft(nodeOffset);
 			const rightOffset = nodeRight(buffer, nodeOffset);
-			nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, leftOffset);
-			const leftDist = rayDistanceToBox3(localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, _castRayVsStaticCompound_nodeBounds[0], _castRayVsStaticCompound_nodeBounds[1], _castRayVsStaticCompound_nodeBounds[2], _castRayVsStaticCompound_nodeBounds[3], _castRayVsStaticCompound_nodeBounds[4], _castRayVsStaticCompound_nodeBounds[5]);
-			nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
-			const rightDist = rayDistanceToBox3(localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, _castRayVsStaticCompound_nodeBounds[0], _castRayVsStaticCompound_nodeBounds[1], _castRayVsStaticCompound_nodeBounds[2], _castRayVsStaticCompound_nodeBounds[3], _castRayVsStaticCompound_nodeBounds[4], _castRayVsStaticCompound_nodeBounds[5]);
+			const leftDist = rayFractionToBox3(localOriginX, localOriginY, localOriginZ, invDispX, invDispY, invDispZ, buffer[leftOffset + 0], buffer[leftOffset + 1], buffer[leftOffset + 2], buffer[leftOffset + 3], buffer[leftOffset + 4], buffer[leftOffset + 5]);
+			const rightDist = rayFractionToBox3(localOriginX, localOriginY, localOriginZ, invDispX, invDispY, invDispZ, buffer[rightOffset + 0], buffer[rightOffset + 1], buffer[rightOffset + 2], buffer[rightOffset + 3], buffer[rightOffset + 4], buffer[rightOffset + 5]);
 			if (leftDist <= rightDist) {
-				if (rightDist < collector.earlyOutFraction) {
+				if (rightDist < earlyOut) {
 					_castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
 					_castRayVsStaticCompound_stackDist[stackSize] = rightDist;
 					stackSize++;
 				}
-				if (leftDist < collector.earlyOutFraction) {
+				if (leftDist < earlyOut) {
 					_castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
 					_castRayVsStaticCompound_stackDist[stackSize] = leftDist;
 					stackSize++;
 				}
 			} else {
-				if (leftDist < collector.earlyOutFraction) {
+				if (leftDist < earlyOut) {
 					_castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
 					_castRayVsStaticCompound_stackDist[stackSize] = leftDist;
 					stackSize++;
 				}
-				if (rightDist < collector.earlyOutFraction) {
+				if (rightDist < earlyOut) {
 					_castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
 					_castRayVsStaticCompound_stackDist[stackSize] = rightDist;
 					stackSize++;
@@ -27391,9 +27456,9 @@ function collidePoint$1(collector, settings, pointX, pointY, pointZ, shapeB, sub
 	conjugate(_collidePointVsStaticCompound_invQuatB, _collidePointVsStaticCompound_quatB);
 	set$7(_collidePointVsStaticCompound_localPoint, pointX - posBX, pointY - posBY, pointZ - posBZ);
 	transformQuat(_collidePointVsStaticCompound_localPoint, _collidePointVsStaticCompound_localPoint, _collidePointVsStaticCompound_invQuatB);
-	const localPointX = _collidePointVsStaticCompound_localPoint[0];
-	const localPointY = _collidePointVsStaticCompound_localPoint[1];
-	const localPointZ = _collidePointVsStaticCompound_localPoint[2];
+	const localPointX = _collidePointVsStaticCompound_localPoint[0] / scaleBX;
+	const localPointY = _collidePointVsStaticCompound_localPoint[1] / scaleBY;
+	const localPointZ = _collidePointVsStaticCompound_localPoint[2] / scaleBZ;
 	let stackSize = 0;
 	_collidePointVsStaticCompound_stackNodes[stackSize++] = 0;
 	while (stackSize > 0) {
@@ -27412,7 +27477,8 @@ function collidePoint$1(collector, settings, pointX, pointY, pointZ, shapeB, sub
 				pushIndex(_collidePointVsStaticCompound_subShapeIdBuilder, _collidePointVsStaticCompound_subShapeIdBuilder, childIndex, shapeB.children.length);
 				set$7(_collidePointVsStaticCompound_posB, posBX, posBY, posBZ);
 				set$4(_collidePointVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
-				transformQuat(_collidePointVsStaticCompound_transformedTranslation, child.position, _collidePointVsStaticCompound_quatB);
+				set$7(_collidePointVsStaticCompound_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+				transformQuat(_collidePointVsStaticCompound_transformedTranslation, _collidePointVsStaticCompound_transformedTranslation, _collidePointVsStaticCompound_quatB);
 				add$3(_collidePointVsStaticCompound_worldPos, _collidePointVsStaticCompound_posB, _collidePointVsStaticCompound_transformedTranslation);
 				multiply$1(_collidePointVsStaticCompound_worldRot, _collidePointVsStaticCompound_quatB, child.quaternion);
 				shapeDefs[child.shape.type].collidePoint(collector, settings, pointX, pointY, pointZ, child.shape, _collidePointVsStaticCompound_subShapeIdBuilder.value, _collidePointVsStaticCompound_subShapeIdBuilder.currentBit, _collidePointVsStaticCompound_worldPos[0], _collidePointVsStaticCompound_worldPos[1], _collidePointVsStaticCompound_worldPos[2], _collidePointVsStaticCompound_worldRot[0], _collidePointVsStaticCompound_worldRot[1], _collidePointVsStaticCompound_worldRot[2], _collidePointVsStaticCompound_worldRot[3], scaleBX, scaleBY, scaleBZ);
@@ -27424,6 +27490,25 @@ function collidePoint$1(collector, settings, pointX, pointY, pointZ, shapeB, sub
 			_collidePointVsStaticCompound_stackNodes[stackSize++] = rightOffset;
 		}
 	}
+}
+/**
+* bring a box from the compound's scaled local space into the unscaled space its bvh is built in.
+* a negative scale component swaps that axis' min and max, so they are re-ordered.
+*/
+function divideBoxByScale$1(box, scaleX, scaleY, scaleZ) {
+	if (scaleX === 1 && scaleY === 1 && scaleZ === 1) return;
+	const x0 = box[0] / scaleX;
+	const x1 = box[3] / scaleX;
+	box[0] = x0 < x1 ? x0 : x1;
+	box[3] = x0 < x1 ? x1 : x0;
+	const y0 = box[1] / scaleY;
+	const y1 = box[4] / scaleY;
+	box[1] = y0 < y1 ? y0 : y1;
+	box[4] = y0 < y1 ? y1 : y0;
+	const z0 = box[2] / scaleZ;
+	const z1 = box[5] / scaleZ;
+	box[2] = z0 < z1 ? z0 : z1;
+	box[5] = z0 < z1 ? z1 : z0;
 }
 const _collideStaticCompoundVsShape_stackNodes = [];
 const _collideStaticCompoundVsShape_subShapeIdBuilder = /* @__PURE__ */ builder();
@@ -27457,6 +27542,7 @@ function collideStaticCompoundVsShape(collector, settings, shapeA, subShapeIdA, 
 	queryBounds[3] += settings.maxSeparationDistance;
 	queryBounds[4] += settings.maxSeparationDistance;
 	queryBounds[5] += settings.maxSeparationDistance;
+	divideBoxByScale$1(queryBounds, scaleAX, scaleAY, scaleAZ);
 	let stackSize = 0;
 	_collideStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 	while (stackSize > 0) {
@@ -27475,7 +27561,8 @@ function collideStaticCompoundVsShape(collector, settings, shapeA, subShapeIdA, 
 				pushIndex(_collideStaticCompoundVsShape_subShapeIdBuilder, _collideStaticCompoundVsShape_subShapeIdBuilder, childIndex, compound.children.length);
 				set$7(_collideStaticCompoundVsShape_posA, posAX, posAY, posAZ);
 				set$4(_collideStaticCompoundVsShape_quatA, quatAX, quatAY, quatAZ, quatAW);
-				transformQuat(_collideStaticCompoundVsShape_transformedTranslation, child.position, _collideStaticCompoundVsShape_quatA);
+				set$7(_collideStaticCompoundVsShape_transformedTranslation, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+				transformQuat(_collideStaticCompoundVsShape_transformedTranslation, _collideStaticCompoundVsShape_transformedTranslation, _collideStaticCompoundVsShape_quatA);
 				add$3(_collideStaticCompoundVsShape_worldPos, _collideStaticCompoundVsShape_posA, _collideStaticCompoundVsShape_transformedTranslation);
 				multiply$1(_collideStaticCompoundVsShape_worldRot, _collideStaticCompoundVsShape_quatA, child.quaternion);
 				const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
@@ -27523,6 +27610,7 @@ function collideShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, 
 	queryBounds[3] += settings.maxSeparationDistance;
 	queryBounds[4] += settings.maxSeparationDistance;
 	queryBounds[5] += settings.maxSeparationDistance;
+	divideBoxByScale$1(queryBounds, scaleBX, scaleBY, scaleBZ);
 	let stackSize = 0;
 	_collideShapeVsStaticCompound_stackNodes[stackSize++] = 0;
 	while (stackSize > 0) {
@@ -27541,7 +27629,8 @@ function collideShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, 
 				pushIndex(_collideShapeVsStaticCompound_subShapeIdBuilder, _collideShapeVsStaticCompound_subShapeIdBuilder, childIndex, compound.children.length);
 				set$7(_collideShapeVsStaticCompound_posB, posBX, posBY, posBZ);
 				set$4(_collideShapeVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
-				transformQuat(_collideShapeVsStaticCompound_transformedTranslation, child.position, _collideShapeVsStaticCompound_quatB);
+				set$7(_collideShapeVsStaticCompound_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+				transformQuat(_collideShapeVsStaticCompound_transformedTranslation, _collideShapeVsStaticCompound_transformedTranslation, _collideShapeVsStaticCompound_quatB);
 				add$3(_collideShapeVsStaticCompound_worldPos, _collideShapeVsStaticCompound_posB, _collideShapeVsStaticCompound_transformedTranslation);
 				multiply$1(_collideShapeVsStaticCompound_worldRot, _collideShapeVsStaticCompound_quatB, child.quaternion);
 				const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
@@ -27595,6 +27684,7 @@ function castStaticCompoundVsShape(collector, settings, shapeA, subShapeIdA, sub
 	endBounds[4] = queryBounds[4] + localDisp[1];
 	endBounds[5] = queryBounds[5] + localDisp[2];
 	union(queryBounds, queryBounds, endBounds);
+	divideBoxByScale$1(queryBounds, scaleAX, scaleAY, scaleAZ);
 	let stackSize = 0;
 	_castStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 	while (stackSize > 0) {
@@ -27613,7 +27703,8 @@ function castStaticCompoundVsShape(collector, settings, shapeA, subShapeIdA, sub
 				pushIndex(_castStaticCompoundVsShape_subShapeIdBuilder, _castStaticCompoundVsShape_subShapeIdBuilder, childIndex, compound.children.length);
 				set$7(_castStaticCompoundVsShape_posA, posAX, posAY, posAZ);
 				set$4(_castStaticCompoundVsShape_quatA, quatAX, quatAY, quatAZ, quatAW);
-				transformQuat(_castStaticCompoundVsShape_transformedTranslation, child.position, _castStaticCompoundVsShape_quatA);
+				set$7(_castStaticCompoundVsShape_transformedTranslation, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+				transformQuat(_castStaticCompoundVsShape_transformedTranslation, _castStaticCompoundVsShape_transformedTranslation, _castStaticCompoundVsShape_quatA);
 				add$3(_castStaticCompoundVsShape_worldPos, _castStaticCompoundVsShape_posA, _castStaticCompoundVsShape_transformedTranslation);
 				multiply$1(_castStaticCompoundVsShape_worldRot, _castStaticCompoundVsShape_quatA, child.quaternion);
 				set$7(_castStaticCompoundVsShape_displacementA, dispAX, dispAY, dispAZ);
@@ -27672,8 +27763,14 @@ function castShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, sub
 	transformQuat(_castShapeVsStaticCompound_posAInB, _castShapeVsStaticCompound_positionDifference, _castShapeVsStaticCompound_inverseQuaternionB);
 	multiply$1(_castShapeVsStaticCompound_quatAInB, _castShapeVsStaticCompound_inverseQuaternionB, _castShapeVsStaticCompound_quatA);
 	transformQuat(_castShapeVsStaticCompound_displacementInB, _castShapeVsStaticCompound_displacementA, _castShapeVsStaticCompound_inverseQuaternionB);
+	if (scaleBX !== 1 || scaleBY !== 1 || scaleBZ !== 1) {
+		_castShapeVsStaticCompound_displacementInB[0] /= scaleBX;
+		_castShapeVsStaticCompound_displacementInB[1] /= scaleBY;
+		_castShapeVsStaticCompound_displacementInB[2] /= scaleBZ;
+	}
 	const aabbMatrix = fromRotationTranslationScale(_castShapeVsStaticCompound_mat4, _castShapeVsStaticCompound_quatAInB, _castShapeVsStaticCompound_posAInB, _castShapeVsStaticCompound_scaleA);
 	transformMat4(_castShapeVsStaticCompound_sweptAABB, shapeA.aabb, aabbMatrix);
+	divideBoxByScale$1(_castShapeVsStaticCompound_sweptAABB, scaleBX, scaleBY, scaleBZ);
 	const rayOriginX = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * .5;
 	const rayOriginY = (_castShapeVsStaticCompound_sweptAABB[1] + _castShapeVsStaticCompound_sweptAABB[4]) * .5;
 	const rayOriginZ = (_castShapeVsStaticCompound_sweptAABB[2] + _castShapeVsStaticCompound_sweptAABB[5]) * .5;
@@ -27715,7 +27812,8 @@ function castShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, sub
 				_castShapeVsStaticCompound_subShapeIdBuilder.value = subShapeIdB;
 				_castShapeVsStaticCompound_subShapeIdBuilder.currentBit = subShapeIdBitsB;
 				pushIndex(_castShapeVsStaticCompound_subShapeIdBuilder, _castShapeVsStaticCompound_subShapeIdBuilder, childIndex, compound.children.length);
-				transformQuat(_castShapeVsStaticCompound_transformedTranslation, child.position, _castShapeVsStaticCompound_quatB);
+				set$7(_castShapeVsStaticCompound_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+				transformQuat(_castShapeVsStaticCompound_transformedTranslation, _castShapeVsStaticCompound_transformedTranslation, _castShapeVsStaticCompound_quatB);
 				add$3(_castShapeVsStaticCompound_worldPos, _castShapeVsStaticCompound_posB, _castShapeVsStaticCompound_transformedTranslation);
 				multiply$1(_castShapeVsStaticCompound_worldRot, _castShapeVsStaticCompound_quatB, child.quaternion);
 				const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
@@ -29268,69 +29366,63 @@ function getSupportingFace(ioResult, _direction, shape, subShapeId) {
 	}
 	transformFaceWithMat4Scale(face, transform, scale);
 }
-const _castRayVsTriangleMesh_pos = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_quat = /* @__PURE__ */ create$44();
-const _castRayVsTriangleMesh_scale = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_rayOriginLocal = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ create$44();
-const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ create$41();
-const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ createRayIntersectsTriangleResult();
 const _castRayVsTriangleMesh_stackNodes = [];
 const _castRayVsTriangleMesh_stackDist = [];
-const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ create$38();
-const _castRayVsTriangleMesh_rightBounds = /* @__PURE__ */ create$38();
-const _castRayVsTriangleMesh_a = /* @__PURE__ */ create$47();
-const _castRayVsTriangleMesh_b = /* @__PURE__ */ create$47();
-const _castRayVsTriangleMesh_c = /* @__PURE__ */ create$47();
 const _castRayVsTriangleMesh_hit = /* @__PURE__ */ createCastRayHit();
 const _castRayVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ builder();
 function castRayVsTriangleMesh(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, shape, subShapeId, subShapeIdBits, posX, posY, posZ, quatX, quatY, quatZ, quatW, scaleX, scaleY, scaleZ) {
-	set$7(_castRayVsTriangleMesh_pos, posX, posY, posZ);
-	set$4(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
-	set$7(_castRayVsTriangleMesh_scale, scaleX, scaleY, scaleZ);
-	conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
-	negate(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_pos);
-	transformQuat(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_invQuat);
-	fromRotationTranslation(_castRayVsTriangleMesh_mat4_WorldToB, _castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_negPos);
-	set$7(_castRayVsTriangleMesh_rayOriginLocal, originX, originY, originZ);
-	transformMat4$1(_castRayVsTriangleMesh_rayOriginLocal, _castRayVsTriangleMesh_rayOriginLocal, _castRayVsTriangleMesh_mat4_WorldToB);
-	set$7(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
-	multiply3x3Vec(_castRayVsTriangleMesh_rayDirectionLocal, _castRayVsTriangleMesh_mat4_WorldToB, _castRayVsTriangleMesh_rayDirectionLocal);
-	_castRayVsTriangleMesh_rayDirectionLocal[0] /= _castRayVsTriangleMesh_scale[0];
-	_castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
-	_castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
-	const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0];
-	const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1];
-	const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2];
-	const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0];
-	const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1];
-	const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2];
 	const buffer = shape.bvh.buffer;
 	const meshData = shape.data;
 	if (buffer.length === 0) {
 		collector.addMiss();
 		return;
 	}
+	set$4(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
+	conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
+	set$7(_castRayVsTriangleMesh_rayOriginLocal, originX - posX, originY - posY, originZ - posZ);
+	transformQuat(_castRayVsTriangleMesh_rayOriginLocal, _castRayVsTriangleMesh_rayOriginLocal, _castRayVsTriangleMesh_invQuat);
+	set$7(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
+	transformQuat(_castRayVsTriangleMesh_rayDirectionLocal, _castRayVsTriangleMesh_rayDirectionLocal, _castRayVsTriangleMesh_invQuat);
+	const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0] / scaleX;
+	const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1] / scaleY;
+	const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2] / scaleZ;
+	const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0] / scaleX;
+	const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1] / scaleY;
+	const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2] / scaleZ;
+	const invDispX = safeReciprocal(localDirX * length);
+	const invDispY = safeReciprocal(localDirY * length);
+	const invDispZ = safeReciprocal(localDirZ * length);
+	const backfaceCulling = !settings.collideWithBackfaces;
+	const positions = meshData.positions;
+	const triangleBuffer = meshData.triangleBuffer;
+	let earlyOut = collector.earlyOutFraction;
+	let maxT = earlyOut < 1 ? earlyOut * length : length;
 	let foundHit = false;
 	let stackSize = 0;
 	_castRayVsTriangleMesh_stackNodes[stackSize] = 0;
 	_castRayVsTriangleMesh_stackDist[stackSize] = -Infinity;
 	stackSize++;
 	while (stackSize > 0) {
-		if (collector.earlyOutFraction <= 0) break;
 		stackSize--;
 		const nodeOffset = _castRayVsTriangleMesh_stackNodes[stackSize];
-		if (_castRayVsTriangleMesh_stackDist[stackSize] >= collector.earlyOutFraction) continue;
+		if (_castRayVsTriangleMesh_stackDist[stackSize] >= earlyOut) continue;
 		if (nodeIsLeaf(buffer, nodeOffset)) {
 			const triStart = nodeTriStart(buffer, nodeOffset);
 			const triCount = nodeTriCount(buffer, nodeOffset);
 			for (let i = 0; i < triCount; i++) {
+				if (earlyOut <= 0) break;
 				const triangleIndex = triStart + i;
-				getTriangleVertices(_castRayVsTriangleMesh_a, _castRayVsTriangleMesh_b, _castRayVsTriangleMesh_c, meshData, triangleIndex);
-				rayIntersectsTriangle(_castRayVsTriangleMesh_hitResult, localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, mul(_castRayVsTriangleMesh_a, _castRayVsTriangleMesh_a, _castRayVsTriangleMesh_scale), mul(_castRayVsTriangleMesh_b, _castRayVsTriangleMesh_b, _castRayVsTriangleMesh_scale), mul(_castRayVsTriangleMesh_c, _castRayVsTriangleMesh_c, _castRayVsTriangleMesh_scale), !settings.collideWithBackfaces);
-				if (_castRayVsTriangleMesh_hitResult.hit && _castRayVsTriangleMesh_hitResult.fraction < collector.earlyOutFraction) {
+				const triOffset = triangleIndex * 8;
+				const ia = triangleBuffer[triOffset + 0] * 3;
+				const ib = triangleBuffer[triOffset + 1] * 3;
+				const ic = triangleBuffer[triOffset + 2] * 3;
+				rayIntersectsTriangle(_castRayVsTriangleMesh_hitResult, localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, maxT, positions[ia], positions[ia + 1], positions[ia + 2], positions[ib], positions[ib + 1], positions[ib + 2], positions[ic], positions[ic + 1], positions[ic + 2], backfaceCulling);
+				if (_castRayVsTriangleMesh_hitResult.hit) {
 					foundHit = true;
 					_castRayVsTriangleMesh_subShapeIdBuilder.value = subShapeId;
 					_castRayVsTriangleMesh_subShapeIdBuilder.currentBit = subShapeIdBits;
@@ -29341,33 +29433,33 @@ function castRayVsTriangleMesh(collector, settings, originX, originY, originZ, d
 					_castRayVsTriangleMesh_hit.materialId = getMaterialId(meshData, triangleIndex);
 					_castRayVsTriangleMesh_hit.bodyIdB = collector.bodyIdB;
 					collector.addHit(_castRayVsTriangleMesh_hit);
+					earlyOut = collector.earlyOutFraction;
+					maxT = earlyOut < 1 ? earlyOut * length : length;
 				}
 			}
 		} else {
 			const leftOffset = nodeLeft(nodeOffset);
 			const rightOffset = nodeRight(buffer, nodeOffset);
-			nodeGetBounds(_castRayVsTriangleMesh_leftBounds, buffer, leftOffset);
-			nodeGetBounds(_castRayVsTriangleMesh_rightBounds, buffer, rightOffset);
-			const leftDist = rayDistanceToBox3(localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, _castRayVsTriangleMesh_leftBounds[0], _castRayVsTriangleMesh_leftBounds[1], _castRayVsTriangleMesh_leftBounds[2], _castRayVsTriangleMesh_leftBounds[3], _castRayVsTriangleMesh_leftBounds[4], _castRayVsTriangleMesh_leftBounds[5]);
-			const rightDist = rayDistanceToBox3(localOriginX, localOriginY, localOriginZ, localDirX, localDirY, localDirZ, length, _castRayVsTriangleMesh_rightBounds[0], _castRayVsTriangleMesh_rightBounds[1], _castRayVsTriangleMesh_rightBounds[2], _castRayVsTriangleMesh_rightBounds[3], _castRayVsTriangleMesh_rightBounds[4], _castRayVsTriangleMesh_rightBounds[5]);
+			const leftDist = rayFractionToBox3(localOriginX, localOriginY, localOriginZ, invDispX, invDispY, invDispZ, buffer[leftOffset + 0], buffer[leftOffset + 1], buffer[leftOffset + 2], buffer[leftOffset + 3], buffer[leftOffset + 4], buffer[leftOffset + 5]);
+			const rightDist = rayFractionToBox3(localOriginX, localOriginY, localOriginZ, invDispX, invDispY, invDispZ, buffer[rightOffset + 0], buffer[rightOffset + 1], buffer[rightOffset + 2], buffer[rightOffset + 3], buffer[rightOffset + 4], buffer[rightOffset + 5]);
 			if (leftDist <= rightDist) {
-				if (rightDist < collector.earlyOutFraction) {
+				if (rightDist < earlyOut) {
 					_castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
 					_castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
 					stackSize++;
 				}
-				if (leftDist < collector.earlyOutFraction) {
+				if (leftDist < earlyOut) {
 					_castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
 					_castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
 					stackSize++;
 				}
 			} else {
-				if (leftDist < collector.earlyOutFraction) {
+				if (leftDist < earlyOut) {
 					_castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
 					_castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
 					stackSize++;
 				}
-				if (rightDist < collector.earlyOutFraction) {
+				if (rightDist < earlyOut) {
 					_castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
 					_castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
 					stackSize++;
@@ -29435,8 +29527,38 @@ function collidePointVsTriangleMesh(collector, _settings, pointX, pointY, pointZ
 		collector.addHit(_collidePointHit);
 	}
 }
+/**
+* bring a box from the mesh's scaled local space into the unscaled space its bvh is built in.
+* a negative scale component swaps that axis' min and max, so they are re-ordered.
+*/
+function divideBoxByScale(box, scaleX, scaleY, scaleZ) {
+	if (scaleX === 1 && scaleY === 1 && scaleZ === 1) return;
+	const x0 = box[0] / scaleX;
+	const x1 = box[3] / scaleX;
+	box[0] = x0 < x1 ? x0 : x1;
+	box[3] = x0 < x1 ? x1 : x0;
+	const y0 = box[1] / scaleY;
+	const y1 = box[4] / scaleY;
+	box[1] = y0 < y1 ? y0 : y1;
+	box[4] = y0 < y1 ? y1 : y0;
+	const z0 = box[2] / scaleZ;
+	const z1 = box[5] / scaleZ;
+	box[2] = z0 < z1 ? z0 : z1;
+	box[5] = z0 < z1 ? z1 : z0;
+}
+/** transform a point by an affine matrix (rotation, scale, translation): no projective divide */
+function transformPointAffine(out, m, p) {
+	const x = p[0];
+	const y = p[1];
+	const z = p[2];
+	out[0] = m[0] * x + m[4] * y + m[8] * z + m[12];
+	out[1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+	out[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+	return out;
+}
 const _castConvexVsTriangleMesh_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 const _castConvexVsTriangleMesh_displacementInB = /* @__PURE__ */ create$47();
+const _castConvexVsTriangleMesh_walkDisplacement = /* @__PURE__ */ create$47();
 const _castConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createSupport();
 const _castConvexVsTriangleMesh_sweptAABB = /* @__PURE__ */ create$38();
 const _castConvexVsTriangleMesh_gjkResult = /* @__PURE__ */ createGjkCastShapeResult();
@@ -29493,6 +29615,8 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const castTransform = multiply(_castConvexVsTriangleMesh_AtoB, _castConvexVsTriangleMesh_invBtoWorld, transformA);
 	multiply3x3Vec(_castConvexVsTriangleMesh_displacementInB, _castConvexVsTriangleMesh_invBtoWorld, _castConvexVsTriangleMesh_displacementA);
 	transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, castTransform);
+	divideBoxByScale(_castConvexVsTriangleMesh_sweptAABB, scaleBX, scaleBY, scaleBZ);
+	set$7(_castConvexVsTriangleMesh_walkDisplacement, _castConvexVsTriangleMesh_displacementInB[0] / scaleBX, _castConvexVsTriangleMesh_displacementInB[1] / scaleBY, _castConvexVsTriangleMesh_displacementInB[2] / scaleBZ);
 	const supportMode = settings.useShrunkenShapeAndConvexRadius ? 1 : 2;
 	const supportA = _castConvexVsTriangleMesh_supportA;
 	setShapeSupport(supportA, shapeA, supportMode, _castConvexVsTriangleMesh_scaleA);
@@ -29501,11 +29625,11 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const rayOriginX = (_castConvexVsTriangleMesh_sweptAABB[0] + _castConvexVsTriangleMesh_sweptAABB[3]) * .5;
 	const rayOriginY = (_castConvexVsTriangleMesh_sweptAABB[1] + _castConvexVsTriangleMesh_sweptAABB[4]) * .5;
 	const rayOriginZ = (_castConvexVsTriangleMesh_sweptAABB[2] + _castConvexVsTriangleMesh_sweptAABB[5]) * .5;
-	const rayLength = length(_castConvexVsTriangleMesh_displacementInB);
+	const rayLength = length(_castConvexVsTriangleMesh_walkDisplacement);
 	const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
-	const rayDirX = _castConvexVsTriangleMesh_displacementInB[0] * invRayLength;
-	const rayDirY = _castConvexVsTriangleMesh_displacementInB[1] * invRayLength;
-	const rayDirZ = _castConvexVsTriangleMesh_displacementInB[2] * invRayLength;
+	const rayDirX = _castConvexVsTriangleMesh_walkDisplacement[0] * invRayLength;
+	const rayDirY = _castConvexVsTriangleMesh_walkDisplacement[1] * invRayLength;
+	const rayDirZ = _castConvexVsTriangleMesh_walkDisplacement[2] * invRayLength;
 	const halfExtents = _castConvexVsTriangleMesh_halfExtents;
 	halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * .5;
 	halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * .5;
@@ -29661,9 +29785,6 @@ const _collideConvexVsTriangleMesh_transform2To1Quat = /* @__PURE__ */ create$44
 const _collideConvexVsTriangleMesh_triangleA_inA = /* @__PURE__ */ create$47();
 const _collideConvexVsTriangleMesh_triangleB_inA = /* @__PURE__ */ create$47();
 const _collideConvexVsTriangleMesh_triangleC_inA = /* @__PURE__ */ create$47();
-const _collideConvexVsTriangleMesh_triangleA = /* @__PURE__ */ create$47();
-const _collideConvexVsTriangleMesh_triangleB = /* @__PURE__ */ create$47();
-const _collideConvexVsTriangleMesh_triangleC = /* @__PURE__ */ create$47();
 const _collideConvexVsTriangleMesh_getTriangleVertices_a = /* @__PURE__ */ create$47();
 const _collideConvexVsTriangleMesh_getTriangleVertices_b = /* @__PURE__ */ create$47();
 const _collideConvexVsTriangleMesh_getTriangleVertices_c = /* @__PURE__ */ create$47();
@@ -29718,11 +29839,14 @@ function collideConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 	const aabbMatrix = fromRotationTranslationScale(_collideConvexVsTriangleMesh_aabbTransform, _collideConvexVsTriangleMesh_quatAInB, _collideConvexVsTriangleMesh_posAInB, _collideConvexVsTriangleMesh_scaleA);
 	transformMat4(_collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, shapeA.aabb, aabbMatrix);
 	expandByExtents(_collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance));
+	divideBoxByScale(_collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, scaleBX, scaleBY, scaleBZ);
 	const mat4_AtoWorld = fromRotationTranslation(_collideConvexVsTriangleMesh_mat4_AtoWorld, _collideConvexVsTriangleMesh_quatA, _collideConvexVsTriangleMesh_posA);
-	const mat4_BtoA = fromRotationTranslation(_collideConvexVsTriangleMesh_mat4_BtoA, _collideConvexVsTriangleMesh_transform2To1Quat, _collideConvexVsTriangleMesh_transform2To1Pos);
+	const mat4_BtoA = fromRotationTranslationScale(_collideConvexVsTriangleMesh_mat4_BtoA, _collideConvexVsTriangleMesh_transform2To1Quat, _collideConvexVsTriangleMesh_transform2To1Pos, _collideConvexVsTriangleMesh_scaleB);
 	const scaleSign = isScaleInsideOut$1(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 	const supportA = _collideConvexVsTriangleMesh_supportA;
 	setShapeSupport(supportA, shapeA, 1, _collideConvexVsTriangleMesh_scaleA);
+	const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
+	let supportAWithRadiusFilled = false;
 	let stackSize = 0;
 	center(_collideConvexVsTriangleMesh_queryCenter, _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2);
 	_collideConvexVsTriangleMesh_stackNodes[stackSize++] = 0;
@@ -29735,12 +29859,9 @@ function collideConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 			for (let i = 0; i < triCount; i++) {
 				const triangleIndex = triStart + i;
 				getTriangleVertices(_collideConvexVsTriangleMesh_getTriangleVertices_a, _collideConvexVsTriangleMesh_getTriangleVertices_b, _collideConvexVsTriangleMesh_getTriangleVertices_c, meshData, triangleIndex);
-				const a = mul(_collideConvexVsTriangleMesh_triangleA, _collideConvexVsTriangleMesh_getTriangleVertices_a, _collideConvexVsTriangleMesh_scaleB);
-				const b = mul(_collideConvexVsTriangleMesh_triangleB, _collideConvexVsTriangleMesh_getTriangleVertices_b, _collideConvexVsTriangleMesh_scaleB);
-				const c = mul(_collideConvexVsTriangleMesh_triangleC, _collideConvexVsTriangleMesh_getTriangleVertices_c, _collideConvexVsTriangleMesh_scaleB);
-				transformMat4$1(_collideConvexVsTriangleMesh_triangleA_inA, a, mat4_BtoA);
-				transformMat4$1(_collideConvexVsTriangleMesh_triangleB_inA, b, mat4_BtoA);
-				transformMat4$1(_collideConvexVsTriangleMesh_triangleC_inA, c, mat4_BtoA);
+				transformPointAffine(_collideConvexVsTriangleMesh_triangleA_inA, mat4_BtoA, _collideConvexVsTriangleMesh_getTriangleVertices_a);
+				transformPointAffine(_collideConvexVsTriangleMesh_triangleB_inA, mat4_BtoA, _collideConvexVsTriangleMesh_getTriangleVertices_b);
+				transformPointAffine(_collideConvexVsTriangleMesh_triangleC_inA, mat4_BtoA, _collideConvexVsTriangleMesh_getTriangleVertices_c);
 				const triangleAABB = _collideConvexVsTriangleMesh_triangleAABB;
 				bounds$1(triangleAABB, _collideConvexVsTriangleMesh_triangleA_inA, _collideConvexVsTriangleMesh_triangleB_inA, _collideConvexVsTriangleMesh_triangleC_inA);
 				if (!intersectsBox3(triangleAABB, boundsOf1)) continue;
@@ -29758,8 +29879,10 @@ function collideConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 				if (_collideConvexVsTriangleMesh_penetrationDepth.status === 0) continue;
 				if (_collideConvexVsTriangleMesh_penetrationDepth.status === 2) {
 					maxSeparationDistance = Math.min(maxSeparationDistance, 1);
-					const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
-					setShapeSupport(supportAWithRadius, shapeA, 0, _collideConvexVsTriangleMesh_scaleA);
+					if (!supportAWithRadiusFilled) {
+						setShapeSupport(supportAWithRadius, shapeA, 0, _collideConvexVsTriangleMesh_scaleA);
+						supportAWithRadiusFilled = true;
+					}
 					supportAWithRadius.addRadius = maxSeparationDistance;
 					if (!penetrationDepthStepEPA(_collideConvexVsTriangleMesh_penetrationDepth, supportAWithRadius, _collideConvexVsTriangleMesh_triangleSupport, settings.penetrationTolerance, _collideConvexVsTriangleMesh_simplex)) continue;
 				}
@@ -29877,12 +30000,12 @@ function collideSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 	const scaleSign = isScaleInsideOut$1(scaleB) ? -1 : 1;
 	const sphereBounds = _collideSphereVsTriangleMesh_boundsOfSphere;
 	const expandedRadius = sphereRadius + settings.maxSeparationDistance;
-	sphereBounds[0] = sphereCenterInMesh[0] - expandedRadius;
-	sphereBounds[1] = sphereCenterInMesh[1] - expandedRadius;
-	sphereBounds[2] = sphereCenterInMesh[2] - expandedRadius;
-	sphereBounds[3] = sphereCenterInMesh[0] + expandedRadius;
-	sphereBounds[4] = sphereCenterInMesh[1] + expandedRadius;
-	sphereBounds[5] = sphereCenterInMesh[2] + expandedRadius;
+	sphereBounds[0] = sphereCenterInMesh[0] / scaleBX - expandedRadius / Math.abs(scaleBX);
+	sphereBounds[1] = sphereCenterInMesh[1] / scaleBY - expandedRadius / Math.abs(scaleBY);
+	sphereBounds[2] = sphereCenterInMesh[2] / scaleBZ - expandedRadius / Math.abs(scaleBZ);
+	sphereBounds[3] = sphereCenterInMesh[0] / scaleBX + expandedRadius / Math.abs(scaleBX);
+	sphereBounds[4] = sphereCenterInMesh[1] / scaleBY + expandedRadius / Math.abs(scaleBY);
+	sphereBounds[5] = sphereCenterInMesh[2] / scaleBZ + expandedRadius / Math.abs(scaleBZ);
 	let stackSize = 0;
 	copy$9(_collideSphereVsTriangleMesh_queryCenter, sphereCenterInMesh);
 	_collideSphereVsTriangleMesh_stackNodes[stackSize++] = 0;
@@ -29988,6 +30111,7 @@ function collideSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 const collideTriangleMeshVsSphere = /* @__PURE__ */ reversedCollideShapeVsShape(collideSphereVsTriangleMesh);
 const _castSphereVsTriangleMesh_start = /* @__PURE__ */ create$47();
 const _castSphereVsTriangleMesh_direction = /* @__PURE__ */ create$47();
+const _castSphereVsTriangleMesh_walkDisplacement = /* @__PURE__ */ create$47();
 const _castSphereVsTriangleMesh_posB = /* @__PURE__ */ create$47();
 const _castSphereVsTriangleMesh_quatB = /* @__PURE__ */ create$44();
 const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ create$47();
@@ -30098,14 +30222,18 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const start = _castSphereVsTriangleMesh_start;
 	const direction = _castSphereVsTriangleMesh_direction;
 	const scaleSign = isScaleInsideOut$1(scaleB) ? -1 : 1;
-	const rayOriginX = start[0];
-	const rayOriginY = start[1];
-	const rayOriginZ = start[2];
-	const rayLength = length(direction);
+	const rayOriginX = start[0] / scaleBX;
+	const rayOriginY = start[1] / scaleBY;
+	const rayOriginZ = start[2] / scaleBZ;
+	const walkDisplacement = set$7(_castSphereVsTriangleMesh_walkDisplacement, direction[0] / scaleBX, direction[1] / scaleBY, direction[2] / scaleBZ);
+	const rayLength = length(walkDisplacement);
 	const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
-	const rayDirX = direction[0] * invRayLength;
-	const rayDirY = direction[1] * invRayLength;
-	const rayDirZ = direction[2] * invRayLength;
+	const rayDirX = walkDisplacement[0] * invRayLength;
+	const rayDirY = walkDisplacement[1] * invRayLength;
+	const rayDirZ = walkDisplacement[2] * invRayLength;
+	const walkRadiusX = sphereRadius / Math.abs(scaleBX);
+	const walkRadiusY = sphereRadius / Math.abs(scaleBY);
+	const walkRadiusZ = sphereRadius / Math.abs(scaleBZ);
 	let stackSize = 0;
 	_castSphereVsTriangleMesh_stackNodes[stackSize] = 0;
 	_castSphereVsTriangleMesh_stackDist[stackSize] = 0;
@@ -30207,19 +30335,19 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 		} else {
 			const leftOffset = nodeLeft(nodeOffset);
 			const rightOffset = nodeRight(buffer, nodeOffset);
-			expandedBounds[0] = buffer[leftOffset + 0] - sphereRadius;
-			expandedBounds[1] = buffer[leftOffset + 1] - sphereRadius;
-			expandedBounds[2] = buffer[leftOffset + 2] - sphereRadius;
-			expandedBounds[3] = buffer[leftOffset + 3] + sphereRadius;
-			expandedBounds[4] = buffer[leftOffset + 4] + sphereRadius;
-			expandedBounds[5] = buffer[leftOffset + 5] + sphereRadius;
+			expandedBounds[0] = buffer[leftOffset + 0] - walkRadiusX;
+			expandedBounds[1] = buffer[leftOffset + 1] - walkRadiusY;
+			expandedBounds[2] = buffer[leftOffset + 2] - walkRadiusZ;
+			expandedBounds[3] = buffer[leftOffset + 3] + walkRadiusX;
+			expandedBounds[4] = buffer[leftOffset + 4] + walkRadiusY;
+			expandedBounds[5] = buffer[leftOffset + 5] + walkRadiusZ;
 			const leftDist = rayDistanceToBox3(rayOriginX, rayOriginY, rayOriginZ, rayDirX, rayDirY, rayDirZ, rayLength, expandedBounds[0], expandedBounds[1], expandedBounds[2], expandedBounds[3], expandedBounds[4], expandedBounds[5]);
-			expandedBounds[0] = buffer[rightOffset + 0] - sphereRadius;
-			expandedBounds[1] = buffer[rightOffset + 1] - sphereRadius;
-			expandedBounds[2] = buffer[rightOffset + 2] - sphereRadius;
-			expandedBounds[3] = buffer[rightOffset + 3] + sphereRadius;
-			expandedBounds[4] = buffer[rightOffset + 4] + sphereRadius;
-			expandedBounds[5] = buffer[rightOffset + 5] + sphereRadius;
+			expandedBounds[0] = buffer[rightOffset + 0] - walkRadiusX;
+			expandedBounds[1] = buffer[rightOffset + 1] - walkRadiusY;
+			expandedBounds[2] = buffer[rightOffset + 2] - walkRadiusZ;
+			expandedBounds[3] = buffer[rightOffset + 3] + walkRadiusX;
+			expandedBounds[4] = buffer[rightOffset + 4] + walkRadiusY;
+			expandedBounds[5] = buffer[rightOffset + 5] + walkRadiusZ;
 			const rightDist = rayDistanceToBox3(rayOriginX, rayOriginY, rayOriginZ, rayDirX, rayDirY, rayDirZ, rayLength, expandedBounds[0], expandedBounds[1], expandedBounds[2], expandedBounds[3], expandedBounds[4], expandedBounds[5]);
 			if (leftDist <= rightDist) {
 				if (rightDist < collector.earlyOutFraction) {
@@ -30351,7 +30479,7 @@ function calculateConstraintProperties(part, bodyA, bodyB, invInertiaA, invInert
 		part.invI2_Axis[1] = 0;
 		part.invI2_Axis[2] = 0;
 	}
-	if (invEffectiveMass === 0) deactivate(part);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
 		part.bias = bias;
@@ -30504,10 +30632,12 @@ const _addContactConstraint_relativePointOnA = /* @__PURE__ */ create$47();
 const _addContactConstraint_relativePointOnB = /* @__PURE__ */ create$47();
 const _addContactConstraint_rA = /* @__PURE__ */ create$47();
 const _addContactConstraint_rB = /* @__PURE__ */ create$47();
-const _addContactConstraint_invInertiaA = /* @__PURE__ */ create$41();
-const _addContactConstraint_invInertiaB = /* @__PURE__ */ create$41();
 const _addContactConstraint_rotA = /* @__PURE__ */ create$41();
 const _addContactConstraint_rotB = /* @__PURE__ */ create$41();
+const _addContactConstraint_scaledInvInertiaA = /* @__PURE__ */ create$41();
+const _addContactConstraint_scaledInvInertiaB = /* @__PURE__ */ create$41();
+let _invInertiaA = _addContactConstraint_scaledInvInertiaA;
+let _invInertiaB = _addContactConstraint_scaledInvInertiaB;
 const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
 const _addContactConstraint_midpoints = [
 	/* @__PURE__ */ create$47(),
@@ -30568,17 +30698,116 @@ function calculateFrictionConstraintProperties(constraint, bodyA, bodyB, midpoin
 	rB[2] = fpz - bodyB.centerOfMassPosition[2];
 	const frictionBias1 = /* @__PURE__ */ calculateFrictionBias(settings, rA, constraint.tangent1);
 	const frictionBias2 = /* @__PURE__ */ calculateFrictionBias(settings, rA, constraint.tangent2);
-	calculateConstraintProperties$3(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
-	calculateConstraintProperties$3(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
+	calculateConstraintProperties$3(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
+	calculateConstraintProperties$3(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
 	if (N > 1) {
 		const angBias = settings.relativeAngularSurfaceVelocity[0] * nx + settings.relativeAngularSurfaceVelocity[1] * ny + settings.relativeAngularSurfaceVelocity[2] * nz;
-		calculateConstraintProperties(constraint.angularFrictionConstraint, bodyA, bodyB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, constraint.normal, angBias);
+		calculateConstraintProperties(constraint.angularFrictionConstraint, bodyA, bodyB, _invInertiaA, _invInertiaB, constraint.normal, angBias);
 	} else deactivate(constraint.angularFrictionConstraint);
 }
 /**
-* add a contact constraint from a new manifold
+* allocate the next constraint slot and fill the manifold-level fields shared by the narrowphase and
+* cache-hit paths: body and sub-shape ids, sort key, normal and tangent basis, combined materials and
+* scaled inverse masses. binds _invInertiaA/B for the per-point and friction setup that follows.
 */
-function addContactConstraint(contactConstraints, contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold, settings, contactListener, deltaTime) {
+function beginContactConstraint(contactConstraints, bodyA, bodyB, subShapeIdA, subShapeIdB, contactIndex, worldSpaceNormal, contactSettings, stepStamp) {
+	if (contactConstraints.count >= contactConstraints.pool.length) contactConstraints.pool.push(createContactConstraint());
+	const constraint = contactConstraints.pool[contactConstraints.count];
+	contactConstraints.count++;
+	constraint.bodyIndexA = bodyA.index;
+	constraint.bodyIndexB = bodyB.index;
+	constraint.subShapeIdA = subShapeIdA;
+	constraint.subShapeIdB = subShapeIdB;
+	constraint.contactIndex = contactIndex;
+	constraint.sortKey = /* @__PURE__ */ computeContactSortKey(bodyA.index, bodyB.index, subShapeIdA, subShapeIdB);
+	copy$9(constraint.normal, worldSpaceNormal);
+	const normalX = constraint.normal[0];
+	const normalY = constraint.normal[1];
+	const normalZ = constraint.normal[2];
+	if (Math.abs(normalX) > Math.abs(normalY)) {
+		const tangentLen = Math.sqrt(normalX * normalX + normalZ * normalZ);
+		constraint.tangent1[0] = normalZ / tangentLen;
+		constraint.tangent1[1] = 0;
+		constraint.tangent1[2] = -normalX / tangentLen;
+	} else {
+		const tangentLen = Math.sqrt(normalY * normalY + normalZ * normalZ);
+		constraint.tangent1[0] = 0;
+		constraint.tangent1[1] = normalZ / tangentLen;
+		constraint.tangent1[2] = -normalY / tangentLen;
+	}
+	cross(constraint.tangent2, constraint.normal, constraint.tangent1);
+	constraint.friction = contactSettings.combinedFriction;
+	constraint.restitution = contactSettings.combinedRestitution;
+	constraint.invMassA = bodyA.motionProperties.invMass * contactSettings.invMassScale1;
+	constraint.invMassB = bodyB.motionProperties.invMass * contactSettings.invMassScale2;
+	constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
+	constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
+	if (bodyA.motionType === 2) {
+		const worldInverseInertiaA = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaA, bodyA.motionProperties, bodyA.quaternion, stepStamp);
+		const scale1 = contactSettings.invInertiaScale1;
+		if (scale1 === 1) _invInertiaA = worldInverseInertiaA;
+		else {
+			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaA[j] = worldInverseInertiaA[j] * scale1;
+			_invInertiaA = _addContactConstraint_scaledInvInertiaA;
+		}
+	}
+	if (bodyB.motionType === 2) {
+		const worldInverseInertiaB = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaB, bodyB.motionProperties, bodyB.quaternion, stepStamp);
+		const scale2 = contactSettings.invInertiaScale2;
+		if (scale2 === 1) _invInertiaB = worldInverseInertiaB;
+		else {
+			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaB[j] = worldInverseInertiaB[j] * scale2;
+			_invInertiaB = _addContactConstraint_scaledInvInertiaB;
+		}
+	}
+	constraint.numContactPoints = 0;
+	return constraint;
+}
+/**
+* finish contact point i of a constraint whose world positions, local positions and warm start
+* lambda are already set: friction midpoint, moment arms, restitution / speculative velocity bias
+* and the non-penetration constraint part.
+*/
+function setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime) {
+	const cp = constraint.contactPoints[i];
+	const midpoint = _addContactConstraint_midpoints[i];
+	const rA = _addContactConstraint_rA;
+	const rB = _addContactConstraint_rB;
+	lerp(midpoint, cp.positionA, cp.positionB, .5);
+	subtract$1(rA, midpoint, bodyA.centerOfMassPosition);
+	subtract$1(rB, midpoint, bodyB.centerOfMassPosition);
+	const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, cp.positionA, cp.positionB, constraint.normal, rA, rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
+	calculateConstraintProperties$3(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.normal, normalVelocityBias);
+}
+/**
+* manifold-level friction: 2 linear parts + 1 angular part anchored at the average "friction point",
+* with the previous step's lambdas transferred wholesale (zero for a new contact). the transferred
+* lambdas are mirrored into the write-side cache so they're a no-op if the constraint never runs
+* (e.g. fully kinematic pair).
+*/
+function setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prevFrictionLambda1, prevFrictionLambda2, prevAngularFrictionLambda, curr) {
+	if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
+		constraint.frictionConstraint1.totalLambda = prevFrictionLambda1;
+		constraint.frictionConstraint2.totalLambda = prevFrictionLambda2;
+		constraint.angularFrictionConstraint.totalLambda = prevAngularFrictionLambda;
+		calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
+		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+	} else {
+		deactivate$3(constraint.frictionConstraint1);
+		deactivate$3(constraint.frictionConstraint2);
+		deactivate(constraint.angularFrictionConstraint);
+		curr.frictionLambda1 = 0;
+		curr.frictionLambda2 = 0;
+		curr.angularFrictionLambda = 0;
+	}
+}
+/**
+* add a contact constraint from a new manifold.
+* stepStamp keys the per-step world inverse inertia memo (bodies.stepStamp).
+*/
+function addContactConstraint(contactConstraints, contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold, settings, contactListener, deltaTime, stepStamp) {
 	if (bodyA.id > bodyB.id) {
 		const temp = bodyA;
 		bodyA = bodyB;
@@ -30601,48 +30830,7 @@ function addContactConstraint(contactConstraints, contactsState, pairs, pairReco
 		contactListener?.onContactPersisted?.(bodyA, bodyB, contactManifold, contactSettings);
 	} else contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
 	if (!contactSettings.isSensor && (bodyA.motionType === 2 && bodyA.motionProperties.invMass !== 0 || bodyB.motionType === 2 && bodyB.motionProperties.invMass !== 0)) {
-		if (contactConstraints.count >= contactConstraints.pool.length) contactConstraints.pool.push(createContactConstraint());
-		const constraint = contactConstraints.pool[contactConstraints.count];
-		contactConstraints.count++;
-		constraint.bodyIndexA = bodyA.index;
-		constraint.bodyIndexB = bodyB.index;
-		constraint.subShapeIdA = contactManifold.subShapeIdA;
-		constraint.subShapeIdB = contactManifold.subShapeIdB;
-		constraint.contactIndex = contact.contactIndex;
-		constraint.sortKey = /* @__PURE__ */ computeContactSortKey(bodyA.index, bodyB.index, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
-		copy$9(constraint.normal, contactManifold.worldSpaceNormal);
-		const normalX = constraint.normal[0];
-		const normalY = constraint.normal[1];
-		const normalZ = constraint.normal[2];
-		if (Math.abs(normalX) > Math.abs(normalY)) {
-			const tangentLen = Math.sqrt(normalX * normalX + normalZ * normalZ);
-			constraint.tangent1[0] = normalZ / tangentLen;
-			constraint.tangent1[1] = 0;
-			constraint.tangent1[2] = -normalX / tangentLen;
-		} else {
-			const tangentLen = Math.sqrt(normalY * normalY + normalZ * normalZ);
-			constraint.tangent1[0] = 0;
-			constraint.tangent1[1] = normalZ / tangentLen;
-			constraint.tangent1[2] = -normalY / tangentLen;
-		}
-		cross(constraint.tangent2, constraint.normal, constraint.tangent1);
-		constraint.friction = contactSettings.combinedFriction;
-		constraint.restitution = contactSettings.combinedRestitution;
-		constraint.invMassA = bodyA.motionProperties.invMass * contactSettings.invMassScale1;
-		constraint.invMassB = bodyB.motionProperties.invMass * contactSettings.invMassScale2;
-		constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
-		constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
-		if (bodyA.motionType === 2) {
-			getInverseInertiaForRotation(_addContactConstraint_invInertiaA, bodyA.motionProperties, rotA);
-			const scale1 = contactSettings.invInertiaScale1;
-			if (scale1 !== 1) for (let j = 0; j < 16; j++) _addContactConstraint_invInertiaA[j] *= scale1;
-		}
-		if (bodyB.motionType === 2) {
-			getInverseInertiaForRotation(_addContactConstraint_invInertiaB, bodyB.motionProperties, rotB);
-			const scale2 = contactSettings.invInertiaScale2;
-			if (scale2 !== 1) for (let j = 0; j < 16; j++) _addContactConstraint_invInertiaB[j] *= scale2;
-		}
-		constraint.numContactPoints = 0;
+		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB, contact.contactIndex, contactManifold.worldSpaceNormal, contactSettings, stepStamp);
 		for (let i = 0; i < contactManifold.numContactPoints; i++) {
 			const cp = constraint.contactPoints[constraint.numContactPoints];
 			constraint.numContactPoints++;
@@ -30670,42 +30858,14 @@ function addContactConstraint(contactConstraints, contactsState, pairs, pairReco
 				}
 			}
 			if (!lambdaSet) cp.normalConstraint.totalLambda = 0;
-			const smoothedNormal = constraint.normal;
-			const midpoint = _addContactConstraint_midpoints[i];
-			const rA = _addContactConstraint_rA;
-			const rB = _addContactConstraint_rB;
-			lerp(midpoint, cp.positionA, cp.positionB, .5);
-			subtract$1(rA, midpoint, bodyA.centerOfMassPosition);
-			subtract$1(rB, midpoint, bodyB.centerOfMassPosition);
-			const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, cp.positionA, cp.positionB, smoothedNormal, _addContactConstraint_rA, _addContactConstraint_rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
-			calculateConstraintProperties$3(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _addContactConstraint_invInertiaA, _addContactConstraint_invInertiaB, _addContactConstraint_rA, _addContactConstraint_rB, smoothedNormal, normalVelocityBias);
+			setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
 			const cachedPoint = curr.contactPoints[i];
 			copy$9(cachedPoint.position1, cp.localPositionA);
 			copy$9(cachedPoint.position2, cp.localPositionB);
 			cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
 		}
-		if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
-			if (existingContact) {
-				constraint.frictionConstraint1.totalLambda = prev.frictionLambda1;
-				constraint.frictionConstraint2.totalLambda = prev.frictionLambda2;
-				constraint.angularFrictionConstraint.totalLambda = prev.angularFrictionLambda;
-			} else {
-				constraint.frictionConstraint1.totalLambda = 0;
-				constraint.frictionConstraint2.totalLambda = 0;
-				constraint.angularFrictionConstraint.totalLambda = 0;
-			}
-			calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
-			curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-			curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-			curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
-		} else {
-			deactivate$3(constraint.frictionConstraint1);
-			deactivate$3(constraint.frictionConstraint2);
-			deactivate(constraint.angularFrictionConstraint);
-			curr.frictionLambda1 = 0;
-			curr.frictionLambda2 = 0;
-			curr.angularFrictionLambda = 0;
-		}
+		if (existingContact) setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
+		else setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, 0, 0, 0, curr);
 		return true;
 	}
 	for (let i = 0; i < contactManifold.numContactPoints; i++) {
@@ -30723,6 +30883,109 @@ function addContactConstraint(contactConstraints, contactsState, pairs, pairReco
 		multiply3x3TransposedVec(cachedPoint.position2, rotB, scratchB);
 		cachedPoint.normalLambda = 0;
 	}
+	curr.frictionLambda1 = 0;
+	curr.frictionLambda2 = 0;
+	curr.angularFrictionLambda = 0;
+	return false;
+}
+const _fromCache_worldSpaceNormal = /* @__PURE__ */ create$47();
+const _fromCache_positionsA = [
+	create$47(),
+	create$47(),
+	create$47(),
+	create$47()
+];
+const _fromCache_positionsB = [
+	create$47(),
+	create$47(),
+	create$47(),
+	create$47()
+];
+const _fromCache_diffAB = /* @__PURE__ */ create$47();
+const _fromCache_listenerManifold = /* @__PURE__ */ createContactManifold();
+/**
+* add a contact constraint for a contact whose body pair hit the body-pair cache: the previous
+* step's cached manifold is carried forward verbatim and its body-local points and lambdas feed
+* constraint setup directly. no narrowphase, no world-to-local round trip, no point matching. a
+* ContactManifold is only reconstructed when a listener wants onContactPersisted.
+* jolt: ContactConstraintManager::GetContactsFromCache.
+*
+* bodyA / bodyB must be in the contact's stored (id-sorted) order.
+*/
+function addContactConstraintFromCache(contactConstraints, contactsState, bodyA, bodyB, contact, settings, contactListener, deltaTime, stepStamp) {
+	contact.lastProcessedFrame = contactsState.frameStamp;
+	const prev = getReadManifold(contact, contactsState);
+	const curr = getWriteManifold(contact, contactsState);
+	const numContactPoints = prev.numContactPoints;
+	copy$9(curr.contactNormal, prev.contactNormal);
+	curr.numContactPoints = numContactPoints;
+	for (let i = 0; i < numContactPoints; i++) {
+		const prevPoint = prev.contactPoints[i];
+		const currPoint = curr.contactPoints[i];
+		copy$9(currPoint.position1, prevPoint.position1);
+		copy$9(currPoint.position2, prevPoint.position2);
+		currPoint.normalLambda = prevPoint.normalLambda;
+	}
+	curr.frictionLambda1 = prev.frictionLambda1;
+	curr.frictionLambda2 = prev.frictionLambda2;
+	curr.angularFrictionLambda = prev.angularFrictionLambda;
+	curr.flags |= 1;
+	const rotA = fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+	const rotB = fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
+	const worldSpaceNormal = _fromCache_worldSpaceNormal;
+	multiply3x3Vec(worldSpaceNormal, rotB, prev.contactNormal);
+	normalize$2(worldSpaceNormal, worldSpaceNormal);
+	const positionsA = _fromCache_positionsA;
+	const positionsB = _fromCache_positionsB;
+	for (let i = 0; i < numContactPoints; i++) {
+		const prevPoint = prev.contactPoints[i];
+		multiply3x3Vec(positionsA[i], rotA, prevPoint.position1);
+		add$3(positionsA[i], positionsA[i], bodyA.centerOfMassPosition);
+		multiply3x3Vec(positionsB[i], rotB, prevPoint.position2);
+		add$3(positionsB[i], positionsB[i], bodyB.centerOfMassPosition);
+	}
+	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
+	if (contactListener?.onContactPersisted) {
+		const listenerManifold = _fromCache_listenerManifold;
+		resetContactManifold(listenerManifold);
+		copy$9(listenerManifold.worldSpaceNormal, worldSpaceNormal);
+		copy$9(listenerManifold.baseOffset, bodyA.centerOfMassPosition);
+		let maxPenetration = -Number.MAX_VALUE;
+		for (let i = 0; i < numContactPoints; i++) {
+			const o = i * 3;
+			listenerManifold.relativeContactPointsOnA[o] = positionsA[i][0] - bodyA.centerOfMassPosition[0];
+			listenerManifold.relativeContactPointsOnA[o + 1] = positionsA[i][1] - bodyA.centerOfMassPosition[1];
+			listenerManifold.relativeContactPointsOnA[o + 2] = positionsA[i][2] - bodyA.centerOfMassPosition[2];
+			listenerManifold.relativeContactPointsOnB[o] = positionsB[i][0] - bodyA.centerOfMassPosition[0];
+			listenerManifold.relativeContactPointsOnB[o + 1] = positionsB[i][1] - bodyA.centerOfMassPosition[1];
+			listenerManifold.relativeContactPointsOnB[o + 2] = positionsB[i][2] - bodyA.centerOfMassPosition[2];
+			sub(_fromCache_diffAB, positionsA[i], positionsB[i]);
+			const d = dot$2(_fromCache_diffAB, worldSpaceNormal);
+			if (d > maxPenetration) maxPenetration = d;
+		}
+		listenerManifold.numContactPoints = numContactPoints;
+		listenerManifold.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
+		listenerManifold.subShapeIdA = contact.subShapeIdA;
+		listenerManifold.subShapeIdB = contact.subShapeIdB;
+		contactListener.onContactPersisted(bodyA, bodyB, listenerManifold, contactSettings);
+	}
+	if (!contactSettings.isSensor && (bodyA.motionType === 2 && bodyA.motionProperties.invMass !== 0 || bodyB.motionType === 2 && bodyB.motionProperties.invMass !== 0)) {
+		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contact.subShapeIdA, contact.subShapeIdB, contact.contactIndex, worldSpaceNormal, contactSettings, stepStamp);
+		for (let i = 0; i < numContactPoints; i++) {
+			const cp = constraint.contactPoints[i];
+			constraint.numContactPoints++;
+			const prevPoint = prev.contactPoints[i];
+			copy$9(cp.positionA, positionsA[i]);
+			copy$9(cp.positionB, positionsB[i]);
+			copy$9(cp.localPositionA, prevPoint.position1);
+			copy$9(cp.localPositionB, prevPoint.position2);
+			cp.normalConstraint.totalLambda = prevPoint.normalLambda;
+			setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
+		}
+		setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
+		return true;
+	}
+	for (let i = 0; i < numContactPoints; i++) curr.contactPoints[i].normalLambda = 0;
 	curr.frictionLambda1 = 0;
 	curr.frictionLambda2 = 0;
 	curr.angularFrictionLambda = 0;
@@ -31021,15 +31284,18 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				_angularVelocityB_1 = 0;
 				_angularVelocityB_2 = 0;
 			}
+			let applied = false;
+			const linearFrictionActive = constraint.frictionConstraint1.effectiveMass !== 0 || constraint.frictionConstraint2.effectiveMass !== 0;
+			const angularFrictionActive = isActive(constraint.angularFrictionConstraint);
 			let sumNormalLambda = 0;
 			let sumDistanceWeightedNormalLambda = 0;
-			for (let i = 0; i < constraint.numContactPoints; i++) {
+			if (linearFrictionActive || angularFrictionActive) for (let i = 0; i < constraint.numContactPoints; i++) {
 				const cp = constraint.contactPoints[i];
 				const ln = cp.normalConstraint.totalLambda;
 				sumNormalLambda += ln;
 				sumDistanceWeightedNormalLambda += cp.distanceToFrictionCenter * ln;
 			}
-			if (constraint.frictionConstraint1.effectiveMass !== 0 || constraint.frictionConstraint2.effectiveMass !== 0) {
+			if (linearFrictionActive) {
 				let lambda1;
 				const part$4 = constraint.frictionConstraint1;
 				let jv;
@@ -31043,7 +31309,7 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				else jv = 0;
 				if (movingA) jv += part$4.r1PlusUxAxis[0] * _angularVelocityA_0 + part$4.r1PlusUxAxis[1] * _angularVelocityA_1 + part$4.r1PlusUxAxis[2] * _angularVelocityA_2;
 				if (movingB) jv -= part$4.r2xAxis[0] * _angularVelocityB_0 + part$4.r2xAxis[1] * _angularVelocityB_1 + part$4.r2xAxis[2] * _angularVelocityB_2;
-				const lambda = part$4.effectiveMass * (jv - getSpringBias(part$4.springPart, part$4.totalLambda));
+				const lambda = part$4.effectiveMass * (jv - part$4.springPart.bias);
 				lambda1 = part$4.totalLambda + lambda;
 				let lambda2;
 				const part$5 = constraint.frictionConstraint2;
@@ -31058,7 +31324,7 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				else jv$1 = 0;
 				if (movingA) jv$1 += part$5.r1PlusUxAxis[0] * _angularVelocityA_0 + part$5.r1PlusUxAxis[1] * _angularVelocityA_1 + part$5.r1PlusUxAxis[2] * _angularVelocityA_2;
 				if (movingB) jv$1 -= part$5.r2xAxis[0] * _angularVelocityB_0 + part$5.r2xAxis[1] * _angularVelocityB_1 + part$5.r2xAxis[2] * _angularVelocityB_2;
-				const lambda$1 = part$5.effectiveMass * (jv$1 - getSpringBias(part$5.springPart, part$5.totalLambda));
+				const lambda$1 = part$5.effectiveMass * (jv$1 - part$5.springPart.bias);
 				lambda2 = part$5.totalLambda + lambda$1;
 				const maxLinearFriction = friction * sumNormalLambda;
 				const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
@@ -31097,7 +31363,7 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 					}
 					_applyLambda__result_6 = true;
 				}
-				anyImpulseApplied = anyImpulseApplied || _applyLambda__result_6;
+				applied = applied || _applyLambda__result_6;
 				let _applyLambda__result_7;
 				const part$7 = constraint.frictionConstraint2;
 				const invMassA$4 = constraint.invMassA;
@@ -31128,9 +31394,9 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 					}
 					_applyLambda__result_7 = true;
 				}
-				anyImpulseApplied = anyImpulseApplied || _applyLambda__result_7;
+				applied = applied || _applyLambda__result_7;
 			}
-			if (isActive(constraint.angularFrictionConstraint)) {
+			if (angularFrictionActive) {
 				const part$8 = constraint.angularFrictionConstraint;
 				let jv$2 = 0;
 				if (movingA) jv$2 += normal[0] * _angularVelocityA_0 + normal[1] * _angularVelocityA_1 + normal[2] * _angularVelocityA_2;
@@ -31157,7 +31423,7 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 					}
 					_applyLambda__result_9 = true;
 				}
-				anyImpulseApplied = anyImpulseApplied || _applyLambda__result_9;
+				applied = applied || _applyLambda__result_9;
 			}
 			for (let i = 0; i < constraint.numContactPoints; i++) {
 				const cp = constraint.contactPoints[i];
@@ -31173,7 +31439,7 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 				else jv$3 = 0;
 				if (movingA) jv$3 += part$10.r1PlusUxAxis[0] * _angularVelocityA_0 + part$10.r1PlusUxAxis[1] * _angularVelocityA_1 + part$10.r1PlusUxAxis[2] * _angularVelocityA_2;
 				if (movingB) jv$3 -= part$10.r2xAxis[0] * _angularVelocityB_0 + part$10.r2xAxis[1] * _angularVelocityB_1 + part$10.r2xAxis[2] * _angularVelocityB_2;
-				const lambda$3 = part$10.effectiveMass * (jv$3 - getSpringBias(part$10.springPart, part$10.totalLambda));
+				const lambda$3 = part$10.effectiveMass * (jv$3 - part$10.springPart.bias);
 				const totalLambda = part$10.totalLambda + lambda$3;
 				const clampedLambda = Math.max(0, totalLambda);
 				let _applyLambda__result_11;
@@ -31206,27 +31472,30 @@ function solveVelocityConstraintsForIsland(contactConstraints, bodies, constrain
 					}
 					_applyLambda__result_11 = true;
 				}
-				anyImpulseApplied = anyImpulseApplied || _applyLambda__result_11;
+				applied = applied || _applyLambda__result_11;
 			}
-			if (isDynamicA) {
-				const mpA = bodyA.motionProperties;
-				const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
-				mpA.linearVelocity[0] = allowedTranslationA & 1 ? _linearVelocityA_0 : 0;
-				mpA.linearVelocity[1] = allowedTranslationA & 2 ? _linearVelocityA_1 : 0;
-				mpA.linearVelocity[2] = allowedTranslationA & 4 ? _linearVelocityA_2 : 0;
-				mpA.angularVelocity[0] = _angularVelocityA_0;
-				mpA.angularVelocity[1] = _angularVelocityA_1;
-				mpA.angularVelocity[2] = _angularVelocityA_2;
-			}
-			if (isDynamicB) {
-				const mpB = bodyB.motionProperties;
-				const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
-				mpB.linearVelocity[0] = allowedTranslationB & 1 ? _linearVelocityB_0 : 0;
-				mpB.linearVelocity[1] = allowedTranslationB & 2 ? _linearVelocityB_1 : 0;
-				mpB.linearVelocity[2] = allowedTranslationB & 4 ? _linearVelocityB_2 : 0;
-				mpB.angularVelocity[0] = _angularVelocityB_0;
-				mpB.angularVelocity[1] = _angularVelocityB_1;
-				mpB.angularVelocity[2] = _angularVelocityB_2;
+			if (applied) {
+				anyImpulseApplied = true;
+				if (isDynamicA) {
+					const mpA = bodyA.motionProperties;
+					const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
+					mpA.linearVelocity[0] = allowedTranslationA & 1 ? _linearVelocityA_0 : 0;
+					mpA.linearVelocity[1] = allowedTranslationA & 2 ? _linearVelocityA_1 : 0;
+					mpA.linearVelocity[2] = allowedTranslationA & 4 ? _linearVelocityA_2 : 0;
+					mpA.angularVelocity[0] = _angularVelocityA_0;
+					mpA.angularVelocity[1] = _angularVelocityA_1;
+					mpA.angularVelocity[2] = _angularVelocityA_2;
+				}
+				if (isDynamicB) {
+					const mpB = bodyB.motionProperties;
+					const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
+					mpB.linearVelocity[0] = allowedTranslationB & 1 ? _linearVelocityB_0 : 0;
+					mpB.linearVelocity[1] = allowedTranslationB & 2 ? _linearVelocityB_1 : 0;
+					mpB.linearVelocity[2] = allowedTranslationB & 4 ? _linearVelocityB_2 : 0;
+					mpB.angularVelocity[0] = _angularVelocityB_0;
+					mpB.angularVelocity[1] = _angularVelocityB_1;
+					mpB.angularVelocity[2] = _angularVelocityB_2;
+				}
 			}
 		}
 	}
@@ -31472,12 +31741,8 @@ const ccdBodyPool = /* @__PURE__ */ pool(createCCDBody);
 function clear(state, bodies) {
 	for (let i = 0; i < state.ccdBodies.length; i++) {
 		const ccdBody = state.ccdBodies[i];
+		bodies.pool[ccdBody.bodyIndex].ccdBodyIndex = -1;
 		ccdBodyPool.release(ccdBody);
-	}
-	for (let i = 0; i < bodies.pool.length; i++) {
-		const body = bodies.pool[i];
-		if (body._pooled) continue;
-		body.ccdBodyIndex = -1;
 	}
 	state.ccdBodies.length = 0;
 }
@@ -31495,7 +31760,6 @@ function computeSweptAABB(out, body, displacement) {
 }
 //#endregion
 //#region src/islands.ts
-const NO_ISLAND = -1;
 /** temporary object for reading constraint iteration overrides */
 const _finalize_constraintOverrides = /* @__PURE__ */ createConstraintIterationOverrides();
 /** init the island builder state */
@@ -31510,13 +31774,16 @@ function init$1() {
 	};
 }
 /** initialize island builder with active bodies (dynamic + kinematic), each active body starts as its own island */
-function prepare(state, bodies, maxContacts) {
-	for (const body of bodies.pool) if (body && !body._pooled) body.islandIndex = NO_ISLAND;
+/**
+* @param numContactConstraints number of contact constraints this step: contactLinks is indexed by
+* contact constraint index, so this bounds both its reset here and the scan in finalize
+*/
+function prepare(state, bodies, numContactConstraints) {
 	const numActiveBodies = bodies.activeBodyCount;
 	state.bodyLinks.length = numActiveBodies;
 	state.bodyIslands.length = numActiveBodies;
-	state.contactLinks.length = maxContacts;
-	for (let i = 0; i < maxContacts; i++) state.contactLinks[i] = INACTIVE_BODY_INDEX;
+	state.contactLinks.length = numContactConstraints;
+	for (let i = 0; i < numContactConstraints; i++) state.contactLinks[i] = INACTIVE_BODY_INDEX;
 	for (let i = 0; i < numActiveBodies; i++) {
 		state.bodyLinks[i] = i;
 		state.bodyIslands[i] = 0;
@@ -31616,15 +31883,27 @@ function finalize(state, bodies, constraintsState, worldSettings) {
 			numIslands++;
 		}
 	}
-	const islands = [];
-	for (let i = 0; i < numIslands; i++) islands.push({
-		index: i,
-		bodyIndices: [],
-		contactIndices: [],
-		constraintIds: [],
-		numVelocitySteps: 0,
-		numPositionSteps: 0
-	});
+	const islands = state.islands;
+	for (let i = 0; i < numIslands; i++) {
+		const island = islands[i];
+		if (island === void 0) islands[i] = {
+			index: i,
+			bodyIndices: [],
+			contactIndices: [],
+			constraintIds: [],
+			numVelocitySteps: 0,
+			numPositionSteps: 0
+		};
+		else {
+			island.index = i;
+			island.bodyIndices.length = 0;
+			island.contactIndices.length = 0;
+			island.constraintIds.length = 0;
+			island.numVelocitySteps = 0;
+			island.numPositionSteps = 0;
+		}
+	}
+	islands.length = numIslands;
 	for (let activeIndex = 0; activeIndex < numActiveBodies; activeIndex++) {
 		const body = bodies.pool[bodies.activeBodyIndices[activeIndex]];
 		const islandIndex = state.bodyIslands[activeIndex];
@@ -31676,19 +31955,26 @@ function finalize(state, bodies, constraintsState, worldSettings) {
 		island.numVelocitySteps = numVelocitySteps;
 		island.numPositionSteps = numPositionSteps;
 	}
-	state.islands = islands;
 }
-/** check if an island can sleep and deactivate all bodies in it if so, called after solving constraints for an island */
-function checkIslandSleep(island, world, deltaTime) {
-	if (!world.settings.sleeping.allowSleeping) return;
+/**
+* finish the step for an island's bodies once the position solver is done: derive each body's
+* position, world aabb and broadphase leaf from its centre of mass, clear its forces, run the sleep
+* test, and put the island to sleep if every dynamic body in it can. one pass per island in place
+* of three over all active bodies (jolt: PhysicsSystem::CheckSleepAndUpdateBounds)
+*/
+function finishIslandStep(island, world, deltaTime) {
+	const allowSleeping = world.settings.sleeping.allowSleeping;
 	const timeBeforeSleep = world.settings.sleeping.timeBeforeSleep;
 	const maxMovement = world.settings.sleeping.pointVelocitySleepThreshold * timeBeforeSleep;
-	let allCanSleep = true;
+	let allCanSleep = allowSleeping;
 	const bodyIndices = island.bodyIndices;
 	for (let i = 0; i < bodyIndices.length; i++) {
 		const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
-		if (body.motionType !== 2) continue;
-		if (!updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep)) allCanSleep = false;
+		updatePositionFromCenterOfMass(world, body);
+		clearForces(body);
+		if (allowSleeping && body.motionType === 2) {
+			if (!updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep)) allCanSleep = false;
+		}
 	}
 	if (allCanSleep) for (let i = 0; i < bodyIndices.length; i++) {
 		const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
@@ -31708,6 +31994,7 @@ function updateWorld(world, listener, timeStep) {
 	clear(world.ccd, world.bodies);
 	world.contactConstraints.count = 0;
 	world.contacts.frameStamp++;
+	world.bodies.stepStamp++;
 	accelerationIntegrationUpdate(world, timeStep);
 	optimize(world.broadphase);
 	findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
@@ -31744,7 +32031,7 @@ function updateWorld(world, listener, timeStep) {
 	}
 	if (timeStep > 0) {
 		wakeBodiesInUserConstraints(world);
-		prepare(world.islands, world.bodies, world.contacts.contacts.length);
+		prepare(world.islands, world.bodies, world.contactConstraints.count);
 		linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
 		linkUserConstraints(world.islands, world.constraints, world.bodies);
 		finalize(world.islands, world.bodies, world.constraints, world.settings);
@@ -31781,14 +32068,11 @@ function updateWorld(world, listener, timeStep) {
 				if (!appliedImpulse) break;
 			}
 		}
-		updateBodyPositions(world);
-		for (const island of world.islands.islands) checkIslandSleep(island, world, timeStep);
-	}
+		for (const island of world.islands.islands) finishIslandStep(island, world, timeStep);
+	} else resetForces(world);
 	flipManifoldCache(world.contacts);
-	resetForces(world);
 }
-const _acceleration_rotation = /* @__PURE__ */ create$41();
-const _acceleration_worldInverseInertia = /* @__PURE__ */ create$41();
+const _acceleration_angularDelta = /* @__PURE__ */ create$47();
 /** integrates forces into velocities (F = ma -> a = F/m -> v += a*dt), applies gravity, damping, and velocity clamping */
 function accelerationIntegrationUpdate(world, timeStep) {
 	for (let i = 0; i < world.bodies.activeBodyCount; i++) {
@@ -31819,14 +32103,12 @@ function accelerationIntegrationUpdate(world, timeStep) {
 		if (!(allowedTranslation & 1)) mp.linearVelocity[0] = 0;
 		if (!(allowedTranslation & 2)) mp.linearVelocity[1] = 0;
 		if (!(allowedTranslation & 4)) mp.linearVelocity[2] = 0;
-		fromQuat(_acceleration_rotation, body.quaternion);
-		const worldInverseInertia = _acceleration_worldInverseInertia;
-		getInverseInertiaForRotation(worldInverseInertia, mp, _acceleration_rotation);
-		const m = worldInverseInertia;
-		const tx = mp.torque[0], ty = mp.torque[1], tz = mp.torque[2];
-		mp.angularVelocity[0] += (m[0] * tx + m[4] * ty + m[8] * tz) * timeStep;
-		mp.angularVelocity[1] += (m[1] * tx + m[5] * ty + m[9] * tz) * timeStep;
-		mp.angularVelocity[2] += (m[2] * tx + m[6] * ty + m[10] * tz) * timeStep;
+		if (mp.torque[0] !== 0 || mp.torque[1] !== 0 || mp.torque[2] !== 0) {
+			const angularDelta = multiplyWorldSpaceInverseInertiaByVector(_acceleration_angularDelta, mp, body.quaternion, mp.torque);
+			mp.angularVelocity[0] += angularDelta[0] * timeStep;
+			mp.angularVelocity[1] += angularDelta[1] * timeStep;
+			mp.angularVelocity[2] += angularDelta[2] * timeStep;
+		}
 		const angularDampingFactor = Math.max(0, 1 - mp.angularDamping * timeStep);
 		mp.angularVelocity[0] *= angularDampingFactor;
 		mp.angularVelocity[1] *= angularDampingFactor;
@@ -31843,14 +32125,6 @@ function accelerationIntegrationUpdate(world, timeStep) {
 		if (!(allowedRotation & 1)) mp.angularVelocity[0] = 0;
 		if (!(allowedRotation & 2)) mp.angularVelocity[1] = 0;
 		if (!(allowedRotation & 4)) mp.angularVelocity[2] = 0;
-	}
-}
-/** updates body positions after physics solvers, derives position (shape origin) from centerOfMassPosition (the primary property modified by physics) */
-function updateBodyPositions(world) {
-	for (let i = 0; i < world.bodies.activeBodyCount; i++) {
-		const body = world.bodies.pool[world.bodies.activeBodyIndices[i]];
-		if (body.sleeping) continue;
-		updatePositionFromCenterOfMass(world, body);
 	}
 }
 /** collide shape collector for narrowphase with manifold reduction */
@@ -31967,7 +32241,7 @@ const narrowphaseWithReductionCollector = {
 			normalize$2(currentManifold.worldSpaceNormal, currentManifold.worldSpaceNormal);
 			if (currentManifold.numContactPoints > 4) pruneContactPoints(currentManifold, currentManifold.worldSpaceNormal);
 			if (currentManifold.numContactPoints > 0) {
-				const created = addContactConstraint(this.world.contactConstraints, this.world.contacts, this.world.pairs, this.pairRecordIndex, this.bodyA, this.bodyB, currentManifold, this.world.settings, this.listener, this.deltaTime);
+				const created = addContactConstraint(this.world.contactConstraints, this.world.contacts, this.world.pairs, this.pairRecordIndex, this.bodyA, this.bodyB, currentManifold, this.world.settings, this.listener, this.deltaTime, this.world.bodies.stepStamp);
 				constraintsCreated = constraintsCreated || created;
 			}
 		}
@@ -32039,7 +32313,7 @@ const narrowphaseWithoutReductionCollector = {
 		}
 		if (tempManifold.numContactPoints > 4) pruneContactPoints(tempManifold, tempManifold.worldSpaceNormal);
 		if (tempManifold.numContactPoints > 0) {
-			const created = addContactConstraint(this.world.contactConstraints, this.world.contacts, this.world.pairs, this.pairRecordIndex, this.bodyA, this.bodyB, tempManifold, this.world.settings, this.listener, this.deltaTime);
+			const created = addContactConstraint(this.world.contactConstraints, this.world.contacts, this.world.pairs, this.pairRecordIndex, this.bodyA, this.bodyB, tempManifold, this.world.settings, this.listener, this.deltaTime, this.world.bodies.stepStamp);
 			this.constraintsCreated = this.constraintsCreated || created;
 		}
 	},
@@ -32057,13 +32331,6 @@ const _bodyPairCache_deltaRot = /* @__PURE__ */ create$44();
 const _bodyPairCache_diff = /* @__PURE__ */ create$47();
 const _bodyPairCache_cachedPos = /* @__PURE__ */ create$47();
 const _bodyPairCache_cachedRot = /* @__PURE__ */ create$44();
-const _bodyPairCache_rotA = /* @__PURE__ */ create$41();
-const _bodyPairCache_rotB = /* @__PURE__ */ create$41();
-const _bodyPairCache_relA = /* @__PURE__ */ create$47();
-const _bodyPairCache_relB = /* @__PURE__ */ create$47();
-const _bodyPairCache_comDelta = /* @__PURE__ */ create$47();
-const _bodyPairCache_diffAB = /* @__PURE__ */ create$47();
-const _bodyPairCache_reconstructedManifold = /* @__PURE__ */ createContactManifold();
 /**
 * Compute the relative pose of body B in body A's local frame.
 * Writes into `outDeltaPos` (B's COM relative to A's COM, rotated into A's frame)
@@ -32074,44 +32341,6 @@ function computeBodyPairDelta(outDeltaPos, outDeltaRot, bodyA, bodyB) {
 	sub(outDeltaPos, bodyB.centerOfMassPosition, bodyA.centerOfMassPosition);
 	transformQuat(outDeltaPos, outDeltaPos, _bodyPairCache_invRA);
 	multiply$1(outDeltaRot, _bodyPairCache_invRA, bodyB.quaternion);
-}
-/**
-* Reconstruct a ContactManifold from a contact's read-side CachedManifold and
-* the current body transforms.
-*
-* Preconditions: physA.id <= physB.id (matches contact's stored ordering).
-* Lambdas will transfer perfectly through addContactConstraint because the
-* reconstructed local positions evaluate back to the cached position1/position2.
-*/
-function reconstructManifoldFromCache(out, contact, physA, physB, cached) {
-	resetContactManifold(out);
-	const rotA = fromQuat(_bodyPairCache_rotA, physA.quaternion);
-	const rotB = fromQuat(_bodyPairCache_rotB, physB.quaternion);
-	multiply3x3Vec(out.worldSpaceNormal, rotB, cached.contactNormal);
-	normalize$2(out.worldSpaceNormal, out.worldSpaceNormal);
-	copy$9(out.baseOffset, physA.centerOfMassPosition);
-	sub(_bodyPairCache_comDelta, physB.centerOfMassPosition, physA.centerOfMassPosition);
-	let maxPenetration = -Number.MAX_VALUE;
-	for (let i = 0; i < cached.numContactPoints; i++) {
-		const cp = cached.contactPoints[i];
-		multiply3x3Vec(_bodyPairCache_relA, rotA, cp.position1);
-		multiply3x3Vec(_bodyPairCache_relB, rotB, cp.position2);
-		add$3(_bodyPairCache_relB, _bodyPairCache_relB, _bodyPairCache_comDelta);
-		const o = i * 3;
-		out.relativeContactPointsOnA[o] = _bodyPairCache_relA[0];
-		out.relativeContactPointsOnA[o + 1] = _bodyPairCache_relA[1];
-		out.relativeContactPointsOnA[o + 2] = _bodyPairCache_relA[2];
-		out.relativeContactPointsOnB[o] = _bodyPairCache_relB[0];
-		out.relativeContactPointsOnB[o + 1] = _bodyPairCache_relB[1];
-		out.relativeContactPointsOnB[o + 2] = _bodyPairCache_relB[2];
-		sub(_bodyPairCache_diffAB, _bodyPairCache_relA, _bodyPairCache_relB);
-		const d = dot$2(_bodyPairCache_diffAB, out.worldSpaceNormal);
-		if (d > maxPenetration) maxPenetration = d;
-	}
-	out.numContactPoints = cached.numContactPoints;
-	out.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
-	out.subShapeIdA = contact.subShapeIdA;
-	out.subShapeIdB = contact.subShapeIdB;
 }
 /**
 * Try to satisfy a body pair from the cached manifold instead of running narrowphase.
@@ -32143,12 +32372,10 @@ function getContactsFromCache(world, listener, deltaTime, currDeltaPos, currDelt
 	while (contactId !== -1) {
 		const contact = world.contacts.contacts[contactId];
 		const nextId = contact.nextInPair;
-		const cachedManifold = getReadManifold(contact, world.contacts);
-		if (cachedManifold.numContactPoints > 0) {
+		if (getReadManifold(contact, world.contacts).numContactPoints > 0) {
 			const orderedA = world.bodies.pool[contact.bodyIndexA];
 			const orderedB = world.bodies.pool[contact.bodyIndexB];
-			reconstructManifoldFromCache(_bodyPairCache_reconstructedManifold, contact, orderedA, orderedB, cachedManifold);
-			addContactConstraint(world.contactConstraints, world.contacts, world.pairs, pairRecordIndex, orderedA, orderedB, _bodyPairCache_reconstructedManifold, world.settings, listener, deltaTime);
+			addContactConstraintFromCache(world.contactConstraints, world.contacts, orderedA, orderedB, contact, world.settings, listener, deltaTime, world.bodies.stepStamp);
 		}
 		contactId = nextId;
 	}
@@ -32258,10 +32485,7 @@ function velocityIntegrationUpdate(world, timeStep) {
 				updatePosition = false;
 			}
 		}
-		if (updatePosition) {
-			add$3(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
-			updatePositionFromCenterOfMass(world, body);
-		}
+		if (updatePosition) add$3(body.centerOfMassPosition, body.centerOfMassPosition, displacement);
 	}
 }
 /**
@@ -32619,7 +32843,8 @@ function init() {
 		freeIndices: [],
 		nextSequence: 0,
 		activeBodyIndices: [],
-		activeBodyCount: 0
+		activeBodyCount: 0,
+		stepStamp: 0
 	};
 }
 //#endregion
