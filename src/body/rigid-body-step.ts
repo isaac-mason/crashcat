@@ -1,43 +1,41 @@
 import type { Vec3 } from 'math';
 import { quat, vec3 } from 'math';
-import * as motionProperties from './motion-properties';
 import type { RigidBody } from './rigid-body';
 
 /**
  * Apply a position step (linear velocity * dt) to the body.
  * Used in position solver for Baumgarte stabilization.
  *
+ * The translation dof mask applies to the step, not to the resulting position: a locked axis stops
+ * the body moving along it, it does not snap the body to zero there.
+ *
  * NOTE: This modifies centerOfMassPosition directly (the primary property for physics).
- * Call updatePosition() at the end of the physics step to sync the derived position property.
+ * `rigidBody.derivePositionAndBounds` syncs the derived position and aabb from it.
  *
  * @param body - Body to update
  * @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
  */
 export function addPositionStep(body: RigidBody, linearVelocityTimesDeltaTime: Vec3): void {
-    // vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, linearVelocityTimesDeltaTime);
-    body.centerOfMassPosition[0] += linearVelocityTimesDeltaTime[0];
-    body.centerOfMassPosition[1] += linearVelocityTimesDeltaTime[1];
-    body.centerOfMassPosition[2] += linearVelocityTimesDeltaTime[2];
-    motionProperties.applyTranslationDOFConstraint(body.centerOfMassPosition, body.motionProperties.allowedDegreesOfFreedom);
+    const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 0b111;
+    if (allowedTranslation & 0b001) body.centerOfMassPosition[0] += linearVelocityTimesDeltaTime[0];
+    if (allowedTranslation & 0b010) body.centerOfMassPosition[1] += linearVelocityTimesDeltaTime[1];
+    if (allowedTranslation & 0b100) body.centerOfMassPosition[2] += linearVelocityTimesDeltaTime[2];
 }
 
 /**
  * Subtract a position step (linear velocity * dt) from the body.
  * Used in position solver for Baumgarte stabilization.
  *
- * NOTE: This modifies centerOfMassPosition directly (the primary property for physics).
- * Call updatePosition() at the end of the physics step to sync the derived position property.
+ * See {@link addPositionStep} on why the dof mask applies to the step and not the position.
  *
  * @param body - Body to update
  * @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
  */
 export function subPositionStep(body: RigidBody, linearVelocityTimesDeltaTime: Vec3): void {
-    // vec3.sub(body.centerOfMassPosition, body.centerOfMassPosition, linearVelocityTimesDeltaTime);
-    body.centerOfMassPosition[0] -= linearVelocityTimesDeltaTime[0];
-    body.centerOfMassPosition[1] -= linearVelocityTimesDeltaTime[1];
-    body.centerOfMassPosition[2] -= linearVelocityTimesDeltaTime[2];
-
-    motionProperties.applyTranslationDOFConstraint(body.centerOfMassPosition, body.motionProperties.allowedDegreesOfFreedom);
+    const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 0b111;
+    if (allowedTranslation & 0b001) body.centerOfMassPosition[0] -= linearVelocityTimesDeltaTime[0];
+    if (allowedTranslation & 0b010) body.centerOfMassPosition[1] -= linearVelocityTimesDeltaTime[1];
+    if (allowedTranslation & 0b100) body.centerOfMassPosition[2] -= linearVelocityTimesDeltaTime[2];
 }
 
 const _addRotationStep_axis = /* @__PURE__ */ vec3.create();

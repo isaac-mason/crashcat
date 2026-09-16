@@ -1,6 +1,7 @@
 import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { dof, MotionType, rigidBody, sphere, updateWorld } from '../../src';
+import { addPositionStep, subPositionStep } from '../../src/body/rigid-body-step';
 import { createTestWorld } from '../helpers';
 
 describe('AllowedDegreesOfFreedom', () => {
@@ -297,6 +298,39 @@ describe('AllowedDegreesOfFreedom', () => {
 
             // X should continue to accumulate
             expect(Math.abs(body.motionProperties.linearVelocity[0])).toBeGreaterThan(0);
+        });
+    });
+
+    // the dof mask applies to the step, not to the resulting position: a locked axis stops the body
+    // moving along it, it must not snap the body to zero there
+    // (jolt: `mPosition += mMotionProperties->LockTranslation(inLinearVelocityTimesDeltaTime)`)
+    describe('position steps on locked axes', () => {
+        const lockedXBody = () => {
+            const { world, layers } = createTestWorld();
+            const body = rigidBody.create(world, {
+                shape: sphere.create({ radius: 0.5 }),
+                objectLayer: layers.OBJECT_LAYER_MOVING,
+                motionType: MotionType.DYNAMIC,
+                position: vec3.fromValues(5, 10, -3),
+            });
+            body.motionProperties.allowedDegreesOfFreedom = dof(false, true, true, true, true, true);
+            return body;
+        };
+
+        test('addPositionStep leaves a locked axis where it is', () => {
+            const body = lockedXBody();
+            addPositionStep(body, vec3.fromValues(1, 2, 4));
+            expect(body.centerOfMassPosition[0]).toBeCloseTo(5, 10);
+            expect(body.centerOfMassPosition[1]).toBeCloseTo(12, 10);
+            expect(body.centerOfMassPosition[2]).toBeCloseTo(1, 10);
+        });
+
+        test('subPositionStep leaves a locked axis where it is', () => {
+            const body = lockedXBody();
+            subPositionStep(body, vec3.fromValues(1, 2, 4));
+            expect(body.centerOfMassPosition[0]).toBeCloseTo(5, 10);
+            expect(body.centerOfMassPosition[1]).toBeCloseTo(8, 10);
+            expect(body.centerOfMassPosition[2]).toBeCloseTo(-7, 10);
         });
     });
 });
