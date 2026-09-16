@@ -1,7 +1,9 @@
 import type { Bodies } from './body/bodies';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
+import * as broadphase from './broadphase/broadphase';
 import * as rigidBody from './body/rigid-body';
+import * as rigidBodyStep from './body/rigid-body-step';
 import { INACTIVE_BODY_INDEX, sleep, updateSleepState } from './body/sleep';
 import type { ConstraintId, ConstraintType } from './constraints/constraint-id';
 import type { Constraints } from './constraints/constraints';
@@ -404,7 +406,8 @@ export function finishIslandStep(island: Island, world: World, deltaTime: number
     for (let i = 0; i < bodyIndices.length; i++) {
         const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];
 
-        rigidBody.updatePositionFromCenterOfMass(world, body);
+        rigidBodyStep.deriveTransform(body);
+        broadphase.notifyBodyBoundsChanged(world, body);
         rigidBody.clearForces(body);
 
         if (allowSleeping && body.motionType === MotionType.DYNAMIC) {
@@ -414,7 +417,11 @@ export function finishIslandStep(island: Island, world: World, deltaTime: number
         }
     }
 
-    // if all bodies can sleep, deactivate the island
+    // if all bodies can sleep, deactivate the island.
+    // sleep() swap-removes from bodies.activeBodyIndices, which the bodyIndices above index into.
+    // that stays safe because a slot is only overwritten when the body living in it is the one being
+    // slept, and every island owns a disjoint set of slots: an island never resolves a slot another
+    // island has already clobbered, and within this loop a slot is only clobbered after its own pass.
     if (allCanSleep) {
         for (let i = 0; i < bodyIndices.length; i++) {
             const body = world.bodies.pool[world.bodies.activeBodyIndices[bodyIndices[i]]];

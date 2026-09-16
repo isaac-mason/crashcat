@@ -7,6 +7,7 @@ import type { Layers } from '../layers';
 import { assert } from '../utils/assert';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
+import * as pairs from '../pairs';
 import * as dbvt from './dbvt';
 
 /** broadphase state for a physics world */
@@ -100,6 +101,17 @@ export function updateBody(broadphase: Broadphase, body: RigidBody): boolean {
     // an escape is a move event: the caller marks the body moved (pairs.markMoved) so it
     // rediscovers its overlaps in the next findCollidingPairs.
     return dbvt.update(tree, body);
+}
+
+/**
+ * publish a body's current world aabb to its broadphase leaf, so queries and pair discovery see it.
+ * the step calls this once per body per step, from the island pass.
+ */
+export function notifyBodyBoundsChanged(world: World, body: RigidBody): void {
+    if (updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
 }
 
 /** removes and re-adds a body in the broadphase when its layer changes */

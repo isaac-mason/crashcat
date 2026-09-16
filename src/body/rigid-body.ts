@@ -543,32 +543,6 @@ export function updateCenterOfMassPosition(body: RigidBody): void {
     vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, body.position);
 }
 
-const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ vec3.create();
-
-/**
- * Updates the body's position (shape origin) based on centerOfMassPosition.
- * This derives position from centerOfMassPosition, which is the primary property modified by physics.
- * Formula: position = centerOfMassPosition - rotation × shape.centerOfMass
- */
-export function updatePositionFromCenterOfMass(world: World, body: RigidBody): void {
-    // get shape center of mass in world space
-    const shapeCenterOfMassInWorldSpace = _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace;
-    vec3.copy(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
-    vec3.transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
-
-    // position = centerOfMassPosition - shapeCenterOfMassInWorldSpace
-    vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
-
-    // update aabb
-    updateAABB(body);
-
-    // update body
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
-}
-
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
@@ -616,10 +590,7 @@ export function updateShape(world: World, body: RigidBody) {
     updateAABB(body);
 
     // notify broadphase of AABB change
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 }
 
 /**
@@ -634,10 +605,7 @@ export function setPosition(world: World, body: RigidBody, position: Vec3, wake:
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {
@@ -658,10 +626,7 @@ export function setQuaternion(world: World, body: RigidBody, quaternion: Quat, w
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {
@@ -684,10 +649,7 @@ export function setTransform(world: World, body: RigidBody, position: Vec3, quat
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {

@@ -1,6 +1,6 @@
 import type { Vec3 } from 'math';
 import { quat, vec3 } from 'math';
-import type { RigidBody } from './rigid-body';
+import { type RigidBody, updateAABB } from './rigid-body';
 
 /**
  * Apply a position step (linear velocity * dt) to the body.
@@ -92,4 +92,23 @@ export function subRotationStep(body: RigidBody, angularVelocityTimesDeltaTime: 
         quat.multiply(body.quaternion, _addRotationStep_rotation, body.quaternion);
         quat.normalize(body.quaternion, body.quaternion);
     }
+}
+
+const _deriveTransform_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ vec3.create();
+
+/**
+ * re-derive the cached world transform from the authoritative state the step helpers mutate:
+ * `position` from `centerOfMassPosition` and `quaternion`, then the world `aabb` from that.
+ * whatever moves the centre of mass owes a call to this before the next reader of either.
+ *
+ * does not publish to the broadphase - see `broadphase.notifyBodyBoundsChanged`.
+ */
+export function deriveTransform(body: RigidBody): void {
+    const shapeCenterOfMassInWorldSpace = _deriveTransform_shapeCenterOfMassInWorldSpace;
+    vec3.copy(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
+    vec3.transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
+
+    vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
+
+    updateAABB(body);
 }
