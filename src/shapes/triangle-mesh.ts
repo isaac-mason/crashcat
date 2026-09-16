@@ -1406,10 +1406,11 @@ function collideConvexVsTriangleMesh(
     // determine if mesh is inside-out
     const scaleSign = vec3.isScaleInsideOut(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
-    // get support function for shape A (shrunk core; filled once, reused across the triangle loop)
+    // both supports for shape A are filled once per pair, the first time a triangle needs one: the
+    // shrunk core on the first triangle to reach gjk, the inflated one on the first to reach epa.
+    // a pair whose bvh walk reaches no leaf fills neither.
     const supportA = _collideConvexVsTriangleMesh_supportA;
-    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
-    // the inflated support is filled once per pair, the first time a triangle reaches epa
+    let supportAFilled = false;
     const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
     let supportAWithRadiusFilled = false;
 
@@ -1536,6 +1537,16 @@ function collideConvexVsTriangleMesh(
                     vec3.set(penetrationAxis, 1, 0, 0);
                 } else {
                     vec3.normalize(penetrationAxis, penetrationAxis);
+                }
+
+                if (!supportAFilled) {
+                    setShapeSupport(
+                        supportA,
+                        shapeA,
+                        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
+                        _collideConvexVsTriangleMesh_scaleA,
+                    );
+                    supportAFilled = true;
                 }
 
                 // perform GJK step with inflated shape (convex radius + max separation distance)
