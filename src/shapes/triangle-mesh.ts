@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
 import { type Box3, box3, triangle3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -1776,10 +1776,7 @@ const collideTriangleMeshVsConvex = /* @__PURE__ */ reversedCollideShapeVsShape(
 
 const _collideSphereVsTriangleMesh_sphereCenterInMesh = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _collideSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
-const _collideSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_boundsOfSphere = /* @__PURE__ */ box3.create();
 const _collideSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
@@ -1802,10 +1799,6 @@ const _collideSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create(
 const _collideSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
 const _collideSphereVsTriangleMesh_penetrationAxis = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_point1 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_point1World = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_point2World = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_newPenetrationAxis = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_hit = /* @__PURE__ */ createCollideShapeHit();
 const _collideSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
@@ -1855,20 +1848,40 @@ function collideSphereVsTriangleMesh(
     const maxSeparationSq = (sphereRadius + settings.maxSeparationDistance) ** 2;
 
     // transform sphere center to mesh local space
-    const posA = vec3.set(_collideSphereVsTriangleMesh_sphereCenterInMesh, posAX, posAY, posAZ);
     const posB = vec3.set(_collideSphereVsTriangleMesh_posB, posBX, posBY, posBZ);
-    const quatB = quat.set(_collideSphereVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     const scaleB = vec3.set(_collideSphereVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    quat.conjugate(_collideSphereVsTriangleMesh_inverseQuatB, quatB);
-    vec3.subtract(_collideSphereVsTriangleMesh_positionDifference, posA, posB);
-    vec3.transformQuat(
-        _collideSphereVsTriangleMesh_sphereCenterInMesh,
-        _collideSphereVsTriangleMesh_positionDifference,
-        _collideSphereVsTriangleMesh_inverseQuatB,
-    );
+    // mesh rotation as a basis, held for the whole triangle walk; the inverse is the transpose
+    const x2 = quatBX + quatBX;
+    const y2 = quatBY + quatBY;
+    const z2 = quatBZ + quatBZ;
+    const xx = quatBX * x2;
+    const yx = quatBY * x2;
+    const yy = quatBY * y2;
+    const zx = quatBZ * x2;
+    const zy = quatBZ * y2;
+    const zz = quatBZ * z2;
+    const wx = quatBW * x2;
+    const wy = quatBW * y2;
+    const wz = quatBW * z2;
+    const m0 = 1 - yy - zz;
+    const m1 = yx + wz;
+    const m2 = zx - wy;
+    const m4 = yx - wz;
+    const m5 = 1 - xx - zz;
+    const m6 = zy + wx;
+    const m8 = zx + wy;
+    const m9 = zy - wx;
+    const m10 = 1 - xx - yy;
 
+    // sphere centre into mesh-local: (posA - posB) through the transposed basis
     const sphereCenterInMesh = _collideSphereVsTriangleMesh_sphereCenterInMesh;
+    const centreOffsetX = posAX - posBX;
+    const centreOffsetY = posAY - posBY;
+    const centreOffsetZ = posAZ - posBZ;
+    sphereCenterInMesh[0] = m0 * centreOffsetX + m1 * centreOffsetY + m2 * centreOffsetZ;
+    sphereCenterInMesh[1] = m4 * centreOffsetX + m5 * centreOffsetY + m6 * centreOffsetZ;
+    sphereCenterInMesh[2] = m8 * centreOffsetX + m9 * centreOffsetY + m10 * centreOffsetZ;
 
     // detect inside-out scaling
     const scaleSign = vec3.isScaleInsideOut(scaleB) ? -1 : 1;
@@ -1998,40 +2011,56 @@ function collideSphereVsTriangleMesh(
 
                     // check if the feature we hit requires an active edge that isn't active
                     if ((triangleActiveEdges & requiredEdges) === 0) {
-                        // transform movement direction to mesh space
-                        vec3.transformQuat(
-                            _collideSphereVsTriangleMesh_activeEdgeMovementDir,
-                            settings.activeEdgeMovementDirection,
-                            _collideSphereVsTriangleMesh_inverseQuatB,
-                        );
+                        // movement direction into mesh space, through the transposed basis
+                        const edgeDir = settings.activeEdgeMovementDirection;
+                        const edgeDirX = edgeDir[0];
+                        const edgeDirY = edgeDir[1];
+                        const edgeDirZ = edgeDir[2];
+                        const movementX = m0 * edgeDirX + m1 * edgeDirY + m2 * edgeDirZ;
+                        const movementY = m4 * edgeDirX + m5 * edgeDirY + m6 * edgeDirZ;
+                        const movementZ = m8 * edgeDirX + m9 * edgeDirY + m10 * edgeDirZ;
 
-                        // apply simplified active edge correction
                         const newPenetrationAxis = backFacing
                             ? triangleNormal
                             : vec3.negate(_collideSphereVsTriangleMesh_newPenetrationAxis, triangleNormal);
                         const newPenetrationAxisLen = vec3.length(newPenetrationAxis);
 
-                        // if penetration_axis affects movement less than triangle normal, use triangle normal
-                        if (
-                            vec3.dot(_collideSphereVsTriangleMesh_activeEdgeMovementDir, penetrationAxis) *
-                                newPenetrationAxisLen >=
-                            vec3.dot(_collideSphereVsTriangleMesh_activeEdgeMovementDir, newPenetrationAxis)
-                        ) {
+                        // if penetration axis affects movement less than the triangle normal, use the normal
+                        const alongPenetration =
+                            movementX * penetrationAxis[0] + movementY * penetrationAxis[1] + movementZ * penetrationAxis[2];
+                        const alongNormal =
+                            movementX * newPenetrationAxis[0] +
+                            movementY * newPenetrationAxis[1] +
+                            movementZ * newPenetrationAxis[2];
+                        if (alongPenetration * newPenetrationAxisLen >= alongNormal) {
                             vec3.copy(penetrationAxis, newPenetrationAxis);
                         }
                     }
                 }
 
-                // transform to world space
-                vec3.add(_collideSphereVsTriangleMesh_point1World, sphereCenterInMesh, point1);
-                vec3.transformQuat(_collideSphereVsTriangleMesh_point1World, _collideSphereVsTriangleMesh_point1World, quatB);
-                vec3.add(_collideSphereVsTriangleMesh_point1World, _collideSphereVsTriangleMesh_point1World, posB);
+                // results into world space, straight into the hit
+                const hit = _collideSphereVsTriangleMesh_hit;
 
-                vec3.add(_collideSphereVsTriangleMesh_point2World, sphereCenterInMesh, point2);
-                vec3.transformQuat(_collideSphereVsTriangleMesh_point2World, _collideSphereVsTriangleMesh_point2World, quatB);
-                vec3.add(_collideSphereVsTriangleMesh_point2World, _collideSphereVsTriangleMesh_point2World, posB);
+                const point1X = sphereCenterInMesh[0] + point1[0];
+                const point1Y = sphereCenterInMesh[1] + point1[1];
+                const point1Z = sphereCenterInMesh[2] + point1[2];
+                hit.pointA[0] = m0 * point1X + m4 * point1Y + m8 * point1Z + posB[0];
+                hit.pointA[1] = m1 * point1X + m5 * point1Y + m9 * point1Z + posB[1];
+                hit.pointA[2] = m2 * point1X + m6 * point1Y + m10 * point1Z + posB[2];
 
-                vec3.transformQuat(_collideSphereVsTriangleMesh_penetrationAxisWorld, penetrationAxis, quatB);
+                const point2X = sphereCenterInMesh[0] + point2[0];
+                const point2Y = sphereCenterInMesh[1] + point2[1];
+                const point2Z = sphereCenterInMesh[2] + point2[2];
+                hit.pointB[0] = m0 * point2X + m4 * point2Y + m8 * point2Z + posB[0];
+                hit.pointB[1] = m1 * point2X + m5 * point2Y + m9 * point2Z + posB[1];
+                hit.pointB[2] = m2 * point2X + m6 * point2Y + m10 * point2Z + posB[2];
+
+                const axisX = penetrationAxis[0];
+                const axisY = penetrationAxis[1];
+                const axisZ = penetrationAxis[2];
+                hit.penetrationAxis[0] = m0 * axisX + m4 * axisY + m8 * axisZ;
+                hit.penetrationAxis[1] = m1 * axisX + m5 * axisY + m9 * axisZ;
+                hit.penetrationAxis[2] = m2 * axisX + m6 * axisY + m10 * axisZ;
 
                 // build sub shape id
                 _collideSphereVsTriangleMesh_subShapeIdBuilder.value = subShapeIdB;
@@ -2043,11 +2072,6 @@ function collideSphereVsTriangleMesh(
                     meshShape.data.triangleCount,
                 );
 
-                // create collision result
-                const hit = _collideSphereVsTriangleMesh_hit;
-                vec3.copy(hit.pointA, _collideSphereVsTriangleMesh_point1World);
-                vec3.copy(hit.pointB, _collideSphereVsTriangleMesh_point2World);
-                vec3.copy(hit.penetrationAxis, _collideSphereVsTriangleMesh_penetrationAxisWorld);
                 hit.penetration = penetrationDepth;
                 hit.subShapeIdA = subShapeIdA;
                 hit.subShapeIdB = _collideSphereVsTriangleMesh_subShapeIdBuilder.value;
@@ -2064,12 +2088,26 @@ function collideSphereVsTriangleMesh(
                     hit.faceB.numVertices = 3;
 
                     // transform scaled triangle vertices to world space
-                    vec3.transformQuat(sv0, sv0, quatB);
-                    vec3.add(sv0, sv0, posB);
-                    vec3.transformQuat(sv1, sv1, quatB);
-                    vec3.add(sv1, sv1, posB);
-                    vec3.transformQuat(sv2, sv2, quatB);
-                    vec3.add(sv2, sv2, posB);
+                    const v0X = sv0[0];
+                    const v0Y = sv0[1];
+                    const v0Z = sv0[2];
+                    sv0[0] = m0 * v0X + m4 * v0Y + m8 * v0Z + posB[0];
+                    sv0[1] = m1 * v0X + m5 * v0Y + m9 * v0Z + posB[1];
+                    sv0[2] = m2 * v0X + m6 * v0Y + m10 * v0Z + posB[2];
+
+                    const v1X = sv1[0];
+                    const v1Y = sv1[1];
+                    const v1Z = sv1[2];
+                    sv1[0] = m0 * v1X + m4 * v1Y + m8 * v1Z + posB[0];
+                    sv1[1] = m1 * v1X + m5 * v1Y + m9 * v1Z + posB[1];
+                    sv1[2] = m2 * v1X + m6 * v1Y + m10 * v1Z + posB[2];
+
+                    const v2X = sv2[0];
+                    const v2Y = sv2[1];
+                    const v2Z = sv2[2];
+                    sv2[0] = m0 * v2X + m4 * v2Y + m8 * v2Z + posB[0];
+                    sv2[1] = m1 * v2X + m5 * v2Y + m9 * v2Z + posB[1];
+                    sv2[2] = m2 * v2X + m6 * v2Y + m10 * v2Z + posB[2];
 
                     hit.faceB.vertices[0] = sv0[0];
                     hit.faceB.vertices[1] = sv0[1];
@@ -2122,11 +2160,7 @@ const _castSphereVsTriangleMesh_start = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_direction = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_walkDisplacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
-const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 const _castSphereVsTriangleMesh_stackNodes: number[] = [];
 const _castSphereVsTriangleMesh_stackDist: number[] = [];
@@ -2145,12 +2179,8 @@ const _castSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
 const _castSphereVsTriangleMesh_hit = /* @__PURE__ */ createCastShapeHit();
 const _castSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
-const _castSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_origin = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactPointAWorld = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactPointBWorld = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactNormalWorld = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_planeIntersectionTemp = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_interiorContactNormal = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_sphereCenterAtHit = /* @__PURE__ */ vec3.create();
@@ -2183,8 +2213,15 @@ function castSphereVsTriangleMeshAddHit(
     sphereRadius: number,
     start: Vec3,
     posB: Vec3,
-    quatB: Quat,
-    inverseQuatB: Quat,
+    m0: number,
+    m1: number,
+    m2: number,
+    m4: number,
+    m5: number,
+    m6: number,
+    m8: number,
+    m9: number,
+    m10: number,
     backFacing: boolean,
     triangleNormal: Vec3,
     activeEdges: number,
@@ -2197,35 +2234,57 @@ function castSphereVsTriangleMeshAddHit(
     let finalContactNormal = contactNormal;
 
     if (settings.collideOnlyWithActiveEdges && activeEdges !== 0b111) {
-        // transform movement direction to mesh space
-        vec3.transformQuat(_castSphereVsTriangleMesh_activeEdgeMovementDir, settings.activeEdgeMovementDirection, inverseQuatB);
+        // movement direction into mesh space, through the transposed basis
+        const edgeDir = settings.activeEdgeMovementDirection;
+        const edgeDirX = edgeDir[0];
+        const edgeDirY = edgeDir[1];
+        const edgeDirZ = edgeDir[2];
+        const movementX = m0 * edgeDirX + m1 * edgeDirY + m2 * edgeDirZ;
+        const movementY = m4 * edgeDirX + m5 * edgeDirY + m6 * edgeDirZ;
+        const movementZ = m8 * edgeDirX + m9 * edgeDirY + m10 * edgeDirZ;
 
-        // apply simplified active edge correction
         const triangleNormalForFix = backFacing
             ? triangleNormal
             : vec3.negate(_castSphereVsTriangleMesh_triangleNormalForFix, triangleNormal);
         const triangleNormalLen = vec3.length(triangleNormalForFix);
         const contactNormalLen = vec3.length(contactNormal);
 
-        if (
-            vec3.dot(_castSphereVsTriangleMesh_activeEdgeMovementDir, contactNormal) * triangleNormalLen <
-            vec3.dot(_castSphereVsTriangleMesh_activeEdgeMovementDir, triangleNormalForFix) * contactNormalLen
-        ) {
+        const alongContact =
+            movementX * contactNormal[0] + movementY * contactNormal[1] + movementZ * contactNormal[2];
+        const alongTriangle =
+            movementX * triangleNormalForFix[0] +
+            movementY * triangleNormalForFix[1] +
+            movementZ * triangleNormalForFix[2];
+        if (alongContact * triangleNormalLen < alongTriangle * contactNormalLen) {
             finalContactNormal = triangleNormalForFix;
         }
     }
 
     // transform to world space
-    const contactPointAWorld = vec3.add(_castSphereVsTriangleMesh_contactPointAWorld, start, contactPointA);
-    vec3.transformQuat(contactPointAWorld, contactPointAWorld, quatB);
-    vec3.add(contactPointAWorld, contactPointAWorld, posB);
+    const hit = _castSphereVsTriangleMesh_hit;
 
-    const contactPointBWorld = vec3.add(_castSphereVsTriangleMesh_contactPointBWorld, start, contactPointB);
-    vec3.transformQuat(contactPointBWorld, contactPointBWorld, quatB);
-    vec3.add(contactPointBWorld, contactPointBWorld, posB);
+    const pointAX = start[0] + contactPointA[0];
+    const pointAY = start[1] + contactPointA[1];
+    const pointAZ = start[2] + contactPointA[2];
+    hit.pointA[0] = m0 * pointAX + m4 * pointAY + m8 * pointAZ + posB[0];
+    hit.pointA[1] = m1 * pointAX + m5 * pointAY + m9 * pointAZ + posB[1];
+    hit.pointA[2] = m2 * pointAX + m6 * pointAY + m10 * pointAZ + posB[2];
 
-    const contactNormalWorld = vec3.transformQuat(_castSphereVsTriangleMesh_contactNormalWorld, finalContactNormal, quatB);
-    vec3.normalize(contactNormalWorld, contactNormalWorld);
+    const pointBX = start[0] + contactPointB[0];
+    const pointBY = start[1] + contactPointB[1];
+    const pointBZ = start[2] + contactPointB[2];
+    hit.pointB[0] = m0 * pointBX + m4 * pointBY + m8 * pointBZ + posB[0];
+    hit.pointB[1] = m1 * pointBX + m5 * pointBY + m9 * pointBZ + posB[1];
+    hit.pointB[2] = m2 * pointBX + m6 * pointBY + m10 * pointBZ + posB[2];
+
+    const normalX = finalContactNormal[0];
+    const normalY = finalContactNormal[1];
+    const normalZ = finalContactNormal[2];
+    hit.normal[0] = m0 * normalX + m4 * normalY + m8 * normalZ;
+    hit.normal[1] = m1 * normalX + m5 * normalY + m9 * normalZ;
+    hit.normal[2] = m2 * normalX + m6 * normalY + m10 * normalZ;
+    vec3.normalize(hit.normal, hit.normal);
+    vec3.negate(hit.penetrationAxis, hit.normal);
 
     // build sub shape id
     _castSphereVsTriangleMesh_subShapeIdBuilder.value = subShapeIdB;
@@ -2237,14 +2296,8 @@ function castSphereVsTriangleMeshAddHit(
         meshShape.data.triangleCount,
     );
 
-    // create cast result
-    const hit = _castSphereVsTriangleMesh_hit;
     hit.status = CastShapeStatus.COLLIDING;
     hit.fraction = fraction;
-    vec3.copy(hit.pointA, contactPointAWorld);
-    vec3.copy(hit.pointB, contactPointBWorld);
-    vec3.copy(hit.normal, contactNormalWorld);
-    vec3.negate(hit.penetrationAxis, contactNormalWorld);
     hit.penetrationDepth = fraction === 0 ? sphereRadius - vec3.distance(contactPointA, contactPointB) : 0;
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = _castSphereVsTriangleMesh_subShapeIdBuilder.value;
@@ -2308,26 +2361,45 @@ function castSphereVsTriangleMesh(
     const sphereRadius = Math.abs(scaleAX) * sphereShape.radius;
 
     // setup sphere sweep in mesh local space
-    const posA = vec3.set(_castSphereVsTriangleMesh_start, posAX, posAY, posAZ);
     const posB = vec3.set(_castSphereVsTriangleMesh_posB, posBX, posBY, posBZ);
-    const quatB = quat.set(_castSphereVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     const scaleB = vec3.set(_castSphereVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
-    const displacement = vec3.set(_castSphereVsTriangleMesh_displacement, displacementAX, displacementAY, displacementAZ);
 
-    // transform sphere start position to mesh local space
-    quat.conjugate(_castSphereVsTriangleMesh_inverseQuatB, quatB);
-    vec3.subtract(_castSphereVsTriangleMesh_positionDifference, posA, posB);
-    vec3.transformQuat(
-        _castSphereVsTriangleMesh_start,
-        _castSphereVsTriangleMesh_positionDifference,
-        _castSphereVsTriangleMesh_inverseQuatB,
-    );
+    // mesh rotation as a basis, held for the whole cast; the inverse is the transpose
+    const x2 = quatBX + quatBX;
+    const y2 = quatBY + quatBY;
+    const z2 = quatBZ + quatBZ;
+    const xx = quatBX * x2;
+    const yx = quatBY * x2;
+    const yy = quatBY * y2;
+    const zx = quatBZ * x2;
+    const zy = quatBZ * y2;
+    const zz = quatBZ * z2;
+    const wx = quatBW * x2;
+    const wy = quatBW * y2;
+    const wz = quatBW * z2;
+    const m0 = 1 - yy - zz;
+    const m1 = yx + wz;
+    const m2 = zx - wy;
+    const m4 = yx - wz;
+    const m5 = 1 - xx - zz;
+    const m6 = zy + wx;
+    const m8 = zx + wy;
+    const m9 = zy - wx;
+    const m10 = 1 - xx - yy;
 
-    // transform displacement to mesh local space
-    vec3.transformQuat(_castSphereVsTriangleMesh_direction, displacement, _castSphereVsTriangleMesh_inverseQuatB);
-
+    // sphere start and displacement into mesh-local, through the transposed basis
     const start = _castSphereVsTriangleMesh_start;
+    const startOffsetX = posAX - posBX;
+    const startOffsetY = posAY - posBY;
+    const startOffsetZ = posAZ - posBZ;
+    start[0] = m0 * startOffsetX + m1 * startOffsetY + m2 * startOffsetZ;
+    start[1] = m4 * startOffsetX + m5 * startOffsetY + m6 * startOffsetZ;
+    start[2] = m8 * startOffsetX + m9 * startOffsetY + m10 * startOffsetZ;
+
     const direction = _castSphereVsTriangleMesh_direction;
+    direction[0] = m0 * displacementAX + m1 * displacementAY + m2 * displacementAZ;
+    direction[1] = m4 * displacementAX + m5 * displacementAY + m6 * displacementAZ;
+    direction[2] = m8 * displacementAX + m9 * displacementAY + m10 * displacementAZ;
 
     // detect inside-out scaling
     const scaleSign = vec3.isScaleInsideOut(scaleB) ? -1 : 1;
@@ -2462,8 +2534,15 @@ function castSphereVsTriangleMesh(
                             sphereRadius,
                             start,
                             posB,
-                            quatB,
-                            _castSphereVsTriangleMesh_inverseQuatB,
+                            m0,
+                            m1,
+                            m2,
+                            m4,
+                            m5,
+                            m6,
+                            m8,
+                            m9,
+                            m10,
                             backFacing,
                             triangleNormal,
                             triangleActiveEdges,
@@ -2536,8 +2615,15 @@ function castSphereVsTriangleMesh(
                                             sphereRadius,
                                             start,
                                             posB,
-                                            quatB,
-                                            _castSphereVsTriangleMesh_inverseQuatB,
+                                            m0,
+                                            m1,
+                                            m2,
+                                            m4,
+                                            m5,
+                                            m6,
+                                            m8,
+                                            m9,
+                                            m10,
                                             backFacing,
                                             triangleNormal,
                                             0b111, // interior hit, all edges active
@@ -2598,8 +2684,15 @@ function castSphereVsTriangleMesh(
                         sphereRadius,
                         start,
                         posB,
-                        quatB,
-                        _castSphereVsTriangleMesh_inverseQuatB,
+                        m0,
+                        m1,
+                        m2,
+                        m4,
+                        m5,
+                        m6,
+                        m8,
+                        m9,
+                        m10,
                         backFacing,
                         triangleNormal,
                         triangleActiveEdges,

@@ -208,10 +208,7 @@ export function collideSphereVsBox(
     const coreHalfZ = Math.max(0, scaledHalfZ - scaledConvexRadius);
     const combinedRadius = sphereRadius + scaledConvexRadius;
 
-    // box rotation (box-local -> world) as a basis, the way jolt composes a body transform
-    // (`Body::GetCenterOfMassTransform` is `Mat44::sRotationTranslation(rotation, position)`).
-    // Rotation is isometric, so distances in the box-local frame equal world distances, and the
-    // inverse is the transpose — no conjugate quaternion needed.
+    // box rotation as a basis; isometric, so the inverse is the transpose
     const x2 = quatBX + quatBX;
     const y2 = quatBY + quatBY;
     const z2 = quatBZ + quatBZ;
