@@ -195,7 +195,6 @@ function isLeftChild(dbvt: DBVT, n: number): boolean {
     return dbvt.topo[parent * STRIDE_TOPO + T_RIGHT] !== n;
 }
 
-/** @optimize */
 function insertLeaf(dbvt: DBVT, leafIndex: number): void {
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
@@ -288,7 +287,6 @@ function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, srcN
     }
 }
 
-/** @optimize */
 function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
@@ -386,7 +384,6 @@ export function remove(dbvt: DBVT, body: RigidBody): void {
 }
 
 /**
- * @optimize
  * returns true iff the body escaped its fat AABB (a "moved" event the persistent-pair broadphase
  * consumes), false when the containment early-out fired.
  *
@@ -614,7 +611,6 @@ export function rebuild(dbvt: DBVT): void {
  * bring the bodies into contact while both coast inside them, so the leaf test must be the
  * fat node AABB (already tested during descent), NOT the current tight body AABB.
  *
- * @optimize
  */
 export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
@@ -662,7 +658,6 @@ export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, vis
     }
 }
 
-/** @optimize */
 export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
@@ -749,7 +744,6 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
     }
 }
 
-/** @optimize */
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
@@ -859,7 +853,6 @@ export function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void {
     }
 }
 
-/** @optimize */
 export function castRay(
     world: World,
     dbvt: DBVT,
@@ -1040,7 +1033,6 @@ export function castRay(
     }
 }
 
-/** @optimize */
 export function castAABB(
     world: World,
     dbvt: DBVT,

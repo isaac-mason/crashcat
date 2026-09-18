@@ -47,47 +47,18 @@ export declare function isActive(part: AngularFrictionConstraintPart): boolean;
  */
 export declare function calculateConstraintProperties(part: AngularFrictionConstraintPart, bodyA: RigidBody, bodyB: RigidBody, invInertiaA: Mat4, invInertiaB: Mat4, worldSpaceAxis: Vec3, bias: number): void;
 /**
- * Calculate what the total lambda would be (without applying impulse).
- * Velocity-local — reads from cached angular velocity vectors.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy)
- * @param angVelB angular velocity of body B (local copy)
- * @param movingA true if body A is not static (dynamic or kinematic)
- * @param movingB true if body B is not static (dynamic or kinematic)
- * @param axis constraint axis (contact normal)
- * @returns new total lambda (unclamped)
- *
- * @inline
+ * Turn a jacobian-velocity product into the part's new total lambda. The caller computes `jv` from
+ * its own angular velocity locals; this owns the constraint math.
  */
-export declare function getTotalLambda(part: AngularFrictionConstraintPart, angVelA: Vec3, angVelB: Vec3, movingA: boolean, movingB: boolean, axis: Vec3): number;
+export declare function totalLambdaFor(part: AngularFrictionConstraintPart, jv: number): number;
 /**
- * Apply a total lambda value to cached angular velocity locals.
- * Velocity-local — mutates the passed-in vectors. Does NOT apply DOF masking.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy, mutated)
- * @param angVelB angular velocity of body B (local copy, mutated)
- * @param isDynamicA true if body A is dynamic
- * @param isDynamicB true if body B is dynamic
- * @param totalLambda new total lambda to apply
- * @returns true if impulse was applied
- *
- * @inline
+ * Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
+ * The caller applies the delta to its own velocity locals.
  */
-export declare function applyLambda(part: AngularFrictionConstraintPart, angVelA: Vec3, angVelB: Vec3, isDynamicA: boolean, isDynamicB: boolean, totalLambda: number): boolean;
+export declare function deltaLambdaFor(part: AngularFrictionConstraintPart, totalLambda: number): number;
 /**
- * Apply warm start impulse from previous frame.
- * Velocity-local — mutates the passed-in vectors. Does NOT apply DOF masking.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy, mutated)
- * @param angVelB angular velocity of body B (local copy, mutated)
- * @param isDynamicA true if body A is dynamic
- * @param isDynamicB true if body B is dynamic
- * @param warmStartRatio scale factor for warm start (dt_new / dt_old)
- * @returns true if impulse was applied
- *
- * @inline
+ * Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
+ * apply. The caller applies it to its own angular velocity locals — see the note on
+ * `contactConstraintPart.warmStartLambda` for why the split is worth having.
  */
-export declare function warmStart(part: AngularFrictionConstraintPart, angVelA: Vec3, angVelB: Vec3, isDynamicA: boolean, isDynamicB: boolean, warmStartRatio: number): boolean;
+export declare function warmStartLambda(part: AngularFrictionConstraintPart, warmStartRatio: number): number;

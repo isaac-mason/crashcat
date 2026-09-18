@@ -222,16 +222,13 @@ export declare function getInverseInertia(out: Mat4, body: RigidBody): Mat4;
  */
 export declare function updateCenterOfMassPosition(body: RigidBody): void;
 /**
- * Updates the body's position (shape origin) based on centerOfMassPosition.
- * This derives position from centerOfMassPosition, which is the primary property modified by physics.
- * Formula: position = centerOfMassPosition - rotation × shape.centerOfMass
- */
-export declare function updatePositionFromCenterOfMass(world: World, body: RigidBody): void;
-/**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
  *
- * @optimize
+ * The rotation basis and the box transform are written out rather than composed through a temporary
+ * `Mat4`. That matrix was a per-call array allocation, and only twelve of its sixteen cells were ever
+ * read — the fourth row and column are built by `fromRotationTranslation` and ignored by
+ * `box3.transformMat4`. Same arithmetic in the same order, so the result is bit-identical.
  */
 export declare function updateAABB(body: RigidBody): void;
 /** updates body properties related to its shape, call this whenever the body's shape changes */

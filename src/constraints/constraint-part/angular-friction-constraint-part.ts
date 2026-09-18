@@ -126,119 +126,33 @@ export function calculateConstraintProperties(
     }
 }
 
-/**
- * Calculate what the total lambda would be (without applying impulse).
- * Velocity-local — reads from cached angular velocity vectors.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy)
- * @param angVelB angular velocity of body B (local copy)
- * @param movingA true if body A is not static (dynamic or kinematic)
- * @param movingB true if body B is not static (dynamic or kinematic)
- * @param axis constraint axis (contact normal)
- * @returns new total lambda (unclamped)
- *
- * @inline
- */
-export function getTotalLambda(
-    part: AngularFrictionConstraintPart,
-    angVelA: Vec3,
-    angVelB: Vec3,
-    movingA: boolean,
-    movingB: boolean,
-    axis: Vec3,
-): number {
-    let jv = 0;
-    if (movingA) {
-        jv += axis[0] * angVelA[0] + axis[1] * angVelA[1] + axis[2] * angVelA[2];
-    }
-    if (movingB) {
-        jv -= axis[0] * angVelB[0] + axis[1] * angVelB[1] + axis[2] * angVelB[2];
-    }
 
-    const lambda = part.effectiveMass * (jv - part.bias);
-    return part.totalLambda + lambda;
+
+/**
+ * Turn a jacobian-velocity product into the part's new total lambda. The caller computes `jv` from
+ * its own angular velocity locals; this owns the constraint math.
+ */
+export function totalLambdaFor(part: AngularFrictionConstraintPart, jv: number): number {
+    return part.totalLambda + part.effectiveMass * (jv - part.bias);
 }
 
 /**
- * Apply a total lambda value to cached angular velocity locals.
- * Velocity-local — mutates the passed-in vectors. Does NOT apply DOF masking.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy, mutated)
- * @param angVelB angular velocity of body B (local copy, mutated)
- * @param isDynamicA true if body A is dynamic
- * @param isDynamicB true if body B is dynamic
- * @param totalLambda new total lambda to apply
- * @returns true if impulse was applied
- *
- * @inline
+ * Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
+ * The caller applies the delta to its own velocity locals.
  */
-export function applyLambda(
-    part: AngularFrictionConstraintPart,
-    angVelA: Vec3,
-    angVelB: Vec3,
-    isDynamicA: boolean,
-    isDynamicB: boolean,
-    totalLambda: number,
-): boolean {
+export function deltaLambdaFor(part: AngularFrictionConstraintPart, totalLambda: number): number {
     const deltaLambda = totalLambda - part.totalLambda;
     part.totalLambda = totalLambda;
-
-    if (deltaLambda === 0) return false;
-
-    if (isDynamicA) {
-        angVelA[0] -= part.invI1_Axis[0] * deltaLambda;
-        angVelA[1] -= part.invI1_Axis[1] * deltaLambda;
-        angVelA[2] -= part.invI1_Axis[2] * deltaLambda;
-    }
-
-    if (isDynamicB) {
-        angVelB[0] += part.invI2_Axis[0] * deltaLambda;
-        angVelB[1] += part.invI2_Axis[1] * deltaLambda;
-        angVelB[2] += part.invI2_Axis[2] * deltaLambda;
-    }
-
-    return true;
+    return deltaLambda;
 }
 
 /**
- * Apply warm start impulse from previous frame.
- * Velocity-local — mutates the passed-in vectors. Does NOT apply DOF masking.
- *
- * @param part the constraint part
- * @param angVelA angular velocity of body A (local copy, mutated)
- * @param angVelB angular velocity of body B (local copy, mutated)
- * @param isDynamicA true if body A is dynamic
- * @param isDynamicB true if body B is dynamic
- * @param warmStartRatio scale factor for warm start (dt_new / dt_old)
- * @returns true if impulse was applied
- *
- * @inline
+ * Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
+ * apply. The caller applies it to its own angular velocity locals — see the note on
+ * `contactConstraintPart.warmStartLambda` for why the split is worth having.
  */
-export function warmStart(
-    part: AngularFrictionConstraintPart,
-    angVelA: Vec3,
-    angVelB: Vec3,
-    isDynamicA: boolean,
-    isDynamicB: boolean,
-    warmStartRatio: number,
-): boolean {
+export function warmStartLambda(part: AngularFrictionConstraintPart, warmStartRatio: number): number {
     part.totalLambda *= warmStartRatio;
-
-    if (part.totalLambda === 0) return false;
-
-    if (isDynamicA) {
-        angVelA[0] -= part.invI1_Axis[0] * part.totalLambda;
-        angVelA[1] -= part.invI1_Axis[1] * part.totalLambda;
-        angVelA[2] -= part.invI1_Axis[2] * part.totalLambda;
-    }
-
-    if (isDynamicB) {
-        angVelB[0] += part.invI2_Axis[0] * part.totalLambda;
-        angVelB[1] += part.invI2_Axis[1] * part.totalLambda;
-        angVelB[2] += part.invI2_Axis[2] * part.totalLambda;
-    }
-
-    return true;
+    return part.totalLambda;
 }
+

@@ -493,35 +493,96 @@ export function setMassProperties(motionProperties: MotionProperties, allowedDOF
     );
 }
 
-const _inertiaRotMat = mat4.create();
-const _rotation = mat4.create();
-const _scaled = mat4.create();
-
 /**
  * Computes the world-space inverse inertia matrix for a given body rotation.
  *
  * Formula: I_inv_world = R * diag(invInertiaDiagonal) * R * mInertiaRotation * R^T
  * where R is the body's rotation matrix.
  *
+ * Written out in scalars rather than as four `mat4` calls through shared scratch. The three
+ * intermediate matrices only ever existed to feed the next step, so they live as locals instead of
+ * module state; the arithmetic is unchanged, so the result is bit-identical (see
+ * `tst/inverse-inertia-scalar-form.test.ts`). Module-scope scratch is the reason the helper version
+ * was slower: a buffer the whole module can see cannot live in registers.
+ *
  * @param out output Mat4 to store the result
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
- *
- * @optimize
  */
 export function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4 {
-    // step 1: convert inertia rotation quaternion to matrix
-    mat4.fromQuat(_inertiaRotMat, motionProperties.inertiaRotation);
+    // step 1: the inertia rotation quaternion as a 3x3 basis (column-major: q<column><row>)
+    const q = motionProperties.inertiaRotation;
+    const qx = q[0];
+    const qy = q[1];
+    const qz = q[2];
+    const qw = q[3];
+    const x2 = qx + qx;
+    const y2 = qy + qy;
+    const z2 = qz + qz;
+    const xx = qx * x2;
+    const yx = qy * x2;
+    const yy = qy * y2;
+    const zx = qz * x2;
+    const zy = qz * y2;
+    const zz = qz * z2;
+    const wx = qw * x2;
+    const wy = qw * y2;
+    const wz = qw * z2;
+    const q00 = 1 - yy - zz;
+    const q01 = yx + wz;
+    const q02 = zx - wy;
+    const q10 = yx - wz;
+    const q11 = 1 - xx - zz;
+    const q12 = zy + wx;
+    const q20 = zx + wy;
+    const q21 = zy - wx;
+    const q22 = 1 - xx - yy;
 
-    // step 2: rotation = bodyRotation * inertiaRotMat
-    mat4.multiply3x3(_rotation, bodyRotation, _inertiaRotMat);
+    // step 2: r = bodyRotation * inertiaRotation, 3x3 block
+    const b = bodyRotation;
+    const r00 = b[0] * q00 + b[4] * q01 + b[8] * q02;
+    const r01 = b[1] * q00 + b[5] * q01 + b[9] * q02;
+    const r02 = b[2] * q00 + b[6] * q01 + b[10] * q02;
+    const r10 = b[0] * q10 + b[4] * q11 + b[8] * q12;
+    const r11 = b[1] * q10 + b[5] * q11 + b[9] * q12;
+    const r12 = b[2] * q10 + b[6] * q11 + b[10] * q12;
+    const r20 = b[0] * q20 + b[4] * q21 + b[8] * q22;
+    const r21 = b[1] * q20 + b[5] * q21 + b[9] * q22;
+    const r22 = b[2] * q20 + b[6] * q21 + b[10] * q22;
 
-    // step 3: scale rotation columns by inverse inertia diagonal
-    mat4.scale(_scaled, _rotation, motionProperties.invInertiaDiagonal);
+    // step 3: scale r's columns by the inverse inertia diagonal
+    const d = motionProperties.invInertiaDiagonal;
+    const dx = d[0];
+    const dy = d[1];
+    const dz = d[2];
+    const s00 = r00 * dx;
+    const s01 = r01 * dx;
+    const s02 = r02 * dx;
+    const s10 = r10 * dy;
+    const s11 = r11 * dy;
+    const s12 = r12 * dy;
+    const s20 = r20 * dz;
+    const s21 = r21 * dz;
+    const s22 = r22 * dz;
 
-    // step 4: out = scaled * rotation^T
-    mat4.multiply3x3RightTransposed(out, _scaled, _rotation);
+    // step 4: out = scaled * r^T
+    out[0] = s00 * r00 + s10 * r10 + s20 * r20;
+    out[1] = s01 * r00 + s11 * r10 + s21 * r20;
+    out[2] = s02 * r00 + s12 * r10 + s22 * r20;
+    out[3] = 0;
+    out[4] = s00 * r01 + s10 * r11 + s20 * r21;
+    out[5] = s01 * r01 + s11 * r11 + s21 * r21;
+    out[6] = s02 * r01 + s12 * r11 + s22 * r21;
+    out[7] = 0;
+    out[8] = s00 * r02 + s10 * r12 + s20 * r22;
+    out[9] = s01 * r02 + s11 * r12 + s21 * r22;
+    out[10] = s02 * r02 + s12 * r12 + s22 * r22;
+    out[11] = 0;
+    out[12] = 0;
+    out[13] = 0;
+    out[14] = 0;
+    out[15] = 1;
 
     // step 5: mask out DOFs that are not allowed
     const allowedRotationAxis = (motionProperties.allowedDegreesOfFreedom >> 3) & 0b111;
@@ -658,7 +719,6 @@ export function addAngularVelocity(motionProperties: MotionProperties, velocityD
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
  *
- * @optimize
  */
 export function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
     vec3.add(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
@@ -671,7 +731,6 @@ export function addLinearVelocityStep(motionProperties: MotionProperties, linear
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void {
     vec3.sub(motionProperties.linearVelocity, motionProperties.linearVelocity, linearVelocityChange);
@@ -683,7 +742,6 @@ export function subLinearVelocityStep(motionProperties: MotionProperties, linear
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
  *
- * @optimize
  */
 export function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
     vec3.add(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
@@ -694,7 +752,6 @@ export function addAngularVelocityStep(motionProperties: MotionProperties, angul
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void {
     vec3.sub(motionProperties.angularVelocity, motionProperties.angularVelocity, angularVelocityChange);
@@ -707,7 +764,6 @@ export function subAngularVelocityStep(motionProperties: MotionProperties, angul
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
  *
- * @optimize
  */
 export function scaleToMass(motionProperties: MotionProperties, newMass: number): void {
     assert(motionProperties.invMass > 0, 'Body must have finite mass to scale');

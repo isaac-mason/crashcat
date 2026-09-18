@@ -1,4 +1,4 @@
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { mat4, quat, type Vec3, vec3 } from 'math';
 import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
@@ -141,17 +141,6 @@ export const def = /* @__PURE__ */ (() =>
 /* collide sphere vs box (analytical, A = sphere, B = box) */
 
 const _collideSphereVsBox_hit = /* @__PURE__ */ createCollideShapeHit();
-const _collideSphereVsBox_boxRotation: Quat = /* @__PURE__ */ quat.create();
-const _collideSphereVsBox_invBoxRotation: Quat = /* @__PURE__ */ quat.create();
-const _collideSphereVsBox_localCenter: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_coreHalf: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_negCoreHalf: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_closest: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_delta: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_normal: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_face: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_boxPosition: Vec3 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsBox_worldScratch: Vec3 = /* @__PURE__ */ vec3.create();
 const _collideSphereVsBox_boxToWorld = /* @__PURE__ */ mat4.create();
 const _collideSphereVsBox_boxScale: Vec3 = /* @__PURE__ */ vec3.create();
 const _collideSphereVsBox_faceDirection: Vec3 = /* @__PURE__ */ vec3.create();
@@ -162,14 +151,16 @@ const _collideSphereVsBox_faceDirection: Vec3 = /* @__PURE__ */ vec3.create();
  * Closed-form clamp of the sphere centre to the box's shrunk core (half-extents minus convex
  * radius, mirroring setBoxSupport EXCLUDE_CONVEX_RADIUS), with the combined radius handling the
  * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
- * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
+ * SAT scan rather than EPA. Agrees with convex.collideConvexVsConvex on shallow contacts to within
+ * floating point — it used to claim BIT-equivalence, but nothing tested that and the basis rewrite
+ * below changes the last bits, so the weaker claim is the one that is actually known.
  *
- * The math frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
- * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
- * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
- * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)
- *
- * @optimize
+ * The frame transforms are written out in scalars against a rotation BASIS rather than rotating
+ * vectors by the quaternion one at a time — the same composition jolt uses for a body transform
+ * (`Body::GetCenterOfMassTransform` is `Mat44::sRotationTranslation(rotation, position)`). One
+ * quaternion-to-basis conversion serves all four transforms, the inverse is the transpose, and
+ * nothing round-trips through module scratch. The faces branch keeps its arrays — they feed
+ * getShapeSupportingFace, and it only runs when faces were asked for.
  */
 export function collideSphereVsBox(
     collector: CollideShapeCollector,
@@ -217,73 +208,102 @@ export function collideSphereVsBox(
     const coreHalfZ = Math.max(0, scaledHalfZ - scaledConvexRadius);
     const combinedRadius = sphereRadius + scaledConvexRadius;
 
-    // box rotation (box-local -> world) and its inverse (world -> box-local). scale is folded into
-    // the half-extents above, matching the gjk path. rotation is isometric, so distances in the
-    // box-local frame equal world distances.
-    quat.set(_collideSphereVsBox_boxRotation, quatBX, quatBY, quatBZ, quatBW);
-    quat.conjugate(_collideSphereVsBox_invBoxRotation, _collideSphereVsBox_boxRotation);
+    // box rotation (box-local -> world) as a basis, the way jolt composes a body transform
+    // (`Body::GetCenterOfMassTransform` is `Mat44::sRotationTranslation(rotation, position)`).
+    // Rotation is isometric, so distances in the box-local frame equal world distances, and the
+    // inverse is the transpose — no conjugate quaternion needed.
+    const x2 = quatBX + quatBX;
+    const y2 = quatBY + quatBY;
+    const z2 = quatBZ + quatBZ;
+    const xx = quatBX * x2;
+    const yx = quatBY * x2;
+    const yy = quatBY * y2;
+    const zx = quatBZ * x2;
+    const zy = quatBZ * y2;
+    const zz = quatBZ * z2;
+    const wx = quatBW * x2;
+    const wy = quatBW * y2;
+    const wz = quatBW * z2;
+    const m0 = 1 - yy - zz;
+    const m1 = yx + wz;
+    const m2 = zx - wy;
+    const m4 = yx - wz;
+    const m5 = 1 - xx - zz;
+    const m6 = zy + wx;
+    const m8 = zx + wy;
+    const m9 = zy - wx;
+    const m10 = 1 - xx - yy;
 
-    // sphere centre into box-local: rotate (posA - posB) by the inverse box rotation
-    vec3.set(_collideSphereVsBox_localCenter, posAX - posBX, posAY - posBY, posAZ - posBZ);
-    vec3.transformQuat(_collideSphereVsBox_localCenter, _collideSphereVsBox_localCenter, _collideSphereVsBox_invBoxRotation);
+    // sphere centre into box-local: (posA - posB) through the transposed basis
+    const offsetX = posAX - posBX;
+    const offsetY = posAY - posBY;
+    const offsetZ = posAZ - posBZ;
+    const localX = m0 * offsetX + m1 * offsetY + m2 * offsetZ;
+    const localY = m4 * offsetX + m5 * offsetY + m6 * offsetZ;
+    const localZ = m8 * offsetX + m9 * offsetY + m10 * offsetZ;
 
     // closest point on the core box: clamp the centre to [-coreHalf, +coreHalf]
-    vec3.set(_collideSphereVsBox_coreHalf, coreHalfX, coreHalfY, coreHalfZ);
-    vec3.negate(_collideSphereVsBox_negCoreHalf, _collideSphereVsBox_coreHalf);
-    vec3.min(_collideSphereVsBox_closest, _collideSphereVsBox_localCenter, _collideSphereVsBox_coreHalf);
-    vec3.max(_collideSphereVsBox_closest, _collideSphereVsBox_closest, _collideSphereVsBox_negCoreHalf);
+    const closestX = Math.max(Math.min(localX, coreHalfX), -coreHalfX);
+    const closestY = Math.max(Math.min(localY, coreHalfY), -coreHalfY);
+    const closestZ = Math.max(Math.min(localZ, coreHalfZ), -coreHalfZ);
 
     // delta = centre - closest; distance² is its squared length
-    vec3.subtract(_collideSphereVsBox_delta, _collideSphereVsBox_localCenter, _collideSphereVsBox_closest);
-    const distanceSq = vec3.squaredLength(_collideSphereVsBox_delta);
+    const deltaX = localX - closestX;
+    const deltaY = localY - closestY;
+    const deltaZ = localZ - closestZ;
+    const distanceSq = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
     const contactDistance = combinedRadius + settings.maxSeparationDistance;
     if (distanceSq > contactDistance * contactDistance) {
         return; // separated beyond radius (+ speculative margin)
     }
 
     // outward normal (box surface -> sphere centre) and the core-face contact point, in box-local
-    const normal = _collideSphereVsBox_normal;
-    const face = _collideSphereVsBox_face;
+    let normalX: number;
+    let normalY: number;
+    let normalZ: number;
+    let faceX: number;
+    let faceY: number;
+    let faceZ: number;
     let penetration: number;
 
     if (distanceSq > 1e-12) {
         // shallow: sphere centre outside the core box — normal is the normalised delta
         const distance = Math.sqrt(distanceSq);
-        vec3.scale(normal, _collideSphereVsBox_delta, 1 / distance);
-        vec3.copy(face, _collideSphereVsBox_closest);
+        const inv = 1 / distance;
+        normalX = deltaX * inv;
+        normalY = deltaY * inv;
+        normalZ = deltaZ * inv;
+        faceX = closestX;
+        faceY = closestY;
+        faceZ = closestZ;
         penetration = combinedRadius - distance;
     } else {
         // deep: sphere centre inside the core box -> nearest face per axis (SAT, no EPA). per axis
         // the nearest-face depth is coreHalfExtent - |centre|, its outward normal is sign(centre);
         // pick the smallest-depth axis (ties X > Y > Z, +face over -face — a straight six-face scan).
-        const localX = _collideSphereVsBox_localCenter[0];
-        const localY = _collideSphereVsBox_localCenter[1];
-        const localZ = _collideSphereVsBox_localCenter[2];
         const depthX = coreHalfX - Math.abs(localX);
         const depthY = coreHalfY - Math.abs(localY);
         const depthZ = coreHalfZ - Math.abs(localZ);
-        let nx = 0;
-        let ny = 0;
-        let nz = 0;
-        let fx = localX;
-        let fy = localY;
-        let fz = localZ;
+        normalX = 0;
+        normalY = 0;
+        normalZ = 0;
+        faceX = localX;
+        faceY = localY;
+        faceZ = localZ;
         let depth: number;
         if (depthX <= depthY && depthX <= depthZ) {
             depth = depthX;
-            nx = localX < 0 ? -1 : 1;
-            fx = nx * coreHalfX;
+            normalX = localX < 0 ? -1 : 1;
+            faceX = normalX * coreHalfX;
         } else if (depthY <= depthZ) {
             depth = depthY;
-            ny = localY < 0 ? -1 : 1;
-            fy = ny * coreHalfY;
+            normalY = localY < 0 ? -1 : 1;
+            faceY = normalY * coreHalfY;
         } else {
             depth = depthZ;
-            nz = localZ < 0 ? -1 : 1;
-            fz = nz * coreHalfZ;
+            normalZ = localZ < 0 ? -1 : 1;
+            faceZ = normalZ * coreHalfZ;
         }
-        vec3.set(normal, nx, ny, nz);
-        vec3.set(face, fx, fy, fz);
         penetration = combinedRadius + depth;
     }
 
@@ -293,22 +313,28 @@ export function collideSphereVsBox(
     }
 
     const hit = _collideSphereVsBox_hit;
-    vec3.set(_collideSphereVsBox_boxPosition, posBX, posBY, posBZ);
 
-    // contact points, box-local -> world:
+    // contact points, box-local -> world through the same basis:
     //   box surface  = core face + convexRadius along the normal
     //   sphere point = centre - sphereRadius along the (box -> sphere) normal
-    vec3.scaleAndAdd(_collideSphereVsBox_worldScratch, face, normal, scaledConvexRadius);
-    vec3.transformQuat(_collideSphereVsBox_worldScratch, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxRotation);
-    vec3.add(hit.pointB, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxPosition);
+    const surfaceX = faceX + normalX * scaledConvexRadius;
+    const surfaceY = faceY + normalY * scaledConvexRadius;
+    const surfaceZ = faceZ + normalZ * scaledConvexRadius;
+    hit.pointB[0] = m0 * surfaceX + m4 * surfaceY + m8 * surfaceZ + posBX;
+    hit.pointB[1] = m1 * surfaceX + m5 * surfaceY + m9 * surfaceZ + posBY;
+    hit.pointB[2] = m2 * surfaceX + m6 * surfaceY + m10 * surfaceZ + posBZ;
 
-    vec3.scaleAndAdd(_collideSphereVsBox_worldScratch, _collideSphereVsBox_localCenter, normal, -sphereRadius);
-    vec3.transformQuat(_collideSphereVsBox_worldScratch, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxRotation);
-    vec3.add(hit.pointA, _collideSphereVsBox_worldScratch, _collideSphereVsBox_boxPosition);
+    const spherePointX = localX - normalX * sphereRadius;
+    const spherePointY = localY - normalY * sphereRadius;
+    const spherePointZ = localZ - normalZ * sphereRadius;
+    hit.pointA[0] = m0 * spherePointX + m4 * spherePointY + m8 * spherePointZ + posBX;
+    hit.pointA[1] = m1 * spherePointX + m5 * spherePointY + m9 * spherePointZ + posBY;
+    hit.pointA[2] = m2 * spherePointX + m6 * spherePointY + m10 * spherePointZ + posBZ;
 
     // penetration axis: A -> B = -(box-local normal, which points box -> sphere = B -> A) in world
-    vec3.transformQuat(_collideSphereVsBox_worldScratch, normal, _collideSphereVsBox_boxRotation);
-    vec3.negate(hit.penetrationAxis, _collideSphereVsBox_worldScratch);
+    hit.penetrationAxis[0] = -(m0 * normalX + m4 * normalY + m8 * normalZ);
+    hit.penetrationAxis[1] = -(m1 * normalX + m5 * normalY + m9 * normalZ);
+    hit.penetrationAxis[2] = -(m2 * normalX + m6 * normalY + m10 * normalZ);
 
     hit.penetration = penetration;
     hit.subShapeIdA = subShapeIdA;
@@ -320,13 +346,28 @@ export function collideSphereVsBox(
     if (settings.collectFaces) {
         // box supporting face: getSupportingFace picks the face by dominant axis + sign of the
         // passed direction; -normal selects the face whose outward normal is +normal.
-        vec3.negate(_collideSphereVsBox_faceDirection, normal);
+        //
+        // This branch keeps its scratch arrays — they feed getShapeSupportingFace, which takes a
+        // Mat4 and Vec3s. It only runs when faces were asked for, not on the collide hot path.
+        vec3.set(_collideSphereVsBox_faceDirection, -normalX, -normalY, -normalZ);
         vec3.set(_collideSphereVsBox_boxScale, scaleBX, scaleBY, scaleBZ);
-        mat4.fromRotationTranslation(
-            _collideSphereVsBox_boxToWorld,
-            _collideSphereVsBox_boxRotation,
-            _collideSphereVsBox_boxPosition,
-        );
+        const boxToWorld = _collideSphereVsBox_boxToWorld;
+        boxToWorld[0] = m0;
+        boxToWorld[1] = m1;
+        boxToWorld[2] = m2;
+        boxToWorld[3] = 0;
+        boxToWorld[4] = m4;
+        boxToWorld[5] = m5;
+        boxToWorld[6] = m6;
+        boxToWorld[7] = 0;
+        boxToWorld[8] = m8;
+        boxToWorld[9] = m9;
+        boxToWorld[10] = m10;
+        boxToWorld[11] = 0;
+        boxToWorld[12] = posBX;
+        boxToWorld[13] = posBY;
+        boxToWorld[14] = posBZ;
+        boxToWorld[15] = 1;
         getShapeSupportingFace(
             hit.faceB,
             boxShape,

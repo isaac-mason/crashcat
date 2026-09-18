@@ -26,7 +26,6 @@ export declare function create(): DBVT;
 export declare function add(dbvt: DBVT, body: RigidBody): number;
 export declare function remove(dbvt: DBVT, body: RigidBody): void;
 /**
- * @optimize
  * returns true iff the body escaped its fat AABB (a "moved" event the persistent-pair broadphase
  * consumes), false when the containment early-out fired.
  *
@@ -48,18 +47,13 @@ export declare function rebuild(dbvt: DBVT): void;
  * bring the bodies into contact while both coast inside them, so the leaf test must be the
  * fat node AABB (already tested during descent), NOT the current tight body AABB.
  *
- * @optimize
  */
 export declare function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void;
-/** @optimize */
 export declare function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void;
-/** @optimize */
 export declare function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
 /** visit every body in the tree — no filtering, no aabb tests */
 export declare function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void;
-/** @optimize */
 export declare function castRay(world: World, dbvt: DBVT, origin: Vec3, direction: Vec3, length: number, queryFilter: Filter, visitor: BodyVisitor): void;
-/** @optimize */
 export declare function castAABB(world: World, dbvt: DBVT, castBounds: Box3, displacement: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
 /** get the bounds of the entire DBVT */
 export declare function bounds(out: Box3, dbvt: DBVT): Box3;

@@ -1,4 +1,3 @@
-import { compilecat } from 'compilecat/rolldown';
 import MagicString from 'magic-string';
 import filesize from 'rollup-plugin-filesize';
 
@@ -11,8 +10,7 @@ function stripDebug() {
             if (!code.includes('assert(')) return null;
             // Remove each `assert(...)` via magic-string so we hand back a real
             // source map (original → stripped). Returning `map: null` here would
-            // break the chain: the next transform (compilecat) maps from
-            // this stripped code, and rollup can't compose back to the original.
+            // break the chain and rollup could not compose back to the original.
             const s = new MagicString(code);
             re.lastIndex = 0;
             for (let m = re.exec(code); m !== null; m = re.exec(code)) {
@@ -35,18 +33,7 @@ export default [
                 exports: 'named',
             },
         ],
-        plugins: [
-            stripDebug(),
-            compilecat({
-                sourcemap: true,
-
-                // Scope: crashcat's own src + the math package (so @optimize
-                // functions can inline math vec3/etc.). Nothing else in
-                // node_modules is read.
-                include: [/\/src\//, /\/node_modules\/math\//],
-            }),
-            filesize(),
-        ],
+        plugins: [stripDebug(), filesize()],
     },
     {
         input: './three/index.ts',

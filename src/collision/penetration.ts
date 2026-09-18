@@ -72,14 +72,14 @@ export function penetrationDepthStepGJK(
     outPenetrationDepth.penetrationAxis[1] = _gjk_closestPoints.penetrationAxis[1];
     outPenetrationDepth.penetrationAxis[2] = _gjk_closestPoints.penetrationAxis[2];
 
-    /* @inline */ copySimplex(outSimplex, _gjk_closestPoints.simplex);
+    copySimplex(outSimplex, _gjk_closestPoints.simplex);
 
     if (_gjk_closestPoints.squaredDistance > 0.0) {
         // collision within convex radius - adjust contact points based on convex radii
         const vLength = Math.sqrt(_gjk_closestPoints.squaredDistance);
 
         // move pointA along penetration axis by convexRadiusA
-        /* @inline */ vec3.scaleAndAdd(
+        vec3.scaleAndAdd(
             outPenetrationDepth.pointA,
             outPenetrationDepth.pointA,
             outPenetrationDepth.penetrationAxis,
@@ -87,7 +87,7 @@ export function penetrationDepthStepGJK(
         );
 
         // move pointB along negative penetration axis by convexRadiusB
-        /* @inline */ vec3.scaleAndAdd(
+        vec3.scaleAndAdd(
             outPenetrationDepth.pointB,
             outPenetrationDepth.pointB,
             outPenetrationDepth.penetrationAxis,
@@ -148,7 +148,7 @@ const clearEpaSupportPoints = (points: EpaSupportPoints) => {
 
 /** add a support point in the given direction */
 const addEpaSupportPoint = (points: EpaSupportPoints, supportA: Support, supportB: Support, direction: Vec3): number => {
-    /* @inline */ vec3.negate(_epa_negatedDirection, direction);
+    vec3.negate(_epa_negatedDirection, direction);
 
     getSupport(_epa_p, supportA, direction);
     getSupport(_epa_q, supportB, _epa_negatedDirection);

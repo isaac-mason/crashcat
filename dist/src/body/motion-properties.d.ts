@@ -94,12 +94,16 @@ export declare function setMassProperties(motionProperties: MotionProperties, al
  * Formula: I_inv_world = R * diag(invInertiaDiagonal) * R * mInertiaRotation * R^T
  * where R is the body's rotation matrix.
  *
+ * Written out in scalars rather than as four `mat4` calls through shared scratch. The three
+ * intermediate matrices only ever existed to feed the next step, so they live as locals instead of
+ * module state; the arithmetic is unchanged, so the result is bit-identical (see
+ * `tst/inverse-inertia-scalar-form.test.ts`). Module-scope scratch is the reason the helper version
+ * was slower: a buffer the whole module can see cannot live in registers.
+ *
  * @param out output Mat4 to store the result
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
- *
- * @optimize
  */
 export declare function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4;
 /** step stamp that bypasses the per-step memo in getWorldInverseInertia: compute fresh into `out` */
@@ -157,7 +161,6 @@ export declare function addAngularVelocity(motionProperties: MotionProperties, v
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
  *
- * @optimize
  */
 export declare function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void;
 /**
@@ -166,7 +169,6 @@ export declare function addLinearVelocityStep(motionProperties: MotionProperties
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export declare function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void;
 /**
@@ -174,7 +176,6 @@ export declare function subLinearVelocityStep(motionProperties: MotionProperties
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
  *
- * @optimize
  */
 export declare function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void;
 /**
@@ -182,7 +183,6 @@ export declare function addAngularVelocityStep(motionProperties: MotionPropertie
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export declare function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void;
 /**
@@ -192,7 +192,6 @@ export declare function subAngularVelocityStep(motionProperties: MotionPropertie
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
  *
- * @optimize
  */
 export declare function scaleToMass(motionProperties: MotionProperties, newMass: number): void;
 /**

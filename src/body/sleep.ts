@@ -1,5 +1,4 @@
 import { type Vec3, vec3 } from 'math';
-import { box3 } from 'math/shapes';
 import type { World } from '../world';
 import type { MotionProperties } from './motion-properties';
 import { MotionType } from './motion-type';
@@ -8,15 +7,12 @@ import type { RigidBody } from './rigid-body';
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 export const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
 
-const _extents: Vec3 = /* @__PURE__ */ vec3.create();
 
 /**
  * get the 3 test points for sleep detection:
  * - center of mass
  * - center of mass + largest bounding box axis
  * - center of mass + second largest bounding box axis
- *
- * @optimize
  */
 export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3]): void {
     const com = body.centerOfMassPosition;
@@ -25,10 +21,10 @@ export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3
     vec3.copy(outPoints[0], com);
 
     // half-sizes of shape AABB
-    box3.extents(_extents, body.shape.aabb);
-    const ex = _extents[0];
-    const ey = _extents[1];
-    const ez = _extents[2];
+    const aabb = body.shape.aabb;
+    const ex = (aabb[3] - aabb[0]) * 0.5;
+    const ey = (aabb[4] - aabb[1]) * 0.5;
+    const ez = (aabb[5] - aabb[2]) * 0.5;
 
     // the two largest extents pick the two rotated axes to test; a rotation matrix column comes
     // straight from the quaternion, so only those two are built

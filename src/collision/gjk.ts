@@ -506,7 +506,6 @@ const _simplexY3 = /* @__PURE__ */ vec3.create();
 /**
  * Recompute simplex.y from y = x - p (ray cast variant).
  *
- * @optimize
  */
 function recomputeSimplexYFromP(simplex: Simplex, x: Vec3): void {
     const end = simplex.size * 3;
@@ -522,7 +521,6 @@ function recomputeSimplexYFromP(simplex: Simplex, x: Vec3): void {
 /**
  * Recompute simplex.y from y = x - (q - p) (shape cast variant).
  *
- * @optimize
  */
 function recomputeSimplexYFromPQ(simplex: Simplex, x: Vec3): void {
     const end = simplex.size * 3;
@@ -539,7 +537,6 @@ function recomputeSimplexYFromPQ(simplex: Simplex, x: Vec3): void {
 /**
  * Compact simplex.p down to the subset selected by inSet (bit i selects point i).
  *
- * @optimize
  */
 function updatePointSetP(simplex: Simplex, inSet: number): void {
     let newSize = 0;
@@ -562,7 +559,6 @@ function updatePointSetP(simplex: Simplex, inSet: number): void {
 /**
  * Compact simplex.y, simplex.p, simplex.q down to the subset selected by inSet.
  *
- * @optimize
  */
 function updatePointSetYPQ(simplex: Simplex, inSet: number): void {
     let newSize = 0;
@@ -591,7 +587,6 @@ function updatePointSetYPQ(simplex: Simplex, inSet: number): void {
 }
 
 /**
- * @optimize
  */
 function computeClosestPointToSimplex(
     result: ClosestPointToSimplexResult,
@@ -715,7 +710,6 @@ export function createGjkCastRayResult(): GjkCastRayResult {
  * @param support support function for the shape
  * @param maxLambda maximum lambda to check (default 1.0). Result lambda will not exceed this.
  *
- * @optimize
  */
 export function gjkCastRay(
     out: GjkCastRayResult,
@@ -910,7 +904,6 @@ export function createGjkCastShapeResult(): GjkCastShapeResult {
  * @param convexRadiusB convex radius of shape B
  * @param maxLambda the max fraction along the sweep
  *
- * @optimize
  */
 export function gjkCastShape(
     out: GjkCastShapeResult,
@@ -1235,7 +1228,6 @@ export function createGjkClosestPoints(): GjkClosestPoints {
  * @param maxDistanceSquared maximum squared distance between A and B before objects are considered infinitely far away.
  *                           If exceeded, out.squaredDistance will be set to Number.MAX_VALUE
  *
- * @optimize
  */
 export function gjkClosestPoints(
     out: GjkClosestPoints,
