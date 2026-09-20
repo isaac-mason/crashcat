@@ -303,7 +303,9 @@ describe('getSupport — triangle / point / polygon primitives', () => {
         const c = vec3.fromValues(0, 1, 0);
         const s = createSupport();
         setTriangleSupport(s, a, b, c);
+        // stored as a point set, evaluated by its own case for the tie-break
         expect(s.kind).toBe(SupportKind.TRIANGLE);
+        expect(s.hull.vertexCount).toBe(3);
         expectVec(at(s, vec3.fromValues(1, 0, 0)), [1, 0, 0]);
         expectVec(at(s, vec3.fromValues(0, 1, 0)), [0, 1, 0]);
         expectVec(at(s, vec3.fromValues(-1, -1, 0)), [0, 0, 0]);
@@ -313,7 +315,9 @@ describe('getSupport — triangle / point / polygon primitives', () => {
         const p = vec3.fromValues(3, -4, 5);
         const s = createSupport();
         setPointSupport(s, p);
-        expect(s.kind).toBe(SupportKind.POINT);
+        // a point is a one-point set
+        expect(s.kind).toBe(SupportKind.HULL);
+        expect(s.hull.vertexCount).toBe(1);
         for (const dir of AXES) {
             expectVec(at(s, dir), [3, -4, 5]);
         }
