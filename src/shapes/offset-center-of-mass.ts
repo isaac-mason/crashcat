@@ -11,7 +11,6 @@ import {
     defineShape,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -87,7 +86,6 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<OffsetCenterOfMassShape>({
         type: ShapeType.OFFSET_CENTER_OF_MASS,
-        category: ShapeCategory.DECORATOR,
 
         computeMassProperties,
         getSurfaceNormal,

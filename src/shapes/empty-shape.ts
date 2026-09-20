@@ -1,7 +1,7 @@
 import { quat, type Vec3, vec3 } from 'math';
 import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
-import { defineShape, ShapeCategory, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
+import { defineShape, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
 
 /**
  * Empty shape - has no volume, no collision geometry.
@@ -40,7 +40,6 @@ export function create(): EmptyShape {
 export const def = /* @__PURE__ */ (() =>
     defineShape<EmptyShape>({
         type: ShapeType.EMPTY,
-        category: ShapeCategory.OTHER,
         computeMassProperties(out: MassProperties, _shape: EmptyShape): void {
             // empty shape has zero mass and zero inertia
             out.mass = 0;

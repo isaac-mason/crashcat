@@ -13,7 +13,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -127,7 +126,6 @@ const _supportingFace_shapeMat4 = /* @__PURE__ */ mat4.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<TransformedShape>({
         type: ShapeType.TRANSFORMED,
-        category: ShapeCategory.DECORATOR,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,

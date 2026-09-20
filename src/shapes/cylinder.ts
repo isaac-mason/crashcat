@@ -7,7 +7,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -119,18 +118,17 @@ export function update(shape: CylinderShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<CylinderShape>({
         type: ShapeType.CYLINDER,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setCylinderSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setCylinderSupport,
         register: () => {
             // cylinder vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CYLINDER, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CYLINDER, convex.collideConvexVsConvex);
 

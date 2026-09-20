@@ -15,7 +15,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -168,7 +167,6 @@ const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<CompoundShape>({
         type: ShapeType.COMPOUND,
-        category: ShapeCategory.COMPOSITE,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,

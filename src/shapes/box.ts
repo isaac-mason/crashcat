@@ -18,7 +18,6 @@ import {
     defineShape,
     getShapeSupportingFace,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -110,17 +109,17 @@ const _computeBoxMassProperties_fullExtents = /* @__PURE__ */ vec3.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<BoxShape>({
         type: ShapeType.BOX,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setBoxSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: castRayVsBox,
         collidePoint: collidePointVsBox,
-        setSupport: setBoxSupport,
         register: () => {
+            // box vs convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.BOX, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.BOX, convex.collideConvexVsConvex);
 

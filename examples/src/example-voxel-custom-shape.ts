@@ -31,7 +31,6 @@ import {
     registerShapes,
     reversedCollideShapeVsShape,
     rigidBody,
-    ShapeCategory,
     ShapeType,
     setCollideShapeFn,
     shapeDefs,
@@ -313,7 +312,6 @@ function setVoxel(shape: VoxelShape, voxelX: number, voxelY: number, voxelZ: num
 
 const voxelShapeDef = defineShape<VoxelShape>({
     type: ShapeType.USER_1,
-    category: ShapeCategory.OTHER,
     computeMassProperties(out, _shape): void {
         // only static voxel shapes for now, no mass
         out.mass = 0;
@@ -462,7 +460,7 @@ const voxelShapeDef = defineShape<VoxelShape>({
     register() {
         // voxels x convex shapes
         for (const shapeDef of Object.values(shapeDefs)) {
-            if (shapeDef.category === ShapeCategory.CONVEX) {
+            if (shapeDef.convex !== undefined) {
                 setCollideShapeFn(ShapeType.USER_1, shapeDef.type, collideVoxelsVsConvex);
                 setCollideShapeFn(shapeDef.type, ShapeType.USER_1, reversedCollideShapeVsShape(collideVoxelsVsConvex));
 

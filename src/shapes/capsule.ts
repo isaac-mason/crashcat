@@ -9,7 +9,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -113,18 +112,17 @@ export function update(shape: CapsuleShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<CapsuleShape>({
         type: ShapeType.CAPSULE,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setCapsuleSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setCapsuleSupport,
         register: () => {
             // capsule vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CAPSULE, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CAPSULE, convex.collideConvexVsConvex);
 

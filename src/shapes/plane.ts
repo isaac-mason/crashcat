@@ -28,7 +28,6 @@ import {
     defineShape,
     getShapeSupportingFace,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -109,7 +108,6 @@ export function update(shape: PlaneShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<PlaneShape>({
         type: ShapeType.PLANE,
-        category: ShapeCategory.OTHER,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
@@ -293,15 +291,20 @@ function computePlaneLocalBounds(out: Box3, shape: PlaneShape): void {
 
 function register(): void {
     // register collision and casting with all convex shapes
+    // one wrapper each, not one per convex shape
+    const collideReversed = reversedCollideShapeVsShape(collideConvexVsPlane);
+    const castReversed = reversedCastShapeVsShape(castConvexVsPlane);
+
+    // register collision and casting with all convex shapes
     for (const shapeDef of Object.values(shapeDefs)) {
-        if (shapeDef.category === ShapeCategory.CONVEX) {
+        if (shapeDef.convex !== undefined) {
             // convex vs plane (direct - shapeA=convex, shapeB=plane)
             setCollideShapeFn(shapeDef.type, ShapeType.PLANE, collideConvexVsPlane);
             setCastShapeFn(shapeDef.type, ShapeType.PLANE, castConvexVsPlane);
 
             // plane vs convex (reversed - swaps arguments)
-            setCollideShapeFn(ShapeType.PLANE, shapeDef.type, reversedCollideShapeVsShape(collideConvexVsPlane));
-            setCastShapeFn(ShapeType.PLANE, shapeDef.type, reversedCastShapeVsShape(castConvexVsPlane));
+            setCollideShapeFn(ShapeType.PLANE, shapeDef.type, collideReversed);
+            setCastShapeFn(ShapeType.PLANE, shapeDef.type, castReversed);
         }
     }
 }

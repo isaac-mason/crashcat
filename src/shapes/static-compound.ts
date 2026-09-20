@@ -17,7 +17,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -157,7 +156,6 @@ export function update(shape: StaticCompoundShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<StaticCompoundShape>({
         type: ShapeType.STATIC_COMPOUND,
-        category: ShapeCategory.COMPOSITE,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,

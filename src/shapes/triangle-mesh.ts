@@ -55,7 +55,6 @@ import {
     defineShape,
     getShapeSupportingFace,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -158,7 +157,6 @@ const _getSupportingFace_c = /* @__PURE__ */ vec3.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<TriangleMeshShape>({
         type: ShapeType.TRIANGLE_MESH,
-        category: ShapeCategory.MESH,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
@@ -166,7 +164,7 @@ export const def = /* @__PURE__ */ (() =>
         collidePoint: collidePointVsTriangleMesh,
         register: () => {
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, collideConvexVsTriangleMesh);
                     setCollideShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, collideTriangleMeshVsConvex);
                     setCastShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, castConvexVsTriangleMesh);
@@ -2249,12 +2247,9 @@ function castSphereVsTriangleMeshAddHit(
         const triangleNormalLen = vec3.length(triangleNormalForFix);
         const contactNormalLen = vec3.length(contactNormal);
 
-        const alongContact =
-            movementX * contactNormal[0] + movementY * contactNormal[1] + movementZ * contactNormal[2];
+        const alongContact = movementX * contactNormal[0] + movementY * contactNormal[1] + movementZ * contactNormal[2];
         const alongTriangle =
-            movementX * triangleNormalForFix[0] +
-            movementY * triangleNormalForFix[1] +
-            movementZ * triangleNormalForFix[2];
+            movementX * triangleNormalForFix[0] + movementY * triangleNormalForFix[1] + movementZ * triangleNormalForFix[2];
         if (alongContact * triangleNormalLen < alongTriangle * contactNormalLen) {
             finalContactNormal = triangleNormalForFix;
         }

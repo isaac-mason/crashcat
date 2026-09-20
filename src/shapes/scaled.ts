@@ -13,7 +13,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -107,7 +106,6 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<ScaledShape>({
         type: ShapeType.SCALED,
-        category: ShapeCategory.DECORATOR,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,

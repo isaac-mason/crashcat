@@ -17,7 +17,6 @@ import type { Shape } from './shapes';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -94,18 +93,17 @@ export function update(shape: SphereShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<SphereShape>({
         type: ShapeType.SPHERE,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setSphereSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: collidePointVsSphere,
-        setSupport: setSphereSupport,
         register: () => {
             // sphere vs convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.SPHERE, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.SPHERE, convex.collideConvexVsConvex);
 

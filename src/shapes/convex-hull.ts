@@ -10,7 +10,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -528,19 +527,20 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 export const def = /* @__PURE__ */ (() =>
     defineShape<ConvexHullShape>({
         type: ShapeType.CONVEX_HULL,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setHullSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setHullSupport,
         register: () => {
+            // convex hull vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.collideConvexVsConvex);
+
                     setCastShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.castConvexVsConvex);
                     setCastShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.castConvexVsConvex);
                 }
