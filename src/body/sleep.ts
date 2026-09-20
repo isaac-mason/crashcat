@@ -7,7 +7,6 @@ import type { RigidBody } from './rigid-body';
 /** sentinel value indicating a body is not in the active bodies list (sleeping or static) */
 export const INACTIVE_BODY_INDEX = Number.MAX_SAFE_INTEGER;
 
-
 /**
  * get the 3 test points for sleep detection:
  * - center of mass

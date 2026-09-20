@@ -1,8 +1,8 @@
 import type { Vec3 } from 'math';
-import { STEP_STAMP_NONE } from '../body/motion-properties';
 import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { World } from '../world';
 import {
     type ConstraintId,

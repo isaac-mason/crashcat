@@ -4,10 +4,10 @@ import type { RigidBody } from '../body/rigid-body';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { Layers } from '../layers';
+import * as pairs from '../pairs';
 import { assert } from '../utils/assert';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
-import * as pairs from '../pairs';
 import * as dbvt from './dbvt';
 
 /** broadphase state for a physics world */

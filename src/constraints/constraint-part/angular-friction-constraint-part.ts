@@ -126,8 +126,6 @@ export function calculateConstraintProperties(
     }
 }
 
-
-
 /**
  * Turn a jacobian-velocity product into the part's new total lambda. The caller computes `jv` from
  * its own angular velocity locals; this owns the constraint math.
@@ -155,4 +153,3 @@ export function warmStartLambda(part: AngularFrictionConstraintPart, warmStartRa
     part.totalLambda *= warmStartRatio;
     return part.totalLambda;
 }
-

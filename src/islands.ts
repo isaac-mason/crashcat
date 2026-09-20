@@ -1,10 +1,10 @@
 import type { Bodies } from './body/bodies';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
-import * as broadphase from './broadphase/broadphase';
 import * as rigidBody from './body/rigid-body';
 import * as rigidBodyStep from './body/rigid-body-step';
 import { INACTIVE_BODY_INDEX, sleep, updateSleepState } from './body/sleep';
+import * as broadphase from './broadphase/broadphase';
 import type { ConstraintId, ConstraintType } from './constraints/constraint-id';
 import type { Constraints } from './constraints/constraints';
 import * as constraints from './constraints/constraints';

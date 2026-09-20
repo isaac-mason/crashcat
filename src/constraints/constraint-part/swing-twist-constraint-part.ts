@@ -1,6 +1,6 @@
 import type { Quat, Vec3 } from 'math';
-import { STEP_STAMP_NONE } from '../../body/motion-properties';
 import { mat4, quat, vec2, vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../../body/motion-properties';
 import type { RigidBody } from '../../body/rigid-body';
 import type { AngleConstraintPart } from './angle-constraint-part';
 import * as angleConstraintPart from './angle-constraint-part';

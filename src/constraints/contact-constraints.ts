@@ -1191,7 +1191,6 @@ function createContactConstraint(): ContactConstraint {
     };
 }
 
-
 /**
  * apply warm start impulses from previous frame to give solver a good initial guess.
  * significantly improves convergence speed (~3x faster).
@@ -1413,7 +1412,6 @@ export function solveVelocityConstraintsForIsland(
     // CRITICAL ORDER: Friction first, then normal (non-penetration is more important so solved last)
 
     let anyImpulseApplied = false;
-
 
     for (const constraintIndex of constraintIndices) {
         const constraint = contactConstraints.pool[constraintIndex];
