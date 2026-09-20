@@ -5692,20 +5692,6 @@ let ShapeType = /* @__PURE__ */ function(ShapeType) {
 	ShapeType[ShapeType["USER_10"] = 110] = "USER_10";
 	return ShapeType;
 }({});
-/** shape categories enum */
-let ShapeCategory = /* @__PURE__ */ function(ShapeCategory) {
-	/** Convex shapes (Sphere, Box, Capsule, ConvexHull) */
-	ShapeCategory[ShapeCategory["CONVEX"] = 0] = "CONVEX";
-	/** Mesh shapes (TriangleMesh) */
-	ShapeCategory[ShapeCategory["MESH"] = 1] = "MESH";
-	/** Decorator shapes that transform other shapes (Transformed, Scaled) */
-	ShapeCategory[ShapeCategory["DECORATOR"] = 2] = "DECORATOR";
-	/** Composite shapes that contain other shapes (Compound) */
-	ShapeCategory[ShapeCategory["COMPOSITE"] = 3] = "COMPOSITE";
-	/** Shapes that don't fit into the above categories */
-	ShapeCategory[ShapeCategory["OTHER"] = 4] = "OTHER";
-	return ShapeCategory;
-}({});
 const DEFAULT_SHAPE_DENSITY = 1e3;
 function createSupportingFaceResult() {
 	return {
@@ -5734,7 +5720,7 @@ function defineShape(shapeDef) {
 	});
 	return {
 		type: shapeDef.type,
-		category: shapeDef.category,
+		convex: shapeDef.convex,
 		computeMassProperties,
 		getSurfaceNormal: shapeDef.getSurfaceNormal,
 		getSupportingFace: shapeDef.getSupportingFace,
@@ -5743,18 +5729,18 @@ function defineShape(shapeDef) {
 		getSubShapeTransformedShape,
 		castRay: shapeDef.castRay,
 		collidePoint: shapeDef.collidePoint,
-		setSupport: shapeDef.setSupport,
 		register: shapeDef.register
 	};
 }
+const shapeDefs = {};
 /**
-* Fill a monomorphic {@link Support} struct for `shape` (+ mode + scale).
-* Dispatches to the shape's `setSupport` hook — only convex shapes register one.
+* Fill a monomorphic {@link Support} for `shape` (+ mode + scale).
+*
+* Only reached through a dispatch entry that exists for convex types, so the handoff is present.
 */
 function setShapeSupport(out, shape, mode, scale) {
-	shapeDefs[shape.type].setSupport(out, shape, mode, scale);
+	shapeDefs[shape.type].convex.setSupport(out, shape, mode, scale);
 }
-const shapeDefs = {};
 const collisionDispatch = {
 	collideFns: /* @__PURE__ */ new Map(),
 	castFns: /* @__PURE__ */ new Map()
@@ -5850,7 +5836,6 @@ function create$33() {
 }
 const def$20 = /* @__PURE__ */ (() => defineShape({
 	type: 8,
-	category: 4,
 	computeMassProperties(out, _shape) {
 		out.mass = 0;
 	},
@@ -7241,9 +7226,10 @@ let SupportKind = /* @__PURE__ */ function(SupportKind) {
 	SupportKind[SupportKind["SPHERE"] = 1] = "SPHERE";
 	SupportKind[SupportKind["CAPSULE"] = 2] = "CAPSULE";
 	SupportKind[SupportKind["CYLINDER"] = 3] = "CYLINDER";
-	SupportKind[SupportKind["HULL"] = 4] = "HULL";
-	SupportKind[SupportKind["TRIANGLE"] = 5] = "TRIANGLE";
-	SupportKind[SupportKind["POINT"] = 6] = "POINT";
+	/** three points with a last-maximal tie-break — mesh contact quality depends on it */
+	SupportKind[SupportKind["TRIANGLE"] = 4] = "TRIANGLE";
+	/** any point set: a hull, or a single point */
+	SupportKind[SupportKind["HULL"] = 5] = "HULL";
 	return SupportKind;
 }({});
 /**
@@ -7255,15 +7241,12 @@ function createSupport() {
 	return {
 		kind: 1,
 		convexRadius: 0,
+		coreRadius: 0,
 		addRadius: 0,
 		hasTransform: false,
 		transform: create$41(),
 		box: { halfExtents: create$47() },
-		sphere: { radius: 0 },
-		capsule: {
-			halfHeight: 0,
-			radius: 0
-		},
+		capsule: { halfHeight: 0 },
 		cylinder: {
 			radius: 0,
 			halfHeight: 0
@@ -7276,13 +7259,7 @@ function createSupport() {
 			neighborsStart: EMPTY_VERTICES,
 			neighbors: EMPTY_VERTICES,
 			lastVertex: -1
-		},
-		triangle: {
-			a: create$47(),
-			b: create$47(),
-			c: create$47()
-		},
-		point: { position: create$47() }
+		}
 	};
 }
 /**
@@ -7290,6 +7267,35 @@ function createSupport() {
 * The single hot GJK/EPA call site — monomorphic.
 */
 function getSupport(out, support, direction) {
+	if (support.kind === 1) {
+		const radius = support.coreRadius + support.addRadius;
+		const dirX = direction[0];
+		const dirY = direction[1];
+		const dirZ = direction[2];
+		let sphereX = 0;
+		let sphereY = 0;
+		let sphereZ = 0;
+		if (radius > 0) {
+			const lengthSq = dirX * dirX + dirY * dirY + dirZ * dirZ;
+			if (lengthSq > 0) {
+				const scale = radius / Math.sqrt(lengthSq);
+				sphereX = dirX * scale;
+				sphereY = dirY * scale;
+				sphereZ = dirZ * scale;
+			}
+		}
+		if (support.hasTransform) {
+			const m = support.transform;
+			out[0] = sphereX + m[12];
+			out[1] = sphereY + m[13];
+			out[2] = sphereZ + m[14];
+		} else {
+			out[0] = sphereX;
+			out[1] = sphereY;
+			out[2] = sphereZ;
+		}
+		return;
+	}
 	let directionX = direction[0];
 	let directionY = direction[1];
 	let directionZ = direction[2];
@@ -7313,48 +7319,22 @@ function getSupport(out, support, direction) {
 			supportZ = directionZ >= 0 ? halfExtents[2] : -halfExtents[2];
 			break;
 		}
-		case 1: {
-			const radius = support.sphere.radius;
-			if (radius > 0) {
-				const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
-				if (lengthSq > 0) {
-					const scale = radius / Math.sqrt(lengthSq);
-					supportX = directionX * scale;
-					supportY = directionY * scale;
-					supportZ = directionZ * scale;
-				} else {
-					supportX = 0;
-					supportY = 0;
-					supportZ = 0;
-				}
-			} else {
-				supportX = 0;
-				supportY = 0;
-				supportZ = 0;
-			}
+		case 2: {
+			const halfHeight = support.capsule.halfHeight;
+			supportX = 0;
+			supportY = directionY > 0 ? halfHeight : -halfHeight;
+			supportZ = 0;
 			break;
 		}
-		case 2: {
-			const capsule = support.capsule;
-			const halfHeight = capsule.halfHeight;
-			const radius = capsule.radius;
-			if (radius > 0) {
-				const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
-				if (lengthSq > 0) {
-					const scale = radius / Math.sqrt(lengthSq);
-					supportX = directionX * scale;
-					supportY = directionY * scale + (directionY > 0 ? halfHeight : -halfHeight);
-					supportZ = directionZ * scale;
-				} else {
-					supportX = 0;
-					supportY = halfHeight;
-					supportZ = 0;
-				}
-			} else {
-				supportX = 0;
-				supportY = directionY > 0 ? halfHeight : -halfHeight;
-				supportZ = 0;
-			}
+		case 4: {
+			const v = support.hull.vertices;
+			const dotA = v[0] * directionX + v[1] * directionY + v[2] * directionZ;
+			const dotB = v[3] * directionX + v[4] * directionY + v[5] * directionZ;
+			const dotC = v[6] * directionX + v[7] * directionY + v[8] * directionZ;
+			const base = dotA > dotB ? dotA > dotC ? 0 : 6 : dotB > dotC ? 3 : 6;
+			supportX = v[base];
+			supportY = v[base + 1];
+			supportZ = v[base + 2];
 			break;
 		}
 		case 3: {
@@ -7371,7 +7351,7 @@ function getSupport(out, support, direction) {
 			supportY = directionY >= 0 ? cylinder.halfHeight : -cylinder.halfHeight;
 			break;
 		}
-		case 4: {
+		default: {
 			const hull = support.hull;
 			const vertices = hull.vertices;
 			const neighborsStart = hull.neighborsStart;
@@ -7429,34 +7409,12 @@ function getSupport(out, support, direction) {
 			supportZ *= outputScale;
 			break;
 		}
-		case 5: {
-			const triangle = support.triangle;
-			const a = triangle.a;
-			const b = triangle.b;
-			const c = triangle.c;
-			const dotA = a[0] * directionX + a[1] * directionY + a[2] * directionZ;
-			const dotB = b[0] * directionX + b[1] * directionY + b[2] * directionZ;
-			const dotC = c[0] * directionX + c[1] * directionY + c[2] * directionZ;
-			let best;
-			if (dotA > dotB) best = dotA > dotC ? a : c;
-			else best = dotB > dotC ? b : c;
-			supportX = best[0];
-			supportY = best[1];
-			supportZ = best[2];
-			break;
-		}
-		default: {
-			const position = support.point.position;
-			supportX = position[0];
-			supportY = position[1];
-			supportZ = position[2];
-			break;
-		}
 	}
-	if (support.addRadius > 0) {
+	const radius = support.coreRadius + support.addRadius;
+	if (radius > 0) {
 		const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
 		if (lengthSq > 0) {
-			const scale = support.addRadius / Math.sqrt(lengthSq);
+			const scale = radius / Math.sqrt(lengthSq);
 			supportX += directionX * scale;
 			supportY += directionY * scale;
 			supportZ += directionZ * scale;
@@ -7480,6 +7438,7 @@ function setBoxSupport(out, shape, mode, scale) {
 	out.kind = 0;
 	out.hasTransform = false;
 	out.addRadius = 0;
+	out.coreRadius = 0;
 	const halfExtents = out.box.halfExtents;
 	if (mode === 1) {
 		const minScale = Math.min(Math.abs(scale[0]), Math.abs(scale[1]), Math.abs(scale[2]));
@@ -7501,10 +7460,10 @@ function setSphereSupport(out, shape, mode, scale) {
 	out.hasTransform = false;
 	out.addRadius = 0;
 	if (mode === 0) {
-		out.sphere.radius = shape.radius * absScale;
+		out.coreRadius = shape.radius * absScale;
 		out.convexRadius = 0;
 	} else {
-		out.sphere.radius = 0;
+		out.coreRadius = 0;
 		out.convexRadius = shape.radius * absScale;
 	}
 }
@@ -7517,16 +7476,17 @@ function setCapsuleSupport(out, shape, mode, scale) {
 	out.addRadius = 0;
 	out.capsule.halfHeight = scaledHalfHeight;
 	if (mode === 0) {
-		out.capsule.radius = scaledRadius;
+		out.coreRadius = scaledRadius;
 		out.convexRadius = 0;
 	} else {
-		out.capsule.radius = 0;
+		out.coreRadius = 0;
 		out.convexRadius = scaledRadius;
 	}
 }
 function setCylinderSupport(out, shape, mode, scale) {
 	const absScale = Math.abs(scale[0]);
 	out.kind = 3;
+	out.coreRadius = 0;
 	out.hasTransform = false;
 	out.addRadius = 0;
 	if (mode === 0 || mode === 2) {
@@ -7544,26 +7504,32 @@ function setCylinderSupport(out, shape, mode, scale) {
 }
 /** triangle operand (mesh) — copies the 3 verts */
 function setTriangleSupport(out, a, b, c) {
-	out.kind = 5;
+	out.kind = 4;
 	out.hasTransform = false;
 	out.addRadius = 0;
+	out.coreRadius = 0;
 	out.convexRadius = 0;
-	const ta = out.triangle.a;
-	const tb = out.triangle.b;
-	const tc = out.triangle.c;
-	ta[0] = a[0];
-	ta[1] = a[1];
-	ta[2] = a[2];
-	tb[0] = b[0];
-	tb[1] = b[1];
-	tb[2] = b[2];
-	tc[0] = c[0];
-	tc[1] = c[1];
-	tc[2] = c[2];
+	const v = out.hull.scratch;
+	v[0] = a[0];
+	v[1] = a[1];
+	v[2] = a[2];
+	v[3] = b[0];
+	v[4] = b[1];
+	v[5] = b[2];
+	v[6] = c[0];
+	v[7] = c[1];
+	v[8] = c[2];
+	out.hull.vertices = v;
+	out.hull.vertexCount = 3;
+	out.hull.outputScale = 1;
+	out.hull.neighborsStart = EMPTY_VERTICES;
+	out.hull.neighbors = EMPTY_VERTICES;
+	out.hull.lastVertex = -1;
 }
 /** polygon face (KCC) — borrows the face's vertex array (read-only, valid for this pair) */
 function setPolygonSupport(out, vertices, vertexCount) {
-	out.kind = 4;
+	out.kind = 5;
+	out.coreRadius = 0;
 	out.hasTransform = false;
 	out.addRadius = 0;
 	out.convexRadius = 0;
@@ -7576,14 +7542,21 @@ function setPolygonSupport(out, vertices, vertexCount) {
 }
 /** point operand (collidePoint) — copies the point */
 function setPointSupport(out, point) {
-	out.kind = 6;
+	out.kind = 5;
 	out.hasTransform = false;
 	out.addRadius = 0;
+	out.coreRadius = 0;
 	out.convexRadius = 0;
-	const position = out.point.position;
-	position[0] = point[0];
-	position[1] = point[1];
-	position[2] = point[2];
+	const v = out.hull.scratch;
+	v[0] = point[0];
+	v[1] = point[1];
+	v[2] = point[2];
+	out.hull.vertices = v;
+	out.hull.vertexCount = 1;
+	out.hull.outputScale = 1;
+	out.hull.neighborsStart = EMPTY_VERTICES;
+	out.hull.neighbors = EMPTY_VERTICES;
+	out.hull.lastVertex = -1;
 }
 /**
 * Compute the convex-radius-shrunk hull vertices (unscaled) into `dst` as a flat [x,y,z,...] array.
@@ -7796,7 +7769,8 @@ function computeScaledShrunkHullPoints(shape, scale, dst) {
 * current pair.
 */
 function setHullSupport(out, shape, mode, scale) {
-	out.kind = 4;
+	out.kind = 5;
+	out.coreRadius = 0;
 	out.hasTransform = false;
 	out.addRadius = 0;
 	const hull = out.hull;
@@ -19592,16 +19566,15 @@ function update$9(shape) {
 const _computeBoxMassProperties_fullExtents = /* @__PURE__ */ create$47();
 const def$11 = /* @__PURE__ */ (() => defineShape({
 	type: 1,
-	category: 0,
+	convex: { setSupport: setBoxSupport },
 	computeMassProperties: computeMassProperties$12,
 	getSurfaceNormal: getSurfaceNormal$11,
 	getSupportingFace: getSupportingFace$11,
 	getInnerRadius: getInnerRadius$10,
 	castRay: castRayVsBox,
 	collidePoint: collidePointVsBox,
-	setSupport: setBoxSupport,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(1, shapeDef.type, collideConvexVsConvex);
 			setCollideShapeFn(shapeDef.type, 1, collideConvexVsConvex);
 			setCastShapeFn(1, shapeDef.type, castConvexVsConvex);
@@ -20142,16 +20115,15 @@ function update$8(shape) {
 }
 const def$10 = /* @__PURE__ */ (() => defineShape({
 	type: 2,
-	category: 0,
+	convex: { setSupport: setCapsuleSupport },
 	computeMassProperties: computeMassProperties$11,
 	getSurfaceNormal: getSurfaceNormal$10,
 	getSupportingFace: getSupportingFace$10,
 	getInnerRadius: getInnerRadius$9,
 	castRay: castRayVsConvex,
 	collidePoint: collidePointVsConvex,
-	setSupport: setCapsuleSupport,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(2, shapeDef.type, collideConvexVsConvex);
 			setCollideShapeFn(shapeDef.type, 2, collideConvexVsConvex);
 			setCastShapeFn(2, shapeDef.type, castConvexVsConvex);
@@ -20332,7 +20304,6 @@ const _getSupportingFace_childTransform$1 = /* @__PURE__ */ create$41();
 const _getSupportingFace_localDirection$1 = /* @__PURE__ */ create$47();
 const def$9 = /* @__PURE__ */ (() => defineShape({
 	type: 5,
-	category: 3,
 	computeMassProperties: computeMassProperties$10,
 	getSurfaceNormal: getSurfaceNormal$9,
 	getSupportingFace: getSupportingFace$9,
@@ -22151,16 +22122,15 @@ function create$9(o) {
 }
 const def$8 = /* @__PURE__ */ (() => defineShape({
 	type: 3,
-	category: 0,
+	convex: { setSupport: setHullSupport },
 	computeMassProperties: computeMassProperties$9,
 	getSurfaceNormal: getSurfaceNormal$8,
 	getSupportingFace: getSupportingFace$8,
 	getInnerRadius: getInnerRadius$7,
 	castRay: castRayVsConvex,
 	collidePoint: collidePointVsConvex,
-	setSupport: setHullSupport,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(3, shapeDef.type, collideConvexVsConvex);
 			setCollideShapeFn(shapeDef.type, 3, collideConvexVsConvex);
 			setCastShapeFn(3, shapeDef.type, castConvexVsConvex);
@@ -22349,16 +22319,15 @@ function update$6(shape) {
 }
 const def$7 = /* @__PURE__ */ (() => defineShape({
 	type: 9,
-	category: 0,
+	convex: { setSupport: setCylinderSupport },
 	computeMassProperties: computeMassProperties$8,
 	getSurfaceNormal: getSurfaceNormal$7,
 	getSupportingFace: getSupportingFace$7,
 	getInnerRadius: getInnerRadius$6,
 	castRay: castRayVsConvex,
 	collidePoint: collidePointVsConvex,
-	setSupport: setCylinderSupport,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(9, shapeDef.type, collideConvexVsConvex);
 			setCollideShapeFn(shapeDef.type, 9, collideConvexVsConvex);
 			setCastShapeFn(9, shapeDef.type, castConvexVsConvex);
@@ -22499,7 +22468,6 @@ function computeOffsetCenterOfMassCenterOfMass(out, shape) {
 const _childMassProperties$2 = /* @__PURE__ */ create$40();
 const def$6 = /* @__PURE__ */ (() => defineShape({
 	type: 10,
-	category: 2,
 	computeMassProperties: computeMassProperties$7,
 	getSurfaceNormal: getSurfaceNormal$6,
 	getSupportingFace: getSupportingFace$6,
@@ -22596,7 +22564,6 @@ function update$4(shape) {
 }
 const def$5 = /* @__PURE__ */ (() => defineShape({
 	type: 11,
-	category: 4,
 	computeMassProperties: computeMassProperties$6,
 	getSurfaceNormal: getSurfaceNormal$5,
 	getSupportingFace: getSupportingFace$5,
@@ -22730,11 +22697,13 @@ function computePlaneLocalBounds(out, shape) {
 	}
 }
 function register$1() {
-	for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+	const collideReversed = reversedCollideShapeVsShape(collideConvexVsPlane);
+	const castReversed = reversedCastShapeVsShape(castConvexVsPlane);
+	for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 		setCollideShapeFn(shapeDef.type, 11, collideConvexVsPlane);
 		setCastShapeFn(shapeDef.type, 11, castConvexVsPlane);
-		setCollideShapeFn(11, shapeDef.type, reversedCollideShapeVsShape(collideConvexVsPlane));
-		setCastShapeFn(11, shapeDef.type, reversedCastShapeVsShape(castConvexVsPlane));
+		setCollideShapeFn(11, shapeDef.type, collideReversed);
+		setCastShapeFn(11, shapeDef.type, castReversed);
 	}
 }
 const _castRayVsPlane_worldPlane = /* @__PURE__ */ create$37();
@@ -23072,7 +23041,6 @@ function update$3(shape) {
 const _childMassProperties$1 = /* @__PURE__ */ create$40();
 const def$4 = /* @__PURE__ */ (() => defineShape({
 	type: 7,
-	category: 2,
 	computeMassProperties: computeMassProperties$5,
 	getSurfaceNormal: getSurfaceNormal$4,
 	getSupportingFace: getSupportingFace$4,
@@ -23207,16 +23175,15 @@ function update$2(shape) {
 }
 const def$3 = /* @__PURE__ */ (() => defineShape({
 	type: 0,
-	category: 0,
+	convex: { setSupport: setSphereSupport },
 	computeMassProperties: computeMassProperties$4,
 	getSurfaceNormal: getSurfaceNormal$3,
 	getSupportingFace: getSupportingFace$3,
 	getInnerRadius: getInnerRadius$2,
 	castRay: castRayVsConvex,
 	collidePoint: collidePointVsSphere,
-	setSupport: setSphereSupport,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(0, shapeDef.type, collideConvexVsConvex);
 			setCollideShapeFn(shapeDef.type, 0, collideConvexVsConvex);
 			setCastShapeFn(0, shapeDef.type, castConvexVsConvex);
@@ -23278,7 +23245,7 @@ function collidePointVsSphere(collector, _settings, pointX, pointY, pointZ, shap
 	}
 }
 const _collideSphereVsSphere_hit = /* @__PURE__ */ createCollideShapeHit();
-function collideSphereVsSphere(collector, _settings, shapeA, subShapeIdA, _subShapeIdBitsA, posAX, posAY, posAZ, _quatAX, _quatAY, _quatAZ, _quatAW, scaleAX, _scaleAY, _scaleAZ, shapeB, subShapeIdB, _subShapeIdBitsB, posBX, posBY, posBZ, _quatBX, _quatBY, _quatBZ, _quatBW, scaleBX, _scaleBY, _scaleBZ) {
+function collideSphereVsSphere(collector, settings, shapeA, subShapeIdA, _subShapeIdBitsA, posAX, posAY, posAZ, _quatAX, _quatAY, _quatAZ, _quatAW, scaleAX, _scaleAY, _scaleAZ, shapeB, subShapeIdB, _subShapeIdBitsB, posBX, posBY, posBZ, _quatBX, _quatBY, _quatBZ, _quatBW, scaleBX, _scaleBY, _scaleBZ) {
 	const sphereA = shapeA;
 	const sphereB = shapeB;
 	const radiusA = sphereA.radius * Math.abs(scaleAX);
@@ -23288,9 +23255,11 @@ function collideSphereVsSphere(collector, _settings, shapeA, subShapeIdA, _subSh
 	const dz = posBZ - posAZ;
 	const distSq = dx * dx + dy * dy + dz * dz;
 	const radiusSum = radiusA + radiusB;
-	if (distSq >= radiusSum * radiusSum) return;
+	const reach = radiusSum + settings.maxSeparationDistance;
+	if (distSq >= reach * reach) return;
 	const dist = Math.sqrt(distSq);
 	const penetration = radiusSum - dist;
+	if (-penetration >= collector.earlyOutFraction) return;
 	let normalX, normalY, normalZ;
 	if (dist > 0) {
 		const invDist = 1 / dist;
@@ -23318,6 +23287,8 @@ function collideSphereVsSphere(collector, _settings, shapeA, subShapeIdA, _subSh
 	hit.materialIdA = sphereA.materialId;
 	hit.materialIdB = sphereB.materialId;
 	hit.bodyIdB = collector.bodyIdB;
+	hit.faceA.numVertices = 0;
+	hit.faceB.numVertices = 0;
 	collector.addHit(hit);
 }
 //#endregion
@@ -23789,7 +23760,6 @@ function update$1(shape) {
 }
 const def$2 = /* @__PURE__ */ (() => defineShape({
 	type: 12,
-	category: 3,
 	computeMassProperties: computeMassProperties$3,
 	getSurfaceNormal: getSurfaceNormal$2,
 	getSupportingFace: getSupportingFace$2,
@@ -24467,7 +24437,6 @@ const _supportingFace_localDirection = /* @__PURE__ */ create$47();
 const _supportingFace_shapeMat4 = /* @__PURE__ */ create$41();
 const def$1 = /* @__PURE__ */ (() => defineShape({
 	type: 6,
-	category: 2,
 	computeMassProperties: computeMassProperties$2,
 	getSurfaceNormal: getSurfaceNormal$1,
 	getSupportingFace: getSupportingFace$1,
@@ -25847,14 +25816,13 @@ const _getSupportingFace_b = /* @__PURE__ */ create$47();
 const _getSupportingFace_c = /* @__PURE__ */ create$47();
 const def = /* @__PURE__ */ (() => defineShape({
 	type: 4,
-	category: 1,
 	computeMassProperties: computeMassProperties$1,
 	getSurfaceNormal,
 	getSupportingFace,
 	castRay: castRayVsTriangleMesh,
 	collidePoint: collidePointVsTriangleMesh,
 	register: () => {
-		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.category === 0) {
+		for (const shapeDef of Object.values(shapeDefs)) if (shapeDef.convex !== void 0) {
 			setCollideShapeFn(shapeDef.type, 4, collideConvexVsTriangleMesh);
 			setCollideShapeFn(4, shapeDef.type, collideTriangleMeshVsConvex);
 			setCastShapeFn(shapeDef.type, 4, castConvexVsTriangleMesh);
@@ -29463,6 +29431,6 @@ function disableCollision(settings, objectLayerA, objectLayerB) {
 	disableCollision$1(settings.layers, objectLayerA, objectLayerB);
 }
 //#endregion
-export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeCategory, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, pairs_exports as pairs, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
+export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SupportKind, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getShapeInnerRadius, getShapeSupportingFace, getShapeSurfaceNormal, getSupport, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, pairs_exports as pairs, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformed_exports as transformed, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, updateWorld };
 
 //# sourceMappingURL=index.js.map

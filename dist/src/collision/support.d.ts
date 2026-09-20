@@ -31,15 +31,22 @@ export declare enum SupportKind {
     SPHERE = 1,
     CAPSULE = 2,
     CYLINDER = 3,
-    HULL = 4,
-    TRIANGLE = 5,
-    POINT = 6
+    /** three points with a last-maximal tie-break — mesh contact quality depends on it */
+    TRIANGLE = 4,
+    /** any point set: a hull, or a single point */
+    HULL = 5
 }
 export type Support = {
     /** which sub-object holds this support's parameters; selects the branch taken in {@link getSupport} */
     kind: SupportKind;
     /** reported convex radius — read by the driver, never added by getSupport (0 in include mode) */
     convexRadius: number;
+    /**
+     * the shape's own rounding: how far its core is pushed out along the direction. a sphere is a
+     * rounded point and a capsule a rounded segment, so both carry it; everything else is 0 because
+     * its core already is the shape. summed with {@link addRadius} and applied in one place.
+     */
+    coreRadius: number;
     /** extra radius added along the local direction by getSupport (EPA separation / cast radius) */
     addRadius: number;
     /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
@@ -49,20 +56,9 @@ export type Support = {
     box: {
         halfExtents: Vec3;
     };
-    /**
-     * sphere as a single radius. 0 → the core is the origin (exclude mode: a sphere is pure convex radius);
-     * r → the rounded surface point `r·dir̂` (include mode).
-     */
-    sphere: {
-        radius: number;
-    };
-    /**
-     * capsule as a segment of half-length `halfHeight` along local Y, optionally rounded by `radius`.
-     * radius 0 → the bare segment endpoint (exclude); r → segment endpoint + `r·dir̂` (include).
-     */
+    /** capsule core: a segment of half-length `halfHeight` along local Y. the rounding is coreRadius. */
     capsule: {
         halfHeight: number;
-        radius: number;
     };
     /**
      * cylinder: `radius` is the radial extent in the local XZ plane, `halfHeight` the axial extent along
@@ -88,16 +84,6 @@ export type Support = {
         neighbors: number[];
         /** warm-start hint: the last winning vertex index, carried across support calls within one pair; -1 = cold */
         lastVertex: number;
-    };
-    /** triangle (mesh face) — support is whichever of the three vertices has the greatest dot with the direction */
-    triangle: {
-        a: Vec3;
-        b: Vec3;
-        c: Vec3;
-    };
-    /** single point — the support is always this point, regardless of direction */
-    point: {
-        position: Vec3;
     };
 };
 /**
