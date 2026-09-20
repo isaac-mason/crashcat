@@ -41,6 +41,8 @@
     "build:dts": "tsc -p tsconfig.build.json && node scripts/add-js-extensions-dts.mjs",
     "format": "biome format --write src/. tst/.",
     "lint": "biome lint --write src/. tst/.",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck-examples": "tsc --noEmit -p examples/tsconfig.json",
     "test": "vitest ./tst",
     "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
     "typecheck-docs": "tsc --project docs/tsconfig.json --noEmit",

@@ -24,7 +24,6 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';
 import { loadGLTF } from './utils/gltf';
-import { color, mix } from 'three/tsl';
 
 const trackGLTF = await loadGLTF('./models/track.glb');
 
