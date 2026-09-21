@@ -317,9 +317,9 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mp.linearVelocity[2] *= linearDampingFactor;
 
         // clamp linear velocity to max
-        const lvx = mp.linearVelocity[0],
-            lvy = mp.linearVelocity[1],
-            lvz = mp.linearVelocity[2];
+        const lvx = mp.linearVelocity[0];
+        const lvy = mp.linearVelocity[1];
+        const lvz = mp.linearVelocity[2];
         const linearSpeedSq = lvx * lvx + lvy * lvy + lvz * lvz;
         const maxLinearSq = mp.maxLinearVelocity * mp.maxLinearVelocity;
         if (linearSpeedSq > maxLinearSq) {
@@ -357,9 +357,9 @@ function accelerationIntegrationUpdate(world: World, timeStep: number): void {
         mp.angularVelocity[2] *= angularDampingFactor;
 
         // clamp angular velocity to max
-        const avx = mp.angularVelocity[0],
-            avy = mp.angularVelocity[1],
-            avz = mp.angularVelocity[2];
+        const avx = mp.angularVelocity[0];
+        const avy = mp.angularVelocity[1];
+        const avz = mp.angularVelocity[2];
         const angularSpeedSq = avx * avx + avy * avy + avz * avz;
         const maxAngularSq = mp.maxAngularVelocity * mp.maxAngularVelocity;
         if (angularSpeedSq > maxAngularSq) {
