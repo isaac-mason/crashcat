@@ -1,7 +1,7 @@
 import { type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { convexHull } from '../../src';
-import { createSupport, getSupport, type Support, SupportFunctionMode, setHullSupport } from '../../src/collision/support';
+import { createSupport, type Support, SupportFunctionMode, setHullSupport } from '../../src/collision/support';
 
 const { INCLUDE_CONVEX_RADIUS, EXCLUDE_CONVEX_RADIUS } = SupportFunctionMode;
 
@@ -150,8 +150,8 @@ describe('convex hull support — hill climb vs brute equivalence', () => {
                     for (const dir of dirs) {
                         // each direction gets a cold accelerated support (first-call brute seeds the hint)
                         setHullSupport(acc, shape, mode, scale);
-                        getSupport(a, acc, dir);
-                        getSupport(b, ref, dir);
+                        acc.getSupport(a, acc, dir);
+                        ref.getSupport(b, ref, dir);
                         const climbDot = dot(a, dir);
                         const bruteDot = dot(b, dir);
                         expect(climbDot).toBeGreaterThanOrEqual(bruteDot - tol);
@@ -178,8 +178,8 @@ describe('convex hull support — hill climb vs brute equivalence', () => {
                     const b = vec3.create();
 
                     for (const dir of dirs) {
-                        getSupport(a, acc, dir);
-                        getSupport(b, ref, dir);
+                        acc.getSupport(a, acc, dir);
+                        ref.getSupport(b, ref, dir);
                         const climbDot = dot(a, dir);
                         const bruteDot = dot(b, dir);
                         expect(climbDot).toBeGreaterThanOrEqual(bruteDot - tol);
@@ -200,7 +200,7 @@ describe('convex hull support — hill climb vs brute equivalence', () => {
         const s = createSupport();
         setHullSupport(s, box, INCLUDE_CONVEX_RADIUS, vec3.fromValues(1, 1, 1));
         const out = vec3.create();
-        getSupport(out, s, vec3.fromValues(1, 1, 1));
+        s.getSupport(out, s, vec3.fromValues(1, 1, 1));
         expect(out[0]).toBeCloseTo(1, 12);
         expect(out[1]).toBeCloseTo(1, 12);
         expect(out[2]).toBeCloseTo(1, 12);

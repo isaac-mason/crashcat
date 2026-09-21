@@ -1,7 +1,7 @@
 import { type Mat4, type Vec3 } from 'math';
 import { type GjkCastShapeResult } from './gjk.js';
 import { type Simplex } from './simplex.js';
-import { type Support } from './support.js';
+import type { Support } from './support.js';
 export declare enum PenetrationDepthStatus {
     NOT_COLLIDING = 0,
     COLLIDING = 1,

@@ -9,7 +9,6 @@ import {
     convexHull,
     createSimplex,
     createSupport,
-    getSupport,
     gjkClosestPoints,
     type Simplex,
     type Support,
@@ -117,9 +116,9 @@ function getMinkowskiSupport(supportA: Support, supportB: Support, direction: Ve
     const supportPointB = vec3.create();
     const negDirection = vec3.create();
 
-    getSupport(supportPointA, supportA, direction);
+    supportA.getSupport(supportPointA, supportA, direction);
     vec3.negate(negDirection, direction);
-    getSupport(supportPointB, supportB, negDirection);
+    supportB.getSupport(supportPointB, supportB, negDirection);
 
     vec3.subtract(out, supportPointA, supportPointB);
 }

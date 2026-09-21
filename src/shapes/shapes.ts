@@ -7,7 +7,7 @@ import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
-import type { Support, SupportFunctionMode } from '../collision/support';
+import type { Support, SupportFunction, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import type { BoxShape } from './box';
 import type { CapsuleShape } from './capsule';
@@ -340,11 +340,11 @@ export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
 /**
  * What the convex narrowphase needs from a shape: the handoff that turns it into a {@link Support}.
  *
- * This is the only place a `Shape` crosses into the support world — `getSupport`, gjk and epa all
- * work in terms of {@link SupportKind}, which is a different and smaller taxonomy than
- * {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and point
- * all share one kind). A shape hands off to one of those existing kinds; it does not introduce new
- * ones, which keeps `getSupport`'s switch closed and dense.
+ * This is the only place a `Shape` crosses into the support world — gjk and epa work in terms of
+ * the evaluators in support.ts ({@link SupportFunction}), which is a different and smaller taxonomy
+ * than {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and
+ * point all share one evaluator). A shape's fill installs one of those existing evaluators; it does
+ * not introduce new ones.
  *
  * Present iff the shape is convex — this is the marker, there is no separate flag.
  */

@@ -1,6 +1,6 @@
 import { type Mat4, type Vec3 } from 'math';
 import { type Simplex } from './simplex.js';
-import { type Support } from './support.js';
+import type { Support } from './support.js';
 export type GjkCastRayResult = {
     isHitFound: boolean;
     lambda: number;

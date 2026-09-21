@@ -11,54 +11,50 @@ export declare enum SupportFunctionMode {
     DEFAULT = 2
 }
 /**
- * Monomorphic support evaluation.
+ * Support evaluation through the struct.
  *
- * A single {@link Support} struct (one hidden class) is filled once per collision pair, then
- * {@link getSupport} — a single, monomorphic function — is called many times per pair by GJK/EPA.
- * The per-shape polymorphism lives entirely in the fill (cold, once per pair); the hot path is one
- * function with a `switch` on `kind`.
+ * A single {@link Support} struct (one hidden class) is filled once per collision pair. the fill
+ * installs the shape's evaluator on the struct next to its parameters, and gjk/epa call it many
+ * times per pair as `support.getSupport(out, support, direction)`. there is no kind tag and no
+ * switch: the evaluator *is* the kind.
+ *
+ * Every evaluator is self-contained — it rotates the direction into local space, finds the core
+ * support, adds the radius along the local direction and transforms the point back — so each
+ * evaluation is one straight-line optimisation unit with nothing shared across a call boundary.
  *
  * Radius contract:
- *  - `convexRadius` is the *reported* radius. `getSupport` never adds it; the collision driver
- *    reads it and passes it to `gjkClosestPoints`/EPA for the shrunk-core-plus-radius distance math.
- *  - `addRadius` is an extra radius added along the (local) direction by `getSupport` itself (the EPA
- *    speculative-separation / cast convex radius). 0 on the GJK path.
+ *  - `convexRadius` is the *reported* radius. no evaluator adds it; the collision driver reads it and
+ *    passes it to `gjkClosestPoints`/EPA for the shrunk-core-plus-radius distance math.
+ *  - `addRadius` is an extra radius added along the (local) direction by the evaluator itself (the
+ *    EPA speculative-separation / cast convex radius). 0 on the GJK path.
  *  - "mode" (include vs exclude convex radius) is baked into the params by the fill: exclude uses the
  *    shrunk core + reports `convexRadius`; include uses the full/rounded core + `convexRadius = 0`.
  */
-export declare enum SupportKind {
-    BOX = 0,
-    SPHERE = 1,
-    CAPSULE = 2,
-    CYLINDER = 3,
-    /** three points with a last-maximal tie-break — mesh contact quality depends on it */
-    TRIANGLE = 4,
-    /** any point set: a hull, or a single point */
-    HULL = 5
-}
+/** evaluate the support point of `support` in direction `direction`, writing it to `out` */
+export type SupportFunction = (out: Vec3, support: Support, direction: Vec3) => void;
 export type Support = {
-    /** which sub-object holds this support's parameters; selects the branch taken in {@link getSupport} */
-    kind: SupportKind;
-    /** reported convex radius — read by the driver, never added by getSupport (0 in include mode) */
+    /** the shape's evaluator, installed by the fill. the hot call site is `support.getSupport(out, support, direction)` */
+    getSupport: SupportFunction;
+    /** reported convex radius — read by the driver, never added by the evaluator (0 in include mode) */
     convexRadius: number;
-    /**
-     * the shape's own rounding: how far its core is pushed out along the direction. a sphere is a
-     * rounded point and a capsule a rounded segment, so both carry it; everything else is 0 because
-     * its core already is the shape. summed with {@link addRadius} and applied in one place.
-     */
-    coreRadius: number;
-    /** extra radius added along the local direction by getSupport (EPA separation / cast radius) */
+    /** extra radius added along the local direction by the evaluator (EPA separation / cast radius) */
     addRadius: number;
-    /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
+    /** whether the support has a transform */
     hasTransform: boolean;
+    /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
     transform: Mat4;
     /** axis-aligned box: support is the corner picked by the sign of the direction on each axis (±halfExtents) */
     box: {
         halfExtents: Vec3;
     };
-    /** capsule core: a segment of half-length `halfHeight` along local Y. the rounding is coreRadius. */
+    /** sphere core: the origin, rounded by `radius`. 0 in exclude mode, where the radius is reported instead. */
+    sphere: {
+        radius: number;
+    };
+    /** capsule core: a segment of half-length `halfHeight` along local Y, rounded by `radius` (0 in exclude mode) */
     capsule: {
         halfHeight: number;
+        radius: number;
     };
     /**
      * cylinder: `radius` is the radial extent in the local XZ plane, `halfHeight` the axial extent along
@@ -68,9 +64,15 @@ export type Support = {
         radius: number;
         halfHeight: number;
     };
-    /** convex vertex set — support is the vertex with the greatest dot product against the direction */
+    /** triangle (mesh operand): three vertices as a flat `[ax,ay,az, bx,by,bz, cx,cy,cz]` buffer, owned and copied into by the fill */
+    triangle: {
+        vertices: number[];
+    };
+    /** single point (collidePoint operand), owned and copied into by the fill */
+    point: Vec3;
+    /** convex vertex set (a hull, or a borrowed polygon face) — support is the vertex with the greatest dot product against the direction */
     hull: {
-        /** flat `[x,y,z,...]` vertices scanned by getSupport; read-only borrow valid for the current pair */
+        /** flat `[x,y,z,...]` vertices scanned by the evaluator; read-only borrow valid for the current pair */
         vertices: number[];
         /** number of vertices in `vertices` (it may be longer than `vertexCount * 3`) */
         vertexCount: number;
@@ -89,14 +91,31 @@ export type Support = {
 /**
  * Allocate a reusable {@link Support}. A driver holds a small fixed number of these (e.g. one per
  * operand slot) and refills them per pair via the fill functions. The sub-objects, transform, and
- * scratch buffer are pre-allocated so filling never allocates.
+ * scratch buffer are pre-allocated so filling never allocates. starts as a zero-radius sphere at the origin.
  */
 export declare function createSupport(): Support;
 /**
- * Evaluate the support point of `support` in direction `direction`, writing it to `out`.
- * The single hot GJK/EPA call site — monomorphic.
+ * sphere evaluator. a sphere's support is rotation invariant: R·(r·dir̂_local) where
+ * dir̂_local = Rᵀ·dir̂ is just r·dir̂, so the direction transform and the rotation half of the
+ * transform-back cancel and only the translation survives. addRadius is applied along that same
+ * direction, so it folds into the radius.
  */
-export declare function getSupport(out: Vec3, support: Support, direction: Vec3): void;
+export declare function sphereSupport(out: Vec3, support: Support, direction: Vec3): void;
+/** box evaluator: the corner picked by the sign of the local direction on each axis */
+export declare function boxSupport(out: Vec3, support: Support, direction: Vec3): void;
+/** capsule evaluator: the near end of the core segment, rounded by the capsule radius */
+export declare function capsuleSupport(out: Vec3, support: Support, direction: Vec3): void;
+/** cylinder evaluator: the radial extreme in the local XZ plane on the near/far cap */
+export declare function cylinderSupport(out: Vec3, support: Support, direction: Vec3): void;
+/** triangle evaluator: three points with a last-maximal tie-break — mesh contact quality depends on it */
+export declare function triangleSupport(out: Vec3, support: Support, direction: Vec3): void;
+/** point evaluator: the point itself, rounded by addRadius along the local direction */
+export declare function pointSupport(out: Vec3, support: Support, direction: Vec3): void;
+/**
+ * convex point-set evaluator: a hull or a polygon face. brute scan when no adjacency is baked or
+ * the pair is cold; otherwise a warm hill-climb over the baked 1-ring.
+ */
+export declare function hullSupport(out: Vec3, support: Support, direction: Vec3): void;
 export declare function setBoxSupport(out: Support, shape: BoxShape, mode: SupportFunctionMode, scale: Vec3): void;
 export declare function setSphereSupport(out: Support, shape: SphereShape, mode: SupportFunctionMode, scale: Vec3): void;
 export declare function setCapsuleSupport(out: Support, shape: CapsuleShape, mode: SupportFunctionMode, scale: Vec3): void;
@@ -121,7 +140,7 @@ export declare function computeShrunkHullPoints(shape: Pick<ConvexHullShape, 'nu
 /**
  * Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices;
  * exclude uses the convex-radius-shrunk vertices. Uniform positive scale borrows the shape-owned
- * arrays and scales the support point in getSupport (fast path); non-uniform / mirrored scale bakes
+ * arrays and scales the support point in the evaluator (fast path); non-uniform / mirrored scale bakes
  * scaled vertices into scratch per pair (slow path). `vertices` is a read-only borrow valid for the
  * current pair.
  */

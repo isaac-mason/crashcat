@@ -148,11 +148,11 @@ export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (outResult: G
 /**
  * What the convex narrowphase needs from a shape: the handoff that turns it into a {@link Support}.
  *
- * This is the only place a `Shape` crosses into the support world — `getSupport`, gjk and epa all
- * work in terms of {@link SupportKind}, which is a different and smaller taxonomy than
- * {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and point
- * all share one kind). A shape hands off to one of those existing kinds; it does not introduce new
- * ones, which keeps `getSupport`'s switch closed and dense.
+ * This is the only place a `Shape` crosses into the support world — gjk and epa work in terms of
+ * the evaluators in support.ts ({@link SupportFunction}), which is a different and smaller taxonomy
+ * than {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and
+ * point all share one evaluator). A shape's fill installs one of those existing evaluators; it does
+ * not introduce new ones.
  *
  * Present iff the shape is convex — this is the marker, there is no separate flag.
  */

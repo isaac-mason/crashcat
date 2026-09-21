@@ -5,7 +5,7 @@ import {
     createBarycentricCoordinatesResult,
 } from './closest-points';
 import { copySimplex, createSimplex, type Simplex } from './simplex';
-import { getSupport, type Support } from './support';
+import type { Support } from './support';
 
 /*
 References:
@@ -729,7 +729,7 @@ export function gjkCastRay(
 
     // v = x - support(0)
     vec3.set(_directionA, 0, 0, 0);
-    getSupport(_p, support, _directionA);
+    support.getSupport(_p, support, _directionA);
     vec3.subtract(_v, _x, _p);
 
     let v_len_sq = Number.MAX_VALUE;
@@ -740,7 +740,7 @@ export function gjkCastRay(
         iterations++;
 
         // get new support point
-        getSupport(_p, support, _v);
+        support.getSupport(_p, support, _v);
 
         vec3.subtract(_w, _x, _p);
 
@@ -937,11 +937,11 @@ export function gjkCastShape(
 
     // v = -support_B + support_A (Minkowski difference B - A in the space of A)
     vec3.set(_directionB, 0, 0, 0);
-    getSupport(_q, shapeBSupport, _directionB);
+    shapeBSupport.getSupport(_q, shapeBSupport, _directionB);
     vec3.negate(_q, _q);
 
     vec3.set(_directionA, 0, 0, 0);
-    getSupport(_p, shapeASupport, _directionA);
+    shapeASupport.getSupport(_p, shapeASupport, _directionA);
 
     vec3.subtract(_v, _q, _p);
 
@@ -960,10 +960,10 @@ export function gjkCastShape(
         // A is moving, so we need to add the back side of B to the front side of A
         // keep the support points on A and B separate so that in the end we can calculate a contact point
         vec3.negate(_directionA, _v);
-        getSupport(_p, shapeASupport, _directionA);
+        shapeASupport.getSupport(_p, shapeASupport, _directionA);
 
         vec3.copy(_directionB, _v);
-        getSupport(_q, shapeBSupport, _directionB);
+        shapeBSupport.getSupport(_q, shapeBSupport, _directionB);
 
         vec3.subtract(_pq, _q, _p);
         vec3.subtract(_w, _x, _pq);
@@ -1255,8 +1255,8 @@ export function gjkClosestPoints(
         vec3.copy(_directionA, _closestPointToSimplex.point);
         vec3.negate(_directionB, _closestPointToSimplex.point);
 
-        getSupport(_p, supportA, _directionA);
-        getSupport(_q, supportB, _directionB);
+        supportA.getSupport(_p, supportA, _directionA);
+        supportB.getSupport(_q, supportB, _directionB);
 
         // get support point of the minkowski sum A - B of v
         vec3.subtract(_w, _p, _q);

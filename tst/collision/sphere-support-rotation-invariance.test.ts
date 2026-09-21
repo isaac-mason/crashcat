@@ -1,9 +1,9 @@
 import { mat4, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { sphere } from '../../src';
-import { createSupport, getSupport, SupportFunctionMode, setSphereSupport } from '../../src/collision/support';
+import { createSupport, SupportFunctionMode, setSphereSupport } from '../../src/collision/support';
 
-// getSupport short-circuits spheres before the shared direction transform, on the grounds that a
+// the sphere evaluator skips the direction transform entirely, on the grounds that a
 // sphere's support is rotation invariant: the transform into local space and the rotation half of
 // the transform back cancel exactly, and addRadius folds into the radius because it is applied
 // along that same direction.
@@ -113,9 +113,9 @@ describe('sphere support is rotation invariant', () => {
                         for (let k = 0; k < 16; k++) support.transform[k] = transform[k];
                     }
 
-                    const coreRadius = support.coreRadius;
+                    const coreRadius = support.sphere.radius;
                     for (const dir of directions()) {
-                        getSupport(actual, support, dir);
+                        support.getSupport(actual, support, dir);
                         referenceSphereSupport(expected, transform ? [...transform] : null, coreRadius, addRadius, dir);
                         expect(actual[0]).toBeCloseTo(expected[0], 12);
                         expect(actual[1]).toBeCloseTo(expected[1], 12);
@@ -144,7 +144,7 @@ describe('sphere support is rotation invariant', () => {
         for (const dir of directions()) {
             const len = Math.hypot(dir[0], dir[1], dir[2]);
             if (len === 0) continue;
-            getSupport(actual, support, dir);
+            support.getSupport(actual, support, dir);
             const offX = actual[0] - centre[0];
             const offY = actual[1] - centre[1];
             const offZ = actual[2] - centre[2];

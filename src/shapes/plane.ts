@@ -20,7 +20,7 @@ import {
     createCollideShapeHit,
     reversedCollideShapeVsShape,
 } from '../collision/collide-shape-vs-shape';
-import { createSupport, getSupport, SupportFunctionMode } from '../collision/support';
+import { createSupport, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import {
@@ -552,7 +552,11 @@ function collideConvexVsPlane(
 
     // get support point in direction opposite to plane normal
     vec3.negate(_collideConvexVsPlane_normal, normal);
-    getSupport(_collideConvexVsPlane_supportPoint, _collideConvexVsPlane_support, _collideConvexVsPlane_normal);
+    _collideConvexVsPlane_support.getSupport(
+        _collideConvexVsPlane_supportPoint,
+        _collideConvexVsPlane_support,
+        _collideConvexVsPlane_normal,
+    );
 
     // calculate penetration
     const signedDistance = plane3.distanceToPoint(_collideConvexVsPlane_localPlane, _collideConvexVsPlane_supportPoint);
@@ -788,7 +792,11 @@ export function castConvexVsPlane(
 
     // get support point in opposite direction
     vec3.negate(_castConvexVsPlane_normalInShapeSpace, _castConvexVsPlane_normalInShapeSpace);
-    getSupport(_castConvexVsPlane_supportPoint, _castConvexVsPlane_support, _castConvexVsPlane_normalInShapeSpace);
+    _castConvexVsPlane_support.getSupport(
+        _castConvexVsPlane_supportPoint,
+        _castConvexVsPlane_support,
+        _castConvexVsPlane_normalInShapeSpace,
+    );
 
     // transform support point to world space
     vec3.transformMat4(_castConvexVsPlane_supportPointWorld, _castConvexVsPlane_supportPoint, _castConvexVsPlane_AtoWorld);

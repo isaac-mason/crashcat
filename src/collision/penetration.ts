@@ -2,7 +2,7 @@ import { degreesToRadians, type Mat4, type Vec3, vec3 } from 'math';
 import * as hull from './epa-convex-hull-builder';
 import { createGjkClosestPoints, type GjkCastShapeResult, gjkCastShape, gjkClosestPoints } from './gjk';
 import { copySimplex, type Simplex } from './simplex';
-import { getSupport, type Support } from './support';
+import type { Support } from './support';
 
 export enum PenetrationDepthStatus {
     NOT_COLLIDING,
@@ -150,8 +150,8 @@ const clearEpaSupportPoints = (points: EpaSupportPoints) => {
 const addEpaSupportPoint = (points: EpaSupportPoints, supportA: Support, supportB: Support, direction: Vec3): number => {
     vec3.negate(_epa_negatedDirection, direction);
 
-    getSupport(_epa_p, supportA, direction);
-    getSupport(_epa_q, supportB, _epa_negatedDirection);
+    supportA.getSupport(_epa_p, supportA, direction);
+    supportB.getSupport(_epa_q, supportB, _epa_negatedDirection);
 
     // store new point
     const idx = points.y.size;
@@ -505,11 +505,11 @@ export function penetrationDepthStepEPA(
             _epa_negatedNormal[0] = -nX;
             _epa_negatedNormal[1] = -nY;
             _epa_negatedNormal[2] = -nZ;
-            getSupport(_epa_p2, supportAIncludingRadius, _epa_negatedNormal);
+            supportAIncludingRadius.getSupport(_epa_p2, supportAIncludingRadius, _epa_negatedNormal);
             _epa_triangleNormal[0] = nX;
             _epa_triangleNormal[1] = nY;
             _epa_triangleNormal[2] = nZ;
-            getSupport(_epa_q2, supportBIncludingRadius, _epa_triangleNormal);
+            supportBIncludingRadius.getSupport(_epa_q2, supportBIncludingRadius, _epa_triangleNormal);
             const w2x = _epa_p2[0] - _epa_q2[0];
             const w2y = _epa_p2[1] - _epa_q2[1];
             const w2z = _epa_p2[2] - _epa_q2[2];
