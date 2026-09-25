@@ -25,9 +25,9 @@ import {
     type World,
     registerAll,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 
 type MeshObject = {
     visualMesh: THREE.Object3D;

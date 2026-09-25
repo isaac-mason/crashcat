@@ -20,6 +20,6 @@
     "rootDir": "./",
     "allowSyntheticDefaultImports": true,
   },
-  "include": ["./src", "./three", "./tst"],
+  "include": ["./src", "./tst"],
   "exclude": ["./dist", "./bench"]
 }

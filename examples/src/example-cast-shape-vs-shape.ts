@@ -23,7 +23,7 @@ import {
     transformed,
     triangleMesh,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import { createFaceGeometry } from './debug/face';
 import { loadGLTFPoints } from './utils/gltf';
 

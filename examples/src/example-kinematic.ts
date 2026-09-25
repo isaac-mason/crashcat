@@ -17,7 +17,8 @@ import {
     sphere,
     updateWorld,
 } from 'crashcat';
-import { createShapeHelper, debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
+import { createShapeHelper } from './debug/shape-helpers';
 import * as debugUI from './debug/debug-ui';
 
 type PhysicsObject = {

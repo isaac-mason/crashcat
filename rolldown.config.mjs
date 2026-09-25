@@ -35,17 +35,4 @@ export default [
         ],
         plugins: [stripDebug(), filesize()],
     },
-    {
-        input: './three/index.ts',
-        external: ['crashcat', 'three'],
-        output: [
-            {
-                file: 'dist/three.js',
-                format: 'es',
-                sourcemap: true,
-                exports: 'named',
-            },
-        ],
-        plugins: [stripDebug(), filesize()],
-    },
 ];

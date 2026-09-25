@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { box, getShapeSupportingFace, convexHull, registerAll, type Shape, scaled, transformed } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 
 registerAll();
 

@@ -27,7 +27,7 @@ import {
     updateWorld,
     type World,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import type { Vec3 } from 'math';
 import { quat, vec3 } from 'math';
 import * as THREE from 'three';

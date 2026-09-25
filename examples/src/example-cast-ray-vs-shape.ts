@@ -17,7 +17,7 @@ import {
     transformed,
     triangleMesh,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import GUI from 'lil-gui';
 import { quat, vec3 } from 'math';
 import * as THREE from 'three';

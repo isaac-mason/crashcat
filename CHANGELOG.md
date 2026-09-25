@@ -2,6 +2,7 @@
 
 ## v0.0.6 (Unreleased)
 
+- feat: the `crashcat/three` entrypoint is removed. the three.js debug renderer and shape helpers now live in the examples (`examples/src/debug/`) - copy them into your project if you use them. alternatively, the renderer-agnostic `debug.*` api in `crashcat` returns flat line buffers (`vertices`, `colors`, `numLines`) for bodies, contacts, contact constraints and joints, which you can draw with a few reused `THREE.LineSegments` - see [`examples/src/example-debug.ts`](./examples/src/example-debug.ts)
 - fix: an inverse effective mass below the smallest normal double was treated as invertible, so a body with restricted dofs could get an infinite effective mass from a tiny rotation about a locked axis
 - fix: `gjkCastShape` reconstructed contact points from a support point it had already rejected
 - feat: `dbvt.walk` now takes `world` first (`walk(world, dbvt, visitor)`), matching the other dbvt traversals

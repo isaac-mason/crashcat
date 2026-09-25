@@ -1,4 +1,4 @@
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from '../../examples/src/debug/debug-renderer';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import type { Scenario, ScenarioInstance } from '../scenarios';

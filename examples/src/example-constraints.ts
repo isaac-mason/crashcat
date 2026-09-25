@@ -25,7 +25,7 @@ import {
     registerAll,
     SpringMode,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* rendering */

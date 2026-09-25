@@ -20,7 +20,8 @@ import {
     triangleMesh,
     type World,
 } from 'crashcat';
-import { createShapeHelper, debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
+import { createShapeHelper } from './debug/shape-helpers';
 import GUI from 'lil-gui';
 import type { Quat, Vec3 } from 'math';
 import { euler, quat, vec3 } from 'math';

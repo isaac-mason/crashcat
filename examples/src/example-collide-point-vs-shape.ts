@@ -22,7 +22,7 @@ import {
     type CollidePointCollector,
     type CollidePointHit,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import { loadGLTFPoints } from './utils/gltf';
 
 registerAll();

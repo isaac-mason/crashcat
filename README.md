@@ -2535,75 +2535,9 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 ### Three.js Debug Renderer
 
-crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+The examples include a three.js debug renderer for visualizing physics simulation state - bodies, contacts, constraints, broadphase and triangle mesh bvhs. It isn't part of the published package, but it is self-contained, so you can copy [`examples/src/debug/debug-renderer.ts`](./examples/src/debug/debug-renderer.ts) into your project and adapt it to your needs.
 
 The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
-
-**Usage**
-
-```ts
-import type { World } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
-import type * as THREE from 'three';
-
-declare const scene: THREE.Scene;
-declare const world: World;
-
-// create debug renderer with default options
-const options = debugRenderer.createDefaultOptions();
-const state = debugRenderer.init(options);
-
-// add to scene
-scene.add(state.object3d);
-
-// update each frame after physics step
-function animate() {
-    // ... update physics ...
-
-    debugRenderer.update(state, world);
-
-    // ... render scene ...
-}
-
-// customize what to visualize
-const customOptions = debugRenderer.createDefaultOptions();
-
-/* body visualization options */
-customOptions.bodies.enabled = true;
-customOptions.bodies.wireframe = false;
-customOptions.bodies.showLinearVelocity = false;
-customOptions.bodies.showAngularVelocity = false;
-
-// unique color per body instance
-customOptions.bodies.color = debugRenderer.BodyColorMode.INSTANCE;
-// color by motion type (static, dynamic, kinematic)
-customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
-// color by sleeping state
-customOptions.bodies.color = debugRenderer.BodyColorMode.SLEEPING;
-// color by simulation island
-customOptions.bodies.color = debugRenderer.BodyColorMode.ISLAND;
-
-/* contact points options */
-customOptions.contacts.enabled = true;
-
-/* contact constraints options */
-customOptions.contactConstraints.enabled = true;
-
-/* constraints options (hinges, sliders, etc.) */
-customOptions.constraints.enabled = true;
-customOptions.constraints.drawLimits = true;
-customOptions.constraints.size = 0.5;
-
-/* broadphase options */
-customOptions.broadphaseDbvt.enabled = false;
-customOptions.broadphaseDbvt.showLeafNodes = true;
-customOptions.broadphaseDbvt.showNonLeafNodes = true;
-
-/* triangle mesh bvh options */
-customOptions.triangleMeshBvh.enabled = false;
-customOptions.triangleMeshBvh.showLeafNodes = true;
-customOptions.triangleMeshBvh.showNonLeafNodes = true;
-```
 
 ## FAQ
 

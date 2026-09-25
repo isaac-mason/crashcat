@@ -11,16 +11,10 @@ importers:
       math:
         specifier: ^0.1.0
         version: 0.1.0
-      three:
-        specifier: '>=0.182.0'
-        version: 0.183.0
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.2.0
         version: 2.2.0
-      '@types/three':
-        specifier: 0.183.0
-        version: 0.183.0
       magic-string:
         specifier: ^0.30.21
         version: 0.30.21

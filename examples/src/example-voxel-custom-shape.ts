@@ -39,7 +39,7 @@ import {
     transformFaceWithMat4Scale,
     updateWorld,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import { mat4, quat, type Vec3, vec3 } from 'math';
 import { simplex2d } from 'math/noise';
 import { random } from 'math/random';

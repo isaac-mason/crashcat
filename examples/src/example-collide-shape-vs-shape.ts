@@ -23,7 +23,7 @@ import {
     type CollideShapeCollector,
     type CollideShapeHit,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import { createFaceGeometry } from './debug/face.js';
 import { loadGLTFPoints } from './utils/gltf';
 

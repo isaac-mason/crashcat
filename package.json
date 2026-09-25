@@ -24,10 +24,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/src/index.d.ts"
-    },
-    "./three": {
-      "import": "./dist/three.js",
-      "types": "./dist/three/index.d.ts"
     }
   },
   "files": [
@@ -47,23 +43,14 @@
     "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
     "typecheck-docs": "tsc --project docs/tsconfig.json --noEmit",
     "docs": "(cd docs && node ./build.js)",
-    "typedoc": "typedoc --tsconfig ./tsconfig.json --name \"crashcat docs\" --out ./dist-typedoc ./src/index.ts ./three/index.ts"
+    "typedoc": "typedoc --tsconfig ./tsconfig.json --name \"crashcat docs\" --out ./dist-typedoc ./src/index.ts"
   },
   "packageManager": "pnpm@8.15.2+sha1.798034f615aa211c6c2ae00010cc20be5fc102ee",
   "dependencies": {
     "math": "^0.1.0"
   },
-  "peerDependencies": {
-    "three": ">=0.182.0"
-  },
-  "peerDependenciesMeta": {
-    "three": {
-      "optional": true
-    }
-  },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
-    "@types/three": "0.183.0",
     "magic-string": "^0.30.21",
     "npm-run-all2": "^9.0.1",
     "rolldown": "^1.0.2",

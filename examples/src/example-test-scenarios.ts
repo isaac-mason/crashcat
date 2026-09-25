@@ -31,7 +31,7 @@ import {
     updateWorld,
     type World
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import type GUI from 'lil-gui';
 import { euler, quat, type Vec3, vec3 } from 'math';
 import * as THREE from 'three';

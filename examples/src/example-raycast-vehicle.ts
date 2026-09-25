@@ -17,7 +17,7 @@ import {
     triangleMesh,
     updateWorld,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import type { Mat4, Quat, Vec3 } from 'math';
 import { mat4, quat, vec3 } from 'math';
 import * as THREE from 'three';

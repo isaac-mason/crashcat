@@ -17,7 +17,7 @@ import {
     rigidBody,
 } from 'crashcat';
 import * as debugUI from './debug/debug-ui';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 
 /* rendering */
 
