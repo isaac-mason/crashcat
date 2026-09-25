@@ -1,4 +1,4 @@
-import type { Quat, Vec2, Vec3 } from 'mathcat';
+import type { Quat, Vec2, Vec3 } from 'math';
 import type { Bodies } from '../body/bodies.js';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';

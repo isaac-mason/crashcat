@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import { mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'math';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
@@ -9,7 +9,6 @@ import {
     convexHull,
     createSimplex,
     createSupport,
-    getSupport,
     gjkClosestPoints,
     type Simplex,
     type Support,
@@ -117,9 +116,9 @@ function getMinkowskiSupport(supportA: Support, supportB: Support, direction: Ve
     const supportPointB = vec3.create();
     const negDirection = vec3.create();
 
-    getSupport(supportPointA, supportA, direction);
+    supportA.getSupport(supportPointA, supportA, direction);
     vec3.negate(negDirection, direction);
-    getSupport(supportPointB, supportB, negDirection);
+    supportB.getSupport(supportPointB, supportB, negDirection);
 
     vec3.subtract(out, supportPointA, supportPointB);
 }

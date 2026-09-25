@@ -1,4 +1,4 @@
-import type { Quat, Vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 import type { AngleConstraintPart } from './angle-constraint-part.js';
 /** how the swing limit behaves */

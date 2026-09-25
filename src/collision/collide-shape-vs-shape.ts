@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
 import type { CollideShapeVsShapeFn, Shape } from '../shapes/shapes';
 import { createFace, type Face } from '../utils/face';

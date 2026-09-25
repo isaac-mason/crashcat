@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { computeShrunkHullPoints, DEFAULT_CONVEX_RADIUS, setHullSupport } from '../collision/support';
@@ -9,7 +10,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -527,19 +527,20 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 export const def = /* @__PURE__ */ (() =>
     defineShape<ConvexHullShape>({
         type: ShapeType.CONVEX_HULL,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setHullSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setHullSupport,
         register: () => {
+            // convex hull vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.collideConvexVsConvex);
+
                     setCastShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.castConvexVsConvex);
                     setCastShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.castConvexVsConvex);
                 }

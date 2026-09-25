@@ -2,9 +2,23 @@
 
 ## v0.0.6 (Unreleased)
 
+- feat: the `crashcat/three` entrypoint is removed. the three.js debug renderer and shape helpers now live in the examples (`examples/src/debug/`) - copy them into your project if you use them. alternatively, the renderer-agnostic `debug.*` api in `crashcat` returns flat line buffers (`vertices`, `colors`, `numLines`) for bodies, contacts, contact constraints and joints, which you can draw with a few reused `THREE.LineSegments` - see [`examples/src/example-debug.ts`](./examples/src/example-debug.ts)
+- fix: an inverse effective mass below the smallest normal double was treated as invertible, so a body with restricted dofs could get an infinite effective mass from a tiny rotation about a locked axis
+- fix: `gjkCastShape` reconstructed contact points from a support point it had already rejected
 - feat: `dbvt.walk` now takes `world` first (`walk(world, dbvt, visitor)`), matching the other dbvt traversals
-- refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards dropped from traversals (body destroy removes the leaf before it is pooled), redundant node reset on free-list reuse removed, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
-- perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) to replace GJK/EPA convex collide for sphere/box pairs
+- refactor(dbvt): packed node layout documented in a file header, dead pooled-body guards and a redundant free-list node reset dropped, `insertLeaf` descent simplified, packed-bounds helpers renamed (`bEmpty` -> `setNodeBoundsEmpty`, `bContainsNode` -> `nodeBoundsContainsNode`, etc.)
+- perf: analytic sphere-vs-box narrowphase (`collideSphereVsBox`) replaces GJK/EPA for sphere/box pairs
+- chore: `mathcat` dependency renamed to `math` (API-compatible reimagining), imports updated to `math`/`math/shapes`
+- perf: body-pair cache hits build contact constraints straight from the cached manifold (`addContactConstraintFromCache`) instead of rebuilding and re-matching a world-space one
+- perf: world inverse inertia is memoised per body per step (`motionProperties.getWorldInverseInertia`); torque integration uses the vector form and skips torque-free bodies
+- fix(triangle-mesh): every query against a scaled mesh ran in the wrong space — ray casts returned wrong fractions, and convex and sphere collides and casts missed hits entirely. all of them now run in the mesh's unscaled local space
+- perf(raycast): ray vs bvh node tests use reciprocals precomputed once per query and read node bounds in place; the mesh ray cast rejects triangles against the current best hit before dividing
+- fix(compound): compound queries ignored the compound's scale when placing children (a child at local (5, 0, 0) under scale 2 sat at 5 instead of 10), static compound bvh walks ran with the query in scaled space, and static compound ray casts missed for any compound away from the origin
+- perf(triangle-mesh): convex vs mesh transforms each triangle vertex with one affine multiply, the mesh scale folded into the matrix, and fills each support for the convex shape once per pair on first use instead of per triangle
+- perf(step): the post-solve position, world aabb and broadphase update runs per island alongside the sleep test and force reset instead of a separate pass over every active body; island objects are reused across steps; the sleep test takes its two rotated axes straight from the quaternion
+- perf(solver): contact velocity solving and warm starting skip the velocity write-back for constraints that applied no impulse, and the friction caps are summed only when a friction part is active
+- fix(body): a locked translation dof snapped the body to zero on that axis during the position solver instead of only stopping motion along it
+- refactor(body): `rigidBody.updatePositionFromCenterOfMass` is removed - deriving a body's cached `position` and `aabb` and publishing its bounds to the broadphase (`broadphase.notifyBodyBoundsChanged`) are separate steps now
 
 ## v0.0.5
 

@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { computeBarycentricCoordinates2d, computeBarycentricCoordinates3d } from '../../src/collision/closest-points';
 

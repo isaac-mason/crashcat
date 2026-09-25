@@ -1,7 +1,8 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -310,6 +311,7 @@ function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         _fixedConstraint_rotA,
         bodyB,
         _fixedConstraint_rotB,
+        bodies.stepStamp,
     );
 
     // setup point constraint (3 DOF - keeps positions together)
@@ -321,6 +323,7 @@ function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _fixedConstraint_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 }
 
@@ -367,6 +370,7 @@ function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         _fixedConstraint_rotA,
         bodyB,
         _fixedConstraint_rotB,
+        STEP_STAMP_NONE,
     );
     const rot = rotationEulerConstraintPart.solvePositionConstraint(
         constraint.rotationConstraintPart,
@@ -388,6 +392,7 @@ function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _fixedConstraint_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 

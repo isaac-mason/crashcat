@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import { quat, type Vec3, vec3 } from 'mathcat';
+import { quat, type Vec3, vec3 } from 'math';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
@@ -23,7 +23,7 @@ import {
     transformed,
     triangleMesh,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import { createFaceGeometry } from './debug/face';
 import { loadGLTFPoints } from './utils/gltf';
 

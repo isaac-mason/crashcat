@@ -39,7 +39,11 @@ export type Island = {
 /** init the island builder state */
 export declare function init(): Islands;
 /** initialize island builder with active bodies (dynamic + kinematic), each active body starts as its own island */
-export declare function prepare(state: Islands, bodies: Bodies, maxContacts: number): void;
+/**
+ * @param numContactConstraints number of contact constraints this step: contactLinks is indexed by
+ * contact constraint index, so this bounds both its reset here and the scan in finalize
+ */
+export declare function prepare(state: Islands, bodies: Bodies, numContactConstraints: number): void;
 /** link two bodies into the same island (union operation) */
 export declare function linkBodies(state: Islands, bodies: Bodies, bodyIndexA: number, bodyIndexB: number): void;
 /**
@@ -74,5 +78,10 @@ export declare function linkUserConstraints(state: Islands, constraintsState: Co
  * 3. Sort islands by size (largest first)
  */
 export declare function finalize(state: Islands, bodies: Bodies, constraintsState: Constraints, worldSettings: WorldSettings): void;
-/** check if an island can sleep and deactivate all bodies in it if so, called after solving constraints for an island */
-export declare function checkIslandSleep(island: Island, world: World, deltaTime: number): void;
+/**
+ * finish the step for an island's bodies once the position solver is done: derive each body's
+ * position, world aabb and broadphase leaf from its centre of mass, clear its forces, run the sleep
+ * test, and put the island to sleep if every dynamic body in it can. one pass per island in place
+ * of three over all active bodies (jolt: PhysicsSystem::CheckSleepAndUpdateBounds)
+ */
+export declare function finishIslandStep(island: Island, world: World, deltaTime: number): void;

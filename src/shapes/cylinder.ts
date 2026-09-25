@@ -1,4 +1,5 @@
-import { type Box3, box3, type Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { DEFAULT_CONVEX_RADIUS, setCylinderSupport } from '../collision/support';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
@@ -6,7 +7,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -118,18 +118,17 @@ export function update(shape: CylinderShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<CylinderShape>({
         type: ShapeType.CYLINDER,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setCylinderSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setCylinderSupport,
         register: () => {
             // cylinder vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CYLINDER, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CYLINDER, convex.collideConvexVsConvex);
 

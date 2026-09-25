@@ -1,4 +1,5 @@
-import { type Box3, box3, mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
@@ -14,7 +15,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -167,7 +167,6 @@ const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<CompoundShape>({
         type: ShapeType.COMPOUND,
-        category: ShapeCategory.COMPOSITE,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
@@ -354,9 +353,9 @@ function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, sha
 
 const _castRayVsCompound_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_quat = /* @__PURE__ */ quat.create();
-const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_worldRot = /* @__PURE__ */ quat.create();
+const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
 function castRayVsCompound(
@@ -403,7 +402,17 @@ function castRayVsCompound(
         );
 
         // accumulate transform
-        vec3.transformQuat(_castRayVsCompound_transformedTranslation, child.position, _castRayVsCompound_quat);
+        vec3.set(
+            _castRayVsCompound_transformedTranslation,
+            child.position[0] * scaleX,
+            child.position[1] * scaleY,
+            child.position[2] * scaleZ,
+        );
+        vec3.transformQuat(
+            _castRayVsCompound_transformedTranslation,
+            _castRayVsCompound_transformedTranslation,
+            _castRayVsCompound_quat,
+        );
         vec3.add(_castRayVsCompound_worldPos, _castRayVsCompound_pos, _castRayVsCompound_transformedTranslation);
         quat.multiply(_castRayVsCompound_worldRot, _castRayVsCompound_quat, child.quaternion);
 
@@ -483,7 +492,17 @@ function collidePointVsCompound(
         // accumulate transform
         vec3.set(_collidePointVsCompound_posB, posBX, posBY, posBZ);
         quat.set(_collidePointVsCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_collidePointVsCompound_transformedTranslation, child.position, _collidePointVsCompound_quatB);
+        vec3.set(
+            _collidePointVsCompound_transformedTranslation,
+            child.position[0] * scaleBX,
+            child.position[1] * scaleBY,
+            child.position[2] * scaleBZ,
+        );
+        vec3.transformQuat(
+            _collidePointVsCompound_transformedTranslation,
+            _collidePointVsCompound_transformedTranslation,
+            _collidePointVsCompound_quatB,
+        );
         vec3.add(_collidePointVsCompound_worldPos, _collidePointVsCompound_posB, _collidePointVsCompound_transformedTranslation);
         quat.multiply(_collidePointVsCompound_worldRot, _collidePointVsCompound_quatB, child.quaternion);
 
@@ -561,7 +580,8 @@ function collideCompoundVsShape(
         // accumulate transform
         vec3.set(_posA, posAX, posAY, posAZ);
         quat.set(_quatA, quatAX, quatAY, quatAZ, quatAW);
-        vec3.transformQuat(_transformedTranslation, child.position, _quatA);
+        vec3.set(_transformedTranslation, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+        vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatA);
         vec3.add(_worldPos, _posA, _transformedTranslation);
         quat.multiply(_worldRot, _quatA, child.quaternion);
 
@@ -647,7 +667,8 @@ function collideShapeVsCompound(
         // accumulate transform
         vec3.set(_posB, posBX, posBY, posBZ);
         quat.set(_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_transformedTranslation, child.position, _quatB);
+        vec3.set(_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+        vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatB);
         vec3.add(_worldPos, _posB, _transformedTranslation);
         quat.multiply(_worldRot, _quatB, child.quaternion);
 
@@ -750,7 +771,8 @@ function castCompoundVsShape(
         // accumulate transform
         vec3.set(_posA, posAX, posAY, posAZ);
         quat.set(_quatA, quatAX, quatAY, quatAZ, quatAW);
-        vec3.transformQuat(_castDecorated_temp, child.position, _quatA);
+        vec3.set(_castDecorated_temp, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+        vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatA);
         vec3.add(_worldPos, _posA, _castDecorated_temp);
         quat.multiply(_worldRot, _quatA, child.quaternion);
 
@@ -846,7 +868,8 @@ function castShapeVsCompound(
         // accumulate transform
         vec3.set(_posB, posBX, posBY, posBZ);
         quat.set(_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_castDecorated_temp, child.position, _quatB);
+        vec3.set(_castDecorated_temp, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+        vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatB);
         vec3.add(_worldPos, _posB, _castDecorated_temp);
         quat.multiply(_worldRot, _quatB, child.quaternion);
 

@@ -1,4 +1,4 @@
-import { quat, vec3, vec4 } from 'mathcat';
+import { quat, vec3, vec4 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, filter, kcc, MotionType, registerAll, rigidBody, updateWorld } from '../../src';
 import { createTestWorld } from '../helpers';

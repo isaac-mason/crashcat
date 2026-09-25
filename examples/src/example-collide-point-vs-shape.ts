@@ -1,5 +1,5 @@
 import GUI from 'lil-gui';
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
@@ -22,7 +22,7 @@ import {
     type CollidePointCollector,
     type CollidePointHit,
 } from 'crashcat';
-import { createShapeHelper } from 'crashcat/three';
+import { createShapeHelper } from './debug/shape-helpers';
 import { loadGLTFPoints } from './utils/gltf';
 
 registerAll();

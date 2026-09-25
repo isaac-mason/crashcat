@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -17,7 +17,8 @@ import {
     sphere,
     updateWorld,
 } from 'crashcat';
-import { createShapeHelper, debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
+import { createShapeHelper } from './debug/shape-helpers';
 import * as debugUI from './debug/debug-ui';
 
 type PhysicsObject = {

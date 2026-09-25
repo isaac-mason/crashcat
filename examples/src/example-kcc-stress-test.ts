@@ -1,5 +1,5 @@
-import { quat, vec3, vec4 } from 'mathcat';
-import type { Vec3 } from 'mathcat';
+import { quat, vec3, vec4 } from 'math';
+import type { Vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import {
@@ -20,7 +20,7 @@ import {
     updateWorld,
     registerAll,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* physics world */

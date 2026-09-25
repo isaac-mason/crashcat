@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape.js';
 import { type Shape, ShapeType } from './shapes.js';
@@ -35,14 +36,16 @@ export declare const def: import("./shapes").ShapeDef<BoxShape>;
  * Closed-form clamp of the sphere centre to the box's shrunk core (half-extents minus convex
  * radius, mirroring setBoxSupport EXCLUDE_CONVEX_RADIUS), with the combined radius handling the
  * rounded shell. Skips GJK/EPA entirely; the deep (centre-inside-core) case degrades to a per-axis
- * SAT scan rather than EPA. Bit-equivalent to convex.collideConvexVsConvex on shallow contacts.
+ * SAT scan rather than EPA. Agrees with convex.collideConvexVsConvex on shallow contacts to within
+ * floating point — it used to claim BIT-equivalence, but nothing tested that and the basis rewrite
+ * below changes the last bits, so the weaker claim is the one that is actually known.
  *
- * The mathcat frame transforms are written idiomatically; compilecat's `@optimize` (flatten +
- * SROA) inlines the vec3/quat calls and localises the literal-initialised scratch, so the hot
- * path compiles to straight-line scalar arithmetic with no module-array round-trips or calls.
- * (The faces branch keeps its scratch arrays — they feed the un-inlined getShapeSupportingFace.)
- *
- * @optimize
+ * The frame transforms are written out in scalars against a rotation BASIS rather than rotating
+ * vectors by the quaternion one at a time — the same composition jolt uses for a body transform
+ * (`Body::GetCenterOfMassTransform` is `Mat44::sRotationTranslation(rotation, position)`). One
+ * quaternion-to-basis conversion serves all four transforms, the inverse is the transpose, and
+ * nothing round-trips through module scratch. The faces branch keeps its arrays — they feed
+ * getShapeSupportingFace, and it only runs when faces were asked for.
  */
 export declare function collideSphereVsBox(collector: CollideShapeCollector, settings: CollideShapeSettings, shapeA: Shape, subShapeIdA: number, _subShapeIdBitsA: number, posAX: number, posAY: number, posAZ: number, _quatAX: number, _quatAY: number, _quatAZ: number, _quatAW: number, scaleAX: number, _scaleAY: number, _scaleAZ: number, shapeB: Shape, subShapeIdB: number, _subShapeIdBitsB: number, posBX: number, posBY: number, posBZ: number, quatBX: number, quatBY: number, quatBZ: number, quatBW: number, scaleBX: number, scaleBY: number, scaleBZ: number): void;
 /**

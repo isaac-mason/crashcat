@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Plane3, plane3, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3, type Plane3, plane3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { type CastRayCollector, type CastRaySettings, CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import {
@@ -19,7 +20,7 @@ import {
     createCollideShapeHit,
     reversedCollideShapeVsShape,
 } from '../collision/collide-shape-vs-shape';
-import { createSupport, getSupport, SupportFunctionMode } from '../collision/support';
+import { createSupport, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import {
@@ -27,7 +28,6 @@ import {
     defineShape,
     getShapeSupportingFace,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -108,7 +108,6 @@ export function update(shape: PlaneShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<PlaneShape>({
         type: ShapeType.PLANE,
-        category: ShapeCategory.OTHER,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
@@ -292,15 +291,20 @@ function computePlaneLocalBounds(out: Box3, shape: PlaneShape): void {
 
 function register(): void {
     // register collision and casting with all convex shapes
+    // one wrapper each, not one per convex shape
+    const collideReversed = reversedCollideShapeVsShape(collideConvexVsPlane);
+    const castReversed = reversedCastShapeVsShape(castConvexVsPlane);
+
+    // register collision and casting with all convex shapes
     for (const shapeDef of Object.values(shapeDefs)) {
-        if (shapeDef.category === ShapeCategory.CONVEX) {
+        if (shapeDef.convex !== undefined) {
             // convex vs plane (direct - shapeA=convex, shapeB=plane)
             setCollideShapeFn(shapeDef.type, ShapeType.PLANE, collideConvexVsPlane);
             setCastShapeFn(shapeDef.type, ShapeType.PLANE, castConvexVsPlane);
 
             // plane vs convex (reversed - swaps arguments)
-            setCollideShapeFn(ShapeType.PLANE, shapeDef.type, reversedCollideShapeVsShape(collideConvexVsPlane));
-            setCastShapeFn(ShapeType.PLANE, shapeDef.type, reversedCastShapeVsShape(castConvexVsPlane));
+            setCollideShapeFn(ShapeType.PLANE, shapeDef.type, collideReversed);
+            setCastShapeFn(ShapeType.PLANE, shapeDef.type, castReversed);
         }
     }
 }
@@ -548,7 +552,11 @@ function collideConvexVsPlane(
 
     // get support point in direction opposite to plane normal
     vec3.negate(_collideConvexVsPlane_normal, normal);
-    getSupport(_collideConvexVsPlane_supportPoint, _collideConvexVsPlane_support, _collideConvexVsPlane_normal);
+    _collideConvexVsPlane_support.getSupport(
+        _collideConvexVsPlane_supportPoint,
+        _collideConvexVsPlane_support,
+        _collideConvexVsPlane_normal,
+    );
 
     // calculate penetration
     const signedDistance = plane3.distanceToPoint(_collideConvexVsPlane_localPlane, _collideConvexVsPlane_supportPoint);
@@ -784,7 +792,11 @@ export function castConvexVsPlane(
 
     // get support point in opposite direction
     vec3.negate(_castConvexVsPlane_normalInShapeSpace, _castConvexVsPlane_normalInShapeSpace);
-    getSupport(_castConvexVsPlane_supportPoint, _castConvexVsPlane_support, _castConvexVsPlane_normalInShapeSpace);
+    _castConvexVsPlane_support.getSupport(
+        _castConvexVsPlane_supportPoint,
+        _castConvexVsPlane_support,
+        _castConvexVsPlane_normalInShapeSpace,
+    );
 
     // transform support point to world space
     vec3.transformMat4(_castConvexVsPlane_supportPointWorld, _castConvexVsPlane_supportPoint, _castConvexVsPlane_AtoWorld);

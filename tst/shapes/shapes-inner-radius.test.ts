@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { box, capsule, compound, convexHull, getShapeInnerRadius, scaled, sphere, transformed, triangleMesh } from '../../src';
 

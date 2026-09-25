@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import { type CollideShapeCollector, type CollideShapeHit } from './collide-shape-vs-shape.js';
 export type VoidedFeature = {
     /** feature position (world space) */

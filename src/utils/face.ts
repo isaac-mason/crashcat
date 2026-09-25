@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 
 export type Face = {
     /**

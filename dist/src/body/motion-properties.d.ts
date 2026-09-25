@@ -1,4 +1,4 @@
-import type { Mat3, Mat4, Quat, Vec3 } from 'mathcat';
+import type { Mat3, Mat4, Quat, Vec3 } from 'math';
 import type { MassProperties } from './mass-properties.js';
 /** motion quality options for collision detection */
 export declare enum MotionQuality {
@@ -58,6 +58,13 @@ export type MotionProperties = {
     allowSleeping: boolean;
     /** timer for sleeping test */
     sleepTestTimer: number;
+    /**
+     * per-step memo of the world space inverse inertia, see getWorldInverseInertia. only meaningful
+     * while worldInverseInertiaStamp matches the current step stamp.
+     */
+    worldInverseInertia: Mat4;
+    /** step stamp the memo was computed for, STEP_STAMP_NONE when it holds nothing usable */
+    worldInverseInertiaStamp: number;
 };
 export declare function create(): MotionProperties;
 /** Adds a force to the force accumulator. */
@@ -87,14 +94,36 @@ export declare function setMassProperties(motionProperties: MotionProperties, al
  * Formula: I_inv_world = R * diag(invInertiaDiagonal) * R * mInertiaRotation * R^T
  * where R is the body's rotation matrix.
  *
+ * Written out in scalars rather than as four `mat4` calls through shared scratch. The three
+ * intermediate matrices only ever existed to feed the next step, so they live as locals instead of
+ * module state; the arithmetic is unchanged, so the result is bit-identical (see
+ * `tst/inverse-inertia-scalar-form.test.ts`). Module-scope scratch is the reason the helper version
+ * was slower: a buffer the whole module can see cannot live in registers.
+ *
  * @param out output Mat4 to store the result
  * @param motionProperties motion properties containing inertia data
  * @param bodyRotation body's rotation matrix (Mat4)
  * @returns out parameter
- *
- * @optimize
  */
 export declare function getInverseInertiaForRotation(out: Mat4, motionProperties: MotionProperties, bodyRotation: Mat4): Mat4;
+/** step stamp that bypasses the per-step memo in getWorldInverseInertia: compute fresh into `out` */
+export declare const STEP_STAMP_NONE = -1;
+/**
+ * world space inverse inertia of a dynamic body, memoised per step.
+ *
+ * with a step stamp >= 0 the matrix is computed at most once per body per step: the first call for
+ * a new stamp computes it into the body's own storage, later calls return that. the returned matrix
+ * is the body's storage, read it, don't write it. this is sound for velocity constraint setup
+ * because nothing rotates a body between force integration and the end of the velocity solve, and
+ * every rotation write that can happen outside the step resets the stamp.
+ *
+ * with STEP_STAMP_NONE the matrix is computed fresh into `out` and `out` is returned. use that where
+ * bodies rotate between calls: the position solver, ccd, and public getters.
+ *
+ * the caller checks that the body is dynamic; non-dynamic bodies contribute a zero matrix and never
+ * reach this.
+ */
+export declare function getWorldInverseInertia(out: Mat4, motionProperties: MotionProperties, bodyQuaternion: Quat, stepStamp: number): Mat4;
 /** Clamps linear velocity to the maximum allowed value */
 export declare function clampLinearVelocity(motionProperties: MotionProperties): void;
 /** Clamps angular velocity to the maximum allowed value */
@@ -132,7 +161,6 @@ export declare function addAngularVelocity(motionProperties: MotionProperties, v
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to add
  *
- * @optimize
  */
 export declare function addLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void;
 /**
@@ -141,7 +169,6 @@ export declare function addLinearVelocityStep(motionProperties: MotionProperties
  * @param motionProperties motion properties to update
  * @param linearVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export declare function subLinearVelocityStep(motionProperties: MotionProperties, linearVelocityChange: Vec3): void;
 /**
@@ -149,7 +176,6 @@ export declare function subLinearVelocityStep(motionProperties: MotionProperties
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to add
  *
- * @optimize
  */
 export declare function addAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void;
 /**
@@ -157,7 +183,6 @@ export declare function addAngularVelocityStep(motionProperties: MotionPropertie
  * @param motionProperties motion properties to update
  * @param angularVelocityChange velocity change to subtract
  *
- * @optimize
  */
 export declare function subAngularVelocityStep(motionProperties: MotionProperties, angularVelocityChange: Vec3): void;
 /**
@@ -167,7 +192,6 @@ export declare function subAngularVelocityStep(motionProperties: MotionPropertie
  * @param motionProperties motion properties to scale
  * @param newMass new mass value (must be > 0)
  *
- * @optimize
  */
 export declare function scaleToMass(motionProperties: MotionProperties, newMass: number): void;
 /**

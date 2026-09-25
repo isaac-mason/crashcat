@@ -1,7 +1,8 @@
-import type { Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { RigidBody } from '../body/rigid-body';
 import type { World } from '../world';
 import {
@@ -357,6 +358,7 @@ function setupVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: n
         bodyB,
         _cone_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // setup rotation constraint (cone limit)
@@ -421,6 +423,7 @@ function solvePosition(constraint: ConeConstraint, bodies: Bodies, _deltaTime: n
         bodyB,
         _cone_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 

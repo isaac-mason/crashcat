@@ -27,9 +27,9 @@ import {
     updateWorld,
     type World,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
-import type { Vec3 } from 'mathcat';
-import { quat, vec3 } from 'mathcat';
+import * as debugRenderer from './debug/debug-renderer';
+import type { Vec3 } from 'math';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import * as debugUI from './debug/debug-ui';

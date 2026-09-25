@@ -1,4 +1,4 @@
-import { type Mat4, mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { convexHull } from '../../src';
 import { createSupportingFaceResult, type SupportingFaceResult } from '../../src/shapes/shapes';
@@ -58,7 +58,11 @@ const _invScale = vec3.create();
 const _planeNormal = vec3.create();
 
 /** verbatim reimplementation of the pre-change getSupportingFace selection (sqrt per plane per call) */
-function refGetSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: ReturnType<typeof convexHull.create>): void {
+function refGetSupportingFace(
+    ioResult: SupportingFaceResult,
+    direction: Vec3,
+    shape: ReturnType<typeof convexHull.create>,
+): void {
     const face = ioResult.face;
     const scale = ioResult.scale;
     const transform = ioResult.transform;
@@ -150,7 +154,12 @@ function expectSameFace(shape: ReturnType<typeof convexHull.create>, scale: Vec3
 }
 
 describe('convex hull getSupportingFace — uniform fast path equivalence', () => {
-    const dirs = [...randomDirections(80, 0xabcdef), vec3.fromValues(1, 0, 0), vec3.fromValues(0, -1, 0), vec3.fromValues(0, 0, 1)];
+    const dirs = [
+        ...randomDirections(80, 0xabcdef),
+        vec3.fromValues(1, 0, 0),
+        vec3.fromValues(0, -1, 0),
+        vec3.fromValues(0, 0, 1),
+    ];
 
     for (const [name, shape] of HULLS) {
         for (const scale of UNIFORM_SCALES) {

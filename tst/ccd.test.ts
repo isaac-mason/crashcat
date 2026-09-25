@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -95,6 +95,40 @@ describe('CCD (Continuous Collision Detection) / MotionQuality.LINEAR_CAST', () 
         // contact normal is along the travel axis (the wall face the bullet hit)
         expect(Math.abs(normalX)).toBeGreaterThan(0.9);
         // and it actually stopped at the wall rather than tunneling
+        expect(bullet.position[0]).toBeLessThan(0);
+    });
+
+    // The CCD sweep reads the target's derived position, world aabb and broadphase leaf. Those are
+    // derived from the centre of mass during velocity integration, which runs before the sweep, so a
+    // target that moves this step has to be swept against its new pose. Deriving them only at the
+    // end of the step instead lets the bullet tunnel through a plate that dropped into its path.
+    test('should sweep against a target that moved into the path during the same step', () => {
+        const { world, layers } = createTestWorld();
+
+        // kinematic plate: bottom face starts at y = 0.245, above the bullet, and ends at y = 0.185,
+        // just inside it. a 0.06 drop, far below any broadphase fattening.
+        const plate = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(0.1, 0.5, 5), density: 1000 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.KINEMATIC,
+            position: vec3.fromValues(0, 0.745, 0),
+        });
+        vec3.set(plate.motionProperties.linearVelocity, 0, -3.6, 0); // 0.06 per 1/60 step
+
+        const bullet = rigidBody.create(world, {
+            shape: sphere.create({ radius: 0.2, density: 1000 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(-2, 0, 0),
+        });
+        bullet.motionProperties.motionQuality = MotionQuality.LINEAR_CAST;
+        vec3.set(bullet.motionProperties.linearVelocity, 300, 0, 0); // 5 units this step
+
+        updateWorld(world, undefined, 1 / 60);
+
+        // the plate ended in the path
+        expect(plate.position[1] - 0.5).toBeLessThan(0.2);
+        // and the bullet stopped at it instead of reaching x = 3
         expect(bullet.position[0]).toBeLessThan(0);
     });
 });

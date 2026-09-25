@@ -758,13 +758,9 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 ### Three.js Debug Renderer
 
-crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+The examples include a three.js debug renderer for visualizing physics simulation state - bodies, contacts, constraints, broadphase and triangle mesh bvhs. It isn't part of the published package, but it is self-contained, so you can copy [`examples/src/debug/debug-renderer.ts`](./examples/src/debug/debug-renderer.ts) into your project and adapt it to your needs.
 
 The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
-
-**Usage**
-
-<Snippet source="./debug-renderer.ts" />
 
 ## FAQ
 

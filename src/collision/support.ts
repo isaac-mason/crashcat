@@ -1,4 +1,4 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import type { BoxShape } from '../shapes/box';
 import type { CapsuleShape } from '../shapes/capsule';
 import type { ConvexHullShape } from '../shapes/convex-hull';
@@ -16,59 +16,52 @@ export enum SupportFunctionMode {
 const EMPTY_VERTICES: number[] = [];
 
 /**
- * Monomorphic support evaluation.
+ * Support evaluation through the struct.
  *
- * A single {@link Support} struct (one hidden class) is filled once per collision pair, then
- * {@link getSupport} — a single, monomorphic function — is called many times per pair by GJK/EPA.
- * The per-shape polymorphism lives entirely in the fill (cold, once per pair); the hot path is one
- * function with a `switch` on `kind`.
+ * A single {@link Support} struct (one hidden class) is filled once per collision pair. the fill
+ * installs the shape's evaluator on the struct next to its parameters, and gjk/epa call it many
+ * times per pair as `support.getSupport(out, support, direction)`. there is no kind tag and no
+ * switch: the evaluator *is* the kind.
+ *
+ * Every evaluator is self-contained — it rotates the direction into local space, finds the core
+ * support, adds the radius along the local direction and transforms the point back — so each
+ * evaluation is one straight-line optimisation unit with nothing shared across a call boundary.
  *
  * Radius contract:
- *  - `convexRadius` is the *reported* radius. `getSupport` never adds it; the collision driver
- *    reads it and passes it to `gjkClosestPoints`/EPA for the shrunk-core-plus-radius distance math.
- *  - `addRadius` is an extra radius added along the (local) direction by `getSupport` itself (the EPA
- *    speculative-separation / cast convex radius). 0 on the GJK path.
+ *  - `convexRadius` is the *reported* radius. no evaluator adds it; the collision driver reads it and
+ *    passes it to `gjkClosestPoints`/EPA for the shrunk-core-plus-radius distance math.
+ *  - `addRadius` is an extra radius added along the (local) direction by the evaluator itself (the
+ *    EPA speculative-separation / cast convex radius). 0 on the GJK path.
  *  - "mode" (include vs exclude convex radius) is baked into the params by the fill: exclude uses the
  *    shrunk core + reports `convexRadius`; include uses the full/rounded core + `convexRadius = 0`.
  */
 
-export enum SupportKind {
-    BOX,
-    SPHERE,
-    CAPSULE,
-    CYLINDER,
-    HULL,
-    TRIANGLE,
-    POINT,
-}
+/** evaluate the support point of `support` in direction `direction`, writing it to `out` */
+export type SupportFunction = (out: Vec3, support: Support, direction: Vec3) => void;
 
 export type Support = {
-    /** which sub-object holds this support's parameters; selects the branch taken in {@link getSupport} */
-    kind: SupportKind;
+    /** the shape's evaluator, installed by the fill. the hot call site is `support.getSupport(out, support, direction)` */
+    getSupport: SupportFunction;
 
-    /** reported convex radius — read by the driver, never added by getSupport (0 in include mode) */
+    /** reported convex radius — read by the driver, never added by the evaluator (0 in include mode) */
     convexRadius: number;
 
-    /** extra radius added along the local direction by getSupport (EPA separation / cast radius) */
+    /** extra radius added along the local direction by the evaluator (EPA separation / cast radius) */
     addRadius: number;
 
-    /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
+    /** whether the support has a transform */
     hasTransform: boolean;
+
+    /** B-in-A transform, applied when hasTransform is true (identity otherwise) */
     transform: Mat4;
 
     /** axis-aligned box: support is the corner picked by the sign of the direction on each axis (±halfExtents) */
     box: { halfExtents: Vec3 };
 
-    /**
-     * sphere as a single radius. 0 → the core is the origin (exclude mode: a sphere is pure convex radius);
-     * r → the rounded surface point `r·dir̂` (include mode).
-     */
+    /** sphere core: the origin, rounded by `radius`. 0 in exclude mode, where the radius is reported instead. */
     sphere: { radius: number };
 
-    /**
-     * capsule as a segment of half-length `halfHeight` along local Y, optionally rounded by `radius`.
-     * radius 0 → the bare segment endpoint (exclude); r → segment endpoint + `r·dir̂` (include).
-     */
+    /** capsule core: a segment of half-length `halfHeight` along local Y, rounded by `radius` (0 in exclude mode) */
     capsule: { halfHeight: number; radius: number };
 
     /**
@@ -77,9 +70,15 @@ export type Support = {
      */
     cylinder: { radius: number; halfHeight: number };
 
-    /** convex vertex set — support is the vertex with the greatest dot product against the direction */
+    /** triangle (mesh operand): three vertices as a flat `[ax,ay,az, bx,by,bz, cx,cy,cz]` buffer, owned and copied into by the fill */
+    triangle: { vertices: number[] };
+
+    /** single point (collidePoint operand), owned and copied into by the fill */
+    point: Vec3;
+
+    /** convex vertex set (a hull, or a borrowed polygon face) — support is the vertex with the greatest dot product against the direction */
     hull: {
-        /** flat `[x,y,z,...]` vertices scanned by getSupport; read-only borrow valid for the current pair */
+        /** flat `[x,y,z,...]` vertices scanned by the evaluator; read-only borrow valid for the current pair */
         vertices: number[];
         /** number of vertices in `vertices` (it may be longer than `vertexCount * 3`) */
         vertexCount: number;
@@ -94,22 +93,16 @@ export type Support = {
         /** warm-start hint: the last winning vertex index, carried across support calls within one pair; -1 = cold */
         lastVertex: number;
     };
-
-    /** triangle (mesh face) — support is whichever of the three vertices has the greatest dot with the direction */
-    triangle: { a: Vec3; b: Vec3; c: Vec3 };
-
-    /** single point — the support is always this point, regardless of direction */
-    point: { position: Vec3 };
 };
 
 /**
  * Allocate a reusable {@link Support}. A driver holds a small fixed number of these (e.g. one per
  * operand slot) and refills them per pair via the fill functions. The sub-objects, transform, and
- * scratch buffer are pre-allocated so filling never allocates.
+ * scratch buffer are pre-allocated so filling never allocates. starts as a zero-radius sphere at the origin.
  */
 export function createSupport(): Support {
     return {
-        kind: SupportKind.SPHERE,
+        getSupport: sphereSupport,
         convexRadius: 0,
         addRadius: 0,
         hasTransform: false,
@@ -118,6 +111,8 @@ export function createSupport(): Support {
         sphere: { radius: 0 },
         capsule: { halfHeight: 0, radius: 0 },
         cylinder: { radius: 0, halfHeight: 0 },
+        triangle: { vertices: [0, 0, 0, 0, 0, 0, 0, 0, 0] },
+        point: vec3.create(),
         hull: {
             vertices: EMPTY_VERTICES,
             vertexCount: 0,
@@ -127,17 +122,47 @@ export function createSupport(): Support {
             neighbors: EMPTY_VERTICES,
             lastVertex: -1,
         },
-        triangle: { a: vec3.create(), b: vec3.create(), c: vec3.create() },
-        point: { position: vec3.create() },
     };
 }
 
 /**
- * Evaluate the support point of `support` in direction `direction`, writing it to `out`.
- * The single hot GJK/EPA call site — monomorphic.
+ * sphere evaluator. a sphere's support is rotation invariant: R·(r·dir̂_local) where
+ * dir̂_local = Rᵀ·dir̂ is just r·dir̂, so the direction transform and the rotation half of the
+ * transform-back cancel and only the translation survives. addRadius is applied along that same
+ * direction, so it folds into the radius.
  */
-export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
-    // 1. transform the direction into the shape's local space (inverse rotation = transposed 3x3)
+export function sphereSupport(out: Vec3, support: Support, direction: Vec3): void {
+    const radius = support.sphere.radius + support.addRadius;
+    const directionX = direction[0];
+    const directionY = direction[1];
+    const directionZ = direction[2];
+    let supportX = 0;
+    let supportY = 0;
+    let supportZ = 0;
+    if (radius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX = directionX * scale;
+            supportY = directionY * scale;
+            supportZ = directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = supportX + m[12];
+        out[1] = supportY + m[13];
+        out[2] = supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
+
+/** box evaluator: the corner picked by the sign of the local direction on each axis */
+export function boxSupport(out: Vec3, support: Support, direction: Vec3): void {
+    // direction into local space (inverse rotation = transposed 3x3)
     let directionX = direction[0];
     let directionY = direction[1];
     let directionZ = direction[2];
@@ -151,188 +176,22 @@ export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
         directionZ = localZ;
     }
 
-    // 2. core support in local space
-    let supportX: number;
-    let supportY: number;
-    let supportZ: number;
+    const halfExtents = support.box.halfExtents;
+    let supportX = directionX >= 0 ? halfExtents[0] : -halfExtents[0];
+    let supportY = directionY >= 0 ? halfExtents[1] : -halfExtents[1];
+    let supportZ = directionZ >= 0 ? halfExtents[2] : -halfExtents[2];
 
-    switch (support.kind) {
-        case SupportKind.BOX: {
-            const halfExtents = support.box.halfExtents;
-            supportX = directionX >= 0 ? halfExtents[0] : -halfExtents[0];
-            supportY = directionY >= 0 ? halfExtents[1] : -halfExtents[1];
-            supportZ = directionZ >= 0 ? halfExtents[2] : -halfExtents[2];
-            break;
-        }
-        case SupportKind.SPHERE: {
-            // core is the origin (exclude); for include the radius produces r·dir̂
-            const radius = support.sphere.radius;
-            if (radius > 0) {
-                const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
-                if (lengthSq > 0) {
-                    const scale = radius / Math.sqrt(lengthSq);
-                    supportX = directionX * scale;
-                    supportY = directionY * scale;
-                    supportZ = directionZ * scale;
-                } else {
-                    supportX = 0;
-                    supportY = 0;
-                    supportZ = 0;
-                }
-            } else {
-                supportX = 0;
-                supportY = 0;
-                supportZ = 0;
-            }
-            break;
-        }
-        case SupportKind.CAPSULE: {
-            const capsule = support.capsule;
-            const halfHeight = capsule.halfHeight;
-            const radius = capsule.radius;
-            if (radius > 0) {
-                const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
-                if (lengthSq > 0) {
-                    const scale = radius / Math.sqrt(lengthSq);
-                    supportX = directionX * scale;
-                    supportY = directionY * scale + (directionY > 0 ? halfHeight : -halfHeight);
-                    supportZ = directionZ * scale;
-                } else {
-                    supportX = 0;
-                    supportY = halfHeight;
-                    supportZ = 0;
-                }
-            } else {
-                supportX = 0;
-                supportY = directionY > 0 ? halfHeight : -halfHeight;
-                supportZ = 0;
-            }
-            break;
-        }
-        case SupportKind.CYLINDER: {
-            const cylinder = support.cylinder;
-            const horizontalLen = Math.sqrt(directionX * directionX + directionZ * directionZ);
-            if (horizontalLen > 0) {
-                const scale = cylinder.radius / horizontalLen;
-                supportX = directionX * scale;
-                supportZ = directionZ * scale;
-            } else {
-                supportX = 0;
-                supportZ = 0;
-            }
-            supportY = directionY >= 0 ? cylinder.halfHeight : -cylinder.halfHeight;
-            break;
-        }
-        case SupportKind.HULL: {
-            const hull = support.hull;
-            const vertices = hull.vertices;
-            const neighborsStart = hull.neighborsStart;
-            supportX = 0;
-            supportY = 0;
-            supportZ = 0;
-
-            if (neighborsStart.length === 0 || hull.lastVertex === -1) {
-                // brute scan — no adjacency baked, or cold pair-fill. when accelerated, this first
-                // call seeds the warm-start hint with the exact argmax.
-                const length = hull.vertexCount * 3;
-                let bestDot = -Infinity;
-                let bestBase = 0;
-                for (let i = 0; i < length; i += 3) {
-                    const vertexX = vertices[i];
-                    const vertexY = vertices[i + 1];
-                    const vertexZ = vertices[i + 2];
-                    const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
-                    if (dot > bestDot) {
-                        bestDot = dot;
-                        bestBase = i;
-                        supportX = vertexX;
-                        supportY = vertexY;
-                        supportZ = vertexZ;
-                    }
-                }
-                if (neighborsStart.length !== 0) {
-                    hull.lastVertex = bestBase / 3;
-                }
-            } else {
-                // warm hill-climb over the baked 1-ring: take the best neighbour of the current
-                // vertex, repeat until none improves. a local max over a convex hull's vertex graph
-                // is the global max, so this returns a true support vertex. steps cap guards
-                // non-termination.
-                const neighbors = hull.neighbors;
-                const vertexCount = hull.vertexCount;
-                let cur = hull.lastVertex;
-                let curBase = cur * 3;
-                let bestDot = vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
-                let steps = 0;
-                let prev: number;
-                do {
-                    prev = cur;
-                    const end = neighborsStart[cur + 1];
-                    for (let k = neighborsStart[cur]; k < end; k++) {
-                        const n = neighbors[k];
-                        const nb = n * 3;
-                        const d = vertices[nb] * directionX + vertices[nb + 1] * directionY + vertices[nb + 2] * directionZ;
-                        if (d > bestDot) {
-                            bestDot = d;
-                            cur = n;
-                        }
-                    }
-                } while (cur !== prev && ++steps <= vertexCount);
-                hull.lastVertex = cur;
-                curBase = cur * 3;
-                supportX = vertices[curBase];
-                supportY = vertices[curBase + 1];
-                supportZ = vertices[curBase + 2];
-            }
-
-            // uniform-scale fast path: scale the winning local vertex (must precede addRadius + transform-back)
-            const outputScale = hull.outputScale;
-            supportX *= outputScale;
-            supportY *= outputScale;
-            supportZ *= outputScale;
-            break;
-        }
-        case SupportKind.TRIANGLE: {
-            const triangle = support.triangle;
-            const a = triangle.a;
-            const b = triangle.b;
-            const c = triangle.c;
-            const dotA = a[0] * directionX + a[1] * directionY + a[2] * directionZ;
-            const dotB = b[0] * directionX + b[1] * directionY + b[2] * directionZ;
-            const dotC = c[0] * directionX + c[1] * directionY + c[2] * directionZ;
-            let best: Vec3;
-            if (dotA > dotB) {
-                best = dotA > dotC ? a : c;
-            } else {
-                best = dotB > dotC ? b : c;
-            }
-            supportX = best[0];
-            supportY = best[1];
-            supportZ = best[2];
-            break;
-        }
-        default: {
-            // POINT
-            const position = support.point.position;
-            supportX = position[0];
-            supportY = position[1];
-            supportZ = position[2];
-            break;
-        }
-    }
-
-    // 3. folded AddConvexRadius — add addRadius along the local direction
-    if (support.addRadius > 0) {
+    // rounding along the local direction, then back to the caller's space
+    const radius = support.addRadius;
+    if (radius > 0) {
         const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
         if (lengthSq > 0) {
-            const scale = support.addRadius / Math.sqrt(lengthSq);
+            const scale = radius / Math.sqrt(lengthSq);
             supportX += directionX * scale;
             supportY += directionY * scale;
             supportZ += directionZ * scale;
         }
     }
-
-    // 4. transform the support point back to world space (rotation + translation)
     if (support.hasTransform) {
         const m = support.transform;
         out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
@@ -345,17 +204,300 @@ export function getSupport(out: Vec3, support: Support, direction: Vec3): void {
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/* setters — bake a shape (+ mode + scale) into a Support struct, once per pair. */
-/* transform and addRadius default to identity/0; the driver sets them.       */
-/* -------------------------------------------------------------------------- */
+/** capsule evaluator: the near end of the core segment, rounded by the capsule radius */
+export function capsuleSupport(out: Vec3, support: Support, direction: Vec3): void {
+    let directionX = direction[0];
+    let directionY = direction[1];
+    let directionZ = direction[2];
+    if (support.hasTransform) {
+        const m = support.transform;
+        const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+        const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+        const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+        directionX = localX;
+        directionY = localY;
+        directionZ = localZ;
+    }
+
+    const capsule = support.capsule;
+    let supportX = 0;
+    let supportY = directionY > 0 ? capsule.halfHeight : -capsule.halfHeight;
+    let supportZ = 0;
+
+    // the rounding that makes the segment a capsule, plus the driver's
+    const radius = capsule.radius + support.addRadius;
+    if (radius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
+
+/** cylinder evaluator: the radial extreme in the local XZ plane on the near/far cap */
+export function cylinderSupport(out: Vec3, support: Support, direction: Vec3): void {
+    let directionX = direction[0];
+    let directionY = direction[1];
+    let directionZ = direction[2];
+    if (support.hasTransform) {
+        const m = support.transform;
+        const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+        const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+        const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+        directionX = localX;
+        directionY = localY;
+        directionZ = localZ;
+    }
+
+    const cylinder = support.cylinder;
+    let supportX: number;
+    let supportZ: number;
+    const horizontalLen = Math.sqrt(directionX * directionX + directionZ * directionZ);
+    if (horizontalLen > 0) {
+        const scale = cylinder.radius / horizontalLen;
+        supportX = directionX * scale;
+        supportZ = directionZ * scale;
+    } else {
+        supportX = 0;
+        supportZ = 0;
+    }
+    let supportY = directionY >= 0 ? cylinder.halfHeight : -cylinder.halfHeight;
+
+    const radius = support.addRadius;
+    if (radius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
+
+/** triangle evaluator: three points with a last-maximal tie-break — mesh contact quality depends on it */
+export function triangleSupport(out: Vec3, support: Support, direction: Vec3): void {
+    let directionX = direction[0];
+    let directionY = direction[1];
+    let directionZ = direction[2];
+    if (support.hasTransform) {
+        const m = support.transform;
+        const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+        const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+        const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+        directionX = localX;
+        directionY = localY;
+        directionZ = localZ;
+    }
+
+    const v = support.triangle.vertices;
+    const dotA = v[0] * directionX + v[1] * directionY + v[2] * directionZ;
+    const dotB = v[3] * directionX + v[4] * directionY + v[5] * directionZ;
+    const dotC = v[6] * directionX + v[7] * directionY + v[8] * directionZ;
+    const base = dotA > dotB ? (dotA > dotC ? 0 : 6) : dotB > dotC ? 3 : 6;
+    let supportX = v[base];
+    let supportY = v[base + 1];
+    let supportZ = v[base + 2];
+
+    const radius = support.addRadius;
+    if (radius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
+
+/** point evaluator: the point itself, rounded by addRadius along the local direction */
+export function pointSupport(out: Vec3, support: Support, direction: Vec3): void {
+    const point = support.point;
+    let supportX = point[0];
+    let supportY = point[1];
+    let supportZ = point[2];
+
+    const radius = support.addRadius;
+    if (radius > 0) {
+        let directionX = direction[0];
+        let directionY = direction[1];
+        let directionZ = direction[2];
+        if (support.hasTransform) {
+            const m = support.transform;
+            const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+            const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+            const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+            directionX = localX;
+            directionY = localY;
+            directionZ = localZ;
+        }
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
+
+/**
+ * convex point-set evaluator: a hull or a polygon face. brute scan when no adjacency is baked or
+ * the pair is cold; otherwise a warm hill-climb over the baked 1-ring.
+ */
+export function hullSupport(out: Vec3, support: Support, direction: Vec3): void {
+    let directionX = direction[0];
+    let directionY = direction[1];
+    let directionZ = direction[2];
+    if (support.hasTransform) {
+        const m = support.transform;
+        const localX = m[0] * directionX + m[1] * directionY + m[2] * directionZ;
+        const localY = m[4] * directionX + m[5] * directionY + m[6] * directionZ;
+        const localZ = m[8] * directionX + m[9] * directionY + m[10] * directionZ;
+        directionX = localX;
+        directionY = localY;
+        directionZ = localZ;
+    }
+
+    const hull = support.hull;
+    const vertices = hull.vertices;
+    const neighborsStart = hull.neighborsStart;
+    let supportX = 0;
+    let supportY = 0;
+    let supportZ = 0;
+
+    if (neighborsStart.length === 0 || hull.lastVertex === -1) {
+        // brute scan — no adjacency baked, or cold pair-fill. when accelerated, this first
+        // call seeds the warm-start hint with the exact argmax.
+        const length = hull.vertexCount * 3;
+        let bestDot = -Infinity;
+        let bestBase = 0;
+        for (let i = 0; i < length; i += 3) {
+            const vertexX = vertices[i];
+            const vertexY = vertices[i + 1];
+            const vertexZ = vertices[i + 2];
+            const dot = vertexX * directionX + vertexY * directionY + vertexZ * directionZ;
+            if (dot > bestDot) {
+                bestDot = dot;
+                bestBase = i;
+                supportX = vertexX;
+                supportY = vertexY;
+                supportZ = vertexZ;
+            }
+        }
+        if (neighborsStart.length !== 0) {
+            hull.lastVertex = bestBase / 3;
+        }
+    } else {
+        // warm hill-climb over the baked 1-ring: take the best neighbour of the current
+        // vertex, repeat until none improves. a local max over a convex hull's vertex graph
+        // is the global max, so this returns a true support vertex. steps cap guards
+        // non-termination.
+        const neighbors = hull.neighbors;
+        const vertexCount = hull.vertexCount;
+        let cur = hull.lastVertex;
+        let curBase = cur * 3;
+        let bestDot = vertices[curBase] * directionX + vertices[curBase + 1] * directionY + vertices[curBase + 2] * directionZ;
+        let steps = 0;
+        let prev: number;
+        do {
+            prev = cur;
+            const end = neighborsStart[cur + 1];
+            for (let k = neighborsStart[cur]; k < end; k++) {
+                const n = neighbors[k];
+                const nb = n * 3;
+                const d = vertices[nb] * directionX + vertices[nb + 1] * directionY + vertices[nb + 2] * directionZ;
+                if (d > bestDot) {
+                    bestDot = d;
+                    cur = n;
+                }
+            }
+        } while (cur !== prev && ++steps <= vertexCount);
+        hull.lastVertex = cur;
+        curBase = cur * 3;
+        supportX = vertices[curBase];
+        supportY = vertices[curBase + 1];
+        supportZ = vertices[curBase + 2];
+    }
+
+    // uniform-scale fast path: scale the winning local vertex (must precede addRadius + transform-back)
+    const outputScale = hull.outputScale;
+    supportX *= outputScale;
+    supportY *= outputScale;
+    supportZ *= outputScale;
+
+    const radius = support.addRadius;
+    if (radius > 0) {
+        const lengthSq = directionX * directionX + directionY * directionY + directionZ * directionZ;
+        if (lengthSq > 0) {
+            const scale = radius / Math.sqrt(lengthSq);
+            supportX += directionX * scale;
+            supportY += directionY * scale;
+            supportZ += directionZ * scale;
+        }
+    }
+    if (support.hasTransform) {
+        const m = support.transform;
+        out[0] = m[0] * supportX + m[4] * supportY + m[8] * supportZ + m[12];
+        out[1] = m[1] * supportX + m[5] * supportY + m[9] * supportZ + m[13];
+        out[2] = m[2] * supportX + m[6] * supportY + m[10] * supportZ + m[14];
+    } else {
+        out[0] = supportX;
+        out[1] = supportY;
+        out[2] = supportZ;
+    }
+}
 
 export function setBoxSupport(out: Support, shape: BoxShape, mode: SupportFunctionMode, scale: Vec3): void {
     const scaledX = Math.abs(scale[0]) * shape.halfExtents[0];
     const scaledY = Math.abs(scale[1]) * shape.halfExtents[1];
     const scaledZ = Math.abs(scale[2]) * shape.halfExtents[2];
 
-    out.kind = SupportKind.BOX;
+    out.getSupport = boxSupport;
     out.hasTransform = false;
     out.addRadius = 0;
 
@@ -377,15 +519,15 @@ export function setBoxSupport(out: Support, shape: BoxShape, mode: SupportFuncti
 
 export function setSphereSupport(out: Support, shape: SphereShape, mode: SupportFunctionMode, scale: Vec3): void {
     const absScale = Math.abs(scale[0]); // uniform scale only
-    out.kind = SupportKind.SPHERE;
+    out.getSupport = sphereSupport;
     out.hasTransform = false;
     out.addRadius = 0;
 
     if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
-        out.sphere.radius = shape.radius * absScale; // core = radius·dir̂
+        out.sphere.radius = shape.radius * absScale; // a sphere is a rounded point
         out.convexRadius = 0;
     } else {
-        out.sphere.radius = 0; // core = origin
+        out.sphere.radius = 0; // core = origin, the radius is reported instead
         out.convexRadius = shape.radius * absScale;
     }
 }
@@ -395,23 +537,23 @@ export function setCapsuleSupport(out: Support, shape: CapsuleShape, mode: Suppo
     const scaledHalfHeight = absScale * shape.halfHeightOfCylinder;
     const scaledRadius = absScale * shape.radius;
 
-    out.kind = SupportKind.CAPSULE;
+    out.getSupport = capsuleSupport;
     out.hasTransform = false;
     out.addRadius = 0;
     out.capsule.halfHeight = scaledHalfHeight;
 
     if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS) {
-        out.capsule.radius = scaledRadius; // segment + radius·dir̂
+        out.capsule.radius = scaledRadius; // a capsule is a rounded segment
         out.convexRadius = 0;
     } else {
-        out.capsule.radius = 0; // segment only
+        out.capsule.radius = 0; // segment only, the radius is reported instead
         out.convexRadius = scaledRadius;
     }
 }
 
 export function setCylinderSupport(out: Support, shape: CylinderShape, mode: SupportFunctionMode, scale: Vec3): void {
     const absScale = Math.abs(scale[0]); // uniform scale only
-    out.kind = SupportKind.CYLINDER;
+    out.getSupport = cylinderSupport;
     out.hasTransform = false;
     out.addRadius = 0;
 
@@ -431,27 +573,25 @@ export function setCylinderSupport(out: Support, shape: CylinderShape, mode: Sup
 
 /** triangle operand (mesh) — copies the 3 verts */
 export function setTriangleSupport(out: Support, a: Vec3, b: Vec3, c: Vec3): void {
-    out.kind = SupportKind.TRIANGLE;
+    out.getSupport = triangleSupport;
     out.hasTransform = false;
     out.addRadius = 0;
     out.convexRadius = 0;
-    const ta = out.triangle.a;
-    const tb = out.triangle.b;
-    const tc = out.triangle.c;
-    ta[0] = a[0];
-    ta[1] = a[1];
-    ta[2] = a[2];
-    tb[0] = b[0];
-    tb[1] = b[1];
-    tb[2] = b[2];
-    tc[0] = c[0];
-    tc[1] = c[1];
-    tc[2] = c[2];
+    const v = out.triangle.vertices;
+    v[0] = a[0];
+    v[1] = a[1];
+    v[2] = a[2];
+    v[3] = b[0];
+    v[4] = b[1];
+    v[5] = b[2];
+    v[6] = c[0];
+    v[7] = c[1];
+    v[8] = c[2];
 }
 
 /** polygon face (KCC) — borrows the face's vertex array (read-only, valid for this pair) */
 export function setPolygonSupport(out: Support, vertices: number[], vertexCount: number): void {
-    out.kind = SupportKind.HULL; // a face is just a convex vertex set
+    out.getSupport = hullSupport; // a face is just a convex vertex set
     out.hasTransform = false;
     out.addRadius = 0;
     out.convexRadius = 0;
@@ -466,19 +606,14 @@ export function setPolygonSupport(out: Support, vertices: number[], vertexCount:
 
 /** point operand (collidePoint) — copies the point */
 export function setPointSupport(out: Support, point: Vec3): void {
-    out.kind = SupportKind.POINT;
+    out.getSupport = pointSupport;
     out.hasTransform = false;
     out.addRadius = 0;
     out.convexRadius = 0;
-    const position = out.point.position;
-    position[0] = point[0];
-    position[1] = point[1];
-    position[2] = point[2];
+    out.point[0] = point[0];
+    out.point[1] = point[1];
+    out.point[2] = point[2];
 }
-
-/* -------------------------------------------------------------------------- */
-/* convex hull — the fill computes the convex-radius-shrunk vertices (exclude mode) */
-/* -------------------------------------------------------------------------- */
 
 /**
  * Compute the convex-radius-shrunk hull vertices (unscaled) into `dst` as a flat [x,y,z,...] array.
@@ -731,12 +866,12 @@ function computeScaledShrunkHullPoints(shape: ConvexHullShape, scale: Vec3, dst:
 /**
  * Fill a HULL support for the given mode + scale. Include (or zero-radius) uses the raw vertices;
  * exclude uses the convex-radius-shrunk vertices. Uniform positive scale borrows the shape-owned
- * arrays and scales the support point in getSupport (fast path); non-uniform / mirrored scale bakes
+ * arrays and scales the support point in the evaluator (fast path); non-uniform / mirrored scale bakes
  * scaled vertices into scratch per pair (slow path). `vertices` is a read-only borrow valid for the
  * current pair.
  */
 export function setHullSupport(out: Support, shape: ConvexHullShape, mode: SupportFunctionMode, scale: Vec3): void {
-    out.kind = SupportKind.HULL;
+    out.getSupport = hullSupport;
     out.hasTransform = false;
     out.addRadius = 0;
 
@@ -745,13 +880,13 @@ export function setHullSupport(out: Support, shape: ConvexHullShape, mode: Suppo
 
     // borrow the shape's CSR adjacency (empty ⇔ not baked → brute scan). valid for the shrunk set (same
     // count/order) and every scale path (affine transforms preserve hull vertex adjacency). reset the
-    // warm-start hint so this pair-fill starts cold (first getSupport call brute-seeds it).
+    // warm-start hint so this pair-fill starts cold (first evaluation brute-seeds it).
     hull.neighborsStart = shape.pointNeighborsStart;
     hull.neighbors = shape.pointNeighbors;
     hull.lastVertex = -1;
 
     // uniform positive scale (identity is just s=1): borrow the shape-owned vertex arrays and scale the
-    // winning support point in getSupport — exact, and no per-pair bake. non-uniform / mirrored scale:
+    // winning support point in the evaluator — exact, and no per-pair bake. non-uniform / mirrored scale:
     // fall back to baking scaled vertices into scratch per pair (slow path).
     const uniform = scale[0] === scale[1] && scale[1] === scale[2] && scale[0] > 0;
 

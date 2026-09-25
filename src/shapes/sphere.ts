@@ -1,4 +1,5 @@
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import {
     type CollidePointCollector,
@@ -16,7 +17,6 @@ import type { Shape } from './shapes';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -93,18 +93,17 @@ export function update(shape: SphereShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<SphereShape>({
         type: ShapeType.SPHERE,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setSphereSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: collidePointVsSphere,
-        setSupport: setSphereSupport,
         register: () => {
             // sphere vs convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.SPHERE, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.SPHERE, convex.collideConvexVsConvex);
 
@@ -220,7 +219,7 @@ const _collideSphereVsSphere_hit = /* @__PURE__ */ createCollideShapeHit();
 
 export function collideSphereVsSphere(
     collector: CollideShapeCollector,
-    _settings: CollideShapeSettings,
+    settings: CollideShapeSettings,
     shapeA: Shape,
     subShapeIdA: number,
     _subShapeIdBitsA: number,
@@ -267,13 +266,18 @@ export function collideSphereVsSphere(
     const distSq = dx * dx + dy * dy + dz * dz;
     const radiusSum = radiusA + radiusB;
 
-    // no collision if distance > sum of radii
-    if (distSq >= radiusSum * radiusSum) {
+    // no collision if the gap is wider than the speculative distance
+    const reach = radiusSum + settings.maxSeparationDistance;
+    if (distSq >= reach * reach) {
         return;
     }
 
     const dist = Math.sqrt(distSq);
     const penetration = radiusSum - dist;
+
+    if (-penetration >= collector.earlyOutFraction) {
+        return;
+    }
 
     // normal from A to B
     let normalX: number, normalY: number, normalZ: number;
@@ -311,6 +315,10 @@ export function collideSphereVsSphere(
     hit.materialIdA = sphereA.materialId;
     hit.materialIdB = sphereB.materialId;
     hit.bodyIdB = collector.bodyIdB;
+
+    // a sphere has no supporting face, and the hit struct is reused
+    hit.faceA.numVertices = 0;
+    hit.faceB.numVertices = 0;
 
     collector.addHit(hit);
 }

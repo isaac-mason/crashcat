@@ -1,5 +1,5 @@
-import type { Mat4, Vec3 } from 'mathcat';
-import { mat4, vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
+import { mat4, vec3 } from 'math';
 import * as motionProperties from '../../body/motion-properties';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
@@ -82,6 +82,7 @@ export function calculateConstraintProperties(
     bodyB: RigidBody,
     rotationB: Mat4,
     r2Local: Vec3,
+    stepStamp: number,
 ): void {
     // transform local space moment arms to world space
     mat4.multiply3x3Vec(part.r1, rotationA, r1Local);
@@ -99,8 +100,7 @@ export function calculateConstraintProperties(
         summedInvMass += mp1.invMass;
 
         // get inverse inertia in world space
-        const invInertia1 = _calc_invInertia1;
-        motionProperties.getInverseInertiaForRotation(invInertia1, mp1, rotationA);
+        const invInertia1 = motionProperties.getWorldInverseInertia(_calc_invInertia1, mp1, bodyA.quaternion, stepStamp);
 
         // create [r1]× cross product matrix
         const r1Cross = _calc_r1Cross;
@@ -130,8 +130,7 @@ export function calculateConstraintProperties(
         summedInvMass += mp2.invMass;
 
         // get inverse inertia in world space
-        const invInertia2 = _calc_invInertia2;
-        motionProperties.getInverseInertiaForRotation(invInertia2, mp2, rotationB);
+        const invInertia2 = motionProperties.getWorldInverseInertia(_calc_invInertia2, mp2, bodyB.quaternion, stepStamp);
 
         // create [r2]× cross product matrix
         const r2Cross = _calc_r2Cross;

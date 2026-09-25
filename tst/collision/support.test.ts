@@ -1,15 +1,21 @@
-import { mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, quat, type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, convexHull, cylinder, sphere } from '../../src';
 import {
+    boxSupport,
+    capsuleSupport,
     createSupport,
-    getSupport,
+    cylinderSupport,
+    hullSupport,
+    pointSupport,
     type Support,
+    type SupportFunction,
     SupportFunctionMode,
-    SupportKind,
     setPointSupport,
     setPolygonSupport,
     setTriangleSupport,
+    sphereSupport,
+    triangleSupport,
 } from '../../src/collision/support';
 import { setShapeSupport } from '../../src/shapes/shapes';
 
@@ -19,7 +25,7 @@ const ONE: Vec3 = vec3.fromValues(1, 1, 1);
 /** run getSupport into a fresh vector */
 function at(support: Support, dir: Vec3): Vec3 {
     const out = vec3.create();
-    getSupport(out, support, dir);
+    support.getSupport(out, support, dir);
     return out;
 }
 
@@ -67,7 +73,7 @@ describe('getSupport — box', () => {
     test('INCLUDE returns the full box; sign-selects half-extents per axis', () => {
         const s = createSupport();
         setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-        expect(s.kind).toBe(SupportKind.BOX);
+        expect(s.getSupport).toBe(boxSupport);
         expect(s.convexRadius).toBe(0);
         expectVec(at(s, vec3.fromValues(1, 1, 1)), [2, 3, 4]);
         expectVec(at(s, vec3.fromValues(-1, -1, -1)), [-2, -3, -4]);
@@ -94,7 +100,7 @@ describe('getSupport — sphere', () => {
     test('INCLUDE returns radius·dir̂; convexRadius is 0', () => {
         const s = createSupport();
         setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-        expect(s.kind).toBe(SupportKind.SPHERE);
+        expect(s.getSupport).toBe(sphereSupport);
         expect(s.convexRadius).toBe(0);
         expectVec(at(s, vec3.fromValues(1, 0, 0)), [2, 0, 0]);
         const r3 = 2 / Math.sqrt(3);
@@ -123,7 +129,7 @@ describe('getSupport — capsule', () => {
     test('INCLUDE returns segment endpoint + radius·dir̂', () => {
         const s = createSupport();
         setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-        expect(s.kind).toBe(SupportKind.CAPSULE);
+        expect(s.getSupport).toBe(capsuleSupport);
         expect(s.convexRadius).toBe(0);
         expectVec(at(s, vec3.fromValues(0, 1, 0)), [0, 1 + 0.5, 0]);
         expectVec(at(s, vec3.fromValues(0, -1, 0)), [0, -(1 + 0.5), 0]);
@@ -144,7 +150,7 @@ describe('getSupport — cylinder', () => {
     test('INCLUDE combines the radial + axial extremes', () => {
         const s = createSupport();
         setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-        expect(s.kind).toBe(SupportKind.CYLINDER);
+        expect(s.getSupport).toBe(cylinderSupport);
         expect(s.convexRadius).toBe(0);
         expectVec(at(s, vec3.fromValues(1, 0, 0)), [1, 2, 0]); // dir.y === 0 → +halfHeight
         expectVec(at(s, vec3.fromValues(0, 1, 0)), [0, 2, 0]); // no radial component
@@ -177,7 +183,7 @@ describe('getSupport — convex hull', () => {
     test('INCLUDE returns the max-dot hull vertex for every direction', () => {
         const s = createSupport();
         setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-        expect(s.kind).toBe(SupportKind.HULL);
+        expect(s.getSupport).toBe(hullSupport);
         for (const dir of AXES) {
             const expected = bruteForceMaxDot(shape.pointPositions, shape.numPoints, dir);
             expectVec(at(s, dir), Array.from(expected));
@@ -303,7 +309,8 @@ describe('getSupport — triangle / point / polygon primitives', () => {
         const c = vec3.fromValues(0, 1, 0);
         const s = createSupport();
         setTriangleSupport(s, a, b, c);
-        expect(s.kind).toBe(SupportKind.TRIANGLE);
+        expect(s.getSupport).toBe(triangleSupport);
+        expect(s.triangle.vertices).toEqual([0, 0, 0, 1, 0, 0, 0, 1, 0]);
         expectVec(at(s, vec3.fromValues(1, 0, 0)), [1, 0, 0]);
         expectVec(at(s, vec3.fromValues(0, 1, 0)), [0, 1, 0]);
         expectVec(at(s, vec3.fromValues(-1, -1, 0)), [0, 0, 0]);
@@ -313,9 +320,27 @@ describe('getSupport — triangle / point / polygon primitives', () => {
         const p = vec3.fromValues(3, -4, 5);
         const s = createSupport();
         setPointSupport(s, p);
-        expect(s.kind).toBe(SupportKind.POINT);
+        expect(s.getSupport).toBe(pointSupport);
         for (const dir of AXES) {
             expectVec(at(s, dir), [3, -4, 5]);
+        }
+    });
+
+    test('point with addRadius and a transform is the transformed point plus radius along the world direction', () => {
+        const s = createSupport();
+        setPointSupport(s, vec3.fromValues(1, 2, 3));
+        s.addRadius = 0.5;
+        s.hasTransform = true;
+        mat4.fromRotationTranslation(
+            s.transform,
+            quat.setAxisAngle(quat.create(), vec3.fromValues(0, 0, 1), Math.PI / 2),
+            vec3.fromValues(10, 0, 0),
+        );
+        // rotating (1,2,3) by 90° about z gives (-2,1,3); translated → (8,1,3). the radius is added
+        // along the direction, which the rotation round-trips exactly
+        for (const dir of AXES) {
+            const unit = vec3.normalize(vec3.create(), dir);
+            expectVec(at(s, dir), [8 + 0.5 * unit[0], 1 + 0.5 * unit[1], 3 + 0.5 * unit[2]], 6);
         }
     });
 
@@ -323,7 +348,7 @@ describe('getSupport — triangle / point / polygon primitives', () => {
         const verts = [-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1];
         const s = createSupport();
         setPolygonSupport(s, verts, 4);
-        expect(s.kind).toBe(SupportKind.HULL);
+        expect(s.getSupport).toBe(hullSupport);
         for (const dir of AXES) {
             const expected = bruteForceMaxDot(verts, 4, dir);
             expectVec(at(s, dir), Array.from(expected));
@@ -370,18 +395,18 @@ describe('getSupport — folded transform (was TransformedSupport)', () => {
 });
 
 describe('getSupport — dispatch + degenerate directions', () => {
-    test('setShapeSupport routes to the correct kind per shape', () => {
-        const cases: Array<[ReturnType<typeof box.create> | any, SupportKind]> = [
-            [box.create({ halfExtents: ONE }), SupportKind.BOX],
-            [sphere.create({ radius: 1 }), SupportKind.SPHERE],
-            [capsule.create({ radius: 0.5, halfHeightOfCylinder: 1 }), SupportKind.CAPSULE],
-            [cylinder.create({ radius: 1, halfHeight: 1 }), SupportKind.CYLINDER],
-            [convexHull.create({ positions: [-1, -1, -1, 1, -1, -1, 0, 1, -1, 0, 0, 1] }), SupportKind.HULL],
+    test('setShapeSupport installs the correct evaluator per shape', () => {
+        const cases: Array<[ReturnType<typeof box.create> | any, SupportFunction]> = [
+            [box.create({ halfExtents: ONE }), boxSupport],
+            [sphere.create({ radius: 1 }), sphereSupport],
+            [capsule.create({ radius: 0.5, halfHeightOfCylinder: 1 }), capsuleSupport],
+            [cylinder.create({ radius: 1, halfHeight: 1 }), cylinderSupport],
+            [convexHull.create({ positions: [-1, -1, -1, 1, -1, -1, 0, 1, -1, 0, 0, 1] }), hullSupport],
         ];
         const s = createSupport();
-        for (const [shape, kind] of cases) {
+        for (const [shape, evaluator] of cases) {
             setShapeSupport(s, shape, INCLUDE_CONVEX_RADIUS, ONE);
-            expect(s.kind).toBe(kind);
+            expect(s.getSupport).toBe(evaluator);
         }
     });
 

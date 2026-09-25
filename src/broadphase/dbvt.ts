@@ -10,9 +10,10 @@
 // leaves always reference live bodies: body destroy removes the leaf from the tree before the
 // body is pooled, so traversals never see a pooled body.
 
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { RigidBody } from '../body/rigid-body';
-import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { World } from '../world';
@@ -194,7 +195,6 @@ function isLeftChild(dbvt: DBVT, n: number): boolean {
     return dbvt.topo[parent * STRIDE_TOPO + T_RIGHT] !== n;
 }
 
-/** @optimize */
 function insertLeaf(dbvt: DBVT, leafIndex: number): void {
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
@@ -287,7 +287,6 @@ function widenAndMarkNodeAndParentsChanged(dbvt: DBVT, parentIndex: number, srcN
     }
 }
 
-/** @optimize */
 function removeLeaf(dbvt: DBVT, leafIndex: number): number {
     const topo = dbvt.topo;
     const bounds = dbvt.bounds;
@@ -385,7 +384,6 @@ export function remove(dbvt: DBVT, body: RigidBody): void {
 }
 
 /**
- * @optimize
  * returns true iff the body escaped its fat AABB (a "moved" event the persistent-pair broadphase
  * consumes), false when the containment early-out fired.
  *
@@ -613,7 +611,6 @@ export function rebuild(dbvt: DBVT): void {
  * bring the bodies into contact while both coast inside them, so the leaf test must be the
  * fat node AABB (already tested during descent), NOT the current tight body AABB.
  *
- * @optimize
  */
 export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
@@ -661,7 +658,6 @@ export function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, vis
     }
 }
 
-/** @optimize */
 export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
@@ -748,7 +744,6 @@ export function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter:
     }
 }
 
-/** @optimize */
 export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
 
@@ -858,7 +853,6 @@ export function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void {
     }
 }
 
-/** @optimize */
 export function castRay(
     world: World,
     dbvt: DBVT,
@@ -876,9 +870,11 @@ export function castRay(
     const originX = origin[0];
     const originY = origin[1];
     const originZ = origin[2];
-    const dirX = direction[0];
-    const dirY = direction[1];
-    const dirZ = direction[2];
+
+    // reciprocals of the displacement, once per query, for the fraction-space slab tests
+    const invDispX = safeReciprocal(direction[0] * length);
+    const invDispY = safeReciprocal(direction[1] * length);
+    const invDispZ = safeReciprocal(direction[2] * length);
 
     // closest-hit fraction so far; any node whose fat-AABB entry fraction is >= this can't hold a
     // closer hit and is pruned. both are normalized to [0, 1] of the ray length. visitors that don't
@@ -888,14 +884,13 @@ export function castRay(
     let stackSize = 0;
     _castStackNode[stackSize] = dbvt.root;
     const rootB = dbvt.root * STRIDE_BOUNDS;
-    _castStackDist[stackSize] = rayDistanceToBox3(
+    _castStackDist[stackSize] = rayFractionToBox3(
         originX,
         originY,
         originZ,
-        dirX,
-        dirY,
-        dirZ,
-        length,
+        invDispX,
+        invDispY,
+        invDispZ,
         bounds[rootB],
         bounds[rootB + 1],
         bounds[rootB + 2],
@@ -924,14 +919,13 @@ export function castRay(
             const right = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
 
             const lb = left * STRIDE_BOUNDS;
-            const leftDist = rayDistanceToBox3(
+            const leftDist = rayFractionToBox3(
                 originX,
                 originY,
                 originZ,
-                dirX,
-                dirY,
-                dirZ,
-                length,
+                invDispX,
+                invDispY,
+                invDispZ,
                 bounds[lb],
                 bounds[lb + 1],
                 bounds[lb + 2],
@@ -940,14 +934,13 @@ export function castRay(
                 bounds[lb + 5],
             );
             const rb = right * STRIDE_BOUNDS;
-            const rightDist = rayDistanceToBox3(
+            const rightDist = rayFractionToBox3(
                 originX,
                 originY,
                 originZ,
-                dirX,
-                dirY,
-                dirZ,
-                length,
+                invDispX,
+                invDispY,
+                invDispZ,
                 bounds[rb],
                 bounds[rb + 1],
                 bounds[rb + 2],
@@ -1008,23 +1001,22 @@ export function castRay(
             continue;
         }
 
-        // early out: ray-aabb test on body bounds
+        // early out: ray-aabb test on body bounds (a finite entry fraction means a hit)
         if (
-            !rayHitsBox3(
+            rayFractionToBox3(
                 originX,
                 originY,
                 originZ,
-                dirX,
-                dirY,
-                dirZ,
-                length,
+                invDispX,
+                invDispY,
+                invDispZ,
                 body.aabb[0],
                 body.aabb[1],
                 body.aabb[2],
                 body.aabb[3],
                 body.aabb[4],
                 body.aabb[5],
-            )
+            ) === Infinity
         ) {
             continue;
         }
@@ -1041,7 +1033,6 @@ export function castRay(
     }
 }
 
-/** @optimize */
 export function castAABB(
     world: World,
     dbvt: DBVT,

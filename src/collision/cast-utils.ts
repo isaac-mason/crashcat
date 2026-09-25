@@ -1,5 +1,3 @@
-import type { Vec3 } from 'mathcat';
-
 export const INITIAL_EARLY_OUT_FRACTION = 1.0 + 1e-4;
 export const SHOULD_EARLY_OUT_FRACTION = 0.0;
 
@@ -21,8 +19,11 @@ export function createRayIntersectsTriangleResult(): RayIntersectsTriangleResult
 }
 
 /**
- * Ray-triangle intersection test with scalar ray args (no ray struct).
+ * Ray-triangle intersection test with scalar ray and vertex args (no ray struct, no Vec3 copies).
  * Based on https://github.com/pmjoniak/GeometricTools/blob/master/GTEngine/Include/Mathematics/GteIntrRay3Triangle3.h
+ *
+ * `maxT` is the largest hit distance still of interest (ray units, at most `length`): a closest-hit
+ * traversal passes the current best hit so triangles behind it are rejected before the divide.
  */
 export function rayIntersectsTriangle(
     out: RayIntersectsTriangleResult,
@@ -33,18 +34,25 @@ export function rayIntersectsTriangle(
     directionY: number,
     directionZ: number,
     length: number,
-    a: Vec3,
-    b: Vec3,
-    c: Vec3,
+    maxT: number,
+    ax: number,
+    ay: number,
+    az: number,
+    bx: number,
+    by: number,
+    bz: number,
+    cx: number,
+    cy: number,
+    cz: number,
     backfaceCulling: boolean,
 ): void {
     // edge1 = b - a, edge2 = c - a
-    const e1x = b[0] - a[0];
-    const e1y = b[1] - a[1];
-    const e1z = b[2] - a[2];
-    const e2x = c[0] - a[0];
-    const e2y = c[1] - a[1];
-    const e2z = c[2] - a[2];
+    const e1x = bx - ax;
+    const e1y = by - ay;
+    const e1z = bz - az;
+    const e2x = cx - ax;
+    const e2y = cy - ay;
+    const e2z = cz - az;
 
     // normal = edge1 × edge2
     const nx = e1y * e2z - e1z * e2y;
@@ -76,9 +84,9 @@ export function rayIntersectsTriangle(
     }
 
     // diff = origin - a
-    const diffx = originX - a[0];
-    const diffy = originY - a[1];
-    const diffz = originZ - a[2];
+    const diffx = originX - ax;
+    const diffy = originY - ay;
+    const diffz = originZ - az;
 
     // barycentric coordinate b1: DdQxE2 = sign * D · (diff × edge2)
     const diffCrossE2x = diffy * e2z - diffz * e2y;
@@ -121,16 +129,103 @@ export function rayIntersectsTriangle(
         return;
     }
 
-    const t = QdN / DdN;
-    if (t <= length) {
-        out.hit = true;
-        out.fraction = t / length;
-        out.frontFacing = sign < 0;
-    } else {
+    // t = QdN / DdN; reject against the caller's bound before dividing (DdN > 0 here)
+    if (QdN > DdN * maxT) {
         out.hit = false;
         out.fraction = 0;
         out.frontFacing = false;
+        return;
     }
+
+    out.hit = true;
+    out.fraction = QdN / DdN / length;
+    out.frontFacing = sign < 0;
+}
+
+/**
+ * Reciprocal of a ray displacement component for {@link rayFractionToBox3}, computed once per query.
+ * A (nearly) zero component yields 0, which no finite displacement can produce, and marks the axis
+ * as parallel: the slab test then checks the origin against the slab instead of multiplying.
+ */
+export function safeReciprocal(d: number): number {
+    return d > 1e-30 || d < -1e-30 ? 1 / d : 0;
+}
+
+/**
+ * Entry fraction of a ray segment into a box, in [0, 1] of the segment, or Infinity when the segment
+ * misses the box or the box lies entirely behind the origin.
+ *
+ * The ray is given as an origin and the reciprocals of its displacement (`direction * length`,
+ * see {@link safeReciprocal}), precomputed once per query, so the per-box work is six multiplies and
+ * the compares: no divides, and the parallel-axis branches are constant per query. Box args are
+ * scalars so callers read them straight out of flat node arrays.
+ */
+export function rayFractionToBox3(
+    originX: number,
+    originY: number,
+    originZ: number,
+    invDispX: number,
+    invDispY: number,
+    invDispZ: number,
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+): number {
+    let tMin = 0;
+    let tMax = 1;
+
+    if (invDispX === 0) {
+        // parallel to the slab: the segment stays at originX, which must lie inside it
+        if (originX < minX || originX > maxX) return Infinity;
+    } else {
+        const t0 = (minX - originX) * invDispX;
+        const t1 = (maxX - originX) * invDispX;
+        if (t0 < t1) {
+            if (t0 > tMin) tMin = t0;
+            if (t1 < tMax) tMax = t1;
+        } else {
+            if (t1 > tMin) tMin = t1;
+            if (t0 < tMax) tMax = t0;
+        }
+        if (tMax < tMin) return Infinity;
+    }
+
+    if (invDispY === 0) {
+        // parallel to the slab: the segment stays at originY, which must lie inside it
+        if (originY < minY || originY > maxY) return Infinity;
+    } else {
+        const t0 = (minY - originY) * invDispY;
+        const t1 = (maxY - originY) * invDispY;
+        if (t0 < t1) {
+            if (t0 > tMin) tMin = t0;
+            if (t1 < tMax) tMax = t1;
+        } else {
+            if (t1 > tMin) tMin = t1;
+            if (t0 < tMax) tMax = t0;
+        }
+        if (tMax < tMin) return Infinity;
+    }
+
+    if (invDispZ === 0) {
+        // parallel to the slab: the segment stays at originZ, which must lie inside it
+        if (originZ < minZ || originZ > maxZ) return Infinity;
+    } else {
+        const t0 = (minZ - originZ) * invDispZ;
+        const t1 = (maxZ - originZ) * invDispZ;
+        if (t0 < t1) {
+            if (t0 > tMin) tMin = t0;
+            if (t1 < tMax) tMax = t1;
+        } else {
+            if (t1 > tMin) tMin = t1;
+            if (t0 < tMax) tMax = t0;
+        }
+        if (tMax < tMin) return Infinity;
+    }
+
+    return tMin;
 }
 
 /**

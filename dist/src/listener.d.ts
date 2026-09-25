@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import type { RigidBody } from './body/rigid-body.js';
 import type { CollideShapeHit } from './collision/collide-shape-vs-shape.js';
 import type { ContactSettings } from './constraints/contact-constraints.js';

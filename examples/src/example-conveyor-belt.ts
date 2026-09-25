@@ -1,4 +1,4 @@
-import { euler, quat, vec3, type Vec3 } from 'mathcat';
+import { euler, quat, vec3, type Vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import {
@@ -17,7 +17,7 @@ import {
     type ContactSettings,
     type RigidBody,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* rendering */

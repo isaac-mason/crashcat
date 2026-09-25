@@ -1,8 +1,8 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { euler, mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
-import { getInverseInertiaForRotation } from '../body/motion-properties';
+import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
 import {
@@ -604,6 +604,7 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             bodyB,
             _setup_rotB,
             constraint.localSpacePosition2,
+            bodies.stepStamp,
         );
     } else if (isTranslationConstrained(constraint) || constraint.translationMotorActive) {
         getPositionConstraintProperties(constraint, bodies, _setup_r1PlusU, _setup_r2, _setup_u);
@@ -623,13 +624,11 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             const invInertiaB = _setup_invInertiaB;
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_setup_rotA, bodyA.quaternion);
-                getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA);
+                mat4.copy(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, bodies.stepStamp));
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_setup_rotB, bodyB.quaternion);
-                getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB);
+                mat4.copy(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, bodies.stepStamp));
             }
 
             // setup limit constraint
@@ -759,6 +758,7 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             _setup_rotA,
             bodyB,
             _setup_rotB,
+            bodies.stepStamp,
         );
     } else if (isRotationConstrained(constraint) || constraint.rotationMotorActive) {
         if (isRotationConstrained(constraint)) {
@@ -1122,6 +1122,7 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             _setup_rotA,
             bodyB,
             _setup_rotB,
+            STEP_STAMP_NONE,
         );
         impulse =
             rotationEulerConstraintPart.solvePositionConstraint(
@@ -1170,6 +1171,7 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             bodyB,
             _setup_rotB,
             constraint.localSpacePosition2,
+            STEP_STAMP_NONE,
         );
         impulse = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarte) || impulse;
     } else if (isTranslationConstrained(constraint)) {
@@ -1203,12 +1205,10 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
                     mat4.identity(invInertiaA);
                     mat4.identity(invInertiaB);
                     if (bodyA.motionType === MotionType.DYNAMIC) {
-                        mat4.fromQuat(_setup_rotA, bodyA.quaternion);
-                        getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA);
+                        getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, STEP_STAMP_NONE);
                     }
                     if (bodyB.motionType === MotionType.DYNAMIC) {
-                        mat4.fromQuat(_setup_rotB, bodyB.quaternion);
-                        getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB);
+                        getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, STEP_STAMP_NONE);
                     }
 
                     axisConstraintPart.calculateConstraintProperties(

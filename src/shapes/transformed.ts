@@ -1,4 +1,5 @@
-import { type Box3, box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -12,7 +13,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -126,7 +126,6 @@ const _supportingFace_shapeMat4 = /* @__PURE__ */ mat4.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<TransformedShape>({
         type: ShapeType.TRANSFORMED,
-        category: ShapeCategory.DECORATOR,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,

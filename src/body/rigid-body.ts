@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import * as broadphase from '../broadphase/broadphase';
 import { MaterialCombineMode } from '../constraints/combine-material';
 import type { ConstraintId } from '../constraints/constraint-id';
@@ -513,8 +514,6 @@ export function* iterate(world: World): Generator<RigidBody> {
     }
 }
 
-const _getInverseInertia_rot = /* @__PURE__ */ mat4.create();
-
 /**
  * get the world-space inverse inertia matrix for a body.
  * for non-dynamic bodies, returns zero matrix.
@@ -526,8 +525,7 @@ export function getInverseInertia(out: Mat4, body: RigidBody): Mat4 {
     if (body.motionType !== MotionType.DYNAMIC) {
         return mat4.zero(out);
     }
-    mat4.fromQuat(_getInverseInertia_rot, body.quaternion);
-    return motionProperties.getInverseInertiaForRotation(out, body.motionProperties, _getInverseInertia_rot);
+    return motionProperties.getWorldInverseInertia(out, body.motionProperties, body.quaternion, motionProperties.STEP_STAMP_NONE);
 }
 
 /**
@@ -545,42 +543,87 @@ export function updateCenterOfMassPosition(body: RigidBody): void {
     vec3.add(body.centerOfMassPosition, body.centerOfMassPosition, body.position);
 }
 
-const _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ vec3.create();
-
-/**
- * Updates the body's position (shape origin) based on centerOfMassPosition.
- * This derives position from centerOfMassPosition, which is the primary property modified by physics.
- * Formula: position = centerOfMassPosition - rotation × shape.centerOfMass
- */
-export function updatePositionFromCenterOfMass(world: World, body: RigidBody): void {
-    // get shape center of mass in world space
-    const shapeCenterOfMassInWorldSpace = _updatePositionFromCenterOfMass_shapeCenterOfMassInWorldSpace;
-    vec3.copy(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
-    vec3.transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
-
-    // position = centerOfMassPosition - shapeCenterOfMassInWorldSpace
-    vec3.sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
-
-    // update aabb
-    updateAABB(body);
-
-    // update body
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
-}
-
 /**
  * Updates the world-space AABB based on the body's transform and shape AABB.
  * Must be called whenever position, quaternion, or shape changes.
  *
- * @optimize
+ * The rotation basis and the box transform are written out rather than composed through a temporary
+ * `Mat4`. That matrix was a per-call array allocation, and only twelve of its sixteen cells were ever
+ * read — the fourth row and column are built by `fromRotationTranslation` and ignored by
+ * `box3.transformMat4`. Same arithmetic in the same order, so the result is bit-identical.
  */
 export function updateAABB(body: RigidBody): void {
-    const m: Mat4 = /* @sroa */ [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    mat4.fromRotationTranslation(m, body.quaternion, body.position);
-    box3.transformMat4(body.aabb, body.shape.aabb, m);
+    const shapeAabb = body.shape.aabb;
+    const minX = shapeAabb[0];
+    const minY = shapeAabb[1];
+    const minZ = shapeAabb[2];
+    const maxX = shapeAabb[3];
+    const maxY = shapeAabb[4];
+    const maxZ = shapeAabb[5];
+    const out = body.aabb;
+
+    // empty input → empty output (preserve the sentinel rather than producing a bogus transformed
+    // box from negative extents)
+    if (minX > maxX || minY > maxY || minZ > maxZ) {
+        out[0] = Number.POSITIVE_INFINITY;
+        out[1] = Number.POSITIVE_INFINITY;
+        out[2] = Number.POSITIVE_INFINITY;
+        out[3] = Number.NEGATIVE_INFINITY;
+        out[4] = Number.NEGATIVE_INFINITY;
+        out[5] = Number.NEGATIVE_INFINITY;
+        return;
+    }
+
+    // rotation basis from the quaternion, by column (m<column><row>)
+    const q = body.quaternion;
+    const qx = q[0];
+    const qy = q[1];
+    const qz = q[2];
+    const qw = q[3];
+    const x2 = qx + qx;
+    const y2 = qy + qy;
+    const z2 = qz + qz;
+    const xx = qx * x2;
+    const xy = qx * y2;
+    const xz = qx * z2;
+    const yy = qy * y2;
+    const yz = qy * z2;
+    const zz = qz * z2;
+    const wx = qw * x2;
+    const wy = qw * y2;
+    const wz = qw * z2;
+    const m0 = 1 - (yy + zz);
+    const m1 = xy + wz;
+    const m2 = xz - wy;
+    const m4 = xy - wz;
+    const m5 = 1 - (xx + zz);
+    const m6 = yz + wx;
+    const m8 = xz + wy;
+    const m9 = yz - wx;
+    const m10 = 1 - (xx + yy);
+
+    // centre and half-extents through the basis: the transformed extent of an axis is the sum of the
+    // absolute contributions of each source axis
+    const position = body.position;
+    const cx = (minX + maxX) * 0.5;
+    const cy = (minY + maxY) * 0.5;
+    const cz = (minZ + maxZ) * 0.5;
+    const ex = (maxX - minX) * 0.5;
+    const ey = (maxY - minY) * 0.5;
+    const ez = (maxZ - minZ) * 0.5;
+    const tcx = m0 * cx + m4 * cy + m8 * cz + position[0];
+    const tcy = m1 * cx + m5 * cy + m9 * cz + position[1];
+    const tcz = m2 * cx + m6 * cy + m10 * cz + position[2];
+    const tex = Math.abs(m0) * ex + Math.abs(m4) * ey + Math.abs(m8) * ez;
+    const tey = Math.abs(m1) * ex + Math.abs(m5) * ey + Math.abs(m9) * ez;
+    const tez = Math.abs(m2) * ex + Math.abs(m6) * ey + Math.abs(m10) * ez;
+
+    out[0] = tcx - tex;
+    out[1] = tcy - tey;
+    out[2] = tcz - tez;
+    out[3] = tcx + tex;
+    out[4] = tcy + tey;
+    out[5] = tcz + tez;
 }
 
 /** updates body properties related to its shape, call this whenever the body's shape changes */
@@ -618,10 +661,7 @@ export function updateShape(world: World, body: RigidBody) {
     updateAABB(body);
 
     // notify broadphase of AABB change
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 }
 
 /**
@@ -636,10 +676,7 @@ export function setPosition(world: World, body: RigidBody, position: Vec3, wake:
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {
@@ -655,14 +692,12 @@ export function setQuaternion(world: World, body: RigidBody, quaternion: Quat, w
     quat.copy(body.quaternion, quaternion);
 
     // update body properties
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
     updateCenterOfMassPosition(body);
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {
@@ -680,14 +715,12 @@ export function setTransform(world: World, body: RigidBody, position: Vec3, quat
     quat.copy(body.quaternion, quaternion);
 
     // update body properties
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
     updateCenterOfMassPosition(body);
     updateAABB(body);
 
     // update broadphase
-    if (broadphase.updateBody(world.broadphase, body)) {
-        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
-        pairs.markMoved(world.pairs, body);
-    }
+    broadphase.notifyBodyBoundsChanged(world, body);
 
     // optionally wake body
     if (wake) {
@@ -751,6 +784,9 @@ export function setMotionType(world: World, body: RigidBody, motionType: MotionT
             body.massProperties,
         );
     }
+
+    // a memoised world inverse inertia from the previous motion type is stale
+    body.motionProperties.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { createConvexHullBuilder2D, EResult, initialize } from '../../src/shapes/utils/convex-hull-builder-2d';
 

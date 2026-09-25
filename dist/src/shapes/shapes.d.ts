@@ -1,5 +1,6 @@
-import type { Box3, Mat4 } from 'mathcat';
-import { type Quat, type Vec3 } from 'mathcat';
+import type { Mat4 } from 'math';
+import { type Quat, type Vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties.js';
 import type { SubShapeId } from '../body/sub-shape.js';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';
@@ -59,18 +60,6 @@ export declare enum ShapeType {
     USER_10 = 110
 }
 /** shape categories enum */
-export declare enum ShapeCategory {
-    /** Convex shapes (Sphere, Box, Capsule, ConvexHull) */
-    CONVEX = 0,
-    /** Mesh shapes (TriangleMesh) */
-    MESH = 1,
-    /** Decorator shapes that transform other shapes (Transformed, Scaled) */
-    DECORATOR = 2,
-    /** Composite shapes that contain other shapes (Compound) */
-    COMPOSITE = 3,
-    /** Shapes that don't fit into the above categories */
-    OTHER = 4
-}
 /**
  * Shape type registry for discriminated unions (extensible).
  * Custom shapes can extend this via declaration merging:
@@ -147,25 +136,34 @@ export type CollidePointVsShapeFn<S> = (collector: CollidePointCollector, settin
 export type CollideShapeVsShapeFn = (collector: CollideShapeCollector, settings: CollideShapeSettings, shapeA: Shape, subShapeIdA: number, subShapeIdBitsA: number, posAX: number, posAY: number, posAZ: number, quatAX: number, quatAY: number, quatAZ: number, quatAW: number, scaleAX: number, scaleAY: number, scaleAZ: number, shapeB: Shape, subShapeIdB: number, subShapeIdBitsB: number, posBX: number, posBY: number, posBZ: number, quatBX: number, quatBY: number, quatBZ: number, quatBW: number, scaleBX: number, scaleBY: number, scaleBZ: number) => void;
 /** Cast handler function type for casting one shape against another */
 export type CastShapeVsShapeFn = (collector: CastShapeCollector, settings: CastShapeSettings, shapeA: Shape, subShapeIdA: number, subShapeIdBitsA: number, posAX: number, posAY: number, posAZ: number, quatAX: number, quatAY: number, quatAZ: number, quatAW: number, scaleAX: number, scaleAY: number, scaleAZ: number, dispAX: number, dispAY: number, dispAZ: number, shapeB: Shape, subShapeIdB: number, subShapeIdBitsB: number, posBX: number, posBY: number, posBZ: number, quatBX: number, quatBY: number, quatBZ: number, quatBW: number, scaleBX: number, scaleBY: number, scaleBZ: number) => void;
-type OptionalShapeDef = 'computeMassProperties' | 'getInnerRadius' | 'setSupport' | 'getLeafShape' | 'getSubShapeTransformedShape';
+type OptionalShapeDef = 'computeMassProperties' | 'convex' | 'getInnerRadius' | 'getLeafShape' | 'getSubShapeTransformedShape';
 export type ShapeDefOptions<S extends ShapeBase> = Omit<ShapeDef<S>, OptionalShapeDef> & Partial<Pick<ShapeDef<S>, OptionalShapeDef>>;
 export declare function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): ShapeDef<S>;
-/**
- * Fill a monomorphic {@link Support} struct for `shape` (+ mode + scale).
- * Dispatches to the shape's `setSupport` hook — only convex shapes register one.
- */
-export declare function setShapeSupport(out: Support, shape: Shape, mode: SupportFunctionMode, scale: Vec3): void;
 export type ComputeMassPropertiesImpl<S extends ShapeBase> = (out: MassProperties, shape: S) => void;
 export type GetSurfaceNormalImpl<S extends ShapeBase> = (ioResult: SurfaceNormalResult, shape: S, subShapeId: number) => void;
 export type GetSupportingFaceImpl<S extends ShapeBase> = (ioResult: SupportingFaceResult, direction: Vec3, shape: S, subShapeId: number) => void;
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 export type GetLeafShapeImpl<S extends ShapeBase> = (outResult: GetLeafShapeResult, shape: S, subShapeId: SubShapeId) => void;
 export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (outResult: GetSubShapeTransformedShapeResult, shape: S, subShapeId: SubShapeId) => void;
-export type SetSupportImpl<S extends ShapeBase> = (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
+/**
+ * What the convex narrowphase needs from a shape: the handoff that turns it into a {@link Support}.
+ *
+ * This is the only place a `Shape` crosses into the support world — gjk and epa work in terms of
+ * the evaluators in support.ts ({@link SupportFunction}), which is a different and smaller taxonomy
+ * than {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and
+ * point all share one evaluator). A shape's fill installs one of those existing evaluators; it does
+ * not introduce new ones.
+ *
+ * Present iff the shape is convex — this is the marker, there is no separate flag.
+ */
+export type ConvexShapeDef<S extends ShapeBase> = {
+    /** fill a {@link Support} for this shape (+ mode + scale) */
+    setSupport: (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
+};
 export type ShapeDef<S extends ShapeBase> = {
     type: ShapeType;
-    /** Shape category used for collision dispatch registration */
-    category: ShapeCategory;
+    /** the convex narrowphase's view of this shape; present iff the type is convex */
+    convex?: ConvexShapeDef<S>;
     /** get mass properties for the shape */
     computeMassProperties: ComputeMassPropertiesImpl<S>;
     /** get surface normal */
@@ -182,19 +180,16 @@ export type ShapeDef<S extends ShapeBase> = {
     castRay: CastRayVsShapeFn<S>;
     /** test if a point collides with the shape */
     collidePoint: CollidePointVsShapeFn<S>;
-    /**
-     * Fill a monomorphic {@link Support} struct for this shape (+ mode + scale).
-     * Only convex shapes define this; undefined for non-convex shapes.
-     * @param out the Support struct to fill
-     * @param shape the shape instance
-     * @param mode support function mode (INCLUDE/EXCLUDE_CONVEX_RADIUS)
-     * @param scale scale to apply to the shape
-     */
-    setSupport?: SetSupportImpl<S>;
     /** Register collision and cast handlers for this shape type */
     register(): void;
 };
 export declare const shapeDefs: Record<ShapeType, ShapeDef<Shape>>;
+/**
+ * Fill a monomorphic {@link Support} for `shape` (+ mode + scale).
+ *
+ * Only reached through a dispatch entry that exists for convex types, so the handoff is present.
+ */
+export declare function setShapeSupport(out: Support, shape: Shape, mode: SupportFunctionMode, scale: Vec3): void;
 export type CollisionDispatch = {
     collideFns: Map<ShapeType, Map<ShapeType, CollideShapeVsShapeFn>>;
     castFns: Map<ShapeType, Map<ShapeType, CastShapeVsShapeFn>>;

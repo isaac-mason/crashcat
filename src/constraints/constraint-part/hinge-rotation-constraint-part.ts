@@ -1,6 +1,6 @@
-import type { Mat4, Vec3 } from 'mathcat';
-import { mat2, mat4, vec3 } from 'mathcat';
-import { addAngularVelocityStep, getInverseInertiaForRotation, subAngularVelocityStep } from '../../body/motion-properties';
+import type { Mat4, Vec3 } from 'math';
+import { mat2, mat4, vec3 } from 'math';
+import { addAngularVelocityStep, getWorldInverseInertia, subAngularVelocityStep } from '../../body/motion-properties';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addRotationStep, subRotationStep } from '../../body/rigid-body-step';
@@ -90,8 +90,6 @@ const _calc_perp = /* @__PURE__ */ vec3.create();
 const _calc_summedInvInertia = /* @__PURE__ */ mat4.create();
 const _calc_temp = /* @__PURE__ */ vec3.create();
 const _calc_invEffMass = /* @__PURE__ */ mat2.create();
-const _calc_rotA = /* @__PURE__ */ mat4.create();
-const _calc_rotB = /* @__PURE__ */ mat4.create();
 
 /**
  * Calculate constraint properties for the hinge rotation constraint.
@@ -108,6 +106,7 @@ export function calculateConstraintProperties(
     bodyB: RigidBody,
     worldSpaceHingeAxis1: Vec3,
     worldSpaceHingeAxis2: Vec3,
+    stepStamp: number,
 ): void {
     // store a1 (body A's hinge axis)
     vec3.copy(part.a1, worldSpaceHingeAxis1);
@@ -140,15 +139,13 @@ export function calculateConstraintProperties(
 
     // get inverse inertias
     if (bodyA.motionType === MotionType.DYNAMIC) {
-        mat4.fromQuat(_calc_rotA, bodyA.quaternion);
-        getInverseInertiaForRotation(part.invI1, bodyA.motionProperties, _calc_rotA);
+        mat4.copy(part.invI1, getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp));
     } else {
         mat4.zero(part.invI1);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
-        mat4.fromQuat(_calc_rotB, bodyB.quaternion);
-        getInverseInertiaForRotation(part.invI2, bodyB.motionProperties, _calc_rotB);
+        mat4.copy(part.invI2, getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp));
     } else {
         mat4.zero(part.invI2);
     }
