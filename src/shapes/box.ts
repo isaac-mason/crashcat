@@ -375,6 +375,9 @@ export function collideSphereVsBox(
 
         // sphere has no supporting face (single point contact)
         hit.faceA.numVertices = 0;
+    } else {
+        hit.faceA.numVertices = 0;
+        hit.faceB.numVertices = 0;
     }
 
     collector.addHit(hit);

@@ -540,6 +540,9 @@ export function collideConvexVsConvexLocal(
             _collideConvex_BtoWorld,
             scaleB,
         );
+    } else {
+        _collideConvex_hit.faceA.numVertices = 0;
+        _collideConvex_hit.faceB.numVertices = 0;
     }
 
     // notify the collector
