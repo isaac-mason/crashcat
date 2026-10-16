@@ -186,7 +186,7 @@ const popBackEpaSupportPoint = (points: EpaSupportPoints) => {
     if (points.q.size > 0) points.q.size--;
 };
 
-const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(256);
+const _epa_supportPoints = /* @__PURE__ */ createEpaSupportPoints(EPA_MAX_POINTS);
 const _epa_hullState = /* @__PURE__ */ (() => {
     const state = hull.init();
     // set hull positions once - the array reference stays the same, we just clear/refill it
