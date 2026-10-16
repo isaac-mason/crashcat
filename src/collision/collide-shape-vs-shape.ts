@@ -251,6 +251,10 @@ function createInvertedCollector() {
             hit.subShapeIdA = hit.subShapeIdB;
             hit.subShapeIdB = tmpSubShapeId;
 
+            const tmpMaterialId = hit.materialIdA;
+            hit.materialIdA = hit.materialIdB;
+            hit.materialIdB = tmpMaterialId;
+
             const tmpFace = hit.faceA;
             hit.faceA = hit.faceB;
             hit.faceB = tmpFace;

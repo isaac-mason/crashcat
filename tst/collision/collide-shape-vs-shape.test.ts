@@ -3077,6 +3077,48 @@ describe('collideShapeVsShape - Box vs Plane', () => {
     });
 });
 
+describe('collideShapeVsShape - reversed pair materials', () => {
+    // sphere vs box runs the specialised handler; box vs sphere runs it reversed, and the hit's
+    // materials must follow the shape order like its points and sub shape ids do
+    const sphereShape = sphere.create({ radius: 1, materialId: 3 });
+    const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1), materialId: 5 });
+
+    const collide = (shapeA: typeof sphereShape | typeof boxShape, shapeB: typeof sphereShape | typeof boxShape) => {
+        const collector = createAllCollideShapeCollector();
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            shapeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            1.5, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        expect(collector.hits.length).toBe(1);
+        return collector.hits[0];
+    };
+
+    test('sphere vs box reports the sphere as a', () => {
+        const hit = collide(sphereShape, boxShape);
+        expect(hit.materialIdA).toBe(3);
+        expect(hit.materialIdB).toBe(5);
+        expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
+    });
+
+    test('box vs sphere reports the box as a', () => {
+        const hit = collide(boxShape, sphereShape);
+        expect(hit.materialIdA).toBe(5);
+        expect(hit.materialIdB).toBe(3);
+        expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
+    });
+});
+
 describe('ClosestCollideShapeCollector early out', () => {
     // counts the hits that get past the shape's early-out check and reach the collector
     class CountingClosestCollector extends ClosestCollideShapeCollector {
