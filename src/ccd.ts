@@ -12,6 +12,9 @@ import { pool } from './utils/pool';
 export type CCD = {
     /** CCD bodies detected this frame */
     ccdBodies: CCDBody[];
+
+    /** indices into ccdBodies in time of impact order, so the records and every body's ccdBodyIndex stay put */
+    order: number[];
 };
 
 /**
@@ -100,6 +103,7 @@ export function resetCCDBody(ccdBody: CCDBody): void {
 export function init(): CCD {
     return {
         ccdBodies: [],
+        order: [],
     };
 }
 
@@ -118,6 +122,7 @@ export function clear(state: CCD, bodies: Bodies): void {
 
     // empty ccd bodies array
     state.ccdBodies.length = 0;
+    state.order.length = 0;
 }
 
 const _computeSweptAABB_endAABB = /* @__PURE__ */ box3.create();

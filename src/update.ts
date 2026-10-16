@@ -1170,15 +1170,11 @@ function velocityIntegrationUpdate(world: World, timeStep: number): void {
 
 /**
  * calculate the motion of a body for CCD correction.
- * if the body is using LinearCast (hasn't moved yet), returns velocity * deltaTime.
- * works for both dynamic and kinematic bodies.
- * otherwise returns zero (body already moved in discrete update).
+ * a dynamic LinearCast body has not moved yet, so its motion is velocity * deltaTime.
+ * anything else (kinematic bodies included) already moved during velocity integration, so it is zero.
  */
 function calculateBodyMotion(out: Vec3, body: RigidBody, deltaTime: number): void {
-    const isLinearCast = body.motionProperties?.motionQuality === MotionQuality.LINEAR_CAST;
-    const isMoving = body.motionType === MotionType.DYNAMIC || body.motionType === MotionType.KINEMATIC;
-
-    if (isMoving && isLinearCast) {
+    if (body.motionType === MotionType.DYNAMIC && body.motionProperties.motionQuality === MotionQuality.LINEAR_CAST) {
         vec3.scale(out, body.motionProperties.linearVelocity, deltaTime);
         return;
     }
@@ -1472,10 +1468,10 @@ function onCCDContactAdded(
     );
     contactSettings.isSensor = bodyA.sensor || bodyB.sensor; // sensor if either is sensor
 
-    // if no listener, we're done (material properties set)
+    // nothing warm starts from a ccd contact: it is cached only to tell the listener's added / persisted / removed
+    // callbacks apart, so without a listener there is nothing more to do
     if (!listener) return;
 
-    // CCD contacts are always added to cache (only dynamic bodies use CCD)
     // swap bodies so orderedBodyA.id < orderedBodyB.id (matches addContactConstraint behavior)
     let orderedBodyA = bodyA;
     let orderedBodyB = bodyB;
@@ -1485,21 +1481,21 @@ function onCCDContactAdded(
         orderedBodyA = bodyB;
         orderedBodyB = bodyA;
 
-        // swap manifold sub-shape IDs to match body swap (use scratch object)
+        // swap the manifold to match, in a scratch copy: the caller still reads the original's points on b
         swappedManifold = _onCCDContactAdded_swappedManifold;
-        manifold.resetContactManifold(swappedManifold);
-        swappedManifold.subShapeIdA = contactManifold.subShapeIdB;
-        swappedManifold.subShapeIdB = contactManifold.subShapeIdA;
+        swappedManifold.numContactPoints = contactManifold.numContactPoints;
         vec3.copy(swappedManifold.baseOffset, contactManifold.baseOffset);
         vec3.copy(swappedManifold.worldSpaceNormal, contactManifold.worldSpaceNormal);
         swappedManifold.penetrationDepth = contactManifold.penetrationDepth;
-        swappedManifold.numContactPoints = contactManifold.numContactPoints;
-
-        // copy contact points
+        swappedManifold.subShapeIdA = contactManifold.subShapeIdA;
+        swappedManifold.subShapeIdB = contactManifold.subShapeIdB;
+        swappedManifold.materialIdA = contactManifold.materialIdA;
+        swappedManifold.materialIdB = contactManifold.materialIdB;
         for (let i = 0; i < contactManifold.numContactPoints * 3; i++) {
-            swappedManifold.relativeContactPointsOnA[i] = contactManifold.relativeContactPointsOnB[i];
-            swappedManifold.relativeContactPointsOnB[i] = contactManifold.relativeContactPointsOnA[i];
+            swappedManifold.relativeContactPointsOnA[i] = contactManifold.relativeContactPointsOnA[i];
+            swappedManifold.relativeContactPointsOnB[i] = contactManifold.relativeContactPointsOnB[i];
         }
+        manifold.swapShapes(swappedManifold);
     }
 
     // find-or-create the owning pair record: CCD can hit a body pair the broadphase sweep never
@@ -1799,8 +1795,13 @@ function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: R
     }
 }
 
-/** comparator for sorting CCD bodies by time of impact */
-function compareCCDBodies(a: ccd.CCDBody, b: ccd.CCDBody): number {
+let _compareCCDOrder_ccdBodies: ccd.CCDBody[] = [];
+
+/** comparator for sorting CCD body indices by time of impact */
+function compareCCDOrder(indexA: number, indexB: number): number {
+    const a = _compareCCDOrder_ccdBodies[indexA];
+    const b = _compareCCDOrder_ccdBodies[indexB];
+
     // primary sort: time of impact (earliest first)
     if (a.fractionPlusSlop !== b.fractionPlusSlop) {
         return a.fractionPlusSlop - b.fractionPlusSlop;
@@ -1810,76 +1811,64 @@ function compareCCDBodies(a: ccd.CCDBody, b: ccd.CCDBody): number {
     return a.bodyIndex - b.bodyIndex;
 }
 
-/** sort CCD bodies by time of impact (earliest first), uses fractionPlusSlop (includes penetration allowance) for stability */
+/**
+ * sort CCD bodies by time of impact (earliest first), uses fractionPlusSlop (includes penetration allowance) for stability.
+ * sorts indices into state.order, so the records and every body's ccdBodyIndex stay where they are.
+ */
 function sortCCDBodies(state: ccd.CCD): void {
+    const order = state.order;
     const count = state.ccdBodies.length;
-    if (count <= 1) return; // nothing to sort
-
-    // sort only the active portion of the array
-    const ccdBodies = state.ccdBodies;
-
-    // create sorted slice
-    const sorted = ccdBodies.slice(0, count).sort(compareCCDBodies);
-
-    // copy sorted array back
+    order.length = count;
     for (let i = 0; i < count; i++) {
-        ccdBodies[i] = sorted[i];
+        order[i] = i;
     }
+    if (count <= 1) return;
+
+    _compareCCDOrder_ccdBodies = state.ccdBodies;
+    order.sort(compareCCDOrder);
 }
 
 const _resolveCCDContacts_movement = /* @__PURE__ */ vec3.create();
 
 /** resolve CCD contacts in chronological order, moves bodies to their collision points and applies impulses */
 function resolveCCDContacts(world: World): void {
+    const order = world.ccd.order;
+
     // process in sorted order (earliest to latest)
-    for (let i = 0; i < world.ccd.ccdBodies.length; i++) {
-        const ccdBody = world.ccd.ccdBodies[i];
+    for (let i = 0; i < order.length; i++) {
+        const ccdBody = world.ccd.ccdBodies[order[i]];
         const bodyA = world.bodies.pool[ccdBody.bodyIndex];
 
-        // handle no collision case
-        if (ccdBody.hitBodyIndex === -1) {
-            // no collision, move full distance
-            // (kinematic bodies already moved in velocity integration, only dynamic needs update)
-            if (bodyA.motionType === MotionType.DYNAMIC) {
-                vec3.add(bodyA.position, bodyA.position, ccdBody.deltaPosition);
-                rigidBody.setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
-            }
-            continue;
-        }
+        if (ccdBody.hitBodyIndex !== -1) {
+            const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
 
-        const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
+            const ccdBodyBIndex = bodyB.ccdBodyIndex;
+            const ccdBodyB = ccdBodyBIndex >= 0 ? world.ccd.ccdBodies[ccdBodyBIndex] : null;
 
-        // check for cascading collision invalidation
-        const ccdBodyBIndex = bodyB.ccdBodyIndex;
-        if (ccdBodyBIndex >= 0) {
-            // bodyB also has CCD
-            const ccdBodyB = world.ccd.ccdBodies[ccdBodyBIndex];
-
-            // if we collide earlier than bodyB, we may invalidate bodyB's collision
-            if (ccdBodyB.hitBodyIndex !== -1 && ccdBodyB.fraction > ccdBody.fraction) {
-                // we hit first - invalidate bodyB's later collision and shorten its travel
+            // hitting a ccd body earlier than it hits anything itself cancels its own hit (we do the response) and
+            // shortens its travel to the time of our impact
+            if (ccdBodyB !== null && ccdBodyB.fraction > ccdBody.fraction) {
                 ccdBodyB.hitBodyIndex = -1;
                 ccdBodyB.fractionPlusSlop = ccdBody.fraction;
             }
+
+            // a ccd body that stopped against something else before we reached it is not where we hit it, so there
+            // is no response. we still only move to the impact, the last position known to be free
+            if (ccdBodyB === null || ccdBodyB.fraction >= ccdBody.fraction) {
+                applyCCD(world, ccdBody, bodyA, bodyB);
+
+                // wake up bodyB if it was sleeping
+                if (bodyB.sleeping) {
+                    rigidBody.wake(world, bodyB);
+                }
+            }
         }
 
-        // apply collision impulse (only affects dynamic bodies)
-        applyCCD(world, ccdBody, bodyA, bodyB);
-
-        // move bodyA to collision point (with penetration allowance)
-        // kinematic bodies already moved in velocity integration, only update dynamic
-        if (bodyA.motionType === MotionType.DYNAMIC) {
-            vec3.scale(_resolveCCDContacts_movement, ccdBody.deltaPosition, ccdBody.fractionPlusSlop);
-            vec3.add(bodyA.position, bodyA.position, _resolveCCDContacts_movement);
-
-            // update body transform and broadphase
-            rigidBody.setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
-        }
-
-        // wake up bodyB if it was sleeping
-        if (bodyB.sleeping) {
-            rigidBody.wake(world, bodyB);
-        }
+        // move to the impact with the penetration allowance, or as far as an earlier hit by another body allows
+        // (only dynamic bodies make ccd bodies, kinematic ones already moved in velocity integration)
+        vec3.scale(_resolveCCDContacts_movement, ccdBody.deltaPosition, ccdBody.fractionPlusSlop);
+        vec3.add(bodyA.position, bodyA.position, _resolveCCDContacts_movement);
+        rigidBody.setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
     }
 }
 
