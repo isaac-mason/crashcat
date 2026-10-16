@@ -164,6 +164,25 @@ describe('getSupport — cylinder', () => {
         expectVec(at(s, vec3.fromValues(1, 0, 0)), [1 - 0.05, 2 - 0.05, 0]);
     });
 
+    test('EXCLUDE caps the scaled convex radius at the default, as the box does', () => {
+        const s = createSupport();
+        setShapeSupport(s, shape, EXCLUDE_CONVEX_RADIUS, vec3.fromValues(4, 4, 4));
+        expect(s.convexRadius).toBeCloseTo(0.05, 10);
+        expectVec(at(s, vec3.fromValues(1, 0, 0)), [4 - 0.05, 8 - 0.05, 0]);
+    });
+
+    test('the half height scales by y and the radius by x', () => {
+        const inc = createSupport();
+        setShapeSupport(inc, shape, INCLUDE_CONVEX_RADIUS, vec3.fromValues(2, 3, 2));
+        expectVec(at(inc, vec3.fromValues(1, 0, 0)), [2, 6, 0]);
+
+        const exc = createSupport();
+        setShapeSupport(exc, shape, EXCLUDE_CONVEX_RADIUS, vec3.fromValues(0.5, 3, 0.5));
+        // the convex radius scales by the smallest axis
+        expect(exc.convexRadius).toBeCloseTo(0.025, 10);
+        expectVec(at(exc, vec3.fromValues(1, 0, 0)), [0.5 - 0.025, 6 - 0.025, 0]);
+    });
+
     test('DEFAULT behaves like INCLUDE for the cylinder', () => {
         const inc = createSupport();
         const def = createSupport();

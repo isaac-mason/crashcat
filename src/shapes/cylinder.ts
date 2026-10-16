@@ -240,8 +240,8 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 
         face.numVertices = 8;
 
-        // bottom cap (y < 0): (radius, halfHeight, radius)
-        // top cap (y >= 0): (-radius, -halfHeight, radius)
+        // top cap (direction y < 0): (radius, halfHeight, radius)
+        // bottom cap (direction y >= 0): (-radius, -halfHeight, radius)
         const scaleX = direction[1] < 0 ? radius : -radius;
         const scaleY = direction[1] < 0 ? halfHeight : -halfHeight;
         const scaleZ = radius;

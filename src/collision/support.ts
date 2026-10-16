@@ -552,19 +552,22 @@ export function setCapsuleSupport(out: Support, shape: CapsuleShape, mode: Suppo
 }
 
 export function setCylinderSupport(out: Support, shape: CylinderShape, mode: SupportFunctionMode, scale: Vec3): void {
-    const absScale = Math.abs(scale[0]); // uniform scale only
+    // x and z scale the radius (they must match), y the half height
+    const scaleXZ = Math.abs(scale[0]);
+    const scaleY = Math.abs(scale[1]);
+    const scaledHalfHeight = scaleY * shape.halfHeight;
+    const scaledRadius = scaleXZ * shape.radius;
     out.getSupport = cylinderSupport;
     out.hasTransform = false;
     out.addRadius = 0;
 
     if (mode === SupportFunctionMode.INCLUDE_CONVEX_RADIUS || mode === SupportFunctionMode.DEFAULT) {
-        out.cylinder.halfHeight = absScale * shape.halfHeight;
-        out.cylinder.radius = absScale * shape.radius;
+        out.cylinder.halfHeight = scaledHalfHeight;
+        out.cylinder.radius = scaledRadius;
         out.convexRadius = 0;
     } else {
-        const scaledHalfHeight = absScale * shape.halfHeight;
-        const scaledRadius = absScale * shape.radius;
-        const scaledConvexRadius = absScale * shape.convexRadius;
+        const minScale = Math.min(scaleXZ, scaleY, Math.abs(scale[2]));
+        const scaledConvexRadius = Math.min(shape.convexRadius * minScale, DEFAULT_CONVEX_RADIUS);
         out.cylinder.halfHeight = scaledHalfHeight - scaledConvexRadius;
         out.cylinder.radius = scaledRadius - scaledConvexRadius;
         out.convexRadius = scaledConvexRadius;
