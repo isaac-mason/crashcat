@@ -385,6 +385,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     listener: Listener | undefined;
     deltaTime: number;
     manifoldsPool: manifold.ContactManifold[];
+    firstWorldSpaceNormals: Vec3[];
     numManifolds: number;
     maxManifolds: number;
     validateBodyPair: boolean;
@@ -414,6 +415,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
 
     // pre-allocated manifolds pool (all 32 slots allocated upfront)
     manifoldsPool: Array.from({ length: 32 }, () => manifold.createContactManifold()),
+    // unit normal of the hit that started each manifold: hits merge against it, and pruning projects along it
+    firstWorldSpaceNormals: Array.from({ length: 32 }, () => vec3.create()),
     numManifolds: 0,
     maxManifolds: 32,
 
@@ -480,11 +483,12 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
 
         // try to find existing manifold with similar normal in active range [0, numManifolds)
         let foundManifold: manifold.ContactManifold | null = null;
+        let foundIndex = -1;
         for (let i = 0; i < this.numManifolds; i++) {
-            const m = this.manifoldsPool[i];
-            const dot = vec3.dot(_narrowphase_worldSpaceNormal, m.worldSpaceNormal);
+            const dot = vec3.dot(_narrowphase_worldSpaceNormal, this.firstWorldSpaceNormals[i]);
             if (dot >= normalThreshold) {
-                foundManifold = m;
+                foundManifold = this.manifoldsPool[i];
+                foundIndex = i;
                 break;
             }
         }
@@ -506,6 +510,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 }
 
                 // replace shallowest manifold with this hit
+                foundIndex = shallowestIdx;
                 foundManifold = this.manifoldsPool[shallowestIdx];
                 manifold.resetContactManifold(foundManifold);
                 vec3.copy(foundManifold.baseOffset, baseOffset);
@@ -517,6 +522,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.materialIdB = hit.materialIdB;
             } else {
                 // use next slot in pool (already allocated)
+                foundIndex = this.numManifolds;
                 foundManifold = this.manifoldsPool[this.numManifolds];
                 this.numManifolds++;
                 manifold.resetContactManifold(foundManifold);
@@ -528,6 +534,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.materialIdA = hit.materialIdA;
                 foundManifold.materialIdB = hit.materialIdB;
             }
+            vec3.copy(this.firstWorldSpaceNormals[foundIndex], _narrowphase_worldSpaceNormal);
         } else {
             // accumulate normal (will be normalized later before creating constraints)
             vec3.add(foundManifold.worldSpaceNormal, foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
@@ -537,27 +544,15 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
         manifold.resetContactManifold(_narrowphase_tempManifold);
         vec3.copy(_narrowphase_tempManifold.baseOffset, baseOffset);
 
-        if (hit.faceA.numVertices >= 2 && hit.faceB.numVertices >= 3) {
-            // clip polygons to generate contact region
-            manifold.manifoldBetweenTwoFaces(
-                _narrowphase_tempManifold,
-                hit.pointA,
-                hit.pointB,
-                hit.penetrationAxis,
-                maxContactDistance,
-                hit.faceA,
-                hit.faceB,
-            );
-        } else {
-            // single contact point
-            _narrowphase_tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - _narrowphase_tempManifold.baseOffset[0];
-            _narrowphase_tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - _narrowphase_tempManifold.baseOffset[1];
-            _narrowphase_tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - _narrowphase_tempManifold.baseOffset[2];
-            _narrowphase_tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - _narrowphase_tempManifold.baseOffset[0];
-            _narrowphase_tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - _narrowphase_tempManifold.baseOffset[1];
-            _narrowphase_tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - _narrowphase_tempManifold.baseOffset[2];
-            _narrowphase_tempManifold.numContactPoints = 1;
-        }
+        manifold.manifoldBetweenTwoFaces(
+            _narrowphase_tempManifold,
+            hit.pointA,
+            hit.pointB,
+            hit.penetrationAxis,
+            maxContactDistance,
+            hit.faceA,
+            hit.faceB,
+        );
 
         // copy contact points from temp manifold into found manifold
         for (let i = 0; i < _narrowphase_tempManifold.numContactPoints; i++) {
@@ -582,9 +577,9 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
             foundManifold.penetrationDepth = hit.penetration;
         }
 
-        // prune if manifold has > 32 points
+        // prune if manifold has > 32 points (the accumulated normal is not unit yet, so project along the first)
         if (foundManifold.numContactPoints > 32) {
-            manifold.pruneContactPoints(foundManifold, foundManifold.worldSpaceNormal);
+            manifold.pruneContactPoints(foundManifold, this.firstWorldSpaceNormals[foundIndex]);
         }
     },
 
@@ -741,27 +736,15 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         tempManifold.materialIdB = hit.materialIdB;
 
         // generate contact points for this hit
-        if (hit.faceA.numVertices >= 2 && hit.faceB.numVertices >= 3) {
-            // clip polygons to generate contact region
-            manifold.manifoldBetweenTwoFaces(
-                tempManifold,
-                hit.pointA,
-                hit.pointB,
-                hit.penetrationAxis,
-                maxContactDistance,
-                hit.faceA,
-                hit.faceB,
-            );
-        } else {
-            // single contact point
-            tempManifold.relativeContactPointsOnA[0] = hit.pointA[0] - tempManifold.baseOffset[0];
-            tempManifold.relativeContactPointsOnA[1] = hit.pointA[1] - tempManifold.baseOffset[1];
-            tempManifold.relativeContactPointsOnA[2] = hit.pointA[2] - tempManifold.baseOffset[2];
-            tempManifold.relativeContactPointsOnB[0] = hit.pointB[0] - tempManifold.baseOffset[0];
-            tempManifold.relativeContactPointsOnB[1] = hit.pointB[1] - tempManifold.baseOffset[1];
-            tempManifold.relativeContactPointsOnB[2] = hit.pointB[2] - tempManifold.baseOffset[2];
-            tempManifold.numContactPoints = 1;
-        }
+        manifold.manifoldBetweenTwoFaces(
+            tempManifold,
+            hit.pointA,
+            hit.pointB,
+            hit.penetrationAxis,
+            maxContactDistance,
+            hit.faceA,
+            hit.faceB,
+        );
 
         // prune to 4 contact points
         if (tempManifold.numContactPoints > MAX_CONTACT_POINTS) {
@@ -1611,27 +1594,15 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
             const maxContactDistance =
                 world.settings.narrowphase.speculativeContactDistance + world.settings.narrowphase.manifoldTolerance;
 
-            if (hit.faceA.numVertices >= 2 && hit.faceB.numVertices >= 3) {
-                // full face-vs-face clipping
-                manifold.manifoldBetweenTwoFaces(
-                    contactManifold,
-                    hit.pointA,
-                    hit.pointB,
-                    hit.penetrationAxis,
-                    maxContactDistance,
-                    hit.faceA,
-                    hit.faceB,
-                );
-            } else {
-                // single point contact
-                contactManifold.relativeContactPointsOnA[0] = hit.pointA[0] - contactManifold.baseOffset[0];
-                contactManifold.relativeContactPointsOnA[1] = hit.pointA[1] - contactManifold.baseOffset[1];
-                contactManifold.relativeContactPointsOnA[2] = hit.pointA[2] - contactManifold.baseOffset[2];
-                contactManifold.relativeContactPointsOnB[0] = hit.pointB[0] - contactManifold.baseOffset[0];
-                contactManifold.relativeContactPointsOnB[1] = hit.pointB[1] - contactManifold.baseOffset[1];
-                contactManifold.relativeContactPointsOnB[2] = hit.pointB[2] - contactManifold.baseOffset[2];
-                contactManifold.numContactPoints = 1;
-            }
+            manifold.manifoldBetweenTwoFaces(
+                contactManifold,
+                hit.pointA,
+                hit.pointB,
+                hit.penetrationAxis,
+                maxContactDistance,
+                hit.faceA,
+                hit.faceB,
+            );
 
             // set metadata
             contactManifold.subShapeIdA = hit.subShapeIdA;

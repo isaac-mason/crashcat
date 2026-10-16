@@ -143,6 +143,8 @@ export function getWorldSpaceContactPointOnB(out: Vec3, manifold: ContactManifol
 // pre-allocated flat arrays for pruneContactPoints (max 64 projected points)
 const _pruneProjectedPoints = new Float64Array(MAX_CLIPPING_CONTACT_POINTS * 3);
 const _prunePenetrationDepthSq = new Float64Array(MAX_CLIPPING_CONTACT_POINTS);
+const _pruneKeptOnA = new Float64Array(MAX_CONTACT_POINTS * 3);
+const _pruneKeptOnB = new Float64Array(MAX_CONTACT_POINTS * 3);
 
 const MIN_DISTANCE_SQ = 1.0e-6; // 1 mm²
 
@@ -159,8 +161,8 @@ const MIN_DISTANCE_SQ = 1.0e-6; // 1 mm²
  *    - Point 3 & 4: On opposite sides of P1-P2 edge (maximize area)
  * 4. Output in winding order: [P1, P3, P2, P4] to form a proper quad
  *
- * In-place reduction: selected points are moved to indices 0-3,
- * manifold.numContactPoints is updated to final count (1-4).
+ * The selected points are gathered in scratch, then copied back to indices 0-3,
+ * manifold.numContactPoints is updated to final count (2-4).
  *
  * @param manifold contactManifold with contact points to prune (modifies in-place)
  * @param penetrationAxis normalized penetration direction (from shape 1 to shape 2)
@@ -177,6 +179,10 @@ export function pruneContactPoints(manifold: ContactManifold, penetrationAxis: V
     const axisX = penetrationAxis[0];
     const axisY = penetrationAxis[1];
     const axisZ = penetrationAxis[2];
+    assert(
+        Math.abs(axisX * axisX + axisY * axisY + axisZ * axisZ - 1) <= 1.0e-6,
+        'pruneContactPoints penetration axis must be normalized',
+    );
 
     // step 1: project all contact points onto plane perpendicular to penetrationAxis
     for (let i = 0; i < numPoints; i++) {
@@ -261,6 +267,8 @@ export function pruneContactPoints(manifold: ContactManifold, penetrationAxis: V
         }
     }
 
+    assert(point2 !== -1, 'pruneContactPoints found no second point');
+
     // step 4: select points 3 & 4 (opposite sides of P1-P2 edge)
     let point3 = -1;
     let point4 = -1;
@@ -303,81 +311,48 @@ export function pruneContactPoints(manifold: ContactManifold, penetrationAxis: V
         }
     }
 
-    // step 5: copy selected points back (in winding order: [P1, P3, P2, P4])
-    // use finalOrder as fixed indices (no array allocation)
-    let outIndex = 0;
-
-    // point1
-    if (point1 !== -1) {
-        if (outIndex !== point1) {
-            const srcI = point1 * 3;
-            const dstI = outIndex * 3;
-            manifold.relativeContactPointsOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
-            manifold.relativeContactPointsOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
-            manifold.relativeContactPointsOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
-            manifold.relativeContactPointsOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
-            manifold.relativeContactPointsOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
-            manifold.relativeContactPointsOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
-        }
-        outIndex++;
-    }
-
-    // point3
+    // step 5: gather the kept points in winding order [p1, p3, p2, p4] so they form a polygon, then copy them back
+    let numKept = pruneKeepPoint(manifold, point1, 0);
     if (point3 !== -1) {
-        if (outIndex !== point3) {
-            const srcI = point3 * 3;
-            const dstI = outIndex * 3;
-            manifold.relativeContactPointsOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
-            manifold.relativeContactPointsOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
-            manifold.relativeContactPointsOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
-            manifold.relativeContactPointsOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
-            manifold.relativeContactPointsOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
-            manifold.relativeContactPointsOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
-        }
-        outIndex++;
+        numKept = pruneKeepPoint(manifold, point3, numKept);
     }
-
-    // point2
-    if (point2 !== -1) {
-        if (outIndex !== point2) {
-            const srcI = point2 * 3;
-            const dstI = outIndex * 3;
-            manifold.relativeContactPointsOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
-            manifold.relativeContactPointsOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
-            manifold.relativeContactPointsOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
-            manifold.relativeContactPointsOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
-            manifold.relativeContactPointsOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
-            manifold.relativeContactPointsOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
-        }
-        outIndex++;
-    }
-
-    // point4
+    numKept = pruneKeepPoint(manifold, point2, numKept);
     if (point4 !== -1) {
-        if (outIndex !== point4) {
-            const srcI = point4 * 3;
-            const dstI = outIndex * 3;
-            manifold.relativeContactPointsOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
-            manifold.relativeContactPointsOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
-            manifold.relativeContactPointsOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
-            manifold.relativeContactPointsOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
-            manifold.relativeContactPointsOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
-            manifold.relativeContactPointsOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
-        }
-        outIndex++;
+        assert(point3 !== point4, 'pruneContactPoints chose the same point on both sides of the p1-p2 edge');
+        numKept = pruneKeepPoint(manifold, point4, numKept);
     }
 
-    manifold.numContactPoints = outIndex;
+    for (let i = 0; i < numKept * 3; i++) {
+        manifold.relativeContactPointsOnA[i] = _pruneKeptOnA[i];
+        manifold.relativeContactPointsOnB[i] = _pruneKeptOnB[i];
+    }
+    manifold.numContactPoints = numKept;
+}
+
+function pruneKeepPoint(manifold: ContactManifold, index: number, numKept: number): number {
+    const srcI = index * 3;
+    const dstI = numKept * 3;
+    _pruneKeptOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
+    _pruneKeptOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
+    _pruneKeptOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
+    _pruneKeptOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
+    _pruneKeptOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
+    _pruneKeptOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
+    return numKept + 1;
 }
 
 const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
+const _manifoldBetweenTwoFaces_penetrationAxis = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_edgeV1 = /* @__PURE__ */ vec3.create();
+const _manifoldBetweenTwoFaces_edgeV2 = /* @__PURE__ */ vec3.create();
 
 /**
  * Generates contact manifold from two supporting faces using polygon clipping.
  *
  * Algorithm:
- * 1. Clip face 2 (incident) against face 1 (reference)
- * 2. Project clipped points onto face 1's plane
+ * 1. Clip the face with 3+ vertices (incident) against the other face (reference), swapping the faces and
+ *    negating the penetration axis when face 2 is the one with fewer than 3 vertices
+ * 2. Project clipped points onto the reference face's plane
  * 3. Filter by max contact distance
  * 4. Fallback to original contact points if clipping produces nothing
  *
@@ -387,9 +362,9 @@ const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
  * @param inContactPoint1 initial contact point on shape 1 (world space)
  * @param inContactPoint2 initial contact point on shape 2 (world space)
  * @param inPenetrationAxis penetration direction (unnormalized, from shape 1 to 2, world space)
- * @param inMaxContactDistance max distance for contact filtering
- * @param inShape1Face supporting face on shape 1 (reference face, world space)
- * @param inShape2Face supporting face on shape 2 (incident face, world space)
+ * @param inMaxContactDistance max distance for contact filtering, > 0
+ * @param inShape1Face supporting face on shape 1 (world space)
+ * @param inShape2Face supporting face on shape 2 (world space)
  */
 export function manifoldBetweenTwoFaces(
     out: ContactManifold,
@@ -400,152 +375,142 @@ export function manifoldBetweenTwoFaces(
     inShape1Face: Face,
     inShape2Face: Face,
 ): void {
+    assert(inMaxContactDistance > 0, 'manifoldBetweenTwoFaces max contact distance must be positive');
+
     // reset output
     out.numContactPoints = 0;
 
-    // check if both shapes have polygon faces
-    // face 1 needs >= 2 vertices (edge or polygon)
-    // face 2 needs >= 3 vertices (polygon)
-    if (inShape1Face.numVertices < 2 || inShape2Face.numVertices < 3) {
-        // not enough vertices for clipping, use original contact points
-        out.relativeContactPointsOnA[0] = inContactPoint1[0] - out.baseOffset[0];
-        out.relativeContactPointsOnA[1] = inContactPoint1[1] - out.baseOffset[1];
-        out.relativeContactPointsOnA[2] = inContactPoint1[2] - out.baseOffset[2];
-        out.relativeContactPointsOnB[0] = inContactPoint2[0] - out.baseOffset[0];
-        out.relativeContactPointsOnB[1] = inContactPoint2[1] - out.baseOffset[1];
-        out.relativeContactPointsOnB[2] = inContactPoint2[2] - out.baseOffset[2];
-        out.numContactPoints = 1;
-        return;
-    }
+    // both faces need at least 2 vertices or else there can never be more than 1 contact point.
+    // at least one face needs at least 3 vertices (when both have 2, only exactly matching edges give 2 contact
+    // points, and that situation is unstable anyhow)
+    if (
+        Math.min(inShape1Face.numVertices, inShape2Face.numVertices) >= 2 &&
+        Math.max(inShape1Face.numVertices, inShape2Face.numVertices) >= 3
+    ) {
+        // swap the shapes if the 2nd face doesn't have enough vertices
+        let shape1Face: Face;
+        let shape2Face: Face;
+        let contactPoints1: number[];
+        let contactPoints2: number[];
+        const penetrationAxis = _manifoldBetweenTwoFaces_penetrationAxis;
+        if (inShape2Face.numVertices >= 3) {
+            shape1Face = inShape1Face;
+            shape2Face = inShape2Face;
+            contactPoints1 = out.relativeContactPointsOnA;
+            contactPoints2 = out.relativeContactPointsOnB;
+            vec3.copy(penetrationAxis, inPenetrationAxis);
+        } else {
+            shape1Face = inShape2Face;
+            shape2Face = inShape1Face;
+            contactPoints1 = out.relativeContactPointsOnB;
+            contactPoints2 = out.relativeContactPointsOnA;
+            vec3.negate(penetrationAxis, inPenetrationAxis);
+        }
 
-    // clip face 2 against face 1
-    _manifoldBetweenTwoFaces_clippedFace.numVertices = 0;
+        // clip face 2 against face 1
+        const clippedFace = _manifoldBetweenTwoFaces_clippedFace;
+        clippedFace.numVertices = 0;
 
-    if (inShape1Face.numVertices >= 3) {
-        // polygon vs polygon
-        clipPolyVsPoly(_manifoldBetweenTwoFaces_clippedFace, inShape2Face, inShape1Face, inPenetrationAxis);
-    } else if (inShape1Face.numVertices === 2) {
-        // edge vs polygon - extract edge endpoints from shape 1 face
-        const edgeV1X = inShape1Face.vertices[0];
-        const edgeV1Y = inShape1Face.vertices[1];
-        const edgeV1Z = inShape1Face.vertices[2];
-        const edgeV2X = inShape1Face.vertices[3];
-        const edgeV2Y = inShape1Face.vertices[4];
-        const edgeV2Z = inShape1Face.vertices[5];
+        if (shape1Face.numVertices >= 3) {
+            // polygon vs polygon
+            clipPolyVsPoly(clippedFace, shape2Face, shape1Face, penetrationAxis);
+        } else {
+            // polygon vs edge of face 1
+            const edgeV1 = vec3.set(
+                _manifoldBetweenTwoFaces_edgeV1,
+                shape1Face.vertices[0],
+                shape1Face.vertices[1],
+                shape1Face.vertices[2],
+            );
+            const edgeV2 = vec3.set(
+                _manifoldBetweenTwoFaces_edgeV2,
+                shape1Face.vertices[3],
+                shape1Face.vertices[4],
+                shape1Face.vertices[5],
+            );
+            clipPolyVsEdge(clippedFace, shape2Face, edgeV1, edgeV2, penetrationAxis);
+        }
 
-        const edgeV1 = vec3.set(_tmpEdgeV1, edgeV1X, edgeV1Y, edgeV1Z);
-        const edgeV2 = vec3.set(_tmpEdgeV2, edgeV2X, edgeV2Y, edgeV2Z);
+        const axisX = penetrationAxis[0];
+        const axisY = penetrationAxis[1];
+        const axisZ = penetrationAxis[2];
 
-        clipPolyVsEdge(_manifoldBetweenTwoFaces_clippedFace, inShape2Face, edgeV1, edgeV2, inPenetrationAxis);
-    }
+        // plane origin is the first vertex of face 1
+        const planeOriginX = shape1Face.vertices[0];
+        const planeOriginY = shape1Face.vertices[1];
+        const planeOriginZ = shape1Face.vertices[2];
 
-    // extract plane origin from first vertex of shape 1 face
-    const planeOriginX = inShape1Face.vertices[0];
-    const planeOriginY = inShape1Face.vertices[1];
-    const planeOriginZ = inShape1Face.vertices[2];
+        // firstEdge = v1 - planeOrigin
+        const firstEdgeX = shape1Face.vertices[3] - planeOriginX;
+        const firstEdgeY = shape1Face.vertices[4] - planeOriginY;
+        const firstEdgeZ = shape1Face.vertices[5] - planeOriginZ;
 
-    // extract second vertex and compute first edge vector
-    const v1X = inShape1Face.vertices[3];
-    const v1Y = inShape1Face.vertices[4];
-    const v1Z = inShape1Face.vertices[5];
+        // calculate plane normal
+        let planeNormalX: number;
+        let planeNormalY: number;
+        let planeNormalZ: number;
 
-    // firstEdge = v1 - planeOrigin
-    const firstEdgeX = v1X - planeOriginX;
-    const firstEdgeY = v1Y - planeOriginY;
-    const firstEdgeZ = v1Z - planeOriginZ;
+        if (shape1Face.numVertices >= 3) {
+            // three+ vertices: planeNormal = firstEdge × (v2 - planeOrigin)
+            const secondEdgeX = shape1Face.vertices[6] - planeOriginX;
+            const secondEdgeY = shape1Face.vertices[7] - planeOriginY;
+            const secondEdgeZ = shape1Face.vertices[8] - planeOriginZ;
 
-    // calculate plane normal
-    let planeNormalX: number;
-    let planeNormalY: number;
-    let planeNormalZ: number;
+            planeNormalX = firstEdgeY * secondEdgeZ - firstEdgeZ * secondEdgeY;
+            planeNormalY = firstEdgeZ * secondEdgeX - firstEdgeX * secondEdgeZ;
+            planeNormalZ = firstEdgeX * secondEdgeY - firstEdgeY * secondEdgeX;
+        } else {
+            // two vertices (edge): normal = (firstEdge × penetrationAxis) × firstEdge
+            // this gives a vector perpendicular to firstEdge that lies in the plane containing both the edge and penetration axis
+            const perpX = firstEdgeY * axisZ - firstEdgeZ * axisY;
+            const perpY = firstEdgeZ * axisX - firstEdgeX * axisZ;
+            const perpZ = firstEdgeX * axisY - firstEdgeY * axisX;
 
-    if (inShape1Face.numVertices >= 3) {
-        // three+ vertices: calculate normal from cross product of two edge vectors
-        // extract third vertex
-        const v2X = inShape1Face.vertices[6];
-        const v2Y = inShape1Face.vertices[7];
-        const v2Z = inShape1Face.vertices[8];
+            planeNormalX = perpY * firstEdgeZ - perpZ * firstEdgeY;
+            planeNormalY = perpZ * firstEdgeX - perpX * firstEdgeZ;
+            planeNormalZ = perpX * firstEdgeY - perpY * firstEdgeX;
+        }
 
-        // secondEdge = v2 - planeOrigin
-        const secondEdgeX = v2X - planeOriginX;
-        const secondEdgeY = v2Y - planeOriginY;
-        const secondEdgeZ = v2Z - planeOriginZ;
+        // if penetration axis and plane normal are perpendicular, fall back to the contact points
+        const penetrationAxisDotPlaneNormal = axisX * planeNormalX + axisY * planeNormalY + axisZ * planeNormalZ;
 
-        // planeNormal = firstEdge × secondEdge
-        // cross product: (a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
-        planeNormalX = firstEdgeY * secondEdgeZ - firstEdgeZ * secondEdgeY;
-        planeNormalY = firstEdgeZ * secondEdgeX - firstEdgeX * secondEdgeZ;
-        planeNormalZ = firstEdgeX * secondEdgeY - firstEdgeY * secondEdgeX;
-    } else {
-        // two vertices (edge): normal = (firstEdge × penetrationAxis) × firstEdge
-        // this gives a vector perpendicular to firstEdge that lies in the plane containing both the edge and penetration axis
+        if (penetrationAxisDotPlaneNormal !== 0.0) {
+            // length of penetration axis (to convert distance to world units)
+            const penetrationAxisLen = Math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
 
-        // perp = firstEdge × penetrationAxis
-        const perpX = firstEdgeY * inPenetrationAxis[2] - firstEdgeZ * inPenetrationAxis[1];
-        const perpY = firstEdgeZ * inPenetrationAxis[0] - firstEdgeX * inPenetrationAxis[2];
-        const perpZ = firstEdgeX * inPenetrationAxis[1] - firstEdgeY * inPenetrationAxis[0];
+            for (let i = 0; i < clippedFace.numVertices; i++) {
+                const vertexIndex = i * 3;
+                const p2X = clippedFace.vertices[vertexIndex];
+                const p2Y = clippedFace.vertices[vertexIndex + 1];
+                const p2Z = clippedFace.vertices[vertexIndex + 2];
 
-        // planeNormal = perp × firstEdge
-        planeNormalX = perpY * firstEdgeZ - perpZ * firstEdgeY;
-        planeNormalY = perpZ * firstEdgeX - perpX * firstEdgeZ;
-        planeNormalZ = perpX * firstEdgeY - perpY * firstEdgeX;
-    }
+                // project p2 onto face 1 plane:
+                // solve: p1 = p2 + distance * penetrationAxis / |penetrationAxis|
+                //        (p1 - planeOrigin) · planeNormal = 0
+                // result: distance = (p2 - planeOrigin) · planeNormal / (penetrationAxis · planeNormal)
+                // (the -|penetrationAxis| term is left out)
+                const distance =
+                    ((p2X - planeOriginX) * planeNormalX +
+                        (p2Y - planeOriginY) * planeNormalY +
+                        (p2Z - planeOriginZ) * planeNormalZ) /
+                    penetrationAxisDotPlaneNormal;
 
-    // check if penetration axis and plane normal are perpendicular
-    // dot product: a · b = a.x * b.x + a.y * b.y + a.z * b.z
-    const penetrationAxisDotPlaneNormal =
-        inPenetrationAxis[0] * planeNormalX + inPenetrationAxis[1] * planeNormalY + inPenetrationAxis[2] * planeNormalZ;
+                // keep the point if it is less than inMaxContactDistance in front of the plane of face 1
+                if (distance * penetrationAxisLen < inMaxContactDistance) {
+                    // p1 = p2 - distance * penetrationAxis, both relative to baseOffset
+                    const outIndex = out.numContactPoints * 3;
+                    contactPoints1[outIndex] = p2X - distance * axisX - out.baseOffset[0];
+                    contactPoints1[outIndex + 1] = p2Y - distance * axisY - out.baseOffset[1];
+                    contactPoints1[outIndex + 2] = p2Z - distance * axisZ - out.baseOffset[2];
+                    contactPoints2[outIndex] = p2X - out.baseOffset[0];
+                    contactPoints2[outIndex + 1] = p2Y - out.baseOffset[1];
+                    contactPoints2[outIndex + 2] = p2Z - out.baseOffset[2];
 
-    if (penetrationAxisDotPlaneNormal !== 0.0) {
-        // length of penetration axis (to convert distance to world units)
-        const penetrationAxisLen = Math.sqrt(
-            inPenetrationAxis[0] * inPenetrationAxis[0] +
-                inPenetrationAxis[1] * inPenetrationAxis[1] +
-                inPenetrationAxis[2] * inPenetrationAxis[2],
-        );
+                    out.numContactPoints++;
 
-        // project clipped points onto face 1 plane and filter by distance
-        for (let i = 0; i < _manifoldBetweenTwoFaces_clippedFace.numVertices; i++) {
-            // extract p2 from clipped face vertices
-            const vertexIndex = i * 3;
-            const p2X = _manifoldBetweenTwoFaces_clippedFace.vertices[vertexIndex];
-            const p2Y = _manifoldBetweenTwoFaces_clippedFace.vertices[vertexIndex + 1];
-            const p2Z = _manifoldBetweenTwoFaces_clippedFace.vertices[vertexIndex + 2];
-
-            // project p2 onto face 1 plane:
-            // solve: p1 = p2 + distance * penetrationAxis / |penetrationAxis|
-            //        (p1 - planeOrigin) · planeNormal = 0
-            // result: distance = (p2 - planeOrigin) · planeNormal / (penetrationAxis · planeNormal)
-
-            // diff = p2 - planeOrigin
-            const diffX = p2X - planeOriginX;
-            const diffY = p2Y - planeOriginY;
-            const diffZ = p2Z - planeOriginZ;
-
-            // dot(diff, planeNormal) / dot(penetrationAxis, planeNormal)
-            const distance = (diffX * planeNormalX + diffY * planeNormalY + diffZ * planeNormalZ) / penetrationAxisDotPlaneNormal;
-
-            // filter by max contact distance (distance is scaled by penetrationAxisLen to convert to world units)
-            if (distance * penetrationAxisLen < inMaxContactDistance) {
-                // p1 = p2 - distance * penetrationAxis
-                const p1X = p2X - distance * inPenetrationAxis[0];
-                const p1Y = p2Y - distance * inPenetrationAxis[1];
-                const p1Z = p2Z - distance * inPenetrationAxis[2];
-
-                // set contact point
-                // convert world space to relative coordinates
-                const outIndex = out.numContactPoints * 3;
-                out.relativeContactPointsOnA[outIndex] = p1X - out.baseOffset[0];
-                out.relativeContactPointsOnA[outIndex + 1] = p1Y - out.baseOffset[1];
-                out.relativeContactPointsOnA[outIndex + 2] = p1Z - out.baseOffset[2];
-                out.relativeContactPointsOnB[outIndex] = p2X - out.baseOffset[0];
-                out.relativeContactPointsOnB[outIndex + 1] = p2Y - out.baseOffset[1];
-                out.relativeContactPointsOnB[outIndex + 2] = p2Z - out.baseOffset[2];
-
-                out.numContactPoints++;
-
-                if (out.numContactPoints >= MAX_CLIPPING_CONTACT_POINTS) {
-                    break; // safety limit
+                    if (out.numContactPoints >= MAX_CLIPPING_CONTACT_POINTS) {
+                        break; // safety limit
+                    }
                 }
             }
         }
@@ -562,6 +527,3 @@ export function manifoldBetweenTwoFaces(
         out.numContactPoints = 1;
     }
 }
-
-const _tmpEdgeV1 = /* @__PURE__ */ vec3.create();
-const _tmpEdgeV2 = /* @__PURE__ */ vec3.create();

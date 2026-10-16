@@ -1,6 +1,15 @@
-import { vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { createContactManifold, manifoldBetweenTwoFaces, pruneContactPoints } from '../../src/manifold/manifold';
+import { box, capsule, EMPTY_SUB_SHAPE_ID } from '../../src';
+import {
+    type ContactManifold,
+    createContactManifold,
+    getWorldSpaceContactPointOnA,
+    getWorldSpaceContactPointOnB,
+    manifoldBetweenTwoFaces,
+    pruneContactPoints,
+} from '../../src/manifold/manifold';
+import { getShapeSupportingFace } from '../../src/shapes/shapes';
 import { createFace, type Face } from '../../src/utils/face';
 
 function createFaceWithVertices(vertices: number[]): Face {
@@ -8,6 +17,29 @@ function createFaceWithVertices(vertices: number[]): Face {
     face.vertices = [...vertices];
     face.numVertices = vertices.length / 3;
     return face;
+}
+
+function expectRelativePoint(points: number[], index: number, x: number, y: number, z: number): void {
+    expect(points[index * 3]).toBeCloseTo(x, 6);
+    expect(points[index * 3 + 1]).toBeCloseTo(y, 6);
+    expect(points[index * 3 + 2]).toBeCloseTo(z, 6);
+}
+
+/** whether some point of the manifold is (a, b) in world space, a on shape a and b on shape b */
+function hasWorldPoint(manifold: ContactManifold, a: number[], b: number[]): boolean {
+    const onA = vec3.create();
+    const onB = vec3.create();
+    for (let i = 0; i < manifold.numContactPoints; i++) {
+        getWorldSpaceContactPointOnA(onA, manifold, i);
+        getWorldSpaceContactPointOnB(onB, manifold, i);
+        if (
+            vec3.distance(onA, vec3.fromValues(a[0], a[1], a[2])) < 1e-6 &&
+            vec3.distance(onB, vec3.fromValues(b[0], b[1], b[2])) < 1e-6
+        ) {
+            return true;
+        }
+    }
+    return false;
 }
 
 describe('manifoldBetweenTwoFaces', () => {
@@ -138,14 +170,14 @@ describe('manifoldBetweenTwoFaces', () => {
         expect(manifold.numContactPoints).toBe(1);
     });
 
-    test('fallback when face 2 has too few vertices', () => {
+    test('face 1 polygon vs face 2 edge swaps the faces and clips the edge', () => {
         const manifold = createContactManifold();
         manifold.baseOffset = vec3.fromValues(0, 0, 0);
 
         // Face 1: valid square
         const face1 = createFaceWithVertices([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]);
 
-        // Face 2: only 2 vertices (need at least 3)
+        // face 2: an edge from the square's centre to beyond its +x side
         const face2 = createFaceWithVertices([0, 0, 0.1, 1, 0, 0.1]);
 
         const contactPoint1 = vec3.fromValues(0, 0, 0);
@@ -155,8 +187,65 @@ describe('manifoldBetweenTwoFaces', () => {
 
         manifoldBetweenTwoFaces(manifold, contactPoint1, contactPoint2, penetrationAxis, maxContactDistance, face1, face2);
 
-        // Should fall back immediately
-        expect(manifold.numContactPoints).toBe(1);
+        // the part of the edge over the square, x in [0, 0.5]: its ends on the edge (b) and below them on the square (a)
+        expect(manifold.numContactPoints).toBe(2);
+        expect(hasWorldPoint(manifold, [0, 0, 0], [0, 0, 0.1])).toBe(true);
+        expect(hasWorldPoint(manifold, [0.5, 0, 0], [0.5, 0, 0.1])).toBe(true);
+    });
+
+    test('capsule lying along a box top face gives the two ends of its resting line', () => {
+        // a 2 m box at the origin, and a capsule (radius 0.5, cylinder half height 0.5) turned to lie along x,
+        // its bottom line sunk 0.1 into the box's top face
+        const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+        const capsuleShape = capsule.create({ radius: 0.5, halfHeightOfCylinder: 0.5 });
+        const capsuleRotation = quat.setAxisAngle(quat.create(), vec3.fromValues(0, 0, 1), Math.PI / 2);
+        const capsuleTransform = mat4.fromRotationTranslation(mat4.create(), capsuleRotation, vec3.fromValues(0, 1.4, 0));
+        const unitScale = vec3.fromValues(1, 1, 1);
+
+        // penetration axis from the box (shape 1) into the capsule (shape 2): the box's face against -axis is its
+        // top, the capsule's face against +axis (in its local space, +x) is its bottom line
+        const penetrationAxis = vec3.fromValues(0, 1, 0);
+        const boxFace = createFace();
+        getShapeSupportingFace(boxFace, boxShape, EMPTY_SUB_SHAPE_ID, vec3.fromValues(0, -1, 0), mat4.create(), unitScale);
+        const capsuleFace = createFace();
+        getShapeSupportingFace(
+            capsuleFace,
+            capsuleShape,
+            EMPTY_SUB_SHAPE_ID,
+            vec3.fromValues(1, 0, 0),
+            capsuleTransform,
+            unitScale,
+        );
+        expect(boxFace.numVertices).toBe(4);
+        expect(capsuleFace.numVertices).toBe(2);
+
+        const manifold = createContactManifold();
+        vec3.set(manifold.baseOffset, 0, 1, 0);
+        manifoldBetweenTwoFaces(
+            manifold,
+            vec3.fromValues(0, 1, 0),
+            vec3.fromValues(0, 0.9, 0),
+            penetrationAxis,
+            0.02,
+            boxFace,
+            capsuleFace,
+        );
+
+        // the resting line's ends x = +-0.5 on the capsule (y = 0.9), each with its point 0.1 above on the box's top
+        expect(manifold.numContactPoints).toBe(2);
+        expect(hasWorldPoint(manifold, [-0.5, 1, 0], [-0.5, 0.9, 0])).toBe(true);
+        expect(hasWorldPoint(manifold, [0.5, 1, 0], [0.5, 0.9, 0])).toBe(true);
+    });
+
+    test('asserts the max contact distance is positive', () => {
+        const manifold = createContactManifold();
+        const face1 = createFaceWithVertices([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0]);
+        const face2 = createFaceWithVertices([-0.5, -0.5, 0.1, 0.5, -0.5, 0.1, 0.5, 0.5, 0.1, -0.5, 0.5, 0.1]);
+        const contactPoint1 = vec3.fromValues(0, 0, 0);
+        const contactPoint2 = vec3.fromValues(0, 0, 0.1);
+        const penetrationAxis = vec3.fromValues(0, 0, 0.1);
+
+        expect(() => manifoldBetweenTwoFaces(manifold, contactPoint1, contactPoint2, penetrationAxis, 0, face1, face2)).toThrow();
     });
 
     test('contact points are stored relative to baseOffset', () => {
@@ -283,8 +372,29 @@ describe('pruneContactPoints (separate function)', () => {
         const penetrationAxis = vec3.fromValues(0, 0, 1);
         pruneContactPoints(manifold, penetrationAxis);
 
-        // Should reduce to exactly 4 points
+        // the corners: p1 the first deepest-widest (-1, -1), p2 the one opposite, p3 and p4 either side of the
+        // p1-p2 diagonal, kept in winding order [p1, p3, p2, p4]
         expect(manifold.numContactPoints).toBe(4);
+        expectRelativePoint(manifold.relativeContactPointsOnA, 0, -1, -1, 0);
+        expectRelativePoint(manifold.relativeContactPointsOnA, 1, -1, 1, 0);
+        expectRelativePoint(manifold.relativeContactPointsOnA, 2, 1, 1, 0);
+        expectRelativePoint(manifold.relativeContactPointsOnA, 3, 1, -1, 0);
+        expectRelativePoint(manifold.relativeContactPointsOnB, 0, -1, -1, 0.02);
+        expectRelativePoint(manifold.relativeContactPointsOnB, 1, -1, 1, 0.02);
+        expectRelativePoint(manifold.relativeContactPointsOnB, 2, 1, 1, 0.02);
+        expectRelativePoint(manifold.relativeContactPointsOnB, 3, 1, -1, 0.02);
+    });
+
+    test('asserts the penetration axis is normalized', () => {
+        const manifold = createContactManifold();
+        for (let i = 0; i < 5; i++) {
+            manifold.relativeContactPointsOnA[i * 3] = i;
+            manifold.relativeContactPointsOnB[i * 3] = i;
+            manifold.relativeContactPointsOnB[i * 3 + 2] = 0.01;
+        }
+        manifold.numContactPoints = 5;
+
+        expect(() => pruneContactPoints(manifold, vec3.fromValues(0, 0, 2))).toThrow();
     });
 
     // test('handles 1-3 points gracefully (no pruning needed)', () => {
