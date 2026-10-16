@@ -1183,6 +1183,8 @@ export function gjkCastShape(
     }
 
     // store results
+    // epa continues from this simplex when the cast starts intersecting
+    copySimplex(out.simplex, _simplex);
     out.lambda = lambda;
     out.hit = true;
 
