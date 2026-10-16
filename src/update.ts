@@ -1187,6 +1187,7 @@ const _ccd_expandedAABB = /* @__PURE__ */ box3.create();
 const _ccd_shapeExtent = /* @__PURE__ */ vec3.create();
 const _ccd_normal = /* @__PURE__ */ vec3.create();
 const _ccd_bodyBMotion = /* @__PURE__ */ vec3.create();
+const _ccd_otherBodyMotion = /* @__PURE__ */ vec3.create();
 
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
 const ccdCastShapeCollector: CastShapeCollector & {
@@ -1361,12 +1362,10 @@ const ccdBodyVisitor: BodyVisitor & {
         // sensor filter - CCD doesn't support sensors
         if (bodyB.sensor) return;
 
-        // calculate relative displacement
-        vec3.copy(_ccd_relativeDisplacement, this.ccdBody.deltaPosition);
-        if (ccdBodyBIndex >= 0) {
-            const ccdBodyB = this.world.ccd.ccdBodies[ccdBodyBIndex];
-            vec3.subtract(_ccd_relativeDisplacement, _ccd_relativeDisplacement, ccdBodyB.deltaPosition);
-        }
+        // relative displacement: every dynamic linear cast body counts as moving by velocity * dt, also one below its
+        // threshold that already moved, as in jolt
+        calculateBodyMotion(_ccd_otherBodyMotion, bodyB, this.timeStep);
+        vec3.subtract(_ccd_relativeDisplacement, this.ccdBody.deltaPosition, _ccd_otherBodyMotion);
 
         // threshold check
         if (vec3.squaredLength(_ccd_relativeDisplacement) < this.ccdBody.linearCastThresholdSq) return;
@@ -1680,9 +1679,6 @@ function applyCCD(world: World, ccdBody: ccd.CCDBody, bodyA: RigidBody, bodyB: R
     }
     vec3.subtract(_applyCCD_relVel, _applyCCD_v2, _applyCCD_v1);
     const normalVel = vec3.dot(_applyCCD_relVel, ccdBody.contactNormal);
-
-    // only resolve if approaching (negative normal velocity)
-    if (normalVel >= 0) return;
 
     // get contact settings
     const settings = ccdBody.contactSettings;

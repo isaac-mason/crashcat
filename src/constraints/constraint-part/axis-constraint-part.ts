@@ -862,7 +862,8 @@ export function solveVelocityConstraintWithMassOverride(
 ): boolean {
     // use two-step process: get total lambda, clamp, apply
     const totalLambda = getTotalLambda(part, bodyA, bodyB, axis);
-    const clampedLambda = Math.max(minLambda, Math.min(maxLambda, totalLambda));
+    // jolt's clamp order: with inverted bounds (a friction limit from a negative normal lambda) the max wins
+    const clampedLambda = Math.min(Math.max(totalLambda, minLambda), maxLambda);
     return applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, clampedLambda);
 }
 

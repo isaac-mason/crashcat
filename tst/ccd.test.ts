@@ -311,6 +311,59 @@ describe('CCD resolution', () => {
         expect(bullet.position[0]).toBeLessThan(0);
     });
 
+    // a grazes b, which is discrete and has already moved this step, up and away from a's path (0.045, inside its
+    // broadphase leaf). at the time of impact the normal is nearly along +y, where b moves away faster than a follows,
+    // so the bodies are separating. jolt solves the ccd contact anyway, with an unbounded normal impulse, so they
+    // leave with no relative normal velocity
+    test('a ccd contact whose bodies are separating is still solved', () => {
+        const { world, layers } = createTestWorld();
+        // a small a keeps its allowed penetration (a quarter of its radius) small, so the grazing hit is kept
+        const a = addBullet(world, layers.OBJECT_LAYER_MOVING, 0.02, 0, 0, 15);
+        const b = rigidBody.create(world, {
+            shape: sphere.create({ radius: 0.5 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0.28, 0.47, 0),
+        });
+        vec3.set(b.motionProperties.linearVelocity, 0, 2.7, 0);
+
+        updateWorld(world, undefined, 1 / 60);
+
+        const ccdBodyA = world.ccd.ccdBodies[a.ccdBodyIndex];
+        expect(ccdBodyA.hitBodyIndex).toBe(b.index);
+        expect(ccdBodyA.contactNormal[1]).toBeGreaterThan(0.95);
+        const relativeVelocity = vec3.subtract(
+            vec3.create(),
+            b.motionProperties.linearVelocity,
+            a.motionProperties.linearVelocity,
+        );
+        expect(vec3.dot(relativeVelocity, ccdBodyA.contactNormal)).toBeCloseTo(0, 3);
+    });
+
+    // b is linear cast but moves 0.04 this step, under its 0.05 threshold, so it has already moved. jolt still counts
+    // its motion against a's sweep: a sweeps 1 - 0.04 relative to b and stops short of b's face, which the full 1
+    // would have reached (at 0.97, inside the step even with a's 0.02 allowed penetration)
+    test('a linear cast target below its threshold still has its motion taken off the sweep', () => {
+        const { world, layers } = createTestWorld();
+        const a = addBullet(world, layers.OBJECT_LAYER_MOVING, 0.1, 0, 0, 60);
+        const b = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(2.03, 0, 0),
+        });
+        b.motionProperties.motionQuality = MotionQuality.LINEAR_CAST;
+        vec3.set(b.motionProperties.linearVelocity, 2.4, 0, 0);
+
+        updateWorld(world, undefined, 1 / 60);
+
+        // b's face ends at 1.07, a's leading point at 1.1 after a full step and 1.06 after the relative one
+        expect(b.ccdBodyIndex).toBe(-1);
+        expect(world.ccd.ccdBodies[a.ccdBodyIndex].hitBodyIndex).toBe(-1);
+        expect(a.position[0]).toBeCloseTo(1, 2);
+        expect(a.motionProperties.linearVelocity[0]).toBeGreaterThan(59);
+    });
+
     test('ccd bodies resolved out of their creation order still find the ccd records of the bodies they hit', () => {
         const { world, layers } = createTestWorld();
         // a and b converge as in the test above; c, created last, hits its own wall first and sorts ahead of both
