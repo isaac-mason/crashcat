@@ -118,7 +118,6 @@ const _rotationMat = /* @__PURE__ */ mat4.create();
 const _childMassProperties = /* @__PURE__ */ massProperties.create();
 
 const _surfaceNormal_invRotation = /* @__PURE__ */ quat.create();
-const _surfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
 const _supportingFace_localDirection = /* @__PURE__ */ vec3.create();
 const _supportingFace_shapeMat4 = /* @__PURE__ */ mat4.create();
@@ -158,24 +157,16 @@ function computeMassProperties(out: MassProperties, shape: TransformedShape): vo
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TransformedShape, subShapeId: number): void {
-    // accumulate transform: position = position - translation (inverse transform)
+    // transform surface position to the inner shape's local space
     vec3.subtract(ioResult.position, ioResult.position, shape.position);
-
-    // accumulate rotation: quaternion = conjugate(shape.rotation) * quaternion (inverse transform)
     const invRotation = quat.conjugate(_surfaceNormal_invRotation, shape.quaternion);
-    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
-    // transform position to local space
     vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
 
     // get normal from inner shape in its local space
     shapeDefs[shape.shape.type].getSurfaceNormal(ioResult, shape.shape, subShapeId);
 
-    // transform normal back to outer space using accumulated rotation.
-    // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
-    // to get the forward transformation for the normal.
-    const forwardAccumulatedRotation = quat.conjugate(_surfaceNormal_forwardRotation, ioResult.quaternion);
-    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+    // the normal comes back in the inner shape's local space; this shape's rotation alone takes it out
+    vec3.transformQuat(ioResult.normal, ioResult.normal, shape.quaternion);
 }
 function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: TransformedShape, subShapeId: number): void {
     // build shape's local transform matrix (position + quaternion)

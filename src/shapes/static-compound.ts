@@ -232,7 +232,6 @@ function computeMassProperties(out: MassProperties, shape: StaticCompoundShape):
 }
 
 const _getSurfaceNormal_invRotation = /* @__PURE__ */ quat.create();
-const _getSurfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundShape, subShapeId: number): void {
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
@@ -247,20 +246,19 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundSh
 
     const child = shape.children[childIndex];
 
+    // transform surface position to the child's local space
     vec3.subtract(ioResult.position, ioResult.position, child.position);
-
     const invRotation = quat.conjugate(_getSurfaceNormal_invRotation, child.quaternion);
-    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
     vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
 
     shapeDefs[child.shape.type].getSurfaceNormal(ioResult, child.shape, remainder);
 
-    const forwardAccumulatedRotation = quat.conjugate(_getSurfaceNormal_forwardRotation, ioResult.quaternion);
-    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+    // the normal comes back in the child's local space; this child's rotation alone takes it to the compound's
+    vec3.transformQuat(ioResult.normal, ioResult.normal, child.quaternion);
 }
 
 const _getSupportingFace_childTransform = /* @__PURE__ */ mat4.create();
+const _getSupportingFace_scaledPosition = /* @__PURE__ */ vec3.create();
 const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 function getSupportingFace(
@@ -280,8 +278,10 @@ function getSupportingFace(
 
     const child = shape.children[childIndex];
 
-    // build child transform matrix and accumulate: transform = transform * childTransform
-    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, child.position);
+    // build child transform matrix and accumulate: transform = transform * childTransform.
+    // the transform carries no scale, so the child's position is scaled here
+    vec3.multiply(_getSupportingFace_scaledPosition, child.position, ioResult.scale);
+    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, _getSupportingFace_scaledPosition);
     mat4.multiply(ioResult.transform, ioResult.transform, _getSupportingFace_childTransform);
 
     // transform direction to child local space using inverse child rotation
@@ -300,37 +300,36 @@ function getInnerRadius(shape: StaticCompoundShape): number {
 }
 
 function getLeafShape(out: GetLeafShapeResult, shape: StaticCompoundShape, subShapeId: number): void {
-    if (subShape.isEmpty(subShapeId)) {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    if (_subShapeIdPopResult.value >= shape.children.length) {
+        // no longer a valid index
         out.shape = null;
         out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
         return;
     }
 
-    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
     const childShape = shape.children[_subShapeIdPopResult.value].shape;
 
     const childShapeDef = shapeDefs[childShape.type];
     childShapeDef.getLeafShape(out, childShape, _subShapeIdPopResult.remainder);
 }
 
-const _getStaticCompoundSubShapeTransformedShape_rotatedChildPos = /* @__PURE__ */ vec3.create();
+const _getSubShapeTransformedShape_childPosition = /* @__PURE__ */ vec3.create();
 
 function getSubShapeTransformedShape(
     out: GetSubShapeTransformedShapeResult,
     shape: StaticCompoundShape,
     subShapeId: number,
 ): void {
-    if (subShape.isEmpty(subShapeId)) {
-        out.shape = null;
-        out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
-        return;
-    }
-
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    assert(_subShapeIdPopResult.value < shape.children.length, 'Invalid SubShapeID for StaticCompoundShape');
     const child = shape.children[_subShapeIdPopResult.value];
 
-    vec3.transformQuat(_getStaticCompoundSubShapeTransformedShape_rotatedChildPos, child.position, out.rotation);
-    vec3.add(out.position, out.position, _getStaticCompoundSubShapeTransformedShape_rotatedChildPos);
+    // pos = pos + rotate(rot, scale * childPos), rot = rot * childRot
+    const childPosition = _getSubShapeTransformedShape_childPosition;
+    vec3.multiply(childPosition, child.position, out.scale);
+    vec3.transformQuat(childPosition, childPosition, out.rotation);
+    vec3.add(out.position, out.position, childPosition);
     quat.multiply(out.rotation, out.rotation, child.quaternion);
 
     const childShapeDef = shapeDefs[child.shape.type];
@@ -354,6 +353,9 @@ const _castRayVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 
 const _castRayVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castRayVsStaticCompound_stackTop = 0;
 
 function castRay(
     collector: CastRayCollector,
@@ -426,12 +428,13 @@ function castRay(
     // the collector's early-out fraction, held in a local and refreshed after each child cast
     let earlyOut = collector.earlyOutFraction;
 
-    let stackSize = 0;
+    const stackBase = _castRayVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _castRayVsStaticCompound_stackNodes[stackSize] = 0;
     _castRayVsStaticCompound_stackDist[stackSize] = -Infinity; // root always visited
     stackSize++;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         stackSize--;
         const nodeOffset = _castRayVsStaticCompound_stackNodes[stackSize];
         const nodeDistance = _castRayVsStaticCompound_stackDist[stackSize];
@@ -452,6 +455,7 @@ function castRay(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castRayVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 // an any-hit collector drops its early-out to zero: nothing further can qualify
                 if (earlyOut <= 0) break;
@@ -469,6 +473,8 @@ function castRay(
                 );
 
                 // the children are placed in world space, so they get the world ray
+                vec3.set(_castRayVsStaticCompound_pos, posX, posY, posZ);
+                quat.set(_castRayVsStaticCompound_quat, quatX, quatY, quatZ, quatW);
                 vec3.set(
                     _castRayVsStaticCompound_transformedTranslation,
                     child.position[0] * scaleX,
@@ -515,6 +521,7 @@ function castRay(
 
                 earlyOut = collector.earlyOutFraction;
             }
+            _castRayVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: compute distances to both children and sort by distance
             // push farther child first so closer is popped first
@@ -598,6 +605,9 @@ const _collidePointVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 
 const _collidePointVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collidePointVsStaticCompound_stackTop = 0;
+
 function collidePoint(
     collector: CollidePointCollector,
     settings: CollidePointSettings,
@@ -638,10 +648,11 @@ function collidePoint(
     const localPointY = _collidePointVsStaticCompound_localPoint[1] / scaleBY;
     const localPointZ = _collidePointVsStaticCompound_localPoint[2] / scaleBZ;
 
-    let stackSize = 0;
+    const stackBase = _collidePointVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _collidePointVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collidePointVsStaticCompound_stackNodes[--stackSize];
@@ -666,6 +677,7 @@ function collidePoint(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collidePointVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -723,6 +735,7 @@ function collidePoint(
                     scaleBZ,
                 );
             }
+            _collidePointVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: push both children
             const leftOffset = bvh.nodeLeft(nodeOffset);
@@ -775,6 +788,10 @@ const _collideStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create(
 
 const _collideStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _collideStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
+const _collideStaticCompoundVsShape_scaleB = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collideStaticCompoundVsShape_stackTop = 0;
 
 function collideStaticCompoundVsShape(
     collector: CollideShapeCollector,
@@ -832,12 +849,15 @@ function collideStaticCompoundVsShape(
         _collideStaticCompoundVsShape_localQuatB,
     );
 
-    // transform shapeB's local AABB to compound A's local space
+    vec3.set(_collideStaticCompoundVsShape_scaleB, scaleBX, scaleBY, scaleBZ);
+
+    // transform shapeB's local AABB (scaled by b's scale) to compound A's local space
     const queryBounds = _collideStaticCompoundVsShape_queryBounds;
-    mat4.fromRotationTranslation(
+    mat4.fromRotationTranslationScale(
         _collideStaticCompoundVsShape_aabbTransform,
         _collideStaticCompoundVsShape_localQuatB,
         _collideStaticCompoundVsShape_localPosB,
+        _collideStaticCompoundVsShape_scaleB,
     );
     box3.transformMat4(queryBounds, shapeB.aabb, _collideStaticCompoundVsShape_aabbTransform);
 
@@ -850,10 +870,19 @@ function collideStaticCompoundVsShape(
     queryBounds[5] += settings.maxSeparationDistance;
     divideBoxByScale(queryBounds, scaleAX, scaleAY, scaleAZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _collideStaticCompoundVsShape_stackTop;
+    let stackSize = stackBase;
     _collideStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collideStaticCompoundVsShape_stackNodes[--stackSize];
@@ -863,12 +892,12 @@ function collideStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -878,6 +907,7 @@ function collideStaticCompoundVsShape(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collideStaticCompoundVsShape_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -947,6 +977,7 @@ function collideStaticCompoundVsShape(
                     );
                 }
             }
+            _collideStaticCompoundVsShape_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -971,6 +1002,9 @@ const _collideShapeVsStaticCompound_localPosA = /* @__PURE__ */ vec3.create();
 const _collideShapeVsStaticCompound_localQuatA = /* @__PURE__ */ quat.create();
 const _collideShapeVsStaticCompound_aabbTransform = /* @__PURE__ */ mat4.create();
 const _collideShapeVsStaticCompound_scaleA = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collideShapeVsStaticCompound_stackTop = 0;
 
 function collideShapeVsStaticCompound(
     collector: CollideShapeCollector,
@@ -1050,10 +1084,19 @@ function collideShapeVsStaticCompound(
     queryBounds[5] += settings.maxSeparationDistance;
     divideBoxByScale(queryBounds, scaleBX, scaleBY, scaleBZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _collideShapeVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _collideShapeVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collideShapeVsStaticCompound_stackNodes[--stackSize];
@@ -1062,12 +1105,12 @@ function collideShapeVsStaticCompound(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -1077,6 +1120,7 @@ function collideShapeVsStaticCompound(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collideShapeVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -1146,6 +1190,7 @@ function collideShapeVsStaticCompound(
                     );
                 }
             }
+            _collideShapeVsStaticCompound_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -1178,6 +1223,10 @@ const _castStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create();
 const _castStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _castStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
 const _castStaticCompoundVsShape_localDispA = /* @__PURE__ */ vec3.create();
+const _castStaticCompoundVsShape_scaleB = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castStaticCompoundVsShape_stackTop = 0;
 
 function castStaticCompoundVsShape(
     collector: CastShapeCollector,
@@ -1249,16 +1298,19 @@ function castStaticCompoundVsShape(
         _castStaticCompoundVsShape_invQuatA,
     );
 
+    vec3.set(_castStaticCompoundVsShape_scaleB, scaleBX, scaleBY, scaleBZ);
+
     // compute swept bounds of shapeB in compound A's local space:
-    // transform shapeB AABB by localQuatB+localPosB to get start bounds,
+    // transform shapeB AABB by its scale, localQuatB and localPosB to get start bounds,
     // then translate by localDispA to get end bounds, and union them.
     const queryBounds = _castStaticCompoundVsShape_queryBounds;
     const endBounds = _castStaticCompoundVsShape_endBounds;
     const localDisp = _castStaticCompoundVsShape_localDispA;
-    mat4.fromRotationTranslation(
+    mat4.fromRotationTranslationScale(
         _castStaticCompoundVsShape_aabbTransform,
         _castStaticCompoundVsShape_localQuatB,
         _castStaticCompoundVsShape_localPosB,
+        _castStaticCompoundVsShape_scaleB,
     );
     box3.transformMat4(queryBounds, shapeB.aabb, _castStaticCompoundVsShape_aabbTransform);
     // end bounds = start bounds translated by displacement
@@ -1271,10 +1323,19 @@ function castStaticCompoundVsShape(
     box3.union(queryBounds, queryBounds, endBounds);
     divideBoxByScale(queryBounds, scaleAX, scaleAY, scaleAZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _castStaticCompoundVsShape_stackTop;
+    let stackSize = stackBase;
     _castStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.earlyOutFraction <= -Infinity) break;
 
         const nodeOffset = _castStaticCompoundVsShape_stackNodes[--stackSize];
@@ -1284,12 +1345,12 @@ function castStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -1299,6 +1360,7 @@ function castStaticCompoundVsShape(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castStaticCompoundVsShape_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.earlyOutFraction <= -Infinity) break;
 
@@ -1373,6 +1435,7 @@ function castStaticCompoundVsShape(
                     );
                 }
             }
+            _castStaticCompoundVsShape_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -1409,7 +1472,6 @@ const _castShapeVsStaticCompound_quatAInB = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_displacementInB = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_mat4 = /* @__PURE__ */ mat4.create();
 const _castShapeVsStaticCompound_sweptAABB = /* @__PURE__ */ box3.create();
-const _castShapeVsStaticCompound_halfExtents = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_expandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_childExpandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_stackNodes: number[] = [];
@@ -1418,6 +1480,9 @@ const _castShapeVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.bu
 const _castShapeVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castShapeVsStaticCompound_stackTop = 0;
 
 function castShapeVsStaticCompound(
     collector: CastShapeCollector,
@@ -1518,19 +1583,20 @@ function castShapeVsStaticCompound(
     const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
 
     // compute half-extents of the base AABB
-    const halfExtents = _castShapeVsStaticCompound_halfExtents;
-    halfExtents[0] = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
-    halfExtents[1] = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
-    halfExtents[2] = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const halfExtentX = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
+    const halfExtentY = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
+    const halfExtentZ = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
 
-    let stackSize = 0;
+    const stackBase = _castShapeVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _castShapeVsStaticCompound_stackNodes[stackSize] = 0;
     _castShapeVsStaticCompound_stackDist[stackSize] = 0; // root always visited
     stackSize++;
 
     const expandedBounds = _castShapeVsStaticCompound_expandedBounds;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         stackSize--;
         const nodeOffset = _castShapeVsStaticCompound_stackNodes[stackSize];
         const nodeDistance = _castShapeVsStaticCompound_stackDist[stackSize];
@@ -1550,6 +1616,7 @@ function castShapeVsStaticCompound(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castShapeVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 const childIndex = childStart + i;
 
@@ -1559,12 +1626,12 @@ function castShapeVsStaticCompound(
                 box3.copy(childBounds, _computeChildAABB_result);
 
                 // expand by half-extents
-                childBounds[0] -= halfExtents[0];
-                childBounds[1] -= halfExtents[1];
-                childBounds[2] -= halfExtents[2];
-                childBounds[3] += halfExtents[0];
-                childBounds[4] += halfExtents[1];
-                childBounds[5] += halfExtents[2];
+                childBounds[0] -= halfExtentX;
+                childBounds[1] -= halfExtentY;
+                childBounds[2] -= halfExtentZ;
+                childBounds[3] += halfExtentX;
+                childBounds[4] += halfExtentY;
+                childBounds[5] += halfExtentZ;
 
                 // early out: ray x child expanded bounds
                 if (
@@ -1589,6 +1656,7 @@ function castShapeVsStaticCompound(
 
                 // stop once the collector wants no more hits
                 if (collector.earlyOutFraction <= -Infinity) {
+                    _castShapeVsStaticCompound_stackTop = stackBase;
                     return;
                 }
 
@@ -1603,6 +1671,8 @@ function castShapeVsStaticCompound(
                     compound.children.length,
                 );
 
+                vec3.set(_castShapeVsStaticCompound_posB, posBX, posBY, posBZ);
+                quat.set(_castShapeVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
                 vec3.set(
                     _castShapeVsStaticCompound_transformedTranslation,
                     child.position[0] * scaleBX,
@@ -1659,6 +1729,7 @@ function castShapeVsStaticCompound(
                     );
                 }
             }
+            _castShapeVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: compute distances to both children and sort by distance
             // ray from swept AABB center along displacement
@@ -1666,12 +1737,12 @@ function castShapeVsStaticCompound(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // expand bounds by half-extents (same as child test)
-            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtentX;
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtentY;
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtentZ;
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtentX;
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtentY;
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtentZ;
             const leftDist = rayDistanceToBox3(
                 rayOriginX,
                 rayOriginY,
@@ -1688,12 +1759,12 @@ function castShapeVsStaticCompound(
                 expandedBounds[5],
             );
 
-            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtentX;
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtentY;
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtentZ;
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtentX;
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtentY;
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtentZ;
             const rightDist = rayDistanceToBox3(
                 rayOriginX,
                 rayOriginY,

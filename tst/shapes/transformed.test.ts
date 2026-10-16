@@ -1,6 +1,6 @@
 import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { ShapeType, sphere, transformed } from '../../src';
+import { box, EMPTY_SUB_SHAPE_ID, getShapeSurfaceNormal, ShapeType, sphere, transformed } from '../../src';
 
 describe('Transformed shape AABB caching', () => {
     test('transformed shape should have correct AABB (no rotation)', () => {
@@ -69,5 +69,25 @@ describe('Transformed shape center of mass', () => {
         expect(ts.centerOfMass[0]).toBeCloseTo(1, 5);
         expect(ts.centerOfMass[1]).toBeCloseTo(0, 5);
         expect(ts.centerOfMass[2]).toBeCloseTo(0, 5);
+    });
+});
+
+describe('Transformed shape surface normal', () => {
+    test('a transformed shape inside a rotated transformed shape returns the world normal', () => {
+        // outer turns a quarter about z, inner turns the box a quarter about x
+        const quarterZ = quat.setAxisAngle(quat.create(), vec3.fromValues(0, 0, 1), Math.PI / 2);
+        const quarterX = quat.setAxisAngle(quat.create(), vec3.fromValues(1, 0, 0), Math.PI / 2);
+        const inner = transformed.create({
+            shape: box.create({ halfExtents: vec3.fromValues(1, 2, 3) }),
+            position: vec3.create(),
+            quaternion: quarterX,
+        });
+        const outer = transformed.create({ shape: inner, position: vec3.create(), quaternion: quarterZ });
+
+        // the box's +y face centre (0, 2, 0) goes to (0, 0, 2) under x, which z leaves alone
+        const normal = getShapeSurfaceNormal(vec3.create(), outer, vec3.fromValues(0, 0, 2), EMPTY_SUB_SHAPE_ID);
+        expect(normal[0]).toBeCloseTo(0, 6);
+        expect(normal[1]).toBeCloseTo(0, 6);
+        expect(normal[2]).toBeCloseTo(1, 6);
     });
 });
