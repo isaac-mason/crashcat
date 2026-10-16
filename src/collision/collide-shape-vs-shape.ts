@@ -197,7 +197,12 @@ export type CollideShapeSettings = {
 
     /** if true, supporting faces will be collected and stored in the collision result */
     collectFaces: boolean;
+
+    /** max squared distance to consider a vertex to be the same as another vertex, used by the internal edge removal algorithm to determine if two edges are shared (unit: meter^2) */
+    internalEdgeRemovalVertexToleranceSq: number;
 };
+
+export const DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ = 1e-8;
 
 export function createDefaultCollideShapeSettings(): CollideShapeSettings {
     return {
@@ -208,6 +213,7 @@ export function createDefaultCollideShapeSettings(): CollideShapeSettings {
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: vec3.create(),
         collectFaces: false,
+        internalEdgeRemovalVertexToleranceSq: DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ,
     };
 }
 
@@ -219,6 +225,7 @@ export function copyCollideShapeSettings(out: CollideShapeSettings, source: Coll
     out.collideOnlyWithActiveEdges = source.collideOnlyWithActiveEdges;
     vec3.copy(out.activeEdgeMovementDirection, source.activeEdgeMovementDirection);
     out.collectFaces = source.collectFaces;
+    out.internalEdgeRemovalVertexToleranceSq = source.internalEdgeRemovalVertexToleranceSq;
 }
 
 function createInvertedCollector() {

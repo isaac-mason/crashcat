@@ -932,6 +932,7 @@ function narrowphase(
     collideSettings.collisionTolerance = world.settings.narrowphase.collisionTolerance;
     collideSettings.penetrationTolerance = world.settings.narrowphase.penetrationTolerance;
     collideSettings.collideOnlyWithActiveEdges = world.settings.narrowphase.collideOnlyWithActiveEdges;
+    collideSettings.internalEdgeRemovalVertexToleranceSq = world.settings.narrowphase.internalEdgeRemovalVertexToleranceSq;
 
     // set active edges direction using linear velocity difference
     vec3.sub(
