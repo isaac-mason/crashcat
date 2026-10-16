@@ -183,10 +183,13 @@ function getInnerRadius(_shape: PlaneShape): number {
 /** scale a plane by a non-uniform scale vector. handles non-uniform and negative scaling correctly */
 function scalePlane(out: Plane3, plane: Plane3, scale: Vec3): Plane3 {
     // scaled_normal = normal / scale (component-wise division)
-    const scaledNormal: Vec3 = [plane.normal[0] / scale[0], plane.normal[1] / scale[1], plane.normal[2] / scale[2]];
+    const scaledNormalX = plane.normal[0] / scale[0];
+    const scaledNormalY = plane.normal[1] / scale[1];
+    const scaledNormalZ = plane.normal[2] / scale[2];
 
-    const scaledNormalLength = vec3.length(scaledNormal);
-    vec3.scale(out.normal, scaledNormal, 1 / scaledNormalLength);
+    const scaledNormalLength = Math.sqrt(scaledNormalX * scaledNormalX + scaledNormalY * scaledNormalY + scaledNormalZ * scaledNormalZ);
+    const inverseLength = 1 / scaledNormalLength;
+    vec3.set(out.normal, scaledNormalX * inverseLength, scaledNormalY * inverseLength, scaledNormalZ * inverseLength);
     out.constant = plane.constant / scaledNormalLength;
 
     return out;
