@@ -2568,3 +2568,39 @@ describe('reversedCastShapeVsShape', () => {
         expect(hit.materialIdB).toBe(3);
     });
 });
+
+describe('AllCastShapeCollector.sort', () => {
+    it('orders hits by fraction, deepest first among hits that start overlapping', () => {
+        const unitSphere = sphere.create({ radius: 1 });
+        const collector = createAllCastShapeCollector();
+        const settings = createDefaultCastShapeSettings();
+
+        // a sweep along +x by 10: b at 8 is hit at fraction 0.6, b at 5 at 0.3, b at 1.5 and 1.0
+        // overlap at the start by 0.5 and 1.0
+        for (const centerX of [8, 1.5, 5, 1.0]) {
+            // biome-ignore format: pretty
+            castShapeVsShape(
+                collector, settings,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                0, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+                10, 0, 0,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(4);
+        collector.sort();
+        const hits = collector.hits;
+        expect(hits[0].fraction).toBe(0);
+        expect(hits[0].penetrationDepth).toBeCloseTo(1.0, 4);
+        expect(hits[1].fraction).toBe(0);
+        expect(hits[1].penetrationDepth).toBeCloseTo(0.5, 4);
+        expect(hits[2].fraction).toBeCloseTo(0.3, 4);
+        expect(hits[3].fraction).toBeCloseTo(0.6, 4);
+    });
+});

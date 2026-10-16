@@ -128,7 +128,7 @@ export function createDefaultCastShapeSettings(): CastShapeSettings {
         collideWithBackfacesTriangles: false,
         collideWithBackfacesConvex: false,
         collectFaces: false,
-        collisionTolerance: 0.01,
+        collisionTolerance: 1e-4,
         penetrationTolerance: 0.01,
         returnDeepestPoint: false,
         useShrunkenShapeAndConvexRadius: false,
@@ -144,6 +144,12 @@ export type CastShapeCollector = {
     addMiss(): void;
     shouldEarlyOut(): boolean;
 };
+
+function compareCastShapeHits(a: CastShapeHit, b: CastShapeHit): number {
+    const fractionA = castShapeHitEarlyOutFraction(a);
+    const fractionB = castShapeHitEarlyOutFraction(b);
+    return fractionA < fractionB ? -1 : fractionA > fractionB ? 1 : 0;
+}
 
 export class AllCastShapeCollector implements CastShapeCollector {
     bodyIdB = -1;
@@ -170,6 +176,11 @@ export class AllCastShapeCollector implements CastShapeCollector {
         this.hitPool.reset();
         this.hits.length = 0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+    }
+
+    /** orders hits closest first: by fraction, deepest first among hits that start overlapping */
+    sort(): void {
+        this.hits.sort(compareCastShapeHits);
     }
 }
 

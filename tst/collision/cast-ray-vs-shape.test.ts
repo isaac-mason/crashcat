@@ -2013,3 +2013,31 @@ describe('castRayVsShape - initial early out fraction', () => {
         expect(castAtFaceX(1 + 5e-5).length).toBe(0);
     });
 });
+
+describe('AllCastRayCollector.sort', () => {
+    test('orders hits closest first', () => {
+        const target = sphere.create({ radius: 0.5 });
+        const ray = createRayParams([0, 0, 0], [1, 0, 0], 100);
+        const collector = createAllCastRayCollector();
+
+        // cast against spheres far, near, middle so the hits arrive out of order
+        for (const centerX of [9, 3, 6]) {
+            // biome-ignore format: pretty
+            castRayVsShape(
+                collector, defaultSettings,
+                ray.originX, ray.originY, ray.originZ,
+                ray.directionX, ray.directionY, ray.directionZ, ray.length,
+                target, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(3);
+        collector.sort();
+        expect(collector.hits[0].fraction).toBeCloseTo(2.5 / 100, 6);
+        expect(collector.hits[1].fraction).toBeCloseTo(5.5 / 100, 6);
+        expect(collector.hits[2].fraction).toBeCloseTo(8.5 / 100, 6);
+    });
+});

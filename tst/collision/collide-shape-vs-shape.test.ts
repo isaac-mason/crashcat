@@ -1610,14 +1610,14 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
         const scaleB = vec3.fromValues(1, 1, 1);
 
         // Test with backface culling enabled
-        const settingsNoCull = { ...settings, collideWithBackfaces: false };
+        const settingsWithCull = { ...settings, collideWithBackfaces: false };
         const collector1 = createAllCollideShapeCollector();
         const results1 = collector1.hits;
 
         // biome-ignore format: readability
         collideShapeVsShape(
             collector1,
-            settingsNoCull,
+            settingsWithCull,
             sphereA,
             EMPTY_SUB_SHAPE_ID, 0,
             posA[0], posA[1], posA[2],
@@ -1634,14 +1634,14 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
         expect(results1.length).toBe(0);
 
         // Test with backface culling disabled
-        const settingsWithCull = { ...settings, collideWithBackfaces: true };
+        const settingsNoCull = { ...settings, collideWithBackfaces: true };
         const collector2 = createAllCollideShapeCollector();
         const results2 = collector2.hits;
 
         // biome-ignore format: readability
         collideShapeVsShape(
             collector2,
-            settingsWithCull,
+            settingsNoCull,
             sphereA,
             EMPTY_SUB_SHAPE_ID, 0,
             posA[0], posA[1], posA[2],
@@ -3257,5 +3257,34 @@ describe('collideShapeVsShape - default back face mode', () => {
         const hits = collideFromBehind(backFaces);
         expect(hits.length).toBe(1);
         expect(hits[0].penetration).toBeCloseTo(0.2, 4);
+    });
+});
+
+describe('AllCollideShapeCollector.sort', () => {
+    test('orders hits deepest first', () => {
+        const unitSphere = sphere.create({ radius: 1 });
+        const collector = createAllCollideShapeCollector();
+
+        // spheres overlapping the one at the origin by 0.2, 0.6 and 0.4
+        for (const centerX of [1.8, 1.4, 1.6]) {
+            // biome-ignore format: pretty
+            collideShapeVsShape(
+                collector, settings,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                0, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(3);
+        collector.sort();
+        expect(collector.hits[0].penetration).toBeCloseTo(0.6, 5);
+        expect(collector.hits[1].penetration).toBeCloseTo(0.4, 5);
+        expect(collector.hits[2].penetration).toBeCloseTo(0.2, 5);
     });
 });

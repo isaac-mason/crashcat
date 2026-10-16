@@ -79,6 +79,10 @@ export type CollideShapeCollector = {
     reset?(): void;
 };
 
+function compareCollideShapeHits(a: CollideShapeHit, b: CollideShapeHit): number {
+    return a.penetration > b.penetration ? -1 : a.penetration < b.penetration ? 1 : 0;
+}
+
 export class AllCollideShapeCollector implements CollideShapeCollector {
     bodyIdB = -1;
     earlyOutFraction = Number.MAX_VALUE;
@@ -104,6 +108,11 @@ export class AllCollideShapeCollector implements CollideShapeCollector {
         this.hits.length = 0;
         this.earlyOutFraction = Number.MAX_VALUE;
         this.bodyIdB = -1;
+    }
+
+    /** orders hits deepest first */
+    sort(): void {
+        this.hits.sort(compareCollideShapeHits);
     }
 }
 

@@ -63,6 +63,10 @@ export type CastRayCollector = {
     shouldEarlyOut(): boolean;
 };
 
+function compareCastRayHits(a: CastRayHit, b: CastRayHit): number {
+    return a.fraction < b.fraction ? -1 : a.fraction > b.fraction ? 1 : 0;
+}
+
 export class AllCastRayCollector implements CastRayCollector {
     bodyIdB = -1;
     earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
@@ -88,6 +92,11 @@ export class AllCastRayCollector implements CastRayCollector {
         this.hitPool.reset();
         this.hits.length = 0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+    }
+
+    /** orders hits closest first */
+    sort(): void {
+        this.hits.sort(compareCastRayHits);
     }
 }
 
