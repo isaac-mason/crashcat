@@ -1229,3 +1229,91 @@ describe('Body - Pooled Slot Reuse', () => {
         expect(second.motionProperties.numPositionStepsOverride).toBe(0);
     });
 });
+
+describe('Body - Removal', () => {
+    test('a removed body no longer holds its shape or user data', () => {
+        const { world, layers } = createTestWorld();
+        const shape = sphere.create({ radius: 1.0 });
+        const body = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            userData: { name: 'ball' },
+        });
+
+        expect(rigidBody.remove(world, body)).toBe(true);
+
+        expect(body.shape).not.toBe(shape);
+        expect(body.shape.type).toBe(ShapeType.EMPTY);
+        expect(body.userData).toBeNull();
+    });
+
+    test('a removed body holds the same shape as a never used pool slot', () => {
+        const { world, layers } = createTestWorld();
+        const first = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+        const second = rigidBody.create(world, {
+            shape: box.create({ halfExtents: [1, 1, 1] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+
+        rigidBody.remove(world, first);
+        rigidBody.remove(world, second);
+
+        expect(first.shape).toBe(second.shape);
+    });
+});
+
+describe('Body - Solver Step Overrides', () => {
+    test('a body created with step overrides reports them on its motion properties', () => {
+        const { world, layers } = createTestWorld();
+        const body = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            numVelocityStepsOverride: 20,
+            numPositionStepsOverride: 5,
+        });
+
+        expect(body.motionProperties.numVelocityStepsOverride).toBe(20);
+        expect(body.motionProperties.numPositionStepsOverride).toBe(5);
+    });
+
+    test('step overrides default to 0 and do not leak into a reused pool slot', () => {
+        const { world, layers } = createTestWorld();
+        const first = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            numVelocityStepsOverride: 20,
+            numPositionStepsOverride: 5,
+        });
+        rigidBody.remove(world, first);
+
+        const second = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+
+        expect(second.motionProperties).toBe(first.motionProperties);
+        expect(second.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(second.motionProperties.numPositionStepsOverride).toBe(0);
+    });
+
+    test('overrides above what jolt stores in a byte are rejected', () => {
+        const { world, layers } = createTestWorld();
+        expect(() =>
+            rigidBody.create(world, {
+                shape: sphere.create({ radius: 1.0 }),
+                objectLayer: layers.OBJECT_LAYER_MOVING,
+                motionType: MotionType.DYNAMIC,
+                numVelocityStepsOverride: 256,
+            }),
+        ).toThrow();
+    });
+});

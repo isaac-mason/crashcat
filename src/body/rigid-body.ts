@@ -15,6 +15,7 @@ import {
     type Shape,
     shapeDefs,
 } from '../shapes/shapes';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import { type BodyId, getBodyIdIndex, getBodyIdSequence, INVALID_BODY_ID, SEQUENCE_MASK, serBodyId } from './body-id';
 import * as massProperties from './mass-properties';
@@ -71,6 +72,17 @@ export type RigidBodySettings = {
     /** max angular velocity @see DEFAULT_RIGID_BODY_SETTINGS */
     maxAngularVelocity?: number;
 
+    /**
+     * used only when this body is dynamic and colliding. override for the number of solver velocity iterations, 0 uses
+     * the world default. an island runs the max over all of its contacts and constraints @see DEFAULT_RIGID_BODY_SETTINGS
+     */
+    numVelocityStepsOverride?: number;
+    /**
+     * used only when this body is dynamic and colliding. override for the number of solver position iterations, 0 uses
+     * the world default. an island runs the max over all of its contacts and constraints @see DEFAULT_RIGID_BODY_SETTINGS
+     */
+    numPositionStepsOverride?: number;
+
     /** body friction @see DEFAULT_RIGID_BODY_SETTINGS */
     friction?: number;
     /** body restitution @see DEFAULT_RIGID_BODY_SETTINGS */
@@ -125,6 +137,8 @@ export const DEFAULT_RIGID_BODY_SETTINGS = {
     angularDamping: 0.05,
     maxLinearVelocity: 500.0,
     maxAngularVelocity: 0.25 * Math.PI * 60.0,
+    numVelocityStepsOverride: 0,
+    numPositionStepsOverride: 0,
     allowSleeping: true,
     friction: 0.2,
     restitution: 0.0,
@@ -252,6 +266,9 @@ export type RigidBody = {
     constraintIds: ConstraintId[];
 };
 
+/** the shape held by pooled bodies, so a free slot keeps no reference to a shape it was given */
+const POOLED_BODY_SHAPE: Shape = /* @__PURE__ */ emptyShape.create();
+
 /** creates a new body with default properties */
 function makeRigidBody(): RigidBody {
     return {
@@ -278,7 +295,7 @@ function makeRigidBody(): RigidBody {
         sensor: false,
         enhancedInternalEdgeRemoval: false,
         collideKinematicVsNonDynamic: false,
-        shape: null! as Shape,
+        shape: POOLED_BODY_SHAPE,
         aabb: box3.create(),
         objectLayer: 0,
         broadphaseLayer: -1,
@@ -334,13 +351,11 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     vec3.zero(mp.force);
     vec3.zero(mp.torque);
 
-    // reset mass state, step overrides and memos a previous body in this slot may have left behind.
+    // reset mass state and memos a previous body in this slot may have left behind.
     // updateShape only sets mass for non-static bodies, so statics rely on this
     mp.invMass = 0;
     vec3.zero(mp.invInertiaDiagonal);
     quat.identity(mp.inertiaRotation);
-    mp.numVelocityStepsOverride = 0;
-    mp.numPositionStepsOverride = 0;
     mp.sleepTestTimer = 0;
     mp.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
 
@@ -349,6 +364,10 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     mp.angularDamping = o.angularDamping ?? DEFAULT_RIGID_BODY_SETTINGS.angularDamping;
     mp.maxLinearVelocity = o.maxLinearVelocity ?? DEFAULT_RIGID_BODY_SETTINGS.maxLinearVelocity;
     mp.maxAngularVelocity = o.maxAngularVelocity ?? DEFAULT_RIGID_BODY_SETTINGS.maxAngularVelocity;
+    mp.numVelocityStepsOverride = o.numVelocityStepsOverride ?? DEFAULT_RIGID_BODY_SETTINGS.numVelocityStepsOverride;
+    mp.numPositionStepsOverride = o.numPositionStepsOverride ?? DEFAULT_RIGID_BODY_SETTINGS.numPositionStepsOverride;
+    assert(mp.numVelocityStepsOverride < 256, 'numVelocityStepsOverride must be less than 256');
+    assert(mp.numPositionStepsOverride < 256, 'numPositionStepsOverride must be less than 256');
     mp.allowedDegreesOfFreedom = o.allowedDegreesOfFreedom ?? DEFAULT_RIGID_BODY_SETTINGS.allowedDegreesOfFreedom;
     mp.allowSleeping = o.allowSleeping ?? DEFAULT_RIGID_BODY_SETTINGS.allowSleeping;
     mp.motionQuality = o.motionQuality ?? DEFAULT_RIGID_BODY_SETTINGS.motionQuality;
@@ -479,8 +498,9 @@ export function remove(world: World, body: RigidBody): boolean {
     // mark as pooled
     body._pooled = true;
 
-    // reset user data eagerly
+    // release references to user owned objects
     body.userData = null;
+    body.shape = POOLED_BODY_SHAPE;
 
     // return index to pool
     world.bodies.freeIndices.push(body.index);
