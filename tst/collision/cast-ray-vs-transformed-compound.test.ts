@@ -11,7 +11,11 @@ import {
     staticCompound,
 } from '../../src';
 
-const settings: CastRaySettings = { collideWithBackfaces: false, treatConvexAsSolid: true };
+const settings: CastRaySettings = {
+    collideWithBackfacesTriangles: false,
+    collideWithBackfacesConvex: false,
+    treatConvexAsSolid: true,
+};
 
 /** one unit sphere child at local (5, 0, 0) */
 function makeStatic(): Shape {

@@ -352,7 +352,7 @@ function performRaycast(state: ExampleState): CastRayHitResult[] {
     const hits: CastRayHitResult[] = [];
 
     const options = createDefaultCastRaySettings();
-    options.collideWithBackfaces = true;
+    options.collideWithBackfacesTriangles = true;
 
     if (config.collectorMode === 'closest') {
         const closestCollector = createClosestCastRayCollector();

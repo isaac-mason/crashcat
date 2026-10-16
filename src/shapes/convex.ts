@@ -122,7 +122,7 @@ export function castRayVsConvex(
     }
 
     // back face hit: cast the inverted ray from the early out fraction back to the forward hit to find the exit point
-    if (settings.collideWithBackfaces && !collector.shouldEarlyOut()) {
+    if (settings.collideWithBackfacesConvex && !collector.shouldEarlyOut()) {
         const startFraction = Math.min(1.0, collector.earlyOutFraction);
         const deltaFraction = fraction - startFraction;
         if (deltaFraction < 0.0) {
@@ -696,7 +696,7 @@ export function castConvexVsConvexLocal(
     }
 
     // back-face culling: reject if shapes are separating (moving apart)
-    if (!settings.collideWithBackfaces) {
+    if (!settings.collideWithBackfacesConvex) {
         const dotProduct = vec3.dot(_castConvex_gjkResult.separatingAxis, displacementInB);
         if (dotProduct <= 0) {
             collector.addMiss();

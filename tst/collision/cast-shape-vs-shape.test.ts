@@ -2,7 +2,10 @@ import type { Quat, Vec3 } from 'math';
 import { quat, vec3 } from 'math';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+    AnyCastShapeCollector,
     box,
+    type CastShapeCollector,
+    type CastShapeHit,
     type CastShapeSettings,
     CastShapeStatus,
     capsule,
@@ -1062,7 +1065,7 @@ describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => 
 
         // Test hitting from backface side with backface culling enabled
         const settingsIgnoreBackfaces = createDefaultCastShapeSettings();
-        settingsIgnoreBackfaces.collideWithBackfaces = false;
+        settingsIgnoreBackfaces.collideWithBackfacesTriangles = false;
         const collectorIgnore = createAllCastShapeCollector();
 
         // biome-ignore format: pretty
@@ -1086,7 +1089,7 @@ describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => 
 
         // Test with backface collision enabled
         const settingsCollideBackfaces = createDefaultCastShapeSettings();
-        settingsCollideBackfaces.collideWithBackfaces = true;
+        settingsCollideBackfaces.collideWithBackfacesTriangles = true;
         const collectorCollide = createAllCastShapeCollector();
 
         // biome-ignore format: pretty
@@ -1687,7 +1690,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
     const sphereA = sphere.create({ radius: 0.5 });
 
     describe('Backface Culling', () => {
-        it('should NOT collide with back-facing triangle when collideWithBackfaces is false', () => {
+        it('should NOT collide with back-facing triangle when collideWithBackfacesTriangles is false', () => {
             const collector = createAllCastShapeCollector();
 
             // Create a single triangle in XY plane at z=0, facing +Z direction
@@ -1734,7 +1737,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
             expect(hits.length).toBe(0); // Should NOT collide (backface ignored)
         });
 
-        it('should collide with front-facing triangle when collideWithBackfaces is false', () => {
+        it('should collide with front-facing triangle when collideWithBackfacesTriangles is false', () => {
             const collector = createAllCastShapeCollector();
 
             // Same triangle
@@ -1772,7 +1775,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
             expect(hits[0].status).toBe(CastShapeStatus.COLLIDING);
         });
 
-        it('should collide with back-facing triangle when collideWithBackfaces is true', () => {
+        it('should collide with back-facing triangle when collideWithBackfacesTriangles is true', () => {
             const collector = createAllCastShapeCollector();
 
             const meshB = triangleMesh.create({
@@ -1782,7 +1785,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIncludeBackfaces: CastShapeSettings = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: true, // Allow backface collisions
+                collideWithBackfacesTriangles: true,
                 // collectFaces: false,
                 // collisionTolerance: 1e-4,
                 // penetrationTolerance: 1e-4,
@@ -1837,7 +1840,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIgnoreBackfaces = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: false,
+                collideWithBackfacesTriangles: false,
                 // collectFaces: false,
                 // collisionTolerance: 1e-4,
                 // penetrationTolerance: 1e-4,
@@ -2086,7 +2089,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIgnoreBackfaces: CastShapeSettings = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: false,
+                collideWithBackfacesTriangles: false,
             };
 
             // Sphere approaching from above (+Z), moving down
@@ -2266,5 +2269,53 @@ describe('castShapeVsShape - GJK restart', () => {
         expect(hits.length).toBe(1);
         expect(hits[0].fraction).toBe(0);
         expect(vec3.distance(hits[0].pointA, hits[0].pointB)).toBeLessThan(1.0e-4);
+    });
+});
+
+describe('castShapeVsShape - any collector early out', () => {
+    class CountingAnyCastShapeCollector extends AnyCastShapeCollector {
+        hitCount = 0;
+
+        addHit(hit: CastShapeHit): void {
+            this.hitCount++;
+            super.addHit(hit);
+        }
+    }
+
+    const sphereA = sphere.create({ radius: 1 });
+    const planeB = plane.create({ plane: { normal: [0, 1, 0], constant: 0 } });
+
+    // a sphere starting at height y with radius 1 penetrates the plane by 1 - y, and moves down into it
+    const castSphereAtHeight = (collector: CastShapeCollector, y: number) => {
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            defaultSettings,
+            sphereA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, y, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, -1, 0,
+            planeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    it('after the first hit, a deeper start in collision never reaches the collector', () => {
+        const collector = new CountingAnyCastShapeCollector();
+
+        castSphereAtHeight(collector, 0.9);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit.fraction).toBe(0);
+        expect(collector.hit.penetrationDepth).toBeCloseTo(0.1, 6);
+        expect(collector.shouldEarlyOut()).toBe(true);
+
+        castSphereAtHeight(collector, 0.5);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit.penetrationDepth).toBeCloseTo(0.1, 6);
     });
 });

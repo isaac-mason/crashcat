@@ -78,7 +78,8 @@ export type WorldSettings = {
         manifoldTolerance: number;
 
         /**
-         * Collide with backfaces during raycasts/shapecasts.
+         * Collide with back facing triangles when finding contacts and in ccd casts.
+         * convex back faces are always ignored there.
          * @default false
          */
         collideWithBackfaces: boolean;

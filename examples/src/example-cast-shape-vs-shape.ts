@@ -56,14 +56,22 @@ const config: {
     shapeA: ShapeOption;
     shapeB: ShapeOption;
     collectorMode: CollectorMode;
-    collideWithBackfaces: boolean;
-} = { shapeA: 'sphere', shapeB: 'sphere', collectorMode: 'closest', collideWithBackfaces: false };
+    collideWithBackfacesTriangles: boolean;
+    collideWithBackfacesConvex: boolean;
+} = {
+    shapeA: 'sphere',
+    shapeB: 'sphere',
+    collectorMode: 'closest',
+    collideWithBackfacesTriangles: false,
+    collideWithBackfacesConvex: false,
+};
 
 const gui = new GUI();
 gui.add(config, 'shapeA', GUI_SHAPE_OPTIONS).name('Shape A Type').onChange(setup);
 gui.add(config, 'shapeB', GUI_SHAPE_OPTIONS).name('Shape B Type').onChange(setup);
 gui.add(config, 'collectorMode', COLLECTOR_MODE_OPTIONS).name('Collector Mode');
-gui.add(config, 'collideWithBackfaces').name('Collide With Backfaces');
+gui.add(config, 'collideWithBackfacesTriangles').name('Collide With Triangle Backfaces');
+gui.add(config, 'collideWithBackfacesConvex').name('Collide With Convex Backfaces');
 
 /* rendering */
 
@@ -374,7 +382,8 @@ function update(state: ExampleState) {
 
     const settings = createDefaultCastShapeSettings();
     settings.collectFaces = true;
-    settings.collideWithBackfaces = config.collideWithBackfaces;
+    settings.collideWithBackfacesTriangles = config.collideWithBackfacesTriangles;
+    settings.collideWithBackfacesConvex = config.collideWithBackfacesConvex;
 
     // Set movement direction for active edge detection
     // Use the cast displacement as the movement direction

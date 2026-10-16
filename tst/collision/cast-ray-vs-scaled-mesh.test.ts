@@ -9,8 +9,16 @@ import {
     triangleMesh,
 } from '../../src';
 
-const settings: CastRaySettings = { collideWithBackfaces: false, treatConvexAsSolid: true };
-const backfaces: CastRaySettings = { collideWithBackfaces: true, treatConvexAsSolid: true };
+const settings: CastRaySettings = {
+    collideWithBackfacesTriangles: false,
+    collideWithBackfacesConvex: false,
+    treatConvexAsSolid: true,
+};
+const backfaces: CastRaySettings = {
+    collideWithBackfacesTriangles: true,
+    collideWithBackfacesConvex: false,
+    treatConvexAsSolid: true,
+};
 
 /** unit quad in the xz plane at y = 1, normal +y, spanning [0,1] x [0,1] */
 function makeQuad() {
@@ -111,7 +119,7 @@ describe('castRay vs scaled triangle mesh', () => {
     test('mirrored scale flips the front face', () => {
         const shape = makeQuad();
         // scale y = -1 puts the quad at y = -1 with its normal pointing -y. a ray coming from above
-        // now hits the back face: culled by default, reported with collideWithBackfaces
+        // now hits the back face: culled by default, reported with collideWithBackfacesTriangles
         expect(cast(shape, [1, -1, 1], [0.3, 9, 0.6], [0, -1, 0], 20).length).toBe(0);
         const hits = cast(shape, [1, -1, 1], [0.3, 9, 0.6], [0, -1, 0], 20, backfaces);
         expect(hits.length).toBe(1);

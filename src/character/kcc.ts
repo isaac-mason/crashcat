@@ -1473,7 +1473,8 @@ function getFirstContactForSweep(
 
     // setup cast settings
     _characterCastSettings.collisionTolerance = character.collisionTolerance;
-    _characterCastSettings.collideWithBackfaces = character.backFaceMode === BackFaceMode.COLLIDE;
+    _characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === BackFaceMode.COLLIDE;
+    _characterCastSettings.collideWithBackfacesConvex = false;
     _characterCastSettings.collideOnlyWithActiveEdges = true;
     _characterCastSettings.useShrunkenShapeAndConvexRadius = true;
     _characterCastSettings.returnDeepestPoint = false;

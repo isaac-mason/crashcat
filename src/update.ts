@@ -1431,7 +1431,8 @@ const ccdBodyVisitor: BodyVisitor & {
 
         const settings = this.castSettings;
         settings.returnDeepestPoint = false;
-        settings.collideWithBackfaces = this.world.settings.narrowphase.collideWithBackfaces;
+        settings.collideWithBackfacesTriangles = this.world.settings.narrowphase.collideWithBackfaces;
+        settings.collideWithBackfacesConvex = false;
 
         // biome-ignore format: pretty
         castShapeVsShape(

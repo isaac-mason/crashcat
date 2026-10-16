@@ -95,8 +95,10 @@ export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
 }
 
 export type CastShapeSettings = {
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
-    collideWithBackfaces: boolean;
+    /** if true, back facing triangles (triangle meshes) are hit, otherwise they are ignored */
+    collideWithBackfacesTriangles: boolean;
+    /** if true, convex shapes (and planes) are hit when the cast moves away from them, otherwise those hits are ignored */
+    collideWithBackfacesConvex: boolean;
     /** if true, the supporting faces at the contact points will be computed and returned in the CastShapeHit objects */
     collectFaces: boolean;
     /** if objects are closer than this distance, they are considered to be colliding (used for GJK) (unit: meter) */
@@ -115,7 +117,8 @@ export type CastShapeSettings = {
 
 export function createDefaultCastShapeSettings(): CastShapeSettings {
     return {
-        collideWithBackfaces: false,
+        collideWithBackfacesTriangles: false,
+        collideWithBackfacesConvex: false,
         collectFaces: false,
         collisionTolerance: 0.01,
         penetrationTolerance: 0.01,
@@ -173,7 +176,8 @@ export class AnyCastShapeCollector implements CastShapeCollector {
 
     addHit(h: CastShapeHit): void {
         copyCastShapeHit(this.hit, h);
-        this.earlyOutFraction = SHOULD_EARLY_OUT_FRACTION;
+        // hits at fraction 0 are bounded by -penetration, so -infinity prunes every further candidate
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {
@@ -181,7 +185,7 @@ export class AnyCastShapeCollector implements CastShapeCollector {
     }
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= SHOULD_EARLY_OUT_FRACTION;
+        return this.earlyOutFraction <= -Infinity;
     }
 
     reset(): void {

@@ -325,7 +325,7 @@ function castRayVsTriangleMesh(
     // a mirrored scale needs no winding fix-up: the ray was mirrored into local space with the
     // mesh, so the local front-face test already answers for the world-space surface side
     // (jolt: ScaledShape::CastRay rescales the ray and casts against the inner shape as is)
-    const backfaceCulling = !settings.collideWithBackfaces;
+    const backfaceCulling = !settings.collideWithBackfacesTriangles;
 
     const positions = meshData.positions;
     const triangleBuffer = meshData.triangleBuffer;
@@ -515,7 +515,9 @@ const hitCountCollector = {
 
 const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ (() => {
     const s = createDefaultCastRaySettings();
-    s.collideWithBackfaces = true; // backface collision required for odd-even rule
+    // the odd-even rule counts every crossing, front or back
+    s.collideWithBackfacesTriangles = true;
+    s.collideWithBackfacesConvex = true;
     return s;
 })();
 
@@ -936,7 +938,7 @@ function castConvexVsTriangleMesh(
                 );
 
                 // backface check
-                if (!settings.collideWithBackfaces && vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0) {
+                if (!settings.collideWithBackfacesTriangles && vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0) {
                     continue;
                 }
 
@@ -991,7 +993,8 @@ function castConvexVsTriangleMesh(
                     // prepare triangle normal for fixNormal
                     // back-facing check: if displacement dot normal > 0, we're approaching from back
                     const backFacing =
-                        !settings.collideWithBackfaces || vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
+                        !settings.collideWithBackfacesTriangles ||
+                        vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
                     if (backFacing) {
                         vec3.copy(_castConvexVsTriangleMesh_triangleNormalForFix, normal);
                     } else {
@@ -2486,7 +2489,7 @@ function castSphereVsTriangleMesh(
                 const normalDotDirection = vec3.dot(triangleNormal, direction);
                 const backFacing = normalDotDirection > 0;
 
-                if (!settings.collideWithBackfaces && backFacing) {
+                if (!settings.collideWithBackfacesTriangles && backFacing) {
                     continue;
                 }
 

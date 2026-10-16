@@ -42,7 +42,11 @@ function getTriangleIndexFromSubShapeId(subShapeId: number, nTriangles: number):
     return result.value;
 }
 
-const defaultSettings: CastRaySettings = { collideWithBackfaces: false, treatConvexAsSolid: true };
+const defaultSettings: CastRaySettings = {
+    collideWithBackfacesTriangles: false,
+    collideWithBackfacesConvex: false,
+    treatConvexAsSolid: true,
+};
 // todo: coverage for future shapes
 // const backfaceSettings: CastRaySettings = { collideWithBackfaces: true };
 

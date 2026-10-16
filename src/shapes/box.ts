@@ -539,8 +539,8 @@ const _castRayVsBox_hit = /* @__PURE__ */ createCastRayHit();
  * Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes. Not an
  * approximation: the gjk path already casts against a sharp box of |scale|·halfExtents with zero
  * convex radius (setBoxSupport under INCLUDE_CONVEX_RADIUS), so this is bit-equivalent geometry,
- * exact rather than iterated to a 1e-3 tolerance. Reporting matches castRayVsConvex (entry hit,
- * treatConvexAsSolid gate); the hit carries no normal, matching CastRayHit.
+ * exact rather than iterated to a 1e-3 tolerance. Reporting follows jolt's BoxShape::CastRay: the entry
+ * hit behind the treatConvexAsSolid gate, and the exit hit when collideWithBackfacesConvex is set.
  */
 export function castRayVsBox(
     collector: CastRayCollector,
@@ -660,23 +660,34 @@ export function castRayVsBox(
         }
     }
 
-    // the box is hit over ray fractions [tmin, tmax]; reject if that interval misses the ray segment
-    // [0, 1] (box entirely behind the origin, or entirely beyond the ray's end)
-    if (tmax < 0 || tmin > 1) {
+    // the box is hit over ray fractions [tmin, tmax]; reject if it lies entirely behind the origin or starts
+    // at or past the early out fraction
+    if (tmax < 0 || tmin >= collector.earlyOutFraction) {
         collector.addMiss();
         return;
     }
 
-    // entry fraction (gjk lambda); tmin < 0 means the origin is inside the box
-    const fraction = tmin;
-    if (settings.treatConvexAsSolid || fraction > 0.0) {
-        _castRayVsBox_hit.status = CastRayStatus.COLLIDING;
-        _castRayVsBox_hit.fraction = Math.max(0.0, fraction);
-        _castRayVsBox_hit.subShapeId = subShapeId;
-        _castRayVsBox_hit.materialId = shape.materialId;
-        _castRayVsBox_hit.bodyIdB = collector.bodyIdB;
+    _castRayVsBox_hit.status = CastRayStatus.COLLIDING;
+    _castRayVsBox_hit.subShapeId = subShapeId;
+    _castRayVsBox_hit.materialId = shape.materialId;
+    _castRayVsBox_hit.bodyIdB = collector.bodyIdB;
+    let hitAdded = false;
+
+    // front side: tmin < 0 means the origin is inside the box
+    if (settings.treatConvexAsSolid || tmin > 0.0) {
+        _castRayVsBox_hit.fraction = Math.max(0.0, tmin);
         collector.addHit(_castRayVsBox_hit);
-    } else {
+        hitAdded = true;
+    }
+
+    // back side: where the ray leaves the box
+    if (settings.collideWithBackfacesConvex && tmax < collector.earlyOutFraction) {
+        _castRayVsBox_hit.fraction = tmax;
+        collector.addHit(_castRayVsBox_hit);
+        hitAdded = true;
+    }
+
+    if (!hitAdded) {
         collector.addMiss();
     }
 }

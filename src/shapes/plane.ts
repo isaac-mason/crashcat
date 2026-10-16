@@ -384,7 +384,7 @@ function castRayVsPlane(
 
     // back-face culling check
     const isBackFacing = dot > 0.0;
-    if (!settings.collideWithBackfaces && isBackFacing) {
+    if (!settings.collideWithBackfacesConvex && isBackFacing) {
         return;
     }
 
@@ -815,7 +815,7 @@ export function castConvexVsPlane(
     // starting in collision?
     if (penetrationDepth > 0.0) {
         // back-face culling?
-        if (!settings.collideWithBackfaces && dot > 0.0) {
+        if (!settings.collideWithBackfacesConvex && dot > 0.0) {
             return;
         }
 
