@@ -730,6 +730,7 @@ function collidePointVsBox(
         Math.abs(_collidePointVsBox_posB[2]) <= scaledHalfZ
     ) {
         _collidePointVsBox_hit.subShapeIdB = subShapeIdB;
+        _collidePointVsBox_hit.materialId = shapeB.materialId;
         _collidePointVsBox_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointVsBox_hit);
     }

@@ -250,6 +250,25 @@ describe('collidePointVsShape - Box', () => {
         expect(collector.hit?.bodyIdB).toBe(1);
     });
 
+    test('reports the box material', () => {
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1), materialId: 7 });
+        const collector = createAnyCollidePointCollector();
+
+        // biome-ignore format: readability
+        collidePointVsShape(
+			collector,
+			settings,
+			0, 0, 0,
+			shape,
+			EMPTY_SUB_SHAPE_ID, 0,
+			0, 0, 0,
+			0, 0, 0, 1,
+			1, 1, 1,
+		);
+
+        expect(collector.hit?.materialId).toBe(7);
+    });
+
     test('should detect point inside box (off-center)', () => {
         const shape = box.create({ halfExtents: vec3.fromValues(2, 2, 2) });
         const point = vec3.fromValues(1, 1, 1);
