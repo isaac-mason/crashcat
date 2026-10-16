@@ -4,7 +4,7 @@ import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { setCapsuleSupport } from '../collision/support';
 import { assert } from '../utils/assert';
-import { transformFaceWithMat4Scale } from '../utils/face';
+import { transformFaceWithMat4RotationTranslation } from '../utils/face';
 import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
@@ -212,8 +212,10 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CapsuleShape, su
 function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CapsuleShape, _subShapeId: number): void {
     const face = ioResult.face;
     const { transform, scale } = ioResult;
-    const halfHeightOfCylinder = shape.halfHeightOfCylinder;
-    const radius = shape.radius;
+    // capsules only take uniform scale, and a mirrored scale leaves the symmetric shape unchanged
+    const absScale = Math.abs(scale[0]);
+    const halfHeightOfCylinder = absScale * shape.halfHeightOfCylinder;
+    const radius = absScale * shape.radius;
 
     // capsule is aligned along Y-axis: line segment from (0, -h, 0) to (0, h, 0) with radius r
 
@@ -262,7 +264,7 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
         face.vertices[3] = supportBottomX;
         face.vertices[4] = supportBottomY;
         face.vertices[5] = supportBottomZ;
-        transformFaceWithMat4Scale(face, transform, scale);
+        transformFaceWithMat4RotationTranslation(face, transform);
     } else {
         // only one point is relevant
         face.numVertices = 0;

@@ -349,9 +349,9 @@ describe('Supporting Face - Scaled Shape', () => {
         getShapeSupportingFace(face, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
-        // Face at -1 (opposite direction), scaled by -1, becomes 1
+        // a mirrored box is the same box: the face opposite the direction stays at x = -1
         for (let i = 0; i < 4; i++) {
-            expect(face.vertices[i * 3]).toBeCloseTo(1);
+            expect(face.vertices[i * 3]).toBeCloseTo(-1);
         }
     });
 

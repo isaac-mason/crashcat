@@ -1,6 +1,6 @@
-import { vec3 } from 'math';
+import { mat4, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { box, computeMassProperties, ShapeType } from '../../src';
+import { box, computeMassProperties, createFace, getShapeSupportingFace, ShapeType } from '../../src';
 import * as massProperties from '../../src/body/mass-properties';
 import { DEFAULT_CONVEX_RADIUS } from '../../src/collision/support';
 
@@ -80,6 +80,57 @@ describe('Box convex radius auto-clamping', () => {
     test('convex radius exactly equal to min half extent should not be clamped', () => {
         const b = box.create({ halfExtents: vec3.fromValues(0.3, 1, 2), convexRadius: 0.3 });
         expect(b.convexRadius).toBe(0.3);
+    });
+});
+
+describe('Box supporting face', () => {
+    const faceNormal = (vertices: number[]) => {
+        const v0 = vec3.fromValues(vertices[0], vertices[1], vertices[2]);
+        const edge1 = vec3.sub(vec3.create(), vec3.fromValues(vertices[3], vertices[4], vertices[5]), v0);
+        const edge2 = vec3.sub(vec3.create(), vec3.fromValues(vertices[6], vertices[7], vertices[8]), v0);
+        return vec3.normalize(vec3.create(), vec3.cross(vec3.create(), edge1, edge2));
+    };
+
+    test('a mirrored scale returns the same face with the same outward winding as the unscaled box', () => {
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 2, 3) });
+        const direction = vec3.fromValues(-1, 0, 0);
+
+        const unscaled = createFace();
+        getShapeSupportingFace(unscaled, shape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
+        const mirrored = createFace();
+        getShapeSupportingFace(mirrored, shape, 0, direction, mat4.create(), vec3.fromValues(-1, 1, 1));
+
+        expect(mirrored.numVertices).toBe(4);
+        for (let i = 0; i < 4; i++) {
+            expect(mirrored.vertices[i * 3]).toBeCloseTo(1, 6);
+        }
+        expect(mirrored.vertices.slice(0, 12)).toEqual(unscaled.vertices.slice(0, 12));
+
+        const normal = faceNormal(mirrored.vertices);
+        expect(normal[0]).toBeCloseTo(1, 6);
+        expect(normal[1]).toBeCloseTo(0, 6);
+        expect(normal[2]).toBeCloseTo(0, 6);
+    });
+
+    test('scaled and translated face vertices sit at the scaled extents', () => {
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 2, 3) });
+        const transform = mat4.fromTranslation(mat4.create(), vec3.fromValues(10, 20, 30));
+        const face = createFace();
+        getShapeSupportingFace(face, shape, 0, vec3.fromValues(0, -1, 0), transform, vec3.fromValues(2, 0.5, 1));
+
+        // +y face of half extents (2, 1, 3), offset by the translation
+        const expected = [
+            [8, 21, 27],
+            [8, 21, 33],
+            [12, 21, 33],
+            [12, 21, 27],
+        ];
+        expect(face.numVertices).toBe(4);
+        for (let i = 0; i < 4; i++) {
+            expect(face.vertices[i * 3]).toBeCloseTo(expected[i][0], 6);
+            expect(face.vertices[i * 3 + 1]).toBeCloseTo(expected[i][1], 6);
+            expect(face.vertices[i * 3 + 2]).toBeCloseTo(expected[i][2], 6);
+        }
     });
 });
 

@@ -2,7 +2,7 @@ import type { Vec3 } from 'math';
 import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { DEFAULT_CONVEX_RADIUS, setCylinderSupport } from '../collision/support';
-import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
+import { transformFaceWithMat4RotationTranslation } from '../utils/face';
 import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
@@ -206,11 +206,9 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CylinderShape): 
 function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CylinderShape): void {
     const face = ioResult.face;
     const { transform, scale } = ioResult;
-    const halfHeight = shape.halfHeight;
-    const radius = shape.radius;
-
-    // check if scale inverts winding
-    const insideOut = isScaleInsideOut(scale);
+    // a cylinder is symmetric, so a mirrored scale only changes its extents, never the face or winding
+    const halfHeight = Math.abs(scale[1]) * shape.halfHeight;
+    const radius = Math.abs(scale[0]) * shape.radius;
 
     // calculate squared components to determine if hitting side or cap
     const xzSq = direction[0] * direction[0] + direction[2] * direction[2];
@@ -260,10 +258,8 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
             rotationSin = direction[2] / horizontalLen;
         }
 
-        // write octagon vertices with winding reversal for inside-out scales
         for (let i = 0; i < 8; i++) {
-            const idx = insideOut ? 7 - i : i;
-            const template = CYLINDER_CAP_OCTAGON[idx];
+            const template = CYLINDER_CAP_OCTAGON[i];
 
             // first apply scale
             const scaledX = scaleX * template[0];
@@ -281,7 +277,7 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
         }
     }
 
-    transformFaceWithMat4Scale(face, transform, scale);
+    transformFaceWithMat4RotationTranslation(face, transform);
 }
 
 function getInnerRadius(shape: CylinderShape): number {

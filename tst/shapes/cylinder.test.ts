@@ -1,5 +1,6 @@
+import { mat4, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { cylinder, ShapeType } from '../../src';
+import { createFace, cylinder, getShapeSupportingFace, ShapeType } from '../../src';
 import { DEFAULT_CONVEX_RADIUS } from '../../src/collision/support';
 
 describe('Cylinder creation', () => {
@@ -91,5 +92,47 @@ describe('Cylinder validation', () => {
         expect(() => cylinder.create({ halfHeight: 1, radius: 1, convexRadius: -0.1 })).toThrow(
             'cylinder convexRadius must be >= 0',
         );
+    });
+});
+
+describe('Cylinder supporting face', () => {
+    test('a mirrored scale returns the same side line as the positive scale', () => {
+        const shape = cylinder.create({ halfHeight: 1, radius: 0.5 });
+        const direction = vec3.fromValues(-1, 0, 0);
+
+        const positive = createFace();
+        getShapeSupportingFace(positive, shape, 0, direction, mat4.create(), vec3.fromValues(2, 3, 2));
+        const mirrored = createFace();
+        getShapeSupportingFace(mirrored, shape, 0, direction, mat4.create(), vec3.fromValues(-2, -3, -2));
+
+        // the line on the +x side, at x = 2 * radius, from y = +3h to y = -3h
+        expect(mirrored.numVertices).toBe(2);
+        expect(mirrored.vertices[0]).toBeCloseTo(1, 6);
+        expect(mirrored.vertices[1]).toBeCloseTo(3, 6);
+        expect(mirrored.vertices[3]).toBeCloseTo(1, 6);
+        expect(mirrored.vertices[4]).toBeCloseTo(-3, 6);
+        expect(mirrored.vertices.slice(0, 6)).toEqual(positive.vertices.slice(0, 6));
+    });
+
+    test('a mirrored scale returns the same tilted cap with the same winding as the positive scale', () => {
+        const shape = cylinder.create({ halfHeight: 1, radius: 0.5 });
+        const direction = vec3.fromValues(-0.3, -1, 0);
+
+        const positive = createFace();
+        getShapeSupportingFace(positive, shape, 0, direction, mat4.create(), vec3.fromValues(2, 3, 2));
+        const mirrored = createFace();
+        getShapeSupportingFace(mirrored, shape, 0, direction, mat4.create(), vec3.fromValues(-2, 3, -2));
+
+        // the top cap at y = 3h, one vertex rotated towards +x (against the direction)
+        expect(mirrored.numVertices).toBe(8);
+        let maxX = Number.NEGATIVE_INFINITY;
+        for (let i = 0; i < 8; i++) {
+            expect(mirrored.vertices[i * 3 + 1]).toBeCloseTo(3, 6);
+            maxX = Math.max(maxX, mirrored.vertices[i * 3]);
+        }
+        expect(maxX).toBeCloseTo(1, 6);
+        for (let i = 0; i < 24; i++) {
+            expect(mirrored.vertices[i]).toBeCloseTo(positive.vertices[i], 10);
+        }
     });
 });

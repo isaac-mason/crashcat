@@ -1,5 +1,6 @@
+import { mat4, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { capsule, computeMassProperties } from '../../src';
+import { capsule, computeMassProperties, createFace, getShapeSupportingFace } from '../../src';
 import * as massProperties from '../../src/body/mass-properties';
 
 describe('Capsule Shape', () => {
@@ -231,5 +232,25 @@ describe('Capsule Shape', () => {
             expect(massProps.inertia[5]).toBeLessThan(massProps.inertia[0]);
             expect(massProps.inertia[5]).toBeLessThan(massProps.inertia[10]);
         });
+    });
+});
+
+describe('Capsule supporting face', () => {
+    test('a mirrored uniform scale returns the same side line as the positive scale', () => {
+        const shape = capsule.create({ halfHeightOfCylinder: 1, radius: 0.5 });
+        const direction = vec3.fromValues(-1, 0, 0);
+
+        const positive = createFace();
+        getShapeSupportingFace(positive, shape, 0, direction, mat4.create(), vec3.fromValues(2, 2, 2));
+        const mirrored = createFace();
+        getShapeSupportingFace(mirrored, shape, 0, direction, mat4.create(), vec3.fromValues(-2, -2, -2));
+
+        // the line on the +x side, at x = 2 * radius, from y = +2h to y = -2h
+        expect(mirrored.numVertices).toBe(2);
+        expect(mirrored.vertices[0]).toBeCloseTo(1, 6);
+        expect(mirrored.vertices[1]).toBeCloseTo(2, 6);
+        expect(mirrored.vertices[3]).toBeCloseTo(1, 6);
+        expect(mirrored.vertices[4]).toBeCloseTo(-2, 6);
+        expect(mirrored.vertices.slice(0, 6)).toEqual(positive.vertices.slice(0, 6));
     });
 });
