@@ -444,8 +444,8 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
             );
 
             const detN = mat4.determinant(n);
-            if (Math.abs(detN) < 1e-12) {
-                // planes are coplanar/degenerate, can't offset safely
+            if (detN === 0) {
+                // n is not invertible: no way to move the vertex back, so no convex radius
                 finalConvexRadius = 0;
                 break;
             }
