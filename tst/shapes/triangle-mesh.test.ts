@@ -382,3 +382,27 @@ describe('Triangle mesh collide point', () => {
         expect(collector.hit).toBe(null);
     });
 });
+
+describe('sphere cast vs triangle mesh: edge and vertex hits', () => {
+    test('a hit whose closest point is the sphere centre falls back to the triangle normal', () => {
+        // a zero radius sphere cast in the triangle's plane straight onto a vertex: the centre at the hit is the
+        // vertex itself, so the closest point is zero and has no direction of its own
+        const mesh = triangleMesh.create({
+            positions: [2, 0, 0, 3, 0, 1, 3, 0, -1],
+            indices: [0, 1, 2],
+        });
+        const settings = createDefaultCastShapeSettings();
+        settings.collideWithBackfacesTriangles = true;
+        settings.collideOnlyWithActiveEdges = false;
+
+        const hits = cast(settings, sphere.create({ radius: 0 }), pose([0, 0, 0]), [5, 0, 0], mesh, pose([0, 0, 0]));
+
+        expect(hits.length).toBe(1);
+        const hit = hits[0];
+        expect(hit.fraction).toBeCloseTo(0.4, 6);
+        expect(hit.pointB[0]).toBeCloseTo(2, 6);
+        expect(Number.isFinite(hit.normal[0]) && Number.isFinite(hit.normal[1]) && Number.isFinite(hit.normal[2])).toBe(true);
+        expect(vec3.length(hit.normal)).toBeCloseTo(1, 6);
+        expect(Math.abs(hit.normal[1])).toBeCloseTo(1, 6);
+    });
+});

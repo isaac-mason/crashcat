@@ -29,6 +29,7 @@ import {
     rayIntersectsTriangle,
     safeReciprocal,
 } from '../collision/cast-utils';
+import { computeBarycentricCoordinates3d, createBarycentricCoordinatesResult } from '../collision/closest-points';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
 import {
@@ -161,6 +162,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         castRay: castRayVsTriangleMesh,
         collidePoint: collidePointVsTriangleMesh,
         register: () => {
@@ -186,6 +188,13 @@ function computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): 
     // mass properties should be overridden at the body level if needed.
     out.mass = 0;
     mat4.identity(out.inertia);
+}
+
+function getMaterial(shape: TriangleMeshShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+    const triangleIndex = _subShapeIdPopResult.value;
+    assert(triangleIndex < shape.data.triangleCount, 'Invalid SubShapeID for TriangleMeshShape');
+    return triangleMeshData.getMaterialId(shape.data, triangleIndex);
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
@@ -2207,10 +2216,7 @@ const _castSphereVsTriangleMesh_d = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v0Rel = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v1Rel = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v2Rel = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n0 = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n1 = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_barycentric = /* @__PURE__ */ createBarycentricCoordinatesResult();
 const _castSphereVsTriangleMesh_p = /* @__PURE__ */ vec3.create();
 
 /** helper to add a cast hit with active edge detection for sphere vs triangle mesh */
@@ -2599,65 +2605,52 @@ function castSphereVsTriangleMesh(
                             // calculate contact point on plane
                             const p = vec3.scaleAndAdd(_castSphereVsTriangleMesh_p, d, direction, planeIntersection);
 
-                            // check if interior point using barycentric coordinates
-                            const bary = { u: 0, v: 0, w: 0 };
-                            const v0Rel = vec3.subtract(_castSphereVsTriangleMesh_v0Rel, rv0, p);
-                            const v1Rel = vec3.subtract(_castSphereVsTriangleMesh_v1Rel, rv1, p);
-                            const v2Rel = vec3.subtract(_castSphereVsTriangleMesh_v2Rel, rv2, p);
-
-                            // simplified barycentric test
-                            const n = vec3.cross(_castSphereVsTriangleMesh_n, v1Rel, v2Rel);
-                            const nLen = vec3.length(n);
-                            if (nLen > 0) {
-                                const totalArea = vec3.dot(n, triangleNormal) / nLen;
-                                if (totalArea > 0) {
-                                    const n0 = vec3.cross(_castSphereVsTriangleMesh_n0, v1Rel, v2Rel);
-                                    const n1 = vec3.cross(_castSphereVsTriangleMesh_n1, v2Rel, v0Rel);
-                                    const n2 = vec3.cross(_castSphereVsTriangleMesh_n2, v0Rel, v1Rel);
-
-                                    bary.u = vec3.dot(n0, triangleNormal) / (totalArea * nLen);
-                                    bary.v = vec3.dot(n1, triangleNormal) / (totalArea * nLen);
-                                    bary.w = vec3.dot(n2, triangleNormal) / (totalArea * nLen);
-
-                                    if (bary.u >= 0 && bary.v >= 0 && bary.w >= 0) {
-                                        // interior hit
-                                        const contactNormal = backFacing
-                                            ? triangleNormal
-                                            : vec3.negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal);
-                                        castSphereVsTriangleMeshAddHit(
-                                            collector,
-                                            settings,
-                                            sphereShape,
-                                            meshShape,
-                                            subShapeIdA,
-                                            subShapeIdB,
-                                            subShapeIdBitsB,
-                                            start,
-                                            posB,
-                                            m0,
-                                            m1,
-                                            m2,
-                                            m4,
-                                            m5,
-                                            m6,
-                                            m8,
-                                            m9,
-                                            m10,
-                                            rv0,
-                                            rv1,
-                                            rv2,
-                                            backFacing,
-                                            triangleNormal,
-                                            0b111, // interior hit, all edges active
-                                            triangleIndex,
-                                            planeIntersection,
-                                            p,
-                                            p,
-                                            contactNormal,
-                                        );
-                                        continue;
-                                    }
-                                }
+                            // check if this is an interior point
+                            const barycentric = _castSphereVsTriangleMesh_barycentric;
+                            computeBarycentricCoordinates3d(
+                                barycentric,
+                                vec3.subtract(_castSphereVsTriangleMesh_v0Rel, rv0, p),
+                                vec3.subtract(_castSphereVsTriangleMesh_v1Rel, rv1, p),
+                                vec3.subtract(_castSphereVsTriangleMesh_v2Rel, rv2, p),
+                                1e-10,
+                            );
+                            if (barycentric.isValid && barycentric.u >= 0 && barycentric.v >= 0 && barycentric.w >= 0) {
+                                // interior hit
+                                const contactNormal = backFacing
+                                    ? triangleNormal
+                                    : vec3.negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal);
+                                castSphereVsTriangleMeshAddHit(
+                                    collector,
+                                    settings,
+                                    sphereShape,
+                                    meshShape,
+                                    subShapeIdA,
+                                    subShapeIdB,
+                                    subShapeIdBitsB,
+                                    start,
+                                    posB,
+                                    m0,
+                                    m1,
+                                    m2,
+                                    m4,
+                                    m5,
+                                    m6,
+                                    m8,
+                                    m9,
+                                    m10,
+                                    rv0,
+                                    rv1,
+                                    rv2,
+                                    backFacing,
+                                    triangleNormal,
+                                    0b111, // interior hit, all edges active
+                                    triangleIndex,
+                                    planeIntersection,
+                                    p,
+                                    p,
+                                    contactNormal,
+                                );
+                                continue;
                             }
                         }
                     }
@@ -2691,8 +2684,18 @@ function castSphereVsTriangleMesh(
                         vec3.subtract(_castSphereVsTriangleMesh_v2RelativeToHit, rv2, p),
                     );
 
+                    // the distance between p and the triangle should be the radius, but floating point accuracy can
+                    // put p on the plane with q zero, so fall back to the normal the triangle is hit along
                     const q = _castSphereVsTriangleMesh_closestPointResult.point;
-                    const contactNormal = vec3.normalize(_castSphereVsTriangleMesh_edgeVertexContactNormal, q);
+                    const contactNormal = _castSphereVsTriangleMesh_edgeVertexContactNormal;
+                    const qLenSq = vec3.squaredLength(q);
+                    if (qLenSq > FLT_MIN) {
+                        vec3.scale(contactNormal, q, 1 / Math.sqrt(qLenSq));
+                    } else if (backFacing) {
+                        vec3.copy(contactNormal, triangleNormal);
+                    } else {
+                        vec3.negate(contactNormal, triangleNormal);
+                    }
                     const contactPointAB = vec3.add(_castSphereVsTriangleMesh_edgeVertexContactPoint, p, q);
 
                     castSphereVsTriangleMeshAddHit(
