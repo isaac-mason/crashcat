@@ -148,29 +148,27 @@ function computeMassProperties(out: MassProperties, shape: CapsuleShape): void {
 
     // from cylinder
     const height_sq = height * height;
-    const inertia_y = radius_sq * cylinder_mass * 0.5;
-    const inertia_xz = cylinder_mass * ((1.0 / 12.0) * height_sq + (1.0 / 4.0) * radius_sq);
+    let inertia_y = radius_sq * cylinder_mass * 0.5;
+    let inertia_xz = inertia_y * 0.5 + (cylinder_mass * height_sq) / 12.0;
 
-    // from hemispheres
-    const hemisphere_ixx_izz = hemisphere_mass * ((2.0 / 5.0) * radius_sq + h * h + (3.0 / 8.0) * h * r);
-    const hemisphere_iyy = hemisphere_mass * (2.0 / 5.0) * radius_sq;
-
-    // total inertia
-    const i_xx_zz = inertia_xz + hemisphere_ixx_izz;
-    const i_yy = inertia_y + hemisphere_iyy;
+    // from both hemispheres, see https://www.gamedev.net/resources/_/technical/math-and-physics/capsule-inertia-tensor-r3856
+    // note eq 14 there has H^2/2 where it should be H^2/4 for ixx and izz, eq 12 is correct
+    const temp = (hemisphere_mass * 4.0 * radius_sq) / 5.0;
+    inertia_y += temp;
+    inertia_xz += temp + hemisphere_mass * (0.5 * height_sq + (3.0 / 4.0) * height * r);
 
     // set diagonal inertia tensor (column-major mat4)
-    out.inertia[0] = i_xx_zz;
+    out.inertia[0] = inertia_xz;
     out.inertia[1] = 0;
     out.inertia[2] = 0;
     out.inertia[3] = 0;
     out.inertia[4] = 0;
-    out.inertia[5] = i_yy;
+    out.inertia[5] = inertia_y;
     out.inertia[6] = 0;
     out.inertia[7] = 0;
     out.inertia[8] = 0;
     out.inertia[9] = 0;
-    out.inertia[10] = i_xx_zz;
+    out.inertia[10] = inertia_xz;
     out.inertia[11] = 0;
     out.inertia[12] = 0;
     out.inertia[13] = 0;

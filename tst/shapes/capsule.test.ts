@@ -167,5 +167,69 @@ describe('Capsule Shape', () => {
             // For near-sphere, all inertias should be close
             expect(Iyy / Ixx).toBeGreaterThan(0.5);
         });
+
+        test('should match a solid sphere when the cylinder has zero height', () => {
+            // create rejects a zero height, so collapse the cylinder after creation
+            const c = capsule.create({ halfHeightOfCylinder: 1.0, radius: 0.7, density: 800 });
+            c.halfHeightOfCylinder = 0;
+            capsule.update(c);
+
+            const massProps = massProperties.create();
+            computeMassProperties(massProps, c);
+
+            const r = 0.7;
+            const sphereMass = ((4 / 3) * Math.PI * r * r * r) * 800;
+            const sphereInertia = (2 / 5) * sphereMass * r * r;
+
+            expect(massProps.mass).toBeCloseTo(sphereMass, 10);
+            expect(massProps.inertia[0]).toBeCloseTo(sphereInertia, 10);
+            expect(massProps.inertia[5]).toBeCloseTo(sphereInertia, 10);
+            expect(massProps.inertia[10]).toBeCloseTo(sphereInertia, 10);
+        });
+
+        test('should match the jolt inertia for a unit capsule', () => {
+            const c = capsule.create({ halfHeightOfCylinder: 1.0, radius: 1.0, density: 1.0 });
+            const massProps = massProperties.create();
+            computeMassProperties(massProps, c);
+
+            // r = 1, H = 2h = 2, density = 1
+            const r = 1;
+            const H = 2;
+            const cylinderMass = Math.PI * H * r * r; // 2 pi
+            const hemisphereMass = ((2 * Math.PI) / 3) * r * r * r; // one hemisphere, 2 pi / 3
+
+            // iyy = r^2 m_cyl / 2 + 2 * (2/5) m_hemi r^2 = pi + 8 pi / 15 = 23 pi / 15
+            const expectedIyy = (r * r * cylinderMass) / 2 + (hemisphereMass * 4 * r * r) / 5;
+            // ixx = r^2 m_cyl / 4 + m_cyl H^2 / 12 + 4/5 m_hemi r^2 + m_hemi (H^2 / 2 + 3/4 H r)
+            //     = pi / 2 + 2 pi / 3 + 8 pi / 15 + 7 pi / 3 = 121 pi / 30
+            const expectedIxx =
+                (r * r * cylinderMass) / 4 +
+                (cylinderMass * H * H) / 12 +
+                (hemisphereMass * 4 * r * r) / 5 +
+                hemisphereMass * (0.5 * H * H + 0.75 * H * r);
+
+            expect(expectedIyy).toBeCloseTo((23 * Math.PI) / 15, 12);
+            expect(expectedIxx).toBeCloseTo((121 * Math.PI) / 30, 12);
+
+            expect(massProps.mass).toBeCloseTo(cylinderMass + 2 * hemisphereMass, 10);
+            expect(massProps.inertia[0]).toBeCloseTo(expectedIxx, 10);
+            expect(massProps.inertia[5]).toBeCloseTo(expectedIyy, 10);
+            expect(massProps.inertia[10]).toBeCloseTo(expectedIxx, 10);
+        });
+
+        test('should have mass of density times volume and iyy below ixx for a tall capsule', () => {
+            const c = capsule.create({ halfHeightOfCylinder: 1.5, radius: 0.4, density: 250 });
+            const massProps = massProperties.create();
+            computeMassProperties(massProps, c);
+
+            const r = 0.4;
+            const h = 1.5;
+            const volume = Math.PI * r * r * 2 * h + (4 / 3) * Math.PI * r * r * r;
+            expect(massProps.mass).toBeCloseTo(250 * volume, 10);
+
+            // rod-like body: spinning about the long axis is easier than tumbling end over end
+            expect(massProps.inertia[5]).toBeLessThan(massProps.inertia[0]);
+            expect(massProps.inertia[5]).toBeLessThan(massProps.inertia[10]);
+        });
     });
 });
