@@ -319,6 +319,9 @@ export function rayDistanceToBox3(
         }
     }
 
+    // a zero-length ray reaching here starts inside the box, the overlap limit of a cast
+    if (length === 0) return 0;
+
     return tMin >= 0 ? tMin / length : Infinity;
 }
 

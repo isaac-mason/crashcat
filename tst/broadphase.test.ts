@@ -317,6 +317,38 @@ describe('Broadphase Integration', () => {
             expect(hits.length).toBe(1);
             expect(hits).toContain(body1);
         });
+
+        it('should treat a zero displacement as an overlap test of the start bounds', () => {
+            const {
+                world,
+                layers: { OBJECT_LAYER_MOVING },
+            } = createTestWorld();
+
+            const bodies: RigidBody[] = [];
+            for (let i = 0; i < 6; i++) {
+                bodies.push(makeBody(world, i * 2, 0, 0, i * 2 + 1, 1, 1, OBJECT_LAYER_MOVING));
+            }
+
+            const testFilter = filter.create(world.settings.layers);
+            const bounds: Box3 = [1.5, -0.5, -0.5, 4.5, 1.5, 1.5];
+
+            const collect = (displacement: [number, number, number]) => {
+                const hits: RigidBody[] = [];
+                const visitor: BodyVisitor = {
+                    shouldExit: false,
+                    visit: (body: RigidBody) => {
+                        hits.push(body);
+                    },
+                };
+                broadphase.castAABB(world, bounds, vec3.fromValues(...displacement), testFilter, visitor);
+                return hits.map((body) => body.id).sort((a, b) => a - b);
+            };
+
+            const expected = [bodies[1].id, bodies[2].id].sort((a, b) => a - b);
+
+            expect(collect([0, 0, 0])).toEqual(expected);
+            expect(collect([1e-6, 0, 0])).toEqual(expected);
+        });
     });
 
     describe('point queries', () => {
