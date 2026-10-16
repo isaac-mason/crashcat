@@ -144,6 +144,17 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         throw new Error(`Convex hull build failed: ${initResult.error}`);
     }
 
+    // check the consistency of the resulting hull if we fully built it
+    if (initResult.result === convexHullBuilder.Result.Success) {
+        const { maxError, maxErrorPositionIdx, coplanarDistance } = convexHullBuilder.determineMaxError(builder);
+        // coplanar distance could be bigger than the allowed tolerance if the points are far apart
+        if (maxError > 4 * Math.max(coplanarDistance, hullTolerance)) {
+            throw new Error(
+                `Hull building failed, point ${maxErrorPositionIdx} had an error of ${maxError} (relative to tolerance: ${maxError / hullTolerance})`,
+            );
+        }
+    }
+
     // get center of mass and volume
     const { centerOfMass, volume } = convexHullBuilder.getCenterOfMassAndVolume(builder);
 
@@ -440,9 +451,9 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
             }
 
             // calculate shift direction: adjoint(n) × offsetMask / det(n)
+            // the adjoint's w row is (0, 0, 0, det(n)), so transformMat4's divide by w is the divide by det(n)
             mat4.adjoint(_normalMatrixAdjoint, n);
             vec3.transformMat4(_vertexShiftDirection, offsetMask, _normalMatrixAdjoint);
-            vec3.scale(_vertexShiftDirection, _vertexShiftDirection, 1 / detN);
             const offset = vec3.length(_vertexShiftDirection);
 
             // max radius: error = r × (offset - 1)  =>  r = error / (offset - 1)
@@ -666,11 +677,12 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 }
 
 function getInnerRadius(shape: ConvexHullShape): number {
-    // calculate the inner radius by getting the minimum distance from the shape origin to the planes of the hull
+    // calculate the inner radius by getting the minimum distance from the center of mass to the planes of the hull
+    // (the planes are in input space, not relative to the center of mass)
+    const centerOfMass = shape.centerOfMass;
     let innerRadius = Number.MAX_VALUE;
     for (const plane of shape.planes) {
-        // distance from shape origin (0,0,0) to plane
-        innerRadius = Math.min(innerRadius, -plane.constant);
+        innerRadius = Math.min(innerRadius, -(vec3.dot(plane.normal, centerOfMass) + plane.constant));
     }
     // clamp against zero for numerical stability (flat convex hulls may have round-off issues)
     return Math.max(0.0, innerRadius);

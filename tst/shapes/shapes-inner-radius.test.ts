@@ -36,6 +36,40 @@ describe('getShapeInnerRadius', () => {
         expect(innerRadius).toBeCloseTo(1, 2);
     });
 
+    it('measures a convex hull from its center of mass, wherever the hull sits', () => {
+        const cube = [-1, -1, -1, 1, -1, -1, -1, 1, -1, 1, 1, -1, -1, -1, 1, 1, -1, 1, -1, 1, 1, 1, 1, 1];
+        const shifted = cube.map((value, i) => (i % 3 === 0 ? value + 10 : value));
+        const shape = convexHull.create({ positions: shifted });
+        expect(shape.centerOfMass[0]).toBeCloseTo(10, 10);
+        expect(getShapeInnerRadius(shape)).toBeCloseTo(1, 10);
+    });
+
+    it('is the shortest center of mass to plane distance of a skewed convex hull', () => {
+        const vertices = [
+            vec3.fromValues(3, 1, 2),
+            vec3.fromValues(7, 1, 2),
+            vec3.fromValues(4, 6, 2),
+            vec3.fromValues(5, 3, 8),
+        ];
+        const shape = convexHull.create({ positions: vertices.flatMap((v) => [v[0], v[1], v[2]]) });
+
+        // a tetrahedron's center of mass is the mean of its vertices
+        const centerOfMass = vec3.create();
+        for (const v of vertices) vec3.scaleAndAdd(centerOfMass, centerOfMass, v, 0.25);
+        expect(vec3.distance(shape.centerOfMass, centerOfMass)).toBeLessThan(1e-10);
+
+        let expected = Number.MAX_VALUE;
+        for (let excluded = 0; excluded < 4; excluded++) {
+            const [a, b, c] = vertices.filter((_, i) => i !== excluded);
+            const normal = vec3.cross(vec3.create(), vec3.subtract(vec3.create(), b, a), vec3.subtract(vec3.create(), c, a));
+            vec3.normalize(normal, normal);
+            expected = Math.min(expected, Math.abs(vec3.dot(normal, vec3.subtract(vec3.create(), centerOfMass, a))));
+        }
+        expect(expected).toBeGreaterThan(0.5);
+
+        expect(getShapeInnerRadius(shape)).toBeCloseTo(expected, 10);
+    });
+
     it('returns 0 for triangle mesh', () => {
         const mesh = triangleMesh.create({
             positions: [0, 0, 0, 1, 0, 0, 0, 1, 0],
