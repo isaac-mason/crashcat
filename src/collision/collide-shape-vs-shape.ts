@@ -204,7 +204,7 @@ export function createDefaultCollideShapeSettings(): CollideShapeSettings {
         maxSeparationDistance: 0,
         collisionTolerance: 1e-4,
         penetrationTolerance: 1e-4,
-        collideWithBackfaces: true,
+        collideWithBackfaces: false,
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: vec3.create(),
         collectFaces: false,

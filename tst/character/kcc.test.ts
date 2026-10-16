@@ -1,6 +1,6 @@
 import { quat, vec3, vec4 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { box, capsule, filter, kcc, MotionType, registerAll, rigidBody, updateWorld } from '../../src';
+import { box, capsule, filter, kcc, MotionType, registerAll, rigidBody, triangleMesh, updateWorld } from '../../src';
 import { createTestWorld } from '../helpers';
 
 registerAll();
@@ -316,5 +316,45 @@ describe('KCC contact removed for destroyed body', () => {
         rigidBody.remove(world, floor);
         step();
         expect(removed).toContain(floorId);
+    });
+});
+
+describe('KCC back face mode', () => {
+    // a capsule resting 0.05 into a quad whose front faces down, so the character touches its back face
+    const contactsWithDownFacingQuad = (backFaceMode: kcc.BackFaceMode) => {
+        const { world, layers } = createTestWorld();
+
+        const quad = rigidBody.create(world, {
+            shape: triangleMesh.create({
+                positions: [-2, 0, -2, 2, 0, -2, 2, 0, 2, -2, 0, 2],
+                indices: [0, 1, 2, 0, 2, 3],
+            }),
+            motionType: MotionType.STATIC,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+        });
+
+        updateWorld(world, undefined, DELTA_TIME);
+
+        const character = kcc.create(
+            {
+                shape: capsule.create({ halfHeightOfCylinder: 0.5, radius: 0.3 }),
+                mass: 70,
+                up: vec3.fromValues(0, 1, 0),
+                backFaceMode,
+            },
+            vec3.fromValues(0, 0.75, 0),
+            quat.create(),
+        );
+
+        kcc.refreshContacts(world, character, filter.create(world.settings.layers));
+        return character.contacts.filter((contact) => contact.bodyId === quad.id).length;
+    };
+
+    test('COLLIDE finds the back face contact', () => {
+        expect(contactsWithDownFacingQuad(kcc.BackFaceMode.COLLIDE)).toBeGreaterThan(0);
+    });
+
+    test('IGNORE does not', () => {
+        expect(contactsWithDownFacingQuad(kcc.BackFaceMode.IGNORE)).toBe(0);
     });
 });

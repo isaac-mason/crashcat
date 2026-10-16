@@ -1289,6 +1289,8 @@ function getContactsAtPosition(
     vec3.scale(_getContacts_paddingOffset, character.up, character.characterPadding);
     vec3.add(_getContacts_shapePos, _getContacts_shapePos, _getContacts_paddingOffset);
 
+    _characterCollideSettings.collideWithBackfaces = character.backFaceMode === BackFaceMode.COLLIDE;
+
     // set max separation distance for predictive contacts
     _characterCollideSettings.maxSeparationDistance = character.predictiveContactDistance + character.characterPadding;
 

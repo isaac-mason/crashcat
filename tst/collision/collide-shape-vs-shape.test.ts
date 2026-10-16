@@ -1781,8 +1781,9 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
                 const i2 = i0 + (gridSize + 1);
                 const i3 = i2 + 1;
 
-                indices.push(i0, i2, i1);
-                indices.push(i1, i2, i3);
+                // ccw seen from +z, so the box above the grid hits front faces
+                indices.push(i0, i1, i2);
+                indices.push(i1, i3, i2);
             }
         }
 
@@ -3216,5 +3217,45 @@ describe('collideShapeVsShape - any collector early out', () => {
         collideAtDistance(collector, 0.5);
         expect(collector.hitCount).toBe(1);
         expect(collector.hit?.penetration).toBeCloseTo(0.1, 3);
+    });
+});
+
+describe('collideShapeVsShape - default back face mode', () => {
+    // a single triangle facing +z, with a sphere overlapping it from behind
+    const meshB = triangleMesh.create({ positions: [-2, -2, 0, 2, -2, 0, 0, 2, 0], indices: [0, 1, 2] });
+    const sphereA = sphere.create({ radius: 0.5 });
+
+    const collideFromBehind = (collideSettings: typeof settings) => {
+        const collector = createAllCollideShapeCollector();
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            collideSettings,
+            sphereA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, -0.3,
+            0, 0, 0, 1,
+            1, 1, 1,
+            meshB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    test('default settings ignore back faces', () => {
+        const defaults = createDefaultCollideShapeSettings();
+        expect(defaults.collideWithBackfaces).toBe(false);
+        expect(collideFromBehind(defaults).length).toBe(0);
+    });
+
+    test('back faces collide when asked for', () => {
+        const backFaces = createDefaultCollideShapeSettings();
+        backFaces.collideWithBackfaces = true;
+        const hits = collideFromBehind(backFaces);
+        expect(hits.length).toBe(1);
+        expect(hits[0].penetration).toBeCloseTo(0.2, 4);
     });
 });

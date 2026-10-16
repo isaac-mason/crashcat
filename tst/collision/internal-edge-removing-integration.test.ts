@@ -181,7 +181,9 @@ describe('InternalEdgeRemovingCollector Integration', () => {
         const sphereQuaternion = quat.create();
         const sphereScale = vec3.fromValues(1, 1, 1);
 
+        // the sphere is behind the +z facing triangles
         const settings = crashcat.createDefaultCollideShapeSettings();
+        settings.collideWithBackfaces = true;
 
         // test both methods
         const standardCollector = crashcat.createAllCollideShapeCollector();
