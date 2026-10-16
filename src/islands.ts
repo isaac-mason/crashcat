@@ -286,14 +286,10 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
     // group bodies by island using the active body list.
     // bodies in activeBodyIndices are guaranteed non-pooled (active bodies never include pooled slots)
     for (let activeIndex = 0; activeIndex < numActiveBodies; activeIndex++) {
-        const body = bodies.pool[bodies.activeBodyIndices[activeIndex]];
         const islandIndex = state.bodyIslands[activeIndex];
         assert(islandIndex >= 0 && islandIndex < numIslands, 'Invalid island index');
 
         islands[islandIndex].bodyIndices.push(activeIndex);
-
-        // set island property on body
-        body.islandIndex = islandIndex;
     }
 
     // map contacts to islands, roup contacts by the island of the active body they link to
@@ -331,9 +327,14 @@ export function finalize(state: Islands, bodies: Bodies, constraintsState: Const
     // (matching JoltPhysics: jobs that take longest run first to improve parallel efficiency)
     islands.sort(compareIslandSize);
 
-    // update island indices after sorting
+    // update island indices after sorting, and tag each body with its island's sorted index
     for (let i = 0; i < islands.length; i++) {
-        islands[i].index = i;
+        const island = islands[i];
+        island.index = i;
+        const bodyIndices = island.bodyIndices;
+        for (let bi = 0; bi < bodyIndices.length; bi++) {
+            bodies.pool[bodies.activeBodyIndices[bodyIndices[bi]]].islandIndex = i;
+        }
     }
 
     // calculate solver iterations for each island
