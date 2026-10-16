@@ -1,6 +1,11 @@
 import { vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
-import { CastRayStatus, createAnyCastRayCollector, createDefaultCastRaySettings } from '../../src/collision/cast-ray-vs-shape';
+import {
+    CastRayStatus,
+    createAllCastRayCollector,
+    createAnyCastRayCollector,
+    createDefaultCastRaySettings,
+} from '../../src/collision/cast-ray-vs-shape';
 import { castRayVsShape } from '../../src/collision/narrowphase';
 import * as box from '../../src/shapes/box';
 import * as capsule from '../../src/shapes/capsule';
@@ -532,5 +537,46 @@ describe('treatConvexAsSolid ray casting', () => {
             expect(collector.hit.fraction).toBeGreaterThan(0);
             expect(collector.hit.fraction).toBeCloseTo(0.2, 2);
         });
+    });
+});
+
+describe('collideWithBackfaces convex ray casting', () => {
+    // ray from inside a unit sphere along +x: it exits at x = 1, so at fraction (1 - 0.25) / 10
+    const castFromInsideSphere = (settings: typeof baseSettings) => {
+        const sphereShape = sphere.create({ radius: 1.0 });
+        const collector = createAllCastRayCollector();
+        collector.bodyIdB = 1;
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0.25, 0, 0,
+            1, 0, 0,
+            10,
+            sphereShape,
+            0, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    it('a hollow convex with back faces hits the far surface on the way out', () => {
+        const hits = castFromInsideSphere({ ...baseSettings, treatConvexAsSolid: false, collideWithBackfaces: true });
+        expect(hits.length).toBe(1);
+        expect(hits[0].status).toBe(CastRayStatus.COLLIDING);
+        expect(hits[0].fraction).toBeCloseTo(0.075, 4);
+    });
+
+    it('a hollow convex without back faces misses', () => {
+        const hits = castFromInsideSphere({ ...baseSettings, treatConvexAsSolid: false, collideWithBackfaces: false });
+        expect(hits.length).toBe(0);
+    });
+
+    it('a solid convex hits at fraction 0', () => {
+        const hits = castFromInsideSphere({ ...baseSettings, treatConvexAsSolid: true, collideWithBackfaces: false });
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBe(0);
     });
 });

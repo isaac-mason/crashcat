@@ -37,6 +37,8 @@ const _castRayVsConvex_quat = /* @__PURE__ */ quat.create();
 const _castRayVsConvex_scale = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_rayDirectionLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_invertedRayOrigin = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_invertedRayDirection = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsConvex_gjkResult = /* @__PURE__ */ createGjkCastRayResult();
 
@@ -99,22 +101,63 @@ export function castRayVsConvex(
         collector.earlyOutFraction,
     );
 
-    if (_castRayVsConvex_gjkResult.isHitFound) {
-        const fraction = _castRayVsConvex_gjkResult.lambda;
+    if (!_castRayVsConvex_gjkResult.isHitFound) {
+        collector.addMiss();
+        return;
+    }
 
-        // if treatConvexAsSolid OR fraction > 0 when treatConvexAsSolid=false and fraction=0,
-        // ray starts inside but we don't report it
-        if (settings.treatConvexAsSolid || fraction > 0.0) {
-            _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
-            _castRayVsConvex_hit.fraction = Math.max(0.0, fraction);
-            _castRayVsConvex_hit.subShapeId = subShapeId;
-            _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
-            _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
-            collector.addHit(_castRayVsConvex_hit);
-        } else {
-            collector.addMiss();
+    const fraction = _castRayVsConvex_gjkResult.lambda;
+    let hitAdded = false;
+
+    // if treatConvexAsSolid OR fraction > 0 when treatConvexAsSolid=false and fraction=0,
+    // ray starts inside but we don't report it
+    if (settings.treatConvexAsSolid || fraction > 0.0) {
+        _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
+        _castRayVsConvex_hit.fraction = Math.max(0.0, fraction);
+        _castRayVsConvex_hit.subShapeId = subShapeId;
+        _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
+        _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
+        collector.addHit(_castRayVsConvex_hit);
+        hitAdded = true;
+    }
+
+    // back face hit: cast the inverted ray from the early out fraction back to the forward hit to find the exit point
+    if (settings.collideWithBackfaces && !collector.shouldEarlyOut()) {
+        const startFraction = Math.min(1.0, collector.earlyOutFraction);
+        const deltaFraction = fraction - startFraction;
+        if (deltaFraction < 0.0) {
+            vec3.scaleAndAdd(
+                _castRayVsConvex_invertedRayOrigin,
+                _castRayVsConvex_rayOriginLocal,
+                _castRayVsConvex_rayDirectionLocal,
+                startFraction,
+            );
+            vec3.scale(_castRayVsConvex_invertedRayDirection, _castRayVsConvex_rayDirectionLocal, deltaFraction);
+
+            gjkCastRay(
+                _castRayVsConvex_gjkResult,
+                _castRayVsConvex_invertedRayOrigin,
+                _castRayVsConvex_invertedRayDirection,
+                1e-3,
+                _castRayVsConvex_support,
+                1.0,
+            );
+
+            // a fraction of 0 means the ray ends inside the shape, which is not a back face hit
+            if (_castRayVsConvex_gjkResult.isHitFound && _castRayVsConvex_gjkResult.lambda > 0.0) {
+                // invert the fraction and rescale it to the original ray
+                _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
+                _castRayVsConvex_hit.fraction = fraction + (_castRayVsConvex_gjkResult.lambda - 1.0) * deltaFraction;
+                _castRayVsConvex_hit.subShapeId = subShapeId;
+                _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
+                _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
+                collector.addHit(_castRayVsConvex_hit);
+                hitAdded = true;
+            }
         }
-    } else {
+    }
+
+    if (!hitAdded) {
         collector.addMiss();
     }
 }
