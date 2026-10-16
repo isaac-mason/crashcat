@@ -5,6 +5,7 @@ import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -184,20 +185,27 @@ export function create(world: World, settings: DistanceConstraintSettings): Dist
     vec3.subtract(delta, constraint.worldSpacePosition2, constraint.worldSpacePosition1);
     const distance = vec3.length(delta);
 
-    // Set min/max (use initial distance if not specified)
+    // set min/max (use initial distance if not specified)
     const minDistance = settings.minDistance ?? -1;
     const maxDistance = settings.maxDistance ?? -1;
     if (minDistance < 0 && maxDistance < 0) {
-        constraint.minDistance = distance;
-        constraint.maxDistance = distance;
+        setDistance(constraint, distance, distance);
     } else {
-        constraint.minDistance = minDistance < 0 ? Math.min(distance, maxDistance) : minDistance;
-        constraint.maxDistance = maxDistance < 0 ? Math.max(distance, minDistance) : maxDistance;
+        setDistance(
+            constraint,
+            minDistance < 0 ? Math.min(distance, maxDistance) : minDistance,
+            maxDistance < 0 ? Math.max(distance, minDistance) : maxDistance,
+        );
     }
 
-    // Set spring settings
+    // most likely gravity is going to tear us apart (this is only used when the distance between the points = 0)
+    vec3.set(constraint.worldSpaceNormal, 0, 1, 0);
+
+    // set spring settings
     if (settings.springSettings) {
         springSettings.copy(constraint.limitsSpringSettings, settings.springSettings);
+    } else {
+        springSettings.reset(constraint.limitsSpringSettings);
     }
 
     // track constraint on both bodies
@@ -475,18 +483,13 @@ export function getTotalLambda(constraint: DistanceConstraint): number {
 /**
  * Set the distance limits for a distance constraint.
  * @param constraint - The constraint to modify
- * @param minDistance - Minimum distance (use -1 to keep current)
- * @param maxDistance - Maximum distance (use -1 to keep current)
+ * @param minDistance - Minimum distance, must be <= maxDistance
+ * @param maxDistance - Maximum distance
  */
 export function setDistance(constraint: DistanceConstraint, minDistance: number, maxDistance: number): void {
-    constraint.minDistance = minDistance < 0 ? constraint.minDistance : minDistance;
-    constraint.maxDistance = maxDistance < 0 ? constraint.maxDistance : maxDistance;
-    // Ensure min <= max
-    if (constraint.minDistance > constraint.maxDistance) {
-        const avg = (constraint.minDistance + constraint.maxDistance) / 2;
-        constraint.minDistance = avg;
-        constraint.maxDistance = avg;
-    }
+    assert(minDistance <= maxDistance, 'min distance must be <= max distance');
+    constraint.minDistance = minDistance;
+    constraint.maxDistance = maxDistance;
 }
 
 /** the constraint definition for distance constraint */

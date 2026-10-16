@@ -53,6 +53,14 @@ export function create(): SpringSettings {
     };
 }
 
+/** reset spring settings to the defaults (hard constraint, no spring) */
+export function reset(out: SpringSettings): SpringSettings {
+    out.mode = SpringMode.FREQUENCY_AND_DAMPING;
+    out.frequencyOrStiffness = 0;
+    out.damping = 0;
+    return out;
+}
+
 /** copy spring settings from source to out */
 export function copy(out: SpringSettings, source: SpringSettings) {
     out.mode = source.mode;

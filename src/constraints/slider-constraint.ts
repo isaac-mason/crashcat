@@ -392,6 +392,8 @@ export function create(world: World, settings: SliderConstraintSettings): Slider
 
     if (settings.limitsSpringSettings) {
         springSettings.copy(constraint.limitsSpringSettings, settings.limitsSpringSettings);
+    } else {
+        springSettings.reset(constraint.limitsSpringSettings);
     }
 
     // set motor defaults

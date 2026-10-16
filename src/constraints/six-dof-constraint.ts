@@ -418,21 +418,22 @@ export function create(world: World, settings: SixDOFConstraintSettings): SixDOF
         vec3.copy(constraint.localSpacePosition2, settings.position2);
     }
 
-    // Copy limits
-    if (settings.limitMin) {
-        for (let i = 0; i < 6; i++) constraint.limitMin[i] = settings.limitMin[i] ?? constraint.limitMin[i];
+    // copy limits over the defaults, so a reused pooled constraint keeps nothing of the last one
+    for (let i = 0; i < 6; i++) {
+        const isRotation = i >= 3;
+        constraint.limitMin[i] = settings.limitMin?.[i] ?? (isRotation ? -Math.PI : -Infinity);
+        constraint.limitMax[i] = settings.limitMax?.[i] ?? (isRotation ? Math.PI : Infinity);
+        constraint.maxFriction[i] = settings.maxFriction?.[i] ?? 0;
+        constraint.motorMinForceLimit[i] = settings.motorMinForceLimit?.[i] ?? -Infinity;
+        constraint.motorMaxForceLimit[i] = settings.motorMaxForceLimit?.[i] ?? Infinity;
+        constraint.motorState[i] = MotorState.OFF;
     }
-    if (settings.limitMax) {
-        for (let i = 0; i < 6; i++) constraint.limitMax[i] = settings.limitMax[i] ?? constraint.limitMax[i];
-    }
-    if (settings.maxFriction) {
-        for (let i = 0; i < 6; i++) constraint.maxFriction[i] = settings.maxFriction[i] ?? 0;
-    }
-    if (settings.limitsSpringSettings) {
-        for (let i = 0; i < 3; i++) {
-            if (settings.limitsSpringSettings[i]) {
-                springSettings.copy(constraint.limitsSpringSettings[i], settings.limitsSpringSettings[i]!);
-            }
+    for (let i = 0; i < 3; i++) {
+        const limitsSpring = settings.limitsSpringSettings?.[i];
+        if (limitsSpring) {
+            springSettings.copy(constraint.limitsSpringSettings[i], limitsSpring);
+        } else {
+            springSettings.reset(constraint.limitsSpringSettings[i]);
         }
     }
     // set motor spring settings (defaults: 2.0 Hz for rotation, 10.0 Hz for translation)
@@ -455,13 +456,6 @@ export function create(world: World, settings: SixDOFConstraintSettings): SixDOF
             constraint.motorSpringSettings[i].damping = 1.0;
         }
     }
-    if (settings.motorMinForceLimit) {
-        for (let i = 0; i < 6; i++) constraint.motorMinForceLimit[i] = settings.motorMinForceLimit[i] ?? -Infinity;
-    }
-    if (settings.motorMaxForceLimit) {
-        for (let i = 0; i < 6; i++) constraint.motorMaxForceLimit[i] = settings.motorMaxForceLimit[i] ?? Infinity;
-    }
-
     updateTranslationLimits(constraint);
     updateRotationLimits(constraint);
     updateFixedFreeAxis(constraint);

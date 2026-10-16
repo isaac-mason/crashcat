@@ -3,6 +3,7 @@ import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { STEP_STAMP_NONE } from '../body/motion-properties';
+import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -182,21 +183,25 @@ export function create(world: World, settings: FixedConstraintSettings): FixedCo
             quat.conjugate(invQuatB, bodyB.quaternion);
 
             if (settings.autoDetectPoint) {
-                // auto-detect anchor point based on inverse masses
-                // weighted average towards lighter body (higher invMass = more influence)
+                // if either body is static, anchor on the other body's center of mass.
+                // otherwise weight the anchor towards the lighter body (higher invMass = more influence)
                 const invM1 = bodyA.motionProperties.invMass;
                 const invM2 = bodyB.motionProperties.invMass;
                 const totalInvMass = invM1 + invM2;
 
                 const anchor = vec3.create();
-                if (totalInvMass > 0) {
+                if (bodyA.motionType === MotionType.STATIC) {
+                    vec3.copy(anchor, bodyB.centerOfMassPosition);
+                } else if (bodyB.motionType === MotionType.STATIC) {
+                    vec3.copy(anchor, bodyA.centerOfMassPosition);
+                } else if (totalInvMass > 0) {
                     // weighted average: lighter body (higher invMass) pulls anchor towards it
                     const w1 = invM1 / totalInvMass;
                     const w2 = invM2 / totalInvMass;
                     vec3.scaleAndAdd(anchor, anchor, bodyA.centerOfMassPosition, w1);
                     vec3.scaleAndAdd(anchor, anchor, bodyB.centerOfMassPosition, w2);
                 } else {
-                    // both infinite mass - use body A's position
+                    // both bodies have infinite mass, use body A's position
                     vec3.copy(anchor, bodyA.centerOfMassPosition);
                 }
 
