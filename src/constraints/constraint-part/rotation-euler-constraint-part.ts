@@ -94,7 +94,7 @@ const _getInvInitialOrientationXY_q2 = /* @__PURE__ */ quat.create();
  */
 export function getInvInitialOrientationXY(axisX1: Vec3, axisY1: Vec3, axisX2: Vec3, axisY2: Vec3): Quat {
     // if axes are identical, return identity
-    if (vec3.equals(axisX1, axisX2) && vec3.equals(axisY1, axisY2)) {
+    if (vec3.exactEquals(axisX1, axisX2) && vec3.exactEquals(axisY1, axisY2)) {
         return quat.create(); // identity
     }
 

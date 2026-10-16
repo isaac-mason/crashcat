@@ -19,7 +19,7 @@ import {
     isSpringActive,
     type SpringPart,
 } from './spring-part';
-import type { SpringSettings } from './spring-settings';
+import { hasStiffness, type SpringSettings } from './spring-settings';
 
 /**
  * Constrains rotation along 1 axis.
@@ -235,8 +235,8 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
 }
 
 /**
- * Calculate constraint properties using SpringSettings.
- * Selects the appropriate calculation method based on the spring mode.
+ * Calculate constraint properties for a limit using SpringSettings.
+ * Turns to a hard limit when the spring has no frequency or stiffness.
  * @param part the constraint part to initialize
  * @param deltaTime time step
  * @param bodyA first body
@@ -247,6 +247,47 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
  * @param settings spring settings (mode, frequency/stiffness, damping)
  */
 export function calculateConstraintPropertiesWithSettings(
+    part: AngleConstraintPart,
+    deltaTime: number,
+    bodyA: RigidBody,
+    bodyB: RigidBody,
+    worldSpaceAxis: Vec3,
+    bias: number,
+    C: number,
+    settings: SpringSettings,
+): void {
+    const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
+
+    if (invEffectiveMass < MIN_NORMAL) {
+        deactivate(part);
+    } else if (!hasStiffness(settings)) {
+        part.effectiveMass = 1 / invEffectiveMass;
+        calculateSpringPropertiesWithBias(part.springPart, bias);
+    } else {
+        part.effectiveMass = calculateSpringPropertiesWithSettings(
+            part.springPart,
+            deltaTime,
+            invEffectiveMass,
+            bias,
+            C,
+            settings,
+        );
+    }
+}
+
+/**
+ * Calculate constraint properties for a motor using SpringSettings.
+ * The spring must have stiffness or damping; damping alone drives the velocity only.
+ * @param part the constraint part to initialize
+ * @param deltaTime time step
+ * @param bodyA first body
+ * @param bodyB second body
+ * @param worldSpaceAxis axis of rotation (normalized)
+ * @param bias bias term
+ * @param C value of the constraint equation (angle error)
+ * @param settings spring settings (mode, frequency/stiffness, damping)
+ */
+export function calculateConstraintPropertiesWithSettingsForMotor(
     part: AngleConstraintPart,
     deltaTime: number,
     bodyA: RigidBody,

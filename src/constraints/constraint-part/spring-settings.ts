@@ -72,3 +72,8 @@ export function copy(out: SpringSettings, source: SpringSettings) {
 export function hasStiffness(settings: SpringSettings): boolean {
     return settings.frequencyOrStiffness > 0;
 }
+
+/** check if the spring has stiffness or damping, which makes it active. if false, the constraint will be hard */
+export function hasStiffnessOrDamping(settings: SpringSettings): boolean {
+    return settings.frequencyOrStiffness > 0 || (settings.mode !== SpringMode.FREQUENCY_AND_DAMPING && settings.damping > 0);
+}

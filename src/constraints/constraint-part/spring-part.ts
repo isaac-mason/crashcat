@@ -162,8 +162,8 @@ export function calculateSpringPropertiesWithFrequencyAndDamping(
  * @param invEffectiveMass - Inverse effective mass K
  * @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
  * @param C - Value of the constraint equation (C). Set to zero if you don't want to drive the constraint to zero with a spring.
- * @param stiffness - Spring stiffness k. Set to zero if you don't want to drive the constraint to zero with a spring.
- * @param damping - Spring damping coefficient c. Set to zero if you don't want to drive the constraint to zero with a spring.
+ * @param stiffness - Spring stiffness k.
+ * @param damping - Spring damping coefficient c. With stiffness and damping both zero the constraint is hard.
  * @returns Updated effective mass K^-1 (after spring adjustment)
  */
 export function calculateSpringPropertiesWithStiffnessAndDamping(
@@ -175,7 +175,8 @@ export function calculateSpringPropertiesWithStiffnessAndDamping(
     stiffness: number,
     damping: number,
 ): number {
-    if (stiffness > 0) {
+    // damping alone still makes a spring, one that only drives the velocity
+    if (stiffness > 0 || damping > 0) {
         return calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping);
     } else {
         const effectiveMass = 1.0 / invEffectiveMass;

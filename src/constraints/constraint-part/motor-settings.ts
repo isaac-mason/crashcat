@@ -9,6 +9,18 @@ export enum MotorState {
     VELOCITY = 1,
     /** Motor drives to target position */
     POSITION = 2,
+    /** motor drives to both the target position and the target velocity */
+    POSITION_AND_VELOCITY = 3,
+}
+
+/** whether the motor state drives to a target velocity */
+export function isVelocityMotor(state: MotorState): boolean {
+    return (state & MotorState.VELOCITY) !== 0;
+}
+
+/** whether the motor state drives to a target position */
+export function isPositionMotor(state: MotorState): boolean {
+    return (state & MotorState.POSITION) !== 0;
 }
 
 /** settings for a constraint motor */
