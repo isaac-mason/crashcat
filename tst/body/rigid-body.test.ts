@@ -857,22 +857,35 @@ describe('Body Shape Navigation', () => {
         expect((leafResult.shape as any)?.radius).toBe(0.5);
     });
 
-    test('should handle empty SubShapeID for compound shapes', () => {
+    test('an all ones id is the last child of two, not a failed lookup', () => {
+        const last = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
         const compoundShape = compound.create({
             children: [
                 { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 1 }) },
-                {
-                    position: vec3.create(),
-                    quaternion: quat.create(),
-                    shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
-                },
+                { position: vec3.create(), quaternion: quat.create(), shape: last },
             ],
         });
 
         const result = rigidBody.createGetLeafShapeResult();
         rigidBody.getLeafShape(result, compoundShape, subShape.EMPTY_SUB_SHAPE_ID);
 
-        // Should return null for compound with empty SubShapeID
+        expect(result.shape).toBe(last);
+        expect(result.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
+    });
+
+    test('an id whose index is past the last child resolves to null', () => {
+        // three children take two bits; all ones pops index 3
+        const compoundShape = compound.create({
+            children: [
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 1 }) },
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 2 }) },
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 3 }) },
+            ],
+        });
+
+        const result = rigidBody.createGetLeafShapeResult();
+        rigidBody.getLeafShape(result, compoundShape, subShape.EMPTY_SUB_SHAPE_ID);
+
         expect(result.shape).toBe(null);
         expect(result.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
     });

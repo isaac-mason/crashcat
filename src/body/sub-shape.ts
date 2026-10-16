@@ -21,13 +21,30 @@ export function builder(): SubShapeIdBuilder {
     };
 }
 
-/** check if sub shape id is empty */
+/**
+ * check if sub shape id is empty.
+ * a real path can be all ones too (the last child of a power of two count), so shapes never test this
+ * while navigating; they pop their level and range check it.
+ */
 export function isEmpty(subShapeId: SubShapeId): boolean {
     return subShapeId === EMPTY_SUB_SHAPE_ID;
 }
 
 /** pop a level off the sub shape id */
 export function pop(out: PopResult, subShapeID: SubShapeId, numBits: number): void {
+    // js shifts by 32 are shifts by 0, so the zero and full width levels are spelled out
+    if (numBits === 0) {
+        out.value = 0;
+        out.remainder = subShapeID;
+        return;
+    }
+    if (numBits === MAX_SUB_SHAPE_ID_BITS) {
+        out.value = subShapeID;
+        out.remainder = EMPTY_SUB_SHAPE_ID;
+        return;
+    }
+
+    // fill the vacated high bits with 1 so an exhausted id reads as empty
     const mask = (1 << numBits) - 1;
     const fillBits = (EMPTY_SUB_SHAPE_ID << (MAX_SUB_SHAPE_ID_BITS - numBits)) >>> 0;
 
@@ -46,7 +63,8 @@ export function push(outBuilder: SubShapeIdBuilder, source: SubShapeIdBuilder, i
     outBuilder.currentBit = source.currentBit;
 
     // clear the bits at the target position
-    const mask = ((1 << numBits) - 1) << outBuilder.currentBit;
+    const levelMask = numBits === MAX_SUB_SHAPE_ID_BITS ? 0xffffffff : (1 << numBits) - 1;
+    const mask = levelMask << outBuilder.currentBit;
 
     outBuilder.value = (outBuilder.value & ~mask) >>> 0;
 

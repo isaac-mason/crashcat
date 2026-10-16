@@ -52,6 +52,30 @@ describe('SubShapeID', () => {
         expect(popResult.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
     });
 
+    it('a zero bit level pops nothing and keeps the whole id', () => {
+        const popResult = subShape.popResult();
+        subShape.pop(popResult, 0xfffffffe, 0);
+        expect(popResult.value).toBe(0);
+        expect(popResult.remainder).toBe(0xfffffffe);
+
+        // a one child list takes zero bits
+        subShape.popIndex(popResult, 0x12345678, 1);
+        expect(popResult.value).toBe(0);
+        expect(popResult.remainder).toBe(0x12345678);
+    });
+
+    it('a full width level pushes and pops every bit', () => {
+        const pushed = subShape.builder();
+        subShape.push(pushed, subShape.builder(), 0x12345678, 32);
+        expect(pushed.value).toBe(0x12345678);
+        expect(pushed.currentBit).toBe(32);
+
+        const popResult = subShape.popResult();
+        subShape.pop(popResult, 0x9abcdef0, 32);
+        expect(popResult.value).toBe(0x9abcdef0);
+        expect(popResult.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
+    });
+
     it('should throw on bit overflow', () => {
         const builder1 = subShape.builder();
         const builder2 = subShape.builder();
