@@ -242,8 +242,8 @@ export function solveVelocityConstraint(part: PointConstraintPart, bodyA: RigidB
 }
 
 // temp variables for apply velocity step
-const _applyVel_angularImpulseA = /* @__PURE__ */ vec3.create();
-const _applyVel_angularImpulseB = /* @__PURE__ */ vec3.create();
+const _applyVel_linearStep = /* @__PURE__ */ vec3.create();
+const _applyVel_angularStep = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply an impulse to both bodies.
@@ -261,26 +261,26 @@ function applyVelocityStep(part: PointConstraintPart, bodyA: RigidBody, bodyB: R
     if (bodyA.motionType === MotionType.DYNAMIC) {
         const mp1 = bodyA.motionProperties;
 
-        // linear: v -= λ * invMass
-        vec3.scaleAndAdd(mp1.linearVelocity, mp1.linearVelocity, lambda, -mp1.invMass);
+        // linear: v -= λ * invMass (locked translation axes stay zero)
+        vec3.scale(_applyVel_linearStep, lambda, mp1.invMass);
+        motionProperties.subLinearVelocityStep(mp1, _applyVel_linearStep);
 
         // angular: w -= I^-1 * [r1]× * λ (3x3 only)
-        const angularImpulse = _applyVel_angularImpulseA;
-        mat4.multiply3x3Vec(angularImpulse, part.invI1_r1X, lambda);
-        vec3.subtract(mp1.angularVelocity, mp1.angularVelocity, angularImpulse);
+        mat4.multiply3x3Vec(_applyVel_angularStep, part.invI1_r1X, lambda);
+        motionProperties.subAngularVelocityStep(mp1, _applyVel_angularStep);
     }
 
     // body B: add impulse
     if (bodyB.motionType === MotionType.DYNAMIC) {
         const mp2 = bodyB.motionProperties;
 
-        // linear: v += λ * invMass
-        vec3.scaleAndAdd(mp2.linearVelocity, mp2.linearVelocity, lambda, mp2.invMass);
+        // linear: v += λ * invMass (locked translation axes stay zero)
+        vec3.scale(_applyVel_linearStep, lambda, mp2.invMass);
+        motionProperties.addLinearVelocityStep(mp2, _applyVel_linearStep);
 
         // angular: w += I^-1 * [r2]× * λ (3x3 only)
-        const angularImpulse = _applyVel_angularImpulseB;
-        mat4.multiply3x3Vec(angularImpulse, part.invI2_r2X, lambda);
-        vec3.add(mp2.angularVelocity, mp2.angularVelocity, angularImpulse);
+        mat4.multiply3x3Vec(_applyVel_angularStep, part.invI2_r2X, lambda);
+        motionProperties.addAngularVelocityStep(mp2, _applyVel_angularStep);
     }
 
     return true;

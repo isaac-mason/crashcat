@@ -93,7 +93,9 @@ function calculateInverseEffectiveMass(
 ): number {
     let invEffectiveMass = 0;
 
-    if (bodyA.motionType === MotionType.DYNAMIC) {
+    // the cross products are needed for every moving body (a kinematic body's angular velocity enters
+    // the jacobian), the inverse inertia terms only for dynamic ones
+    if (bodyA.motionType !== MotionType.STATIC) {
         // r1 × axis
         const r1x = r1PlusU[0];
         const r1y = r1PlusU[1];
@@ -104,7 +106,9 @@ function calculateInverseEffectiveMass(
         part.r1PlusUxAxis[0] = r1y * az - r1z * ay;
         part.r1PlusUxAxis[1] = r1z * ax - r1x * az;
         part.r1PlusUxAxis[2] = r1x * ay - r1y * ax;
+    }
 
+    if (bodyA.motionType === MotionType.DYNAMIC) {
         // I1^-1 × (r1 × axis)
         const cx = part.r1PlusUxAxis[0];
         const cy = part.r1PlusUxAxis[1];
@@ -118,7 +122,7 @@ function calculateInverseEffectiveMass(
             invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
     }
 
-    if (bodyB.motionType === MotionType.DYNAMIC) {
+    if (bodyB.motionType !== MotionType.STATIC) {
         // r2 × axis
         const r2x = r2[0];
         const r2y = r2[1];
@@ -129,7 +133,9 @@ function calculateInverseEffectiveMass(
         part.r2xAxis[0] = r2y * az - r2z * ay;
         part.r2xAxis[1] = r2z * ax - r2x * az;
         part.r2xAxis[2] = r2x * ay - r2y * ax;
+    }
 
+    if (bodyB.motionType === MotionType.DYNAMIC) {
         // I2^-1 × (r2 × axis)
         const cx = part.r2xAxis[0];
         const cy = part.r2xAxis[1];
