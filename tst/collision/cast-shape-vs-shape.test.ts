@@ -9,6 +9,7 @@ import {
     type CastShapeSettings,
     CastShapeStatus,
     capsule,
+    castConvexVsConvex,
     castShapeVsShape,
     compound,
     createAllCastShapeCollector,
@@ -17,6 +18,7 @@ import {
     cylinder,
     EMPTY_SUB_SHAPE_ID,
     plane,
+    reversedCastShapeVsShape,
     type Shape,
     sphere,
     staticCompound,
@@ -2447,4 +2449,122 @@ describe('castShapeVsShape - closest collector orders starting overlaps by depth
             expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
         });
     }
+});
+
+describe('reversedCastShapeVsShape', () => {
+    const sphereShape = sphere.create({ radius: 0.5, materialId: 3 });
+    const boxShape = box.create({ halfExtents: [1, 1, 1], materialId: 7 });
+    const settings = { ...createDefaultCastShapeSettings(), collectFaces: true };
+    const reversedCast = reversedCastShapeVsShape(castConvexVsConvex);
+
+    it('mirrors the forward cast with points on the right bodies at the hit', () => {
+        // sphere at (-3, 0.3, 0) sweeping +6 in x hits the box at origin at fraction (3 - 1.5) / 6 = 0.25
+        const forward = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        castConvexVsConvex(
+            forward,
+            settings,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -3, 0.3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            6, 0, 0,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        // the same relative motion seen from the box: the box sweeps -6 in x into the resting sphere
+        const reversed = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        reversedCast(
+            reversed,
+            settings,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            -6, 0, 0,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -3, 0.3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        const f = forward.hit;
+        const r = reversed.hit;
+        expect(f.status).toBe(CastShapeStatus.COLLIDING);
+        expect(r.status).toBe(CastShapeStatus.COLLIDING);
+        expect(f.fraction).toBeCloseTo(0.25, 3);
+        expect(r.fraction).toBe(f.fraction);
+        expect(r.penetrationDepth).toBe(f.penetrationDepth);
+
+        // axis flips, normal stays -normalize(axis), so it mirrors the forward normal
+        expect(r.penetrationAxis).toEqual([-f.penetrationAxis[0], -f.penetrationAxis[1], -f.penetrationAxis[2]]);
+        const axisLength = vec3.length(r.penetrationAxis);
+        for (let i = 0; i < 3; i++) {
+            expect(r.normal[i]).toBeCloseTo(-r.penetrationAxis[i] / axisLength, 6);
+            expect(r.normal[i]).toBeCloseTo(-f.normal[i], 6);
+        }
+        expect(r.normal[0]).toBeCloseTo(1, 3);
+
+        expect(r.materialIdA).toBe(7);
+        expect(r.materialIdB).toBe(3);
+
+        // shape a (the box) is reported in its swept frame: centre at x = -1.5, face at x = -2.5
+        expect(r.pointA[0]).toBeCloseTo(-2.5, 3);
+        expect(r.pointA[1]).toBeCloseTo(0.3, 3);
+        // shape b (the sphere) at rest: on its surface, radius from (-3, 0.3, 0)
+        expect(r.pointB[0]).toBeCloseTo(-2.5, 3);
+        expect(vec3.distance(r.pointB, [-3, 0.3, 0])).toBeCloseTo(0.5, 3);
+
+        // the box's supporting face is its -x face at the hit
+        expect(r.faceA.numVertices).toBe(4);
+        for (let i = 0; i < r.faceA.numVertices; i++) {
+            expect(r.faceA.vertices[i * 3]).toBeCloseTo(-2.5, 3);
+        }
+        expect(r.faceB.numVertices).toBe(f.faceA.numVertices);
+        for (let i = 0; i < f.faceA.numVertices * 3; i++) {
+            const delta = i % 3 === 0 ? f.fraction * 6 : 0;
+            expect(r.faceB.vertices[i]).toBeCloseTo(f.faceA.vertices[i] - delta, 5);
+        }
+    });
+
+    it('a plane cast into a sphere reports the plane at the hit and the sphere at rest', () => {
+        // plane surface at y = 0 sweeps +5 in y; it meets the bottom of the sphere at (0, 3, 0) (y = 2.5) at fraction 0.5
+        const planeShape = plane.create({ plane: { normal: [0, 1, 0], constant: 0 }, materialId: 5 });
+        const collector = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            defaultSettings,
+            planeShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, 5, 0,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        const hit = collector.hit;
+        expect(hit.status).toBe(CastShapeStatus.COLLIDING);
+        expect(hit.fraction).toBeCloseTo(0.5, 5);
+        expect(hit.pointA[1]).toBeCloseTo(2.5, 5);
+        expect(hit.pointB[1]).toBeCloseTo(2.5, 5);
+        // normal points from b (sphere) towards a (plane)
+        expect(hit.normal[1]).toBeCloseTo(-1, 5);
+        expect(hit.penetrationAxis[1]).toBeGreaterThan(0);
+        expect(hit.materialIdA).toBe(5);
+        expect(hit.materialIdB).toBe(3);
+    });
 });

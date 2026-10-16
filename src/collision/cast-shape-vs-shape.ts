@@ -245,23 +245,49 @@ function createInvertedCollector() {
     const collector = {
         base: null! as CastShapeCollector,
         bodyIdB: -1,
+        /** world space displacement of the reversed cast (shape b moving against shape a) */
+        reversedDisplacement: vec3.create(),
         get earlyOutFraction() {
             return this.base.earlyOutFraction;
         },
         addHit(hit: CastShapeHit) {
-            const tmpPoint = hit.pointA;
-            hit.pointA = hit.pointB;
-            hit.pointB = tmpPoint;
+            // the reversed cast reports shape b in its swept frame and shape a at rest, shift both back
+            // by fraction x reversed displacement so shape a is in its swept frame and shape b at rest
+            const deltaX = hit.fraction * this.reversedDisplacement[0];
+            const deltaY = hit.fraction * this.reversedDisplacement[1];
+            const deltaZ = hit.fraction * this.reversedDisplacement[2];
 
+            // swap pointA and pointB
+            const tmpX = hit.pointA[0];
+            const tmpY = hit.pointA[1];
+            const tmpZ = hit.pointA[2];
+            hit.pointA[0] = hit.pointB[0] - deltaX;
+            hit.pointA[1] = hit.pointB[1] - deltaY;
+            hit.pointA[2] = hit.pointB[2] - deltaZ;
+            hit.pointB[0] = tmpX - deltaX;
+            hit.pointB[1] = tmpY - deltaY;
+            hit.pointB[2] = tmpZ - deltaZ;
+
+            // negate penetrationAxis, normal follows as -penetrationAxis.normalized()
+            hit.penetrationAxis[0] = -hit.penetrationAxis[0];
+            hit.penetrationAxis[1] = -hit.penetrationAxis[1];
+            hit.penetrationAxis[2] = -hit.penetrationAxis[2];
+            vec3.normalize(hit.normal, hit.penetrationAxis);
             vec3.negate(hit.normal, hit.normal);
-
-            const tmpFace = hit.faceA;
-            hit.faceA = hit.faceB;
-            hit.faceB = tmpFace;
 
             const tmpSubShapeId = hit.subShapeIdA;
             hit.subShapeIdA = hit.subShapeIdB;
             hit.subShapeIdB = tmpSubShapeId;
+
+            const tmpMaterialId = hit.materialIdA;
+            hit.materialIdA = hit.materialIdB;
+            hit.materialIdB = tmpMaterialId;
+
+            const tmpFace = hit.faceA;
+            hit.faceA = hit.faceB;
+            hit.faceB = tmpFace;
+            shiftFace(hit.faceA, deltaX, deltaY, deltaZ);
+            shiftFace(hit.faceB, deltaX, deltaY, deltaZ);
 
             this.base.addHit(hit);
         },
@@ -273,9 +299,18 @@ function createInvertedCollector() {
         },
     } satisfies CastShapeCollector & {
         base: CastShapeCollector;
+        reversedDisplacement: Vec3;
     };
 
     return collector;
+}
+
+function shiftFace(face: Face, deltaX: number, deltaY: number, deltaZ: number): void {
+    for (let i = 0; i < face.numVertices; i++) {
+        face.vertices[i * 3] -= deltaX;
+        face.vertices[i * 3 + 1] -= deltaY;
+        face.vertices[i * 3 + 2] -= deltaZ;
+    }
 }
 
 export function reversedCastShapeVsShape(fn: CastShapeVsShapeFn): CastShapeVsShapeFn {
@@ -316,6 +351,7 @@ export function reversedCastShapeVsShape(fn: CastShapeVsShapeFn): CastShapeVsSha
     ) => {
         invertedCollector.base = collector;
         invertedCollector.bodyIdB = collector.bodyIdB;
+        vec3.set(invertedCollector.reversedDisplacement, -dispAX, -dispAY, -dispAZ);
 
         const result = fn(
             invertedCollector,
