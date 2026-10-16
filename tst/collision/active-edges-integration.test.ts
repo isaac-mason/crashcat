@@ -103,13 +103,13 @@ describe('Active Edges Integration - Feature Toggle', () => {
         // Should hit with corrected penetrationAxis and normal
         expect(collector.hit.status).toBe(CastShapeStatus.COLLIDING);
 
-        // PenetrationAxis points from mesh (B) to sphere (A) = upward (positive Z)
+        // PenetrationAxis points from sphere (A) to mesh (B) = downward (negative Z)
         const penetrationAxis = collector.hit.penetrationAxis;
-        expect(penetrationAxis[2]).toBeGreaterThan(0.8);
+        expect(penetrationAxis[2]).toBeLessThan(-0.8);
 
-        // Normal = -penetrationAxis.normalized() (points downward, negative Z)
+        // Normal = -penetrationAxis.normalized() (points upward, positive Z)
         const normal = collector.hit.normal;
-        expect(normal[2]).toBeLessThan(-0.8);
+        expect(normal[2]).toBeGreaterThan(0.8);
         expect(Math.abs(vec3.length(normal) - 1.0)).toBeLessThan(0.01); // normalized
         expect(Math.abs(normal[1] + penetrationAxis[1])).toBeLessThan(0.01);
         expect(Math.abs(normal[2] + penetrationAxis[2])).toBeLessThan(0.01);
@@ -162,15 +162,15 @@ describe('Active Edges Integration - Interior Edge Correction (Cast)', () => {
 
         expect(collector.hit.status).toBe(CastShapeStatus.COLLIDING);
 
-        // STRONG ASSERTION: PenetrationAxis points upward (B → A), perpendicular to surface
+        // STRONG ASSERTION: PenetrationAxis points downward (A → B), perpendicular to surface
         const penetrationAxis = collector.hit.penetrationAxis;
-        expect(penetrationAxis[2]).toBeGreaterThan(0.9); // Z component should be close to 1
+        expect(penetrationAxis[2]).toBeLessThan(-0.9); // Z component should be close to -1
         expect(Math.abs(penetrationAxis[0])).toBeLessThan(0.2); // X component should be near 0
         expect(Math.abs(penetrationAxis[1])).toBeLessThan(0.2); // Y component should be near 0
 
-        // Normal = -penetrationAxis.normalized(), points downward (-Z)
+        // Normal = -penetrationAxis.normalized(), points upward (+Z)
         const normal = collector.hit.normal;
-        expect(normal[2]).toBeLessThan(-0.9); // Z component should be close to -1
+        expect(normal[2]).toBeGreaterThan(0.9); // Z component should be close to 1
         expect(Math.abs(normal[0])).toBeLessThan(0.2); // X component should be near 0
         expect(Math.abs(normal[1])).toBeLessThan(0.2); // Y component should be near 0
     });
@@ -322,13 +322,13 @@ describe('Active Edges Integration - Movement Direction Heuristic', () => {
 
         expect(collector.hit.status).toBe(CastShapeStatus.COLLIDING);
 
-        // PenetrationAxis: separation direction (perpendicular to mesh surface = upward)
+        // PenetrationAxis: a to b, perpendicular to the mesh surface = downward
         const penetrationAxis = collector.hit.penetrationAxis;
-        expect(penetrationAxis[2]).toBeGreaterThan(0.7); // Upward (away from mesh)
+        expect(penetrationAxis[2]).toBeLessThan(-0.7); // Downward (into mesh)
 
-        // Normal = -penetrationAxis.normalized() (points downward into mesh)
+        // Normal = -penetrationAxis.normalized() (points upward out of the mesh)
         const normal = collector.hit.normal;
-        expect(normal[2]).toBeLessThan(-0.7); // Downward
+        expect(normal[2]).toBeGreaterThan(0.7); // Upward
     });
 });
 

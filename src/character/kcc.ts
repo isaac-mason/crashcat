@@ -1220,8 +1220,8 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
     },
 
     shouldEarlyOut(): boolean {
-        // early out if we found a hit at fraction 0 (already penetrating)
-        return this.hasHit && this.earlyOutFraction <= 0;
+        // fraction 0 hits are rejected and the bound only ever drops to a positive fraction, so the cast runs to the end
+        return this.earlyOutFraction <= -Infinity;
     },
 
     reset(): void {
