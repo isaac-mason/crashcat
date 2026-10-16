@@ -27,6 +27,16 @@ export function cloneFace(face: Face): Face {
     };
 }
 
+/** move every face vertex by an offset */
+export function translateFace(face: Face, offset: Vec3): void {
+    const vertices = face.vertices;
+    for (let i = 0; i < face.numVertices; i++) {
+        vertices[i * 3] += offset[0];
+        vertices[i * 3 + 1] += offset[1];
+        vertices[i * 3 + 2] += offset[2];
+    }
+}
+
 /**
  * transform face vertices using a pre-computed transformation matrix (rotation + translation only, no scale).
  * assumes vertices are already scaled.

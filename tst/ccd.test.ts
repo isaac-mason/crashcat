@@ -132,3 +132,58 @@ describe('CCD (Continuous Collision Detection) / MotionQuality.LINEAR_CAST', () 
         expect(bullet.position[0]).toBeLessThan(0);
     });
 });
+
+describe('CCD contact manifold', () => {
+    test('a box cast flat onto a floor makes a manifold of its four bottom corners', () => {
+        const { world, layers } = createTestWorld();
+
+        const floor = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(10, 0.5, 10) }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: vec3.fromValues(0, -0.5, 0),
+        });
+
+        // 3 units above the floor and 5 units of travel this step: the discrete narrowphase cannot see the floor
+        const crate = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5) }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, 3.5, 0),
+        });
+        crate.motionProperties.motionQuality = MotionQuality.LINEAR_CAST;
+        vec3.set(crate.motionProperties.linearVelocity, 0, -300, 0);
+
+        const manifolds: { numContactPoints: number; points: number[] }[] = [];
+        const listener: Listener = {
+            onContactAdded: (bodyA, _bodyB, manifold) => {
+                const points: number[] = [];
+                for (let i = 0; i < manifold.numContactPoints; i++) {
+                    // world points on the floor's side
+                    const onFloor = bodyA === floor ? manifold.relativeContactPointsOnA : manifold.relativeContactPointsOnB;
+                    points.push(
+                        manifold.baseOffset[0] + onFloor[i * 3],
+                        manifold.baseOffset[1] + onFloor[i * 3 + 1],
+                        manifold.baseOffset[2] + onFloor[i * 3 + 2],
+                    );
+                }
+                manifolds.push({ numContactPoints: manifold.numContactPoints, points });
+            },
+        };
+
+        updateWorld(world, listener, 1 / 60);
+
+        expect(manifolds.length).toBe(1);
+        expect(manifolds[0].numContactPoints).toBe(4);
+        for (let i = 0; i < 4; i++) {
+            expect(Math.abs(manifolds[0].points[i * 3])).toBeCloseTo(0.5, 4);
+            expect(manifolds[0].points[i * 3 + 1]).toBeCloseTo(0, 4);
+            expect(Math.abs(manifolds[0].points[i * 3 + 2])).toBeCloseTo(0.5, 4);
+        }
+
+        // the impulse goes through the centre of the four corners, so the crate lands without spinning
+        expect(crate.position[1]).toBeGreaterThan(0.4);
+        expect(crate.position[1]).toBeLessThan(0.6);
+        expect(vec3.length(crate.motionProperties.angularVelocity)).toBeLessThan(1e-6);
+    });
+});

@@ -38,6 +38,7 @@ import * as manifold from './manifold/manifold';
 import { MAX_CONTACT_POINTS } from './manifold/manifold';
 import * as pairs from './pairs';
 import { getShapeInnerRadius } from './shapes/shapes';
+import { translateFace } from './utils/face';
 import type { World } from './world';
 
 /**
@@ -1247,7 +1248,8 @@ const ccdCastShapeCollector: CastShapeCollector & {
         if (fractionPlusSlop >= this.ccdBody.fractionPlusSlop) return;
 
         // store FULL hit data (need faceA, faceB for manifold creation)
-        copyCastShapeHit(this.hit, hit);
+        const storedHit = this.hit;
+        copyCastShapeHit(storedHit, hit);
 
         // store earliest collision
         this.ccdBody.hitBodyIndex = this.bodyB.index;
@@ -1257,19 +1259,15 @@ const ccdCastShapeCollector: CastShapeCollector & {
         this.ccdBody.subShapeId1 = hit.subShapeIdA;
         this.ccdBody.subShapeId2 = hit.subShapeIdB;
 
-        // CRITICAL: Correct contact point for bodyB's movement
-        // If bodyB also has CCD, it hasn't moved yet, so contact points need to be
-        // adjusted for where bodyB will be at the time of collision
+        // the cast assumed bodyB is still, but it moves too: shift the contact points and faces by where it
+        // is at the time of the hit
         calculateBodyMotion(_ccd_bodyBMotion, this.bodyB, this.timeStep);
-
+        vec3.scale(_ccd_bodyBMotion, _ccd_bodyBMotion, fraction);
         if (vec3.squaredLength(_ccd_bodyBMotion) > 1e-12) {
-            // Scale by fraction (bodyB moves fraction * deltaTime before collision)
-            vec3.scale(_ccd_bodyBMotion, _ccd_bodyBMotion, fraction);
-            // Offset contact point by bodyB's movement
-            vec3.add(this.ccdBody.contactPoint, hit.pointA, _ccd_bodyBMotion);
-        } else {
-            // BodyB not using CCD or already moved - use contact point as-is
-            vec3.copy(this.ccdBody.contactPoint, hit.pointA);
+            vec3.add(storedHit.pointA, storedHit.pointA, _ccd_bodyBMotion);
+            vec3.add(storedHit.pointB, storedHit.pointB, _ccd_bodyBMotion);
+            translateFace(storedHit.faceA, _ccd_bodyBMotion);
+            translateFace(storedHit.faceB, _ccd_bodyBMotion);
         }
 
         // populate contact settings
@@ -1414,9 +1412,14 @@ const ccdBodyVisitor: BodyVisitor & {
         ccdCastShapeCollector.earlyOutFraction = this.earlyOutFraction;
 
         const settings = this.castSettings;
-        settings.returnDeepestPoint = false;
+        settings.useShrunkenShapeAndConvexRadius = true;
         settings.collideWithBackfacesTriangles = this.world.settings.narrowphase.collideWithBackfaces;
         settings.collideWithBackfacesConvex = false;
+        settings.returnDeepestPoint = true;
+        settings.collectFaces = true;
+        settings.collideOnlyWithActiveEdges = this.world.settings.narrowphase.collideOnlyWithActiveEdges;
+        // the relative movement is the hint for the active edges
+        vec3.copy(settings.activeEdgeMovementDirection, _ccd_relativeDisplacement);
 
         // biome-ignore format: pretty
         castShapeVsShape(
@@ -1609,11 +1612,6 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
             contactManifold.penetrationDepth = hit.penetrationDepth;
             vec3.copy(contactManifold.worldSpaceNormal, ccdBody.contactNormal);
 
-            // prune to 4 points max
-            if (contactManifold.numContactPoints > MAX_CONTACT_POINTS) {
-                manifold.pruneContactPoints(contactManifold, contactManifold.worldSpaceNormal);
-            }
-
             // call listener callbacks (calculates material properties, fires events)
             onCCDContactAdded(world, listener, bodyA, bodyB, contactManifold, ccdBody.contactSettings);
 
@@ -1621,20 +1619,24 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
             if (ccdBody.contactSettings.isSensor) {
                 ccdBody.fractionPlusSlop = 1.0;
                 ccdBody.hitBodyIndex = -1;
-            } else {
-                // calculate average contact point for impulse resolution
-                if (contactManifold.numContactPoints > 1) {
-                    const avgPoint = vec3.create();
-                    for (let j = 0; j < contactManifold.numContactPoints; j++) {
-                        const idx = j * 3;
-                        avgPoint[0] += contactManifold.relativeContactPointsOnB[idx];
-                        avgPoint[1] += contactManifold.relativeContactPointsOnB[idx + 1];
-                        avgPoint[2] += contactManifold.relativeContactPointsOnB[idx + 2];
-                    }
-                    vec3.scale(avgPoint, avgPoint, 1.0 / contactManifold.numContactPoints);
-                    vec3.add(ccdBody.contactPoint, contactManifold.baseOffset, avgPoint);
+            } else if (contactManifold.numContactPoints > 1) {
+                // the average of the manifold's points on b applies the same impulse as applying it at every point
+                const numContactPoints = contactManifold.numContactPoints;
+                const pointsOnB = contactManifold.relativeContactPointsOnB;
+                let sumX = 0;
+                let sumY = 0;
+                let sumZ = 0;
+                for (let j = 0; j < numContactPoints; j++) {
+                    sumX += pointsOnB[j * 3];
+                    sumY += pointsOnB[j * 3 + 1];
+                    sumZ += pointsOnB[j * 3 + 2];
                 }
-                // else: single point already set in addHit() with bodyB correction
+                const contactPoint = ccdBody.contactPoint;
+                contactPoint[0] = contactManifold.baseOffset[0] + sumX / numContactPoints;
+                contactPoint[1] = contactManifold.baseOffset[1] + sumY / numContactPoints;
+                contactPoint[2] = contactManifold.baseOffset[2] + sumZ / numContactPoints;
+            } else {
+                vec3.copy(ccdBody.contactPoint, hit.pointB);
             }
         }
 
