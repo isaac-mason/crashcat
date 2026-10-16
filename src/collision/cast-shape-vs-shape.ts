@@ -129,7 +129,7 @@ export function createDefaultCastShapeSettings(): CastShapeSettings {
         collideWithBackfacesConvex: false,
         collectFaces: false,
         collisionTolerance: 1e-4,
-        penetrationTolerance: 0.01,
+        penetrationTolerance: 1e-4,
         returnDeepestPoint: false,
         useShrunkenShapeAndConvexRadius: false,
         collideOnlyWithActiveEdges: true,
