@@ -3288,3 +3288,42 @@ describe('AllCollideShapeCollector.sort', () => {
         expect(collector.hits[2].penetration).toBeCloseTo(0.2, 5);
     });
 });
+
+describe('collideShapeVsShape - all collector with faces', () => {
+    test('a box resting on a box reports both supporting faces', () => {
+        const faceSettings = createDefaultCollideShapeSettings();
+        faceSettings.collectFaces = true;
+
+        const collector = createAllCollideShapeCollector();
+        const floor = box.create({ halfExtents: vec3.fromValues(4, 0.5, 4) });
+        const crate = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5) });
+
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            faceSettings,
+            crate,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0.99, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            floor,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        expect(collector.hits.length).toBe(1);
+        const hit = collector.hits[0];
+
+        // the crate's bottom face and the floor's top face
+        expect(hit.faceA.numVertices).toBe(4);
+        expect(hit.faceB.numVertices).toBe(4);
+        for (let i = 0; i < 4; i++) {
+            expect(hit.faceA.vertices[i * 3 + 1]).toBeCloseTo(0.49, 5);
+            expect(hit.faceB.vertices[i * 3 + 1]).toBeCloseTo(0.5, 5);
+            expect(Math.abs(hit.faceB.vertices[i * 3])).toBeCloseTo(4, 5);
+        }
+    });
+});

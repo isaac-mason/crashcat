@@ -1,6 +1,7 @@
 import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
 import { type Box3, box3, type Plane3, plane3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
+import { EMPTY_SUB_SHAPE_ID, type SubShapeId } from '../body/sub-shape';
 import { type CastRayCollector, type CastRaySettings, CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import {
     type CastShapeCollector,
@@ -21,6 +22,7 @@ import {
     reversedCollideShapeVsShape,
 } from '../collision/collide-shape-vs-shape';
 import { createSupport, SupportFunctionMode } from '../collision/support';
+import { assert } from '../utils/assert';
 import type { Face } from '../utils/face';
 import { isScaleInsideOut, transformFaceWithMat4Scale } from '../utils/face';
 import {
@@ -111,6 +113,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         castRay: castRayVsPlane,
         collidePoint: collidePointVsPlane,
@@ -119,6 +122,11 @@ export const def = /* @__PURE__ */ (() =>
 
 function computeMassProperties(out: MassProperties, _shape: PlaneShape): void {
     out.mass = 0;
+}
+
+function getMaterial(shape: PlaneShape, subShapeId: SubShapeId): number {
+    assert(subShapeId === EMPTY_SUB_SHAPE_ID, 'invalid sub shape id for a plane shape');
+    return shape.materialId;
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: PlaneShape, _subShapeId: number): void {

@@ -55,6 +55,7 @@ export const def = /* @__PURE__ */ (() =>
             // no faces, return empty face
             ioResult.face.numVertices = 0;
         },
+        getMaterial: (): number => -1,
         castRay: () => {
             /* no-op */
         },

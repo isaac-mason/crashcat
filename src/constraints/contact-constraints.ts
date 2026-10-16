@@ -9,6 +9,7 @@ import type { Listener } from '../listener';
 import type { ContactManifold } from '../manifold/manifold';
 import * as manifold from '../manifold/manifold';
 import type { Pairs } from '../pairs';
+import { getShapeMaterial } from '../shapes/shapes';
 import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as angularFrictionConstraintPart from './constraint-part/angular-friction-constraint-part';
@@ -107,8 +108,11 @@ export type ContactConstraint = {
     /** index of the contact in the global contact array, used to look up contact for writing back solved impulses */
     contactIndex: number;
 
-    /** sort key for deterministic ordering */
-    sortKey: number;
+    /** high 32 bits of the 64 bit sort key for deterministic ordering, see {@link computeContactSortKey} */
+    sortKeyHigh: number;
+
+    /** low 32 bits of the 64 bit sort key */
+    sortKeyLow: number;
 };
 
 /**
@@ -607,7 +611,7 @@ function beginContactConstraint(
     constraint.contactIndex = contactIndex; // store ID for impulse writeback
 
     // compute sort key for deterministic constraint solving
-    constraint.sortKey = computeContactSortKey(bodyA.index, bodyB.index, subShapeIdA, subShapeIdB);
+    computeContactSortKey(constraint, bodyA.id, subShapeIdA, bodyB.id, subShapeIdB);
 
     // normal and tangents
     vec3.copy(constraint.normal, worldSpaceNormal);
@@ -858,11 +862,11 @@ export function addContactConstraint(
     }
 
     // if one of the bodies is a sensor, don't actually create the constraint
-    // one of the bodies must be dynamic and have mass to be able to create a contact constraint
+    // one of the bodies must be dynamic and keep its mass after the listener to be able to create a contact constraint
     if (
         !contactSettings.isSensor &&
-        ((bodyA.motionType === MotionType.DYNAMIC && bodyA.motionProperties.invMass !== 0) ||
-            (bodyB.motionType === MotionType.DYNAMIC && bodyB.motionProperties.invMass !== 0))
+        ((bodyA.motionType === MotionType.DYNAMIC && contactSettings.invMassScale1 !== 0) ||
+            (bodyB.motionType === MotionType.DYNAMIC && contactSettings.invMassScale2 !== 0))
     ) {
         const constraint = beginContactConstraint(
             contactConstraints,
@@ -1086,16 +1090,18 @@ export function addContactConstraintFromCache(
         listenerManifold.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
         listenerManifold.subShapeIdA = contact.subShapeIdA;
         listenerManifold.subShapeIdB = contact.subShapeIdB;
+        listenerManifold.materialIdA = getShapeMaterial(bodyA.shape, contact.subShapeIdA);
+        listenerManifold.materialIdB = getShapeMaterial(bodyB.shape, contact.subShapeIdB);
 
         contactListener.onContactPersisted(bodyA, bodyB, listenerManifold, contactSettings);
     }
 
     // if one of the bodies is a sensor, don't actually create the constraint
-    // one of the bodies must be dynamic and have mass to be able to create a contact constraint
+    // one of the bodies must be dynamic and keep its mass after the listener to be able to create a contact constraint
     if (
         !contactSettings.isSensor &&
-        ((bodyA.motionType === MotionType.DYNAMIC && bodyA.motionProperties.invMass !== 0) ||
-            (bodyB.motionType === MotionType.DYNAMIC && bodyB.motionProperties.invMass !== 0))
+        ((bodyA.motionType === MotionType.DYNAMIC && contactSettings.invMassScale1 !== 0) ||
+            (bodyB.motionType === MotionType.DYNAMIC && contactSettings.invMassScale2 !== 0))
     ) {
         const constraint = beginContactConstraint(
             contactConstraints,
@@ -1187,7 +1193,8 @@ function createContactConstraint(): ContactConstraint {
         invInertiaScaleA: 1,
         invInertiaScaleB: 1,
         contactIndex: -1,
-        sortKey: 0,
+        sortKeyHigh: 0,
+        sortKeyLow: 0,
     };
 }
 
@@ -1881,19 +1888,48 @@ export function solvePositionConstraintsForIsland(
     return anyImpulseApplied;
 }
 
+let _sortKeyHigh = 0;
+let _sortKeyLow = 0;
+
+/** fold the four little endian bytes of a u32 into the 64 bit fnv-1a hash held in _sortKeyHigh / _sortKeyLow */
+function fnv1a64Word(word: number): void {
+    let high = _sortKeyHigh;
+    let low = _sortKeyLow;
+    for (let byte = 0; byte < 4; byte++) {
+        low = (low ^ ((word >>> (byte * 8)) & 0xff)) >>> 0;
+        // hash * 0x100000001b3 mod 2^64 = hash * 0x1b3 + (hash << 40), in 32 bit halves.
+        // low * 0x1b3 < 2^41, exact in a double
+        const lowProduct = low * 0x1b3;
+        high = (Math.imul(high, 0x1b3) + Math.floor(lowProduct / 0x100000000) + (low << 8)) >>> 0;
+        low = lowProduct >>> 0;
+    }
+    _sortKeyHigh = high;
+    _sortKeyLow = low;
+}
+
 /**
- * Compute sort key for contact constraint.
- * Uses a simple hash of the body indices and sub-shape IDs.
+ * the contact's sort key: the 64 bit fnv-1a hash of body id a, sub shape id a, body id b, sub shape id b, each id
+ * as its little endian bytes (a body id as 8: index then sequence), stored as two u32 halves
+ * (jolt: SubShapeIDPair::GetHash, over 4 byte body ids)
  */
-function computeContactSortKey(bodyIndexA: number, bodyIndexB: number, subShapeA: number, subShapeB: number): number {
-    // simple hash combining all IDs
-    // TODO: subShapeId pair hash?
-    let hash = 0;
-    hash = (hash * 31 + bodyIndexA) | 0;
-    hash = (hash * 31 + bodyIndexB) | 0;
-    hash = (hash * 31 + subShapeA) | 0;
-    hash = (hash * 31 + subShapeB) | 0;
-    return hash >>> 0; // convert to unsigned
+export function computeContactSortKey(
+    out: Pick<ContactConstraint, 'sortKeyHigh' | 'sortKeyLow'>,
+    bodyIdA: number,
+    subShapeIdA: number,
+    bodyIdB: number,
+    subShapeIdB: number,
+): void {
+    // fnv-1a offset basis 0xcbf29ce484222325
+    _sortKeyHigh = 0xcbf29ce4;
+    _sortKeyLow = 0x84222325;
+    fnv1a64Word(bodyIdA >>> 0);
+    fnv1a64Word(Math.floor(bodyIdA / 0x100000000));
+    fnv1a64Word(subShapeIdA);
+    fnv1a64Word(bodyIdB >>> 0);
+    fnv1a64Word(Math.floor(bodyIdB / 0x100000000));
+    fnv1a64Word(subShapeIdB);
+    out.sortKeyHigh = _sortKeyHigh;
+    out.sortKeyLow = _sortKeyLow;
 }
 
 /**
@@ -1911,8 +1947,11 @@ export function sortContactIndices(contactConstraints: ContactConstraints, bodie
         if (!a || !b) return 0;
 
         // primary sort: sort key
-        if (a.sortKey !== b.sortKey) {
-            return a.sortKey - b.sortKey;
+        if (a.sortKeyHigh !== b.sortKeyHigh) {
+            return a.sortKeyHigh - b.sortKeyHigh;
+        }
+        if (a.sortKeyLow !== b.sortKeyLow) {
+            return a.sortKeyLow - b.sortKeyLow;
         }
 
         // secondary sort: body a id

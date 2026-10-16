@@ -1,6 +1,7 @@
 import type { Mat4, Vec3 } from 'math';
 import { mat4, quat, vec3 } from 'math';
 import { box3 } from 'math/shapes';
+import { EMPTY_SUB_SHAPE_ID, type SubShapeId } from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
@@ -25,8 +26,15 @@ import {
 } from '../collision/penetration';
 import * as simplex from '../collision/simplex';
 import { createSupport, SupportFunctionMode, setPointSupport } from '../collision/support';
+import { assert } from '../utils/assert';
 import type { ConvexShape, Shape } from './shapes';
 import { getShapeSupportingFace, setShapeSupport } from './shapes';
+
+/** a convex shape is a single leaf with a single material */
+export function getConvexMaterial(shape: ConvexShape, subShapeId: SubShapeId): number {
+    assert(subShapeId === EMPTY_SUB_SHAPE_ID, 'invalid sub shape id for a convex shape');
+    return shape.materialId;
+}
 
 /* cast ray */
 

@@ -542,6 +542,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial: convex.getConvexMaterial,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
