@@ -802,8 +802,7 @@ export function moveKinematic(
     applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 
     // calculate required angular velocity
-    getAxisAngleFromQuat(_moveKinematic_axis, deltaRotation);
-    const angle = 2 * Math.acos(Math.max(-1, Math.min(1, deltaRotation[3]))); // w is at index 3
+    const angle = getAxisAngleFromQuat(_moveKinematic_axis, deltaRotation);
     vec3.scale(motionProperties.angularVelocity, _moveKinematic_axis, angle / deltaTime);
     applyRotationDOFConstraint(motionProperties.angularVelocity, motionProperties.allowedDegreesOfFreedom);
 }
@@ -830,13 +829,16 @@ export function applyRotationDOFConstraint(angularVelocity: Vec3, allowedDOFs: n
     if (!(allowedRotation & 0b100)) angularVelocity[2] = 0; // z rotation locked
 }
 
-/** helper to extract axis from a quaternion (for axis-angle representation) */
-function getAxisAngleFromQuat(outAxis: Vec3, q: Quat): void {
+/** helper to extract axis and angle from a quaternion, angle in [0, pi] */
+function getAxisAngleFromQuat(outAxis: Vec3, q: Quat): number {
     // For a unit quaternion q = [x, y, z, w], the axis is [x, y, z] / sin(θ/2)
     // where θ is the rotation angle
+    // q and -q are the same rotation, use the w >= 0 twin so the angle takes the short way round
+    const sign = q[3] < 0 ? -1 : 1;
+    const angle = 2 * Math.acos(Math.min(1, sign * q[3]));
     const sinHalfAngleSq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
     if (sinHalfAngleSq > 1e-10) {
-        const sinHalfAngle = Math.sqrt(sinHalfAngleSq);
+        const sinHalfAngle = sign * Math.sqrt(sinHalfAngleSq);
         outAxis[0] = q[0] / sinHalfAngle;
         outAxis[1] = q[1] / sinHalfAngle;
         outAxis[2] = q[2] / sinHalfAngle;
@@ -846,6 +848,7 @@ function getAxisAngleFromQuat(outAxis: Vec3, q: Quat): void {
         outAxis[1] = 0;
         outAxis[2] = 0;
     }
+    return angle;
 }
 
 const _multiplyWorldSpaceInverseInertiaByVector_combinedQuat = /* @__PURE__ */ quat.create();
