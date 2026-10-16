@@ -1,4 +1,5 @@
 import { vec3 } from 'math';
+import { isEdgeActive } from '../../collision/active-edges';
 import type { BvhSplitStrategy } from './triangle-mesh-bvh';
 import * as triangleMeshBvh from './triangle-mesh-bvh';
 import type { TriangleMeshData } from './triangle-mesh-data';
@@ -254,6 +255,7 @@ function deduplicateVertices(inputPositions: number[]): {
 
 const _normal0 = /* @__PURE__ */ vec3.create();
 const _normal1 = /* @__PURE__ */ vec3.create();
+const _edgeDirection = /* @__PURE__ */ vec3.create();
 
 /*
  * Compute which edges are "active" (sharp) based on dihedral angles.
@@ -262,7 +264,9 @@ const _normal1 = /* @__PURE__ */ vec3.create();
  * - It's a boundary edge (only one triangle uses it)
  * - It's a non-manifold edge (more than 2 triangles use it)
  * - The dihedral angle threshold is disabled (cosThreshold < 0.0)
- * - The dihedral angle between adjacent triangles exceeds the threshold (cos(angle) < cosThreshold)
+ * - The edge is convex and the dihedral angle between adjacent triangles exceeds the threshold (cos(angle) < cosThreshold)
+ *
+ * Concave edges between two triangles are never active.
  *
  * Active edges are important for collision detection to avoid smoothing at sharp features.
  */
@@ -325,11 +329,17 @@ function computeActiveEdges(data: TriangleMeshData, cosThreshold: number): void 
         _normal1[1] = data.triangleBuffer[offset1 + OFFSET_NORMAL_Y];
         _normal1[2] = data.triangleBuffer[offset1 + OFFSET_NORMAL_Z];
 
-        // compute dihedral angle via dot product
-        const dotProduct = _normal0[0] * _normal1[0] + _normal0[1] * _normal1[1] + _normal0[2] * _normal1[2];
+        // edge direction as wound by the first triangle: AB (bit 0), BC (bit 1), CA (bit 2)
+        const edgeStart = edgeMask0 === 0b001 ? OFFSET_INDEX_A : edgeMask0 === 0b010 ? OFFSET_INDEX_B : OFFSET_INDEX_C;
+        const edgeEnd = edgeMask0 === 0b001 ? OFFSET_INDEX_B : edgeMask0 === 0b010 ? OFFSET_INDEX_C : OFFSET_INDEX_A;
+        const edgeStartIndex = data.triangleBuffer[offset0 + edgeStart];
+        const edgeEndIndex = data.triangleBuffer[offset0 + edgeEnd];
+        _edgeDirection[0] = data.positions[edgeEndIndex * 3] - data.positions[edgeStartIndex * 3];
+        _edgeDirection[1] = data.positions[edgeEndIndex * 3 + 1] - data.positions[edgeStartIndex * 3 + 1];
+        _edgeDirection[2] = data.positions[edgeEndIndex * 3 + 2] - data.positions[edgeStartIndex * 3 + 2];
 
-        // if dot product >= threshold, the dihedral angle is small (smooth edge)
-        if (dotProduct >= cosThreshold) {
+        // concave edges are never active, convex edges are active past the threshold angle
+        if (!isEdgeActive(_normal0, _normal1, _edgeDirection, cosThreshold)) {
             // mark edge as inactive in both triangles
             const activeEdges0 = data.triangleBuffer[offset0 + OFFSET_ACTIVE_EDGES];
             const activeEdges1 = data.triangleBuffer[offset1 + OFFSET_ACTIVE_EDGES];
@@ -337,7 +347,7 @@ function computeActiveEdges(data: TriangleMeshData, cosThreshold: number): void 
             data.triangleBuffer[offset0 + OFFSET_ACTIVE_EDGES] = activeEdges0 & ~edgeMask0;
             data.triangleBuffer[offset1 + OFFSET_ACTIVE_EDGES] = activeEdges1 & ~edgeMask1;
         }
-        // else: sharp edge (dot < threshold), edges remain active (initialized to 0b111)
+        // else: sharp convex edge, edges remain active (initialized to 0b111)
     }
 }
 

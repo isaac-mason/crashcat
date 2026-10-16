@@ -481,10 +481,10 @@ describe('TriangleMeshBuilder', () => {
         });
 
         test('all edges with extreme angle difference', () => {
-            // Create two triangles with 170° dihedral angle (very sharp)
+            // Create two triangles folded sharply into a convex ridge
             // This tests the cosine threshold more thoroughly
             const result = buildTriangleMesh({
-                positions: [0, 0, 0, 1, 0, 0, 0.5, 0.1, 0, 0.5, -0.1, 0.5],
+                positions: [0, 0, 0, 1, 0, 0, 0.5, 0.1, 0, 0.5, -0.1, -0.5],
                 indices: [0, 1, 2, 1, 0, 3],
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
@@ -541,5 +541,50 @@ describe('TriangleMeshBuilder', () => {
             expect(typeof getActiveEdges(result.data, 0)).toBe('number');
             expect(typeof getActiveEdges(result.data, 1)).toBe('number');
         });
+    });
+});
+
+describe('TriangleMeshBuilder active edges per jolt', () => {
+    // active edge bits per triangle: bit 0 = AB, bit 1 = BC, bit 2 = CA
+    const cosTenDegrees = Math.cos((10 * Math.PI) / 180);
+
+    // triangle 0 = (0, 1, 2) lies in z = 0 with normal +z, triangle 1 = (1, 0, 3) shares the edge
+    // from (0, 0, 0) to (1, 0, 0) as its AB edge too. the fold is the angle between the two normals:
+    // folding triangle 1 below the plane makes a convex ridge, folding it above makes a concave valley
+    const buildFold = (foldDegrees: number, valley: boolean) => {
+        const fold = (foldDegrees * Math.PI) / 180;
+        const z = valley ? Math.sin(fold) : -Math.sin(fold);
+        return buildTriangleMesh({
+            positions: [0, 0, 0, 1, 0, 0, 0.5, 1, 0, 0.5, -Math.cos(fold), z],
+            indices: [0, 1, 2, 1, 0, 3],
+            degenerateTolerance: 1e-6,
+            bvhMaxLeafTris: 2,
+            bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
+            activeEdgeCosThresholdAngle: cosTenDegrees,
+        });
+    };
+
+    const expectSharedEdge = (result: ReturnType<typeof buildTriangleMesh>, active: boolean) => {
+        expect(result.data.triangleCount).toBe(2);
+        // the shared edge is AB on both triangles, the other edges are boundaries and stay active
+        const expected = active ? 0b111 : 0b110;
+        expect(getActiveEdges(result.data, 0)).toBe(expected);
+        expect(getActiveEdges(result.data, 1)).toBe(expected);
+    };
+
+    test('the shared edge of a flat quad is inactive', () => {
+        expectSharedEdge(buildFold(0, false), false);
+    });
+
+    test('a convex ridge past the threshold is active on both triangles', () => {
+        expectSharedEdge(buildFold(30, false), true);
+    });
+
+    test('a concave valley of the same angle is inactive', () => {
+        expectSharedEdge(buildFold(30, true), false);
+    });
+
+    test('a convex fold just under the threshold is inactive', () => {
+        expectSharedEdge(buildFold(9, false), false);
     });
 });
