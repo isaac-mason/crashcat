@@ -467,8 +467,8 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                     // skip this hit, continue with next
                     return;
                 case ContactValidateResult.REJECT_ALL_CONTACTS_FOR_THIS_BODY_PAIR:
-                    // early-out from collision detection
-                    this.earlyOutFraction = 0;
+                    // early-out from collision detection: the bound is -penetration, so -infinity prunes every further candidate
+                    this.earlyOutFraction = -Infinity;
                     return;
             }
         }
@@ -626,7 +626,7 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
     },
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= 0;
+        return this.earlyOutFraction <= -Infinity;
     },
 };
 
@@ -715,8 +715,8 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
                     // skip this hit, continue with next
                     return;
                 case ContactValidateResult.REJECT_ALL_CONTACTS_FOR_THIS_BODY_PAIR:
-                    // early-out from collision detection
-                    this.earlyOutFraction = 0;
+                    // early-out from collision detection: the bound is -penetration, so -infinity prunes every further candidate
+                    this.earlyOutFraction = -Infinity;
                     return;
             }
         }
@@ -775,7 +775,7 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
     },
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= 0;
+        return this.earlyOutFraction <= -Infinity;
     },
 };
 
@@ -1590,16 +1590,13 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
             // set base offset (bodyA's COM at start of sweep)
             vec3.copy(contactManifold.baseOffset, bodyA.centerOfMassPosition);
 
-            // generate contact points via clipping
-            const maxContactDistance =
-                world.settings.narrowphase.speculativeContactDistance + world.settings.narrowphase.manifoldTolerance;
-
+            // generate contact points via clipping, keeping face points within the manifold tolerance of the hit
             manifold.manifoldBetweenTwoFaces(
                 contactManifold,
                 hit.pointA,
                 hit.pointB,
                 hit.penetrationAxis,
-                maxContactDistance,
+                world.settings.narrowphase.manifoldTolerance,
                 hit.faceA,
                 hit.faceB,
             );
