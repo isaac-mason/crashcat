@@ -5,7 +5,7 @@ import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
-import { rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
+import { FLT_MIN, rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
@@ -1536,7 +1536,7 @@ function castShapeVsStaticCompound(
         const nodeDistance = _castShapeVsStaticCompound_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -1587,8 +1587,8 @@ function castShapeVsStaticCompound(
                     continue;
                 }
 
-                // early out if we've found a very close hit
-                if (collector.earlyOutFraction <= 0) {
+                // stop once the collector wants no more hits
+                if (collector.earlyOutFraction <= -Infinity) {
                     return;
                 }
 
@@ -1710,27 +1710,30 @@ function castShapeVsStaticCompound(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;

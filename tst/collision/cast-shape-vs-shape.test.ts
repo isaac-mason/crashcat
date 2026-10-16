@@ -17,7 +17,9 @@ import {
     cylinder,
     EMPTY_SUB_SHAPE_ID,
     plane,
+    type Shape,
     sphere,
+    staticCompound,
     triangleMesh,
 } from '../../src';
 
@@ -2318,4 +2320,131 @@ describe('castShapeVsShape - any collector early out', () => {
         expect(collector.hitCount).toBe(1);
         expect(collector.hit.penetrationDepth).toBeCloseTo(0.1, 6);
     });
+});
+
+describe('castShapeVsShape - closest collector orders starting overlaps by depth', () => {
+    const deepestSettings: CastShapeSettings = { ...createDefaultCastShapeSettings(), returnDeepestPoint: true };
+
+    // casts shapeA from (x, y, 0) straight down by 1 against shapeB centred at (0, targetY, 0)
+    const castDown = (collector: CastShapeCollector, shapeA: Shape, x: number, y: number, shapeB: Shape, targetY: number) => {
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            deepestSettings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            x, y, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, -1, 0,
+            shapeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, targetY, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    const sphereA = sphere.create({ radius: 0.5 });
+
+    // each target's top face is at y = 0, so a radius 0.5 sphere at height y starts 0.5 - y deep
+    const targets: [string, Shape, number][] = [
+        ['plane', plane.create({ plane: { normal: [0, 1, 0], constant: 0 } }), 0],
+        ['box', box.create({ halfExtents: [2, 1, 2] }), -1],
+    ];
+
+    for (const [name, target, targetY] of targets) {
+        for (const heights of [
+            [0.4, 0.2],
+            [0.2, 0.4],
+        ]) {
+            it(`${name}: starts at heights ${heights.join(' then ')} keep the 0.3 deep overlap`, () => {
+                const collector = createClosestCastShapeCollector();
+                for (const y of heights) {
+                    castDown(collector, sphereA, 0, y, target, targetY);
+                }
+
+                expect(collector.hit.status).toBe(CastShapeStatus.COLLIDING);
+                expect(collector.hit.fraction).toBe(0);
+                expect(collector.hit.penetrationDepth).toBeCloseTo(0.3, 4);
+                expect(collector.earlyOutFraction).toBeCloseTo(-0.3, 4);
+                expect(collector.shouldEarlyOut()).toBe(false);
+            });
+        }
+    }
+
+    // two slabs side by side: the left one's top at y = 0 over x in [-2, 0], the right one's at y = 0.3 over x in [0, 2].
+    // a radius 0.5 sphere centred at (0, 0.4) starts 0.1 into the left slab and 0.4 into the right one.
+    const leftSlab = {
+        shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+        position: [-1, -0.5, 0] as Vec3,
+        quaternion: identityQuat(),
+    };
+    const rightSlab = {
+        shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+        position: [1, -0.2, 0] as Vec3,
+        quaternion: identityQuat(),
+    };
+
+    const compounds: [string, (children: (typeof leftSlab)[]) => Shape][] = [
+        ['compound', (children) => compound.create({ children })],
+        ['static compound', (children) => staticCompound.create({ children })],
+    ];
+
+    for (const [name, create] of compounds) {
+        for (const [order, children] of [
+            ['left first', [leftSlab, rightSlab]],
+            ['right first', [rightSlab, leftSlab]],
+        ] as const) {
+            it(`${name} (${order}): a cast starting inside both children reports the deeper`, () => {
+                const collector = createClosestCastShapeCollector();
+                castDown(collector, sphereA, 0, 0.4, create([...children]), 0);
+
+                expect(collector.hit.fraction).toBe(0);
+                expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+                expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+            });
+        }
+    }
+
+    // the same layout as two upward facing quads (ccw seen from +y)
+    const quad = (x0: number, x1: number, y: number) => [x0, y, -1, x0, y, 1, x1, y, 1, x1, y, -1];
+    const meshes: [string, Shape][] = [
+        [
+            'left first',
+            triangleMesh.create({
+                positions: [...quad(-2, 0, 0), ...quad(0, 2, 0.3)],
+                indices: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+            }),
+        ],
+        [
+            'right first',
+            triangleMesh.create({
+                positions: [...quad(0, 2, 0.3), ...quad(-2, 0, 0)],
+                indices: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+            }),
+        ],
+    ];
+
+    for (const [order, mesh] of meshes) {
+        it(`mesh (${order}): a sphere cast starting over both quads reports the deeper`, () => {
+            const collector = createClosestCastShapeCollector();
+            castDown(collector, sphereA, 0, 0.4, mesh, 0);
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+
+        it(`mesh (${order}): a box cast starting over both quads reports the deeper`, () => {
+            // spans x in [-0.25, 0.25] and y in [-0.1, 0.9]: 0.1 into the left quad (out upwards), 0.25 into the right
+            // quad (out sideways past its x = 0 edge)
+            const collector = createClosestCastShapeCollector();
+            castDown(collector, box.create({ halfExtents: [0.25, 0.5, 0.25], convexRadius: 0 }), 0, 0.4, mesh, 0);
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.25, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+    }
 });

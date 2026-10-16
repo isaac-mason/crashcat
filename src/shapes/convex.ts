@@ -704,15 +704,16 @@ export function castConvexVsConvexLocal(
         }
     }
 
-    // early-out check: reject if this hit is further than already found
-    if (_castConvex_gjkResult.lambda >= collector.earlyOutFraction) {
-        collector.addMiss();
-        return;
-    }
-
     // transform contact points from B's local space to world space using targetTransform
     vec3.transformMat4(_castConvex_castShapeHit.pointA, _castConvex_gjkResult.pointA, targetTransform);
     vec3.transformMat4(_castConvex_castShapeHit.pointB, _castConvex_gjkResult.pointB, targetTransform);
+    const penetrationDepth = vec3.distance(_castConvex_castShapeHit.pointA, _castConvex_castShapeHit.pointB);
+
+    // reject a starting overlap no deeper than the collector's bound; hits at fraction > 0 past it were already rejected by the gjk cast
+    if (_castConvex_gjkResult.lambda === 0 && -penetrationDepth >= collector.earlyOutFraction) {
+        collector.addMiss();
+        return;
+    }
 
     // transform penetrationAxis from B's local space to world space (keep unnormalized)
     mat4.multiply3x3Vec(_castConvex_castShapeHit.penetrationAxis, targetTransform, _castConvex_gjkResult.separatingAxis);
@@ -724,6 +725,7 @@ export function castConvexVsConvexLocal(
     // update result object
     _castConvex_castShapeHit.status = CastShapeStatus.COLLIDING;
     _castConvex_castShapeHit.fraction = _castConvex_gjkResult.lambda;
+    _castConvex_castShapeHit.penetrationDepth = penetrationDepth;
     _castConvex_castShapeHit.subShapeIdA = subShapeIdA;
     _castConvex_castShapeHit.subShapeIdB = subShapeIdB;
     _castConvex_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;

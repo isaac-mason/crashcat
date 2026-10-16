@@ -2,7 +2,7 @@ import { type Vec3, vec3 } from 'math';
 import type { CastShapeVsShapeFn, Shape } from '../shapes/shapes';
 import { createFace, type Face } from '../utils/face';
 import { pool } from '../utils/pool';
-import { INITIAL_EARLY_OUT_FRACTION, SHOULD_EARLY_OUT_FRACTION } from './cast-utils';
+import { INITIAL_EARLY_OUT_FRACTION } from './cast-utils';
 
 export enum CastShapeStatus {
     NOT_COLLIDING,
@@ -66,6 +66,14 @@ export function createCastShapeHit(): CastShapeHit {
         faceB: createFace(),
         bodyIdB: -1,
     };
+}
+
+/**
+ * the value a cast hit is ordered by and bounds further searching with: the fraction, or for a hit
+ * that starts overlapping (fraction 0) the negated penetration depth, so deeper overlaps sort first
+ */
+export function castShapeHitEarlyOutFraction(hit: CastShapeHit): number {
+    return hit.fraction > 0 ? hit.fraction : -hit.penetrationDepth;
 }
 
 export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
@@ -206,8 +214,9 @@ export class ClosestCastShapeCollector implements CastShapeCollector {
     hit: CastShapeHit = createCastShapeHit();
 
     addHit(h: CastShapeHit): void {
-        if (this.hit.status === CastShapeStatus.NOT_COLLIDING || h.fraction < this.hit.fraction) {
-            this.earlyOutFraction = h.fraction;
+        const earlyOut = castShapeHitEarlyOutFraction(h);
+        if (this.hit.status === CastShapeStatus.NOT_COLLIDING || earlyOut < castShapeHitEarlyOutFraction(this.hit)) {
+            this.earlyOutFraction = earlyOut;
             copyCastShapeHit(this.hit, h);
         }
     }
@@ -217,7 +226,7 @@ export class ClosestCastShapeCollector implements CastShapeCollector {
     }
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= SHOULD_EARLY_OUT_FRACTION;
+        return this.earlyOutFraction <= -Infinity;
     }
 
     reset(): void {

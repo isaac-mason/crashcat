@@ -1,4 +1,11 @@
-export const INITIAL_EARLY_OUT_FRACTION = 1.0 + 1e-4;
+/** f32 machine epsilon (jolt's FLT_EPSILON), not Number.EPSILON which is the f64 one */
+const FLT_EPSILON = 1.1920929e-7;
+
+/** smallest positive normal f32 (jolt's FLT_MIN) */
+export const FLT_MIN = 1.1754943508222875e-38;
+
+export const INITIAL_EARLY_OUT_FRACTION = 1.0 + FLT_EPSILON;
+/** ray casts stop at a hit at fraction 0; shape casts keep going for deeper overlaps, down to -Infinity */
 export const SHOULD_EARLY_OUT_FRACTION = 0.0;
 
 /** result of a {@link rayIntersectsTriangle} test */

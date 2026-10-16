@@ -21,6 +21,7 @@ import {
 } from '../collision/cast-shape-vs-shape';
 import {
     createRayIntersectsTriangleResult,
+    FLT_MIN,
     INITIAL_EARLY_OUT_FRACTION,
     rayDistanceToBox3,
     rayFractionToBox3,
@@ -846,7 +847,7 @@ function castConvexVsTriangleMesh(
         const nodeDistance = _castConvexVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -895,8 +896,8 @@ function castConvexVsTriangleMesh(
                     continue;
                 }
 
-                // early out if we've found a very close hit
-                if (collector.earlyOutFraction <= 0) {
+                // stop once the collector wants no more hits
+                if (collector.earlyOutFraction <= -Infinity) {
                     return;
                 }
 
@@ -1176,27 +1177,30 @@ function castConvexVsTriangleMesh(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
@@ -2211,7 +2215,6 @@ function castSphereVsTriangleMeshAddHit(
     subShapeIdA: number,
     subShapeIdB: number,
     subShapeIdBitsB: number,
-    sphereRadius: number,
     start: Vec3,
     posB: Vec3,
     m0: number,
@@ -2296,7 +2299,7 @@ function castSphereVsTriangleMeshAddHit(
 
     hit.status = CastShapeStatus.COLLIDING;
     hit.fraction = fraction;
-    hit.penetrationDepth = fraction === 0 ? sphereRadius - vec3.distance(contactPointA, contactPointB) : 0;
+    hit.penetrationDepth = vec3.distance(hit.pointA, hit.pointB);
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = _castSphereVsTriangleMesh_subShapeIdBuilder.value;
     hit.materialIdA = sphereShape.materialId;
@@ -2438,7 +2441,7 @@ function castSphereVsTriangleMesh(
         const nodeDistance = _castSphereVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -2448,6 +2451,10 @@ function castSphereVsTriangleMesh(
             const triCount = triangleMeshBvh.nodeTriCount(buffer, nodeOffset);
 
             for (let i = 0; i < triCount; i++) {
+                if (collector.earlyOutFraction <= -Infinity) {
+                    return;
+                }
+
                 const triangleIndex = triStart + i;
 
                 // get triangle vertices
@@ -2529,7 +2536,6 @@ function castSphereVsTriangleMesh(
                             subShapeIdA,
                             subShapeIdB,
                             subShapeIdBitsB,
-                            sphereRadius,
                             start,
                             posB,
                             m0,
@@ -2610,7 +2616,6 @@ function castSphereVsTriangleMesh(
                                             subShapeIdA,
                                             subShapeIdB,
                                             subShapeIdBitsB,
-                                            sphereRadius,
                                             start,
                                             posB,
                                             m0,
@@ -2679,7 +2684,6 @@ function castSphereVsTriangleMesh(
                         subShapeIdA,
                         subShapeIdB,
                         subShapeIdBitsB,
-                        sphereRadius,
                         start,
                         posB,
                         m0,
@@ -2754,25 +2758,28 @@ function castSphereVsTriangleMesh(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;

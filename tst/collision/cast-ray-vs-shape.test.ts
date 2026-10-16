@@ -1982,3 +1982,34 @@ describe('castRay - Plane', () => {
         // plane scaling affects the distance
     });
 });
+
+describe('castRayVsShape - initial early out fraction', () => {
+    // a unit-length ray along +x against a box whose near face sits at x = faceX, so the hit fraction is faceX
+    const castAtFaceX = (faceX: number) => {
+        const collector = createAllCastRayCollector();
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            defaultSettings,
+            0, 0, 0,
+            1, 0, 0,
+            1,
+            box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
+            EMPTY_SUB_SHAPE_ID, 0,
+            faceX + 1, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    test('a hit just past the ray end, within the f32 epsilon, is kept', () => {
+        const hits = castAtFaceX(1 + 5e-8);
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBeCloseTo(1 + 5e-8, 12);
+    });
+
+    test('a hit past 1 + f32 epsilon is rejected', () => {
+        expect(castAtFaceX(1 + 5e-5).length).toBe(0);
+    });
+});
