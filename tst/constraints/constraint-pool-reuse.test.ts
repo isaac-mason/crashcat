@@ -4,6 +4,7 @@ import {
     hingeConstraint,
     MotionType,
     MotorState,
+    motorSettings,
     rigidBody,
     SixDOFAxis,
     SpringMode,
@@ -82,7 +83,7 @@ describe('a reused pooled constraint keeps nothing of the previous one', () => {
         expectDefaultSpring(second.limitsSpringSettings);
     });
 
-    test('six dof limits, friction, limit springs, motor force limits and motor states', () => {
+    test('six dof limits, friction, limit springs, motor settings and motor states', () => {
         const { world, bodyA, bodyB } = createTwoBodies();
         const settings = {
             bodyIdA: bodyA.id,
@@ -101,8 +102,13 @@ describe('a reused pooled constraint keeps nothing of the previous one', () => {
             limitMax: [1, 1, 1, 0.5, 0.5, 0.5],
             maxFriction: [2, 2, 2, 2, 2, 2],
             limitsSpringSettings: [softSpring(), softSpring(), softSpring()],
-            motorMinForceLimit: [-10, -10, -10, -10, -10, -10],
-            motorMaxForceLimit: [10, 10, 10, 10, 10, 10],
+            motorSettings: Array.from({ length: 6 }, () => {
+                const settings = motorSettings.create();
+                settings.springSettings.frequencyOrStiffness = 7;
+                motorSettings.setForceLimit(settings, 10);
+                motorSettings.setTorqueLimit(settings, 10);
+                return settings;
+            }),
         });
         sixDOFConstraint.setMotorState(first, SixDOFAxis.TRANSLATION_Y, MotorState.VELOCITY);
         sixDOFConstraint.remove(world, first);
@@ -113,8 +119,7 @@ describe('a reused pooled constraint keeps nothing of the previous one', () => {
         expect(second.limitMax).toEqual([Infinity, Infinity, Infinity, Math.PI, Math.PI, Math.PI]);
         expect(second.maxFriction).toEqual([0, 0, 0, 0, 0, 0]);
         for (const spring of second.limitsSpringSettings) expectDefaultSpring(spring);
-        expect(second.motorMinForceLimit).toEqual([-Infinity, -Infinity, -Infinity, -Infinity, -Infinity, -Infinity]);
-        expect(second.motorMaxForceLimit).toEqual([Infinity, Infinity, Infinity, Infinity, Infinity, Infinity]);
+        for (const settings of second.motorSettings) expect(settings).toEqual(motorSettings.create());
         expect(second.motorState.every((state) => state === MotorState.OFF)).toBe(true);
         expect(second.translationMotorActive).toBe(false);
     });

@@ -1,10 +1,11 @@
 import type { Mat4, Quat, Vec2, Vec3 } from 'math';
-import { mat3, mat4, quat, vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -179,9 +180,9 @@ export type SliderConstraintSettings = {
     /** automatically detect anchor point based on body positions */
     autoDetectPoint?: boolean;
     // limits
-    /** minimum position limit (default: -Infinity, must be ≤ 0) */
+    /** minimum position limit (default: -Infinity, must be <= 0) */
     limitsMin?: number;
-    /** maximum position limit (default: Infinity, must be ≥ 0) */
+    /** maximum position limit (default: Infinity, must be >= 0) */
     limitsMax?: number;
     /** spring settings for soft limits */
     limitsSpringSettings?: SpringSettings;
@@ -197,62 +198,6 @@ export type SliderConstraintSettings = {
     /** override number of position solver iterations (0 = use default) @default 0 */
     numPositionStepsOverride?: number;
 };
-
-const _getInvInitialOrientationXY_z1 = /* @__PURE__ */ vec3.create();
-const _getInvInitialOrientationXY_z2 = /* @__PURE__ */ vec3.create();
-const _getInvInitialOrientationXY_mat1 = /* @__PURE__ */ mat3.create();
-const _getInvInitialOrientationXY_mat2 = /* @__PURE__ */ mat3.create();
-const _getInvInitialOrientationXY_q1 = /* @__PURE__ */ quat.create();
-const _getInvInitialOrientationXY_q2 = /* @__PURE__ */ quat.create();
-const _getInvInitialOrientationXY_q1Conj = /* @__PURE__ */ quat.create();
-
-/** calculate the inverse initial orientation for rotation tracking */
-function getInvInitialOrientationXY(out: Quat, sliderAxis1: Vec3, normalAxis1: Vec3, sliderAxis2: Vec3, normalAxis2: Vec3): Quat {
-    const eps = 1e-6;
-
-    // if axes are identical, return identity
-    if (
-        Math.abs(sliderAxis1[0] - sliderAxis2[0]) < eps &&
-        Math.abs(sliderAxis1[1] - sliderAxis2[1]) < eps &&
-        Math.abs(sliderAxis1[2] - sliderAxis2[2]) < eps &&
-        Math.abs(normalAxis1[0] - normalAxis2[0]) < eps &&
-        Math.abs(normalAxis1[1] - normalAxis2[1]) < eps &&
-        Math.abs(normalAxis1[2] - normalAxis2[2]) < eps
-    ) {
-        return quat.identity(out);
-    }
-
-    // build 3x3 rotation matrices from axes
-    // z axis is slider × normal
-    vec3.cross(_getInvInitialOrientationXY_z1, sliderAxis1, normalAxis1);
-    vec3.cross(_getInvInitialOrientationXY_z2, sliderAxis2, normalAxis2);
-
-    // create rotation matrices
-    // biome-ignore format: readability
-    mat3.set(_getInvInitialOrientationXY_mat1,
-        sliderAxis1[0], sliderAxis1[1], sliderAxis1[2], // column 0 (X = slider)
-        normalAxis1[0], normalAxis1[1], normalAxis1[2], // column 1 (Y = normal)
-        _getInvInitialOrientationXY_z1[0], _getInvInitialOrientationXY_z1[1], _getInvInitialOrientationXY_z1[2], // column 2 (Z = slider × normal)
-    );
-
-    // biome-ignore format: readability
-    mat3.set(_getInvInitialOrientationXY_mat2,
-        sliderAxis2[0], sliderAxis2[1], sliderAxis2[2], // column 0
-        normalAxis2[0], normalAxis2[1], normalAxis2[2], // column 1
-        _getInvInitialOrientationXY_z2[0], _getInvInitialOrientationXY_z2[1], _getInvInitialOrientationXY_z2[2], // column 2
-    );
-
-    // convert to quaternions
-    quat.fromMat3(_getInvInitialOrientationXY_q1, _getInvInitialOrientationXY_mat1);
-    quat.fromMat3(_getInvInitialOrientationXY_q2, _getInvInitialOrientationXY_mat2);
-
-    // return q2 * conjugate(q1)
-    quat.conjugate(_getInvInitialOrientationXY_q1Conj, _getInvInitialOrientationXY_q1);
-
-    quat.multiply(out, _getInvInitialOrientationXY_q2, _getInvInitialOrientationXY_q1Conj);
-
-    return out;
-}
 
 const V0 = /* @__PURE__ */ vec3.create();
 
@@ -311,13 +256,15 @@ export function create(world: World, settings: SliderConstraintSettings): Slider
     vec3.normalize(_create_normalAxis1, settings.normalAxisA);
     vec3.normalize(_create_normalAxis2, settings.normalAxisB);
 
-    // calculate invInitialOrientation from world space axes
-    getInvInitialOrientationXY(
+    // inverse of the initial rotation from body 1 to body 2 in body 1 space, from the axes as given
+    quat.copy(
         constraint.invInitialOrientation,
-        _create_sliderAxis1,
-        _create_normalAxis1,
-        _create_sliderAxis2,
-        _create_normalAxis2,
+        rotationEulerConstraintPart.getInvInitialOrientationXY(
+            _create_sliderAxis1,
+            _create_normalAxis1,
+            _create_sliderAxis2,
+            _create_normalAxis2,
+        ),
     );
 
     const point1 = settings.pointA ?? V0;
@@ -331,18 +278,22 @@ export function create(world: World, settings: SliderConstraintSettings): Slider
             quat.conjugate(_create_invQuatB, bodyB.quaternion);
 
             if (settings.autoDetectPoint) {
-                // determine anchor point based on body mass
-                const mpA = bodyA.motionProperties;
-                const mpB = bodyB.motionProperties;
-                const invMassA = mpA.invMass;
-                const invMassB = mpB.invMass;
+                // if either body is static, anchor on the other body's center of mass.
+                // otherwise weight the anchor towards the lighter body (higher invMass = more influence)
+                const invMassA = bodyA.motionProperties.invMass;
+                const invMassB = bodyB.motionProperties.invMass;
                 const totalInvMass = invMassA + invMassB;
 
-                if (totalInvMass !== 0) {
-                    // weighted anchor towards lighter body
-                    vec3.scaleAndAdd(_create_anchor, vec3.create(), bodyA.centerOfMassPosition, invMassA / totalInvMass);
+                if (bodyA.motionType === MotionType.STATIC) {
+                    vec3.copy(_create_anchor, bodyB.centerOfMassPosition);
+                } else if (bodyB.motionType === MotionType.STATIC) {
+                    vec3.copy(_create_anchor, bodyA.centerOfMassPosition);
+                } else if (totalInvMass !== 0) {
+                    vec3.zero(_create_anchor);
+                    vec3.scaleAndAdd(_create_anchor, _create_anchor, bodyA.centerOfMassPosition, invMassA / totalInvMass);
                     vec3.scaleAndAdd(_create_anchor, _create_anchor, bodyB.centerOfMassPosition, invMassB / totalInvMass);
                 } else {
+                    // both bodies have infinite mass, use body A's position
                     vec3.copy(_create_anchor, bodyA.centerOfMassPosition);
                 }
 
@@ -386,9 +337,11 @@ export function create(world: World, settings: SliderConstraintSettings): Slider
     // set limits
     const limitsMin = settings.limitsMin ?? -Infinity;
     const limitsMax = settings.limitsMax ?? Infinity;
-    constraint.limitsMin = Math.min(limitsMin, 0);
-    constraint.limitsMax = Math.max(limitsMax, 0);
-    constraint.hasLimits = constraint.limitsMin !== -Infinity || constraint.limitsMax !== Infinity;
+    assert(
+        limitsMin !== limitsMax || (settings.limitsSpringSettings?.frequencyOrStiffness ?? 0) > 0,
+        'equal slider limits without a spring, use a fixed constraint',
+    );
+    setLimits(constraint, limitsMin, limitsMax);
 
     if (settings.limitsSpringSettings) {
         springSettings.copy(constraint.limitsSpringSettings, settings.limitsSpringSettings);
@@ -495,13 +448,16 @@ export function getCurrentPosition(constraint: SliderConstraint, bodies: Bodies)
  * @param max maximum position (must be ≥ 0)
  */
 export function setLimits(constraint: SliderConstraint, min: number, max: number): void {
-    constraint.limitsMin = Math.min(min, 0);
-    constraint.limitsMax = Math.max(max, 0);
-    constraint.hasLimits = constraint.limitsMin !== -Infinity || constraint.limitsMax !== Infinity;
+    assert(min <= 0, 'slider min limit must be <= 0');
+    assert(max >= 0, 'slider max limit must be >= 0');
+    constraint.limitsMin = min;
+    constraint.limitsMax = max;
+    constraint.hasLimits = min !== -Infinity || max !== Infinity;
 }
 
 /** Set motor state for slider constraint. */
 export function setMotorState(constraint: SliderConstraint, state: MotorState): void {
+    assert(state === MotorState.OFF || motorSettings.isValid(constraint.motorSettings), 'invalid motor settings');
     constraint.motorState = state;
 }
 
@@ -783,8 +739,7 @@ function calculateMotorConstraintProperties(
 
         case MotorState.POSITION: {
             if (springSettings.hasStiffness(constraint.motorSettings.springSettings)) {
-                const error = constraint.d - constraint.targetPosition;
-                axisConstraintPart.calculateConstraintPropertiesWithSettings(
+                axisConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                     constraint.motorConstraintPart,
                     deltaTime,
                     bodyA,
@@ -797,7 +752,31 @@ function calculateMotorConstraintProperties(
                     constraint.r2,
                     constraint.worldSpaceSliderAxis,
                     0,
-                    error,
+                    constraint.d - constraint.targetPosition,
+                    constraint.motorSettings.springSettings,
+                );
+            } else {
+                axisConstraintPart.deactivate(constraint.motorConstraintPart);
+            }
+            break;
+        }
+
+        case MotorState.POSITION_AND_VELOCITY: {
+            if (springSettings.hasStiffnessOrDamping(constraint.motorSettings.springSettings)) {
+                axisConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                    constraint.motorConstraintPart,
+                    deltaTime,
+                    bodyA,
+                    bodyB,
+                    invMassA,
+                    invMassB,
+                    _sliderConstraint_invInertiaA,
+                    _sliderConstraint_invInertiaB,
+                    _sliderConstraint_r1PlusU,
+                    constraint.r2,
+                    constraint.worldSpaceSliderAxis,
+                    -constraint.targetVelocity,
+                    constraint.d - constraint.targetPosition,
                     constraint.motorSettings.springSettings,
                 );
             } else {
@@ -922,6 +901,7 @@ function solveVelocity(constraint: SliderConstraint, bodies: Bodies, deltaTime: 
             }
             case MotorState.VELOCITY:
             case MotorState.POSITION:
+            case MotorState.POSITION_AND_VELOCITY:
                 motor = axisConstraintPart.solveVelocityConstraint(
                     constraint.motorConstraintPart,
                     bodyA,
