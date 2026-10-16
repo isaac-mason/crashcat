@@ -7,7 +7,9 @@ import {
     castRayVsShape,
     castShapeVsShape,
     collidePointVsShape,
+    computeMassProperties,
     collideShapeVsShape,
+    createAllCastRayCollector,
     createAllCollidePointCollector,
     createAllCollideShapeCollector,
     createClosestCastRayCollector,
@@ -17,6 +19,7 @@ import {
     createDefaultCollidePointSettings,
     createDefaultCollideShapeSettings,
     EMPTY_SUB_SHAPE_ID,
+    massProperties,
     plane,
     sphere,
 } from '../../src';
@@ -225,5 +228,103 @@ describe('plane - ray and point at a pose', () => {
 
         expect(collidePoint(4.5)).toBe(1);
         expect(collidePoint(3.5)).toBe(0);
+    });
+});
+
+describe('plane - jolt parity', () => {
+    test('create normalises the constant with the normal', () => {
+        const scaledPlane = plane.create({ plane: { normal: [0, 2, 0], constant: -1 } });
+        expect(scaledPlane.plane.normal).toEqual([0, 1, 0]);
+        expect(scaledPlane.plane.constant).toBe(-0.5);
+
+        // the surface is at y = 0.5
+        const collidePoint = (y: number) => {
+            const collector = createAllCollidePointCollector();
+            // biome-ignore format: readability
+            collidePointVsShape(
+                collector,
+                createDefaultCollidePointSettings(),
+                0, y, 0,
+                scaledPlane,
+                EMPTY_SUB_SHAPE_ID, 0,
+                0, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+            return collector.hits.length;
+        };
+        expect(collidePoint(0.4)).toBe(1);
+        expect(collidePoint(0.75)).toBe(0);
+    });
+
+    test('mass properties zero both the mass and the inertia', () => {
+        const out = massProperties.create();
+        out.mass = 5;
+        for (let i = 0; i < 16; i++) out.inertia[i] = i + 1;
+        computeMassProperties(out, planeShape);
+        expect(out.mass).toBe(0);
+        for (let i = 0; i < 16; i++) expect(out.inertia[i]).toBe(0);
+    });
+
+    test('a point inside reports the plane material', () => {
+        const materialPlane = plane.create({ plane: { normal: [0, 1, 0], constant: 0 }, materialId: 7 });
+        const collector = createAllCollidePointCollector();
+        // biome-ignore format: readability
+        collidePointVsShape(
+            collector,
+            createDefaultCollidePointSettings(),
+            0, -1, 0,
+            materialPlane,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        expect(collector.hits.length).toBe(1);
+        expect(collector.hits[0].materialId).toBe(7);
+    });
+
+    test('a ray starting inside the solid hits at 0 and still hits the surface from behind', () => {
+        const collector = createAllCastRayCollector();
+        const settings = createDefaultCastRaySettings();
+        settings.treatConvexAsSolid = true;
+        settings.collideWithBackfacesConvex = true;
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0, -1, 0,
+            0, 1, 0,
+            10,
+            planeShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        collector.sort();
+        expect(collector.hits.length).toBe(2);
+        expect(collector.hits[0].fraction).toBe(0);
+        expect(collector.hits[1].fraction).toBeCloseTo(0.1, 6);
+    });
+
+    test('only an exactly parallel ray misses', () => {
+        const collector = createAllCastRayCollector();
+        const settings = createDefaultCastRaySettings();
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0, 1e-12, 0,
+            1, -1e-11, 0,
+            1,
+            planeShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        expect(collector.hits.length).toBe(1);
+        expect(collector.hits[0].fraction).toBeCloseTo(0.1, 6);
     });
 });

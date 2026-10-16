@@ -78,9 +78,11 @@ export type PlaneShape = {
 
 /** create a plane shape from settings */
 export function create(o: PlaneShapeSettings): PlaneShape {
+    // normalise the whole equation so the plane stays where it was described
     const plane = plane3.create();
-    vec3.normalize(plane.normal, o.plane.normal);
-    plane.constant = o.plane.constant;
+    const normalLength = vec3.length(o.plane.normal);
+    vec3.scale(plane.normal, o.plane.normal, 1 / normalLength);
+    plane.constant = o.plane.constant / normalLength;
 
     const halfExtent = o.halfExtent ?? DEFAULT_PLANE_HALF_EXTENT;
 
@@ -121,7 +123,9 @@ export const def = /* @__PURE__ */ (() =>
     }))();
 
 function computeMassProperties(out: MassProperties, _shape: PlaneShape): void {
+    // planes are static only: no mass, no inertia
     out.mass = 0;
+    mat4.zero(out.inertia);
 }
 
 function getMaterial(shape: PlaneShape, subShapeId: SubShapeId): number {
@@ -380,7 +384,6 @@ function castRayVsPlane(
         _castRayVsPlane_hit.materialId = (shape as PlaneShape).materialId;
         _castRayVsPlane_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_castRayVsPlane_hit);
-        return;
     }
 
     // set ray direction from parameters
@@ -389,7 +392,7 @@ function castRayVsPlane(
     const dot = vec3.dot(_castRayVsPlane_rayDirection, _castRayVsPlane_worldPlane.normal);
 
     // parallel to plane?
-    if (Math.abs(dot) < 1e-10) {
+    if (dot === 0) {
         return;
     }
 
@@ -463,6 +466,7 @@ function collidePointVsPlane(
 
     if (distance < 0.0) {
         _collidePointVsPlane_hit.subShapeIdB = subShapeId;
+        _collidePointVsPlane_hit.materialId = shape.materialId;
         _collidePointVsPlane_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointVsPlane_hit);
     }
