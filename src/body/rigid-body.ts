@@ -334,6 +334,16 @@ function setRigidBody(body: RigidBody, o: RigidBodySettings): void {
     vec3.zero(mp.force);
     vec3.zero(mp.torque);
 
+    // reset mass state, step overrides and memos a previous body in this slot may have left behind.
+    // updateShape only sets mass for non-static bodies, so statics rely on this
+    mp.invMass = 0;
+    vec3.zero(mp.invInertiaDiagonal);
+    quat.identity(mp.inertiaRotation);
+    mp.numVelocityStepsOverride = 0;
+    mp.numPositionStepsOverride = 0;
+    mp.sleepTestTimer = 0;
+    mp.worldInverseInertiaStamp = motionProperties.STEP_STAMP_NONE;
+
     mp.gravityFactor = o.gravityFactor ?? DEFAULT_RIGID_BODY_SETTINGS.gravityFactor;
     mp.linearDamping = o.linearDamping ?? DEFAULT_RIGID_BODY_SETTINGS.linearDamping;
     mp.angularDamping = o.angularDamping ?? DEFAULT_RIGID_BODY_SETTINGS.angularDamping;

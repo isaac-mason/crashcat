@@ -1183,3 +1183,49 @@ describe('Body - wakeInAABB', () => {
         expect(awakeBody.sleeping).toBe(false);
     });
 });
+
+describe('Body - Pooled Slot Reuse', () => {
+    test('a static body reusing a dynamic body slot has no mass or step overrides', () => {
+        const { world, layers } = createTestWorld();
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+        const dynamicBody = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        dynamicBody.motionProperties.numVelocityStepsOverride = 12;
+        dynamicBody.motionProperties.numPositionStepsOverride = 7;
+        expect(dynamicBody.motionProperties.invMass).toBeGreaterThan(0);
+
+        const index = dynamicBody.index;
+        rigidBody.remove(world, dynamicBody);
+
+        const staticBody = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+        });
+
+        expect(staticBody.index).toBe(index);
+        expect(staticBody.motionProperties.invMass).toBe(0);
+        expect(vec3.length(staticBody.motionProperties.invInertiaDiagonal)).toBe(0);
+        expect(staticBody.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(staticBody.motionProperties.numPositionStepsOverride).toBe(0);
+        expect(staticBody.motionProperties.worldInverseInertiaStamp).toBe(motionProperties.STEP_STAMP_NONE);
+    });
+
+    test('a dynamic body reusing a slot does not inherit step overrides', () => {
+        const { world, layers } = createTestWorld();
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+        const first = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        first.motionProperties.numVelocityStepsOverride = 12;
+        first.motionProperties.numPositionStepsOverride = 7;
+
+        const index = first.index;
+        rigidBody.remove(world, first);
+
+        const second = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+
+        expect(second.index).toBe(index);
+        expect(second.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(second.motionProperties.numPositionStepsOverride).toBe(0);
+    });
+});
