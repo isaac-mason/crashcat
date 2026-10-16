@@ -1,9 +1,11 @@
-import { vec3 } from 'math';
+import { mat4, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
+    computeMassProperties,
     ConstraintSpace,
     distanceConstraint,
     emptyShape,
+    massProperties,
     MotionType,
     rigidBody,
     ShapeType,
@@ -20,6 +22,16 @@ describe('EmptyShape', () => {
         expect(shape.volume).toBe(0);
         expect(shape.centerOfMass).toEqual([0, 0, 0]);
         expect(shape.aabb).toEqual([0, 0, 0, 0, 0, 0]);
+    });
+
+    test('has unit mass and identity inertia', () => {
+        const out = massProperties.create();
+        mat4.multiplyScalar(out.inertia, out.inertia, 7);
+
+        computeMassProperties(out, emptyShape.create());
+
+        expect(out.mass).toBe(1);
+        expect(Array.from(out.inertia)).toEqual(Array.from(mat4.create()));
     });
 
     test('should create static body with empty shape', () => {
@@ -135,7 +147,7 @@ describe('EmptyShape', () => {
         expect(body.dbvtNode).toBeGreaterThanOrEqual(0);
     });
 
-    test('should have zero mass properties', () => {
+    test('a body with an empty shape has unit mass', () => {
         const { world, layers } = createTestWorld();
 
         const body = rigidBody.create(world, {
@@ -144,20 +156,19 @@ describe('EmptyShape', () => {
             motionType: MotionType.STATIC,
         });
 
-        expect(body.massProperties.mass).toBe(0);
+        expect(body.massProperties.mass).toBe(1);
     });
 
-    test('should require mass properties for dynamic bodies', () => {
+    test('a dynamic body with an empty shape needs no mass override', () => {
         const { world, layers } = createTestWorld();
 
-        // Dynamic EmptyShape requires explicit mass properties since it has no geometry
-        expect(() => {
-            rigidBody.create(world, {
-                shape: emptyShape.create(),
-                objectLayer: layers.OBJECT_LAYER_MOVING,
-                motionType: MotionType.DYNAMIC,
-                position: vec3.fromValues(0, 10, 0),
-            });
-        }).toThrow('Invalid mass');
+        const body = rigidBody.create(world, {
+            shape: emptyShape.create(),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, 10, 0),
+        });
+
+        expect(body.motionProperties.invMass).toBe(1);
     });
 });

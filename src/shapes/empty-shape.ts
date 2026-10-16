@@ -1,4 +1,4 @@
-import { quat, type Vec3, vec3 } from 'math';
+import { mat4, type Vec3, vec3 } from 'math';
 import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import { defineShape, ShapeType, type SupportingFaceResult, type SurfaceNormalResult } from './shapes';
@@ -9,7 +9,7 @@ import { defineShape, ShapeType, type SupportingFaceResult, type SurfaceNormalRe
  *
  * EmptyShape bodies:
  * - Do not produce any collision contacts (no-op collision/cast functions)
- * - Have zero mass and zero inertia
+ * - Have unit mass and identity inertia
  * - Have zero-size AABB
  * - Are added to broadphase but filtered out during narrowphase via dispatch
  * - Can still be used in constraints (e.g., for "fixed to world" constraints)
@@ -41,15 +41,14 @@ export const def = /* @__PURE__ */ (() =>
     defineShape<EmptyShape>({
         type: ShapeType.EMPTY,
         computeMassProperties(out: MassProperties, _shape: EmptyShape): void {
-            // empty shape has zero mass and zero inertia
-            out.mass = 0;
-            // inertia matrix is already initialized to zeros in massProperties.create()
+            // unit mass and inertia, so a dynamic body without a shape still integrates
+            out.mass = 1;
+            mat4.identity(out.inertia);
         },
         getSurfaceNormal(ioResult: SurfaceNormalResult, _shape: EmptyShape, _subShapeId: number): void {
             // no surface, return zero normal
             vec3.zero(ioResult.normal);
             vec3.zero(ioResult.position);
-            quat.identity(ioResult.quaternion);
             vec3.set(ioResult.scale, 1, 1, 1);
         },
         getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, _shape: EmptyShape, _subShapeId: number): void {

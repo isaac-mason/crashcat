@@ -1,5 +1,5 @@
 import type { Mat4 } from 'math';
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { mat4, type Quat, type Vec3, vec3 } from 'math';
 import type { Box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import type { SubShapeId } from '../body/sub-shape';
@@ -114,7 +114,6 @@ export const DEFAULT_SHAPE_DENSITY = 1000; // kg/m³
 export type SurfaceNormalResult = {
     normal: Vec3;
     position: Vec3;
-    quaternion: Quat;
     scale: Vec3;
 };
 
@@ -439,14 +438,12 @@ export function setCastShapeFn(typeA: ShapeType, typeB: ShapeType, fn: CastShape
 const _surfaceNormalResult: SurfaceNormalResult = {
     normal: vec3.create(),
     position: vec3.create(),
-    quaternion: quat.create(),
     scale: vec3.fromValues(1, 1, 1),
 };
 
 export function getShapeSurfaceNormal(out: Vec3, shape: Shape, position: Vec3, subShapeId: number): Vec3 {
     // set up result with initial transforms
     vec3.copy(_surfaceNormalResult.position, position);
-    quat.identity(_surfaceNormalResult.quaternion);
     vec3.set(_surfaceNormalResult.scale, 1, 1, 1);
 
     // compute surface normal with accumulated transforms
