@@ -1,4 +1,7 @@
+/** smallest positive normal f32 (jolt's FLT_MIN) */
+export declare const FLT_MIN = 1.1754943508222875e-38;
 export declare const INITIAL_EARLY_OUT_FRACTION: number;
+/** ray casts stop at a hit at fraction 0; shape casts keep going for deeper overlaps, down to -Infinity */
 export declare const SHOULD_EARLY_OUT_FRACTION = 0;
 /** result of a {@link rayIntersectsTriangle} test */
 export type RayIntersectsTriangleResult = {

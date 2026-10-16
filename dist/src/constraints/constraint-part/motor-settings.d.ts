@@ -6,8 +6,14 @@ export declare enum MotorState {
     /** Motor drives to target velocity */
     VELOCITY = 1,
     /** Motor drives to target position */
-    POSITION = 2
+    POSITION = 2,
+    /** motor drives to both the target position and the target velocity */
+    POSITION_AND_VELOCITY = 3
 }
+/** whether the motor state drives to a target velocity */
+export declare function isVelocityMotor(state: MotorState): boolean;
+/** whether the motor state drives to a target position */
+export declare function isPositionMotor(state: MotorState): boolean;
 /** settings for a constraint motor */
 export type MotorSettings = {
     /**

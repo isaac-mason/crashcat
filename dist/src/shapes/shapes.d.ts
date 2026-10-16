@@ -103,7 +103,6 @@ export declare const DEFAULT_SHAPE_DENSITY = 1000;
 export type SurfaceNormalResult = {
     normal: Vec3;
     position: Vec3;
-    quaternion: Quat;
     scale: Vec3;
 };
 export type SupportingFaceResult = {
@@ -142,6 +141,7 @@ export declare function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptio
 export type ComputeMassPropertiesImpl<S extends ShapeBase> = (out: MassProperties, shape: S) => void;
 export type GetSurfaceNormalImpl<S extends ShapeBase> = (ioResult: SurfaceNormalResult, shape: S, subShapeId: number) => void;
 export type GetSupportingFaceImpl<S extends ShapeBase> = (ioResult: SupportingFaceResult, direction: Vec3, shape: S, subShapeId: number) => void;
+export type GetMaterialImpl<S extends ShapeBase> = (shape: S, subShapeId: SubShapeId) => number;
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 export type GetLeafShapeImpl<S extends ShapeBase> = (outResult: GetLeafShapeResult, shape: S, subShapeId: SubShapeId) => void;
 export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (outResult: GetSubShapeTransformedShapeResult, shape: S, subShapeId: SubShapeId) => void;
@@ -170,6 +170,8 @@ export type ShapeDef<S extends ShapeBase> = {
     getSurfaceNormal: GetSurfaceNormalImpl<S>;
     /** get supporting face */
     getSupportingFace: GetSupportingFaceImpl<S>;
+    /** get the material id of the leaf a sub shape id names, -1 for none */
+    getMaterial: GetMaterialImpl<S>;
     /** get inner radius - radius of the biggest sphere that fits entirely in the shape */
     getInnerRadius: GetInnerRadiusImpl<S>;
     /** navigate to leaf shape following sub shape id hierarchy */
@@ -236,4 +238,13 @@ export declare function getShapeSupportingFace(out: Face, shape: Shape, subShape
  * @returns the inner radius in meters
  */
 export declare function getShapeInnerRadius(shape: Shape): number;
+/**
+ * the scale a rotated child sees: a scale in its parent's space carried into the child's space, the diagonal of
+ * rotation^T * scale * rotation. a uniform scale or an identity rotation passes through unchanged. only exact where
+ * the rotation keeps the scale's axes aligned (multiples of 90 degrees), otherwise the child would need a shear
+ * (jolt: ScaleHelpers::RotateScale behind the child's TransformScale)
+ */
+export declare function transformScale(out: Vec3, rotation: Quat, scaleX: number, scaleY: number, scaleZ: number): Vec3;
+/** the material id of the leaf a sub shape id names, -1 for none */
+export declare function getShapeMaterial(shape: Shape, subShapeId: SubShapeId): number;
 export {};

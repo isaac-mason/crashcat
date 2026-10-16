@@ -42,7 +42,11 @@ export type SpringSettings = {
 };
 /** create default spring settings (hard constraint, no spring) */
 export declare function create(): SpringSettings;
+/** reset spring settings to the defaults (hard constraint, no spring) */
+export declare function reset(out: SpringSettings): SpringSettings;
 /** copy spring settings from source to out */
 export declare function copy(out: SpringSettings, source: SpringSettings): void;
 /** check if the spring has valid frequency/stiffness (soft constraint), if false, the spring will be hard */
 export declare function hasStiffness(settings: SpringSettings): boolean;
+/** check if the spring has stiffness or damping, which makes it active. if false, the constraint will be hard */
+export declare function hasStiffnessOrDamping(settings: SpringSettings): boolean;

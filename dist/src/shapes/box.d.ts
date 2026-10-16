@@ -52,7 +52,7 @@ export declare function collideSphereVsBox(collector: CollideShapeCollector, set
  * Analytic ray-vs-box (slab test), replacing the generic GJK convex cast for boxes. Not an
  * approximation: the gjk path already casts against a sharp box of |scale|·halfExtents with zero
  * convex radius (setBoxSupport under INCLUDE_CONVEX_RADIUS), so this is bit-equivalent geometry,
- * exact rather than iterated to a 1e-3 tolerance. Reporting matches castRayVsConvex (entry hit,
- * treatConvexAsSolid gate); the hit carries no normal, matching CastRayHit.
+ * exact rather than iterated to a 1e-3 tolerance. Reporting follows jolt's BoxShape::CastRay: the entry
+ * hit behind the treatConvexAsSolid gate, and the exit hit when collideWithBackfacesConvex is set.
  */
 export declare function castRayVsBox(collector: CastRayCollector, settings: CastRaySettings, originX: number, originY: number, originZ: number, directionX: number, directionY: number, directionZ: number, length: number, shape: BoxShape, subShapeId: number, _subShapeIdBits: number, posX: number, posY: number, posZ: number, quatX: number, quatY: number, quatZ: number, quatW: number, scaleX: number, scaleY: number, scaleZ: number): void;

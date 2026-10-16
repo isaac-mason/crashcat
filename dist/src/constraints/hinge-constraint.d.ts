@@ -79,9 +79,9 @@ export type HingeConstraintSettings = {
     normalAxisB: Vec3;
     /** constraint space @default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** minimum angle limit in radians (default: -PI) */
+    /** minimum angle limit in radians, in [-PI, 0] (default: -PI) */
     limitsMin?: number;
-    /** maximum angle limit in radians (default: PI) */
+    /** maximum angle limit in radians, in [0, PI] (default: PI) */
     limitsMax?: number;
     /** spring settings for soft limits */
     limitsSpringSettings?: SpringSettings;
@@ -105,8 +105,8 @@ export declare function get(world: World, id: ConstraintId): HingeConstraint | u
 /**
  * Set hinge constraint limits.
  * @param constraint the constraint to modify
- * @param min minimum angle in radians
- * @param max maximum angle in radians
+ * @param min minimum angle in radians, in [-PI, 0]
+ * @param max maximum angle in radians, in [0, PI]
  */
 export declare function setLimits(constraint: HingeConstraint, min: number, max: number): void;
 /** Set motor state for hinge constraint. */

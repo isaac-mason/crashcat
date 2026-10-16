@@ -79,8 +79,10 @@ export type ContactConstraint = {
     invInertiaScaleB: number;
     /** index of the contact in the global contact array, used to look up contact for writing back solved impulses */
     contactIndex: number;
-    /** sort key for deterministic ordering */
-    sortKey: number;
+    /** high 32 bits of the 64 bit sort key for deterministic ordering, see {@link computeContactSortKey} */
+    sortKeyHigh: number;
+    /** low 32 bits of the 64 bit sort key */
+    sortKeyLow: number;
 };
 /**
  * A single contact point with non-penetration constraint data.
@@ -219,6 +221,12 @@ export declare function storeAppliedImpulses(contactConstraints: ContactConstrai
  *
  */
 export declare function solvePositionConstraintsForIsland(contactConstraints: ContactConstraints, bodies: Bodies, constraintIndices: number[], penetrationSlop: number, baumgarteFactor: number, maxPenetrationDistance: number): boolean;
+/**
+ * the contact's sort key: the 64 bit fnv-1a hash of body id a, sub shape id a, body id b, sub shape id b, each id
+ * as its little endian bytes (a body id as 8: index then sequence), stored as two u32 halves
+ * (jolt: SubShapeIDPair::GetHash, over 4 byte body ids)
+ */
+export declare function computeContactSortKey(out: Pick<ContactConstraint, 'sortKeyHigh' | 'sortKeyLow'>, bodyIdA: number, subShapeIdA: number, bodyIdB: number, subShapeIdB: number): void;
 /**
  * Sort contact constraint indices for deterministic solving.
  * Sorts by:

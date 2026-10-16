@@ -7,7 +7,7 @@ import { ShapeType } from './shapes.js';
  *
  * EmptyShape bodies:
  * - Do not produce any collision contacts (no-op collision/cast functions)
- * - Have zero mass and zero inertia
+ * - Have unit mass and identity inertia
  * - Have zero-size AABB
  * - Are added to broadphase but filtered out during narrowphase via dispatch
  * - Can still be used in constraints (e.g., for "fixed to world" constraints)

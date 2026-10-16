@@ -1,7 +1,7 @@
 import type { Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 import { type SpringPart } from './spring-part.js';
-import type { SpringSettings } from './spring-settings.js';
+import { type SpringSettings } from './spring-settings.js';
 /**
  * Constrains rotation along 1 axis.
  *
@@ -75,8 +75,8 @@ export declare function calculateConstraintPropertiesWithFrequencyAndDamping(par
  */
 export declare function calculateConstraintPropertiesWithStiffnessAndDamping(part: AngleConstraintPart, deltaTime: number, bodyA: RigidBody, bodyB: RigidBody, worldSpaceAxis: Vec3, bias: number, C: number, stiffness: number, damping: number): void;
 /**
- * Calculate constraint properties using SpringSettings.
- * Selects the appropriate calculation method based on the spring mode.
+ * Calculate constraint properties for a limit using SpringSettings.
+ * Turns to a hard limit when the spring has no frequency or stiffness.
  * @param part the constraint part to initialize
  * @param deltaTime time step
  * @param bodyA first body
@@ -87,6 +87,19 @@ export declare function calculateConstraintPropertiesWithStiffnessAndDamping(par
  * @param settings spring settings (mode, frequency/stiffness, damping)
  */
 export declare function calculateConstraintPropertiesWithSettings(part: AngleConstraintPart, deltaTime: number, bodyA: RigidBody, bodyB: RigidBody, worldSpaceAxis: Vec3, bias: number, C: number, settings: SpringSettings): void;
+/**
+ * Calculate constraint properties for a motor using SpringSettings.
+ * The spring must have stiffness or damping; damping alone drives the velocity only.
+ * @param part the constraint part to initialize
+ * @param deltaTime time step
+ * @param bodyA first body
+ * @param bodyB second body
+ * @param worldSpaceAxis axis of rotation (normalized)
+ * @param bias bias term
+ * @param C value of the constraint equation (angle error)
+ * @param settings spring settings (mode, frequency/stiffness, damping)
+ */
+export declare function calculateConstraintPropertiesWithSettingsForMotor(part: AngleConstraintPart, deltaTime: number, bodyA: RigidBody, bodyB: RigidBody, worldSpaceAxis: Vec3, bias: number, C: number, settings: SpringSettings): void;
 /** apply warm start impulse from previous frame */
 export declare function warmStart(part: AngleConstraintPart, bodyA: RigidBody, bodyB: RigidBody, warmStartImpulseRatio: number): void;
 /**

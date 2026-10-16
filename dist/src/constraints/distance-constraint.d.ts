@@ -60,8 +60,8 @@ export declare function getTotalLambda(constraint: DistanceConstraint): number;
 /**
  * Set the distance limits for a distance constraint.
  * @param constraint - The constraint to modify
- * @param minDistance - Minimum distance (use -1 to keep current)
- * @param maxDistance - Maximum distance (use -1 to keep current)
+ * @param minDistance - Minimum distance, must be <= maxDistance
+ * @param maxDistance - Maximum distance
  */
 export declare function setDistance(constraint: DistanceConstraint, minDistance: number, maxDistance: number): void;
 /** the constraint definition for distance constraint */

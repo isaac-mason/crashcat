@@ -32,6 +32,8 @@ export declare class InternalEdgeRemovingCollector implements CollideShapeCollec
     private chainedCollector;
     private voidedFeatures;
     private delayedResults;
+    /** max squared distance to consider a vertex to be the same as another vertex, used to determine if a feature is voided */
+    private vertexToleranceSq;
     addHit(hit: CollideShapeHit): void;
     addMiss(): void;
     shouldEarlyOut(): boolean;
@@ -41,13 +43,17 @@ export declare class InternalEdgeRemovingCollector implements CollideShapeCollec
      */
     flush(): void;
     /**
-     * reset the collector state
+     * reset the collector state, and the chained collector's
      */
     reset(): void;
     /**
-     * set the chained collector (for reusing the wrapper)
+     * set the chained collector and the vertex tolerance (for reusing the wrapper)
+     * @param chainedCollector collector that receives all the results that do not hit internal edges
+     * @param vertexToleranceSq max squared distance to consider a vertex to be the same as another vertex
      */
-    set(chainedCollector: CollideShapeCollector): void;
+    set(chainedCollector: CollideShapeCollector, vertexToleranceSq: number): void;
+    /** release the delayed results and voided features */
+    private clear;
     /**
      * calculate the face normal from the first 3 vertices
      */

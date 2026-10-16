@@ -45,10 +45,17 @@ export type CastShapeHit = {
     bodyIdB: number;
 };
 export declare function createCastShapeHit(): CastShapeHit;
+/**
+ * the value a cast hit is ordered by and bounds further searching with: the fraction, or for a hit
+ * that starts overlapping (fraction 0) the negated penetration depth, so deeper overlaps sort first
+ */
+export declare function castShapeHitEarlyOutFraction(hit: CastShapeHit): number;
 export declare function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit): void;
 export type CastShapeSettings = {
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
-    collideWithBackfaces: boolean;
+    /** if true, back facing triangles (triangle meshes) are hit, otherwise they are ignored */
+    collideWithBackfacesTriangles: boolean;
+    /** if true, convex shapes (and planes) are hit when the cast moves away from them, otherwise those hits are ignored */
+    collideWithBackfacesConvex: boolean;
     /** if true, the supporting faces at the contact points will be computed and returned in the CastShapeHit objects */
     collectFaces: boolean;
     /** if objects are closer than this distance, they are considered to be colliding (used for GJK) (unit: meter) */
@@ -85,6 +92,8 @@ export declare class AllCastShapeCollector implements CastShapeCollector {
     addMiss(): void;
     shouldEarlyOut(): boolean;
     reset(): void;
+    /** orders hits closest first: by fraction, deepest first among hits that start overlapping */
+    sort(): void;
 }
 export declare function createAllCastShapeCollector(): AllCastShapeCollector;
 export declare class AnyCastShapeCollector implements CastShapeCollector {

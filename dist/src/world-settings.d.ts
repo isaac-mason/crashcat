@@ -67,7 +67,8 @@ export type WorldSettings = {
          */
         manifoldTolerance: number;
         /**
-         * Collide with backfaces during raycasts/shapecasts.
+         * Collide with back facing triangles when finding contacts and in ccd casts.
+         * convex back faces are always ignored there.
          * @default false
          */
         collideWithBackfaces: boolean;
@@ -112,6 +113,14 @@ export type WorldSettings = {
          * @default cos(1°) ≈ 0.99985
          */
         bodyPairCacheCosMaxDeltaRotationDiv2: number;
+        /**
+         * Max squared distance to consider a vertex to be the same as another vertex, used by
+         * the internal edge removal algorithm (enhancedInternalEdgeRemoval) to determine if two
+         * edges are shared.
+         * Unit: meters²
+         * @default 1e-8
+         */
+        internalEdgeRemovalVertexToleranceSq: number;
     };
     /** Solver options */
     solver: {

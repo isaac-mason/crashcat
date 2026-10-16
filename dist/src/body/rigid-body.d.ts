@@ -46,6 +46,16 @@ export type RigidBodySettings = {
     maxLinearVelocity?: number;
     /** max angular velocity @see DEFAULT_RIGID_BODY_SETTINGS */
     maxAngularVelocity?: number;
+    /**
+     * used only when this body is dynamic and colliding. override for the number of solver velocity iterations, 0 uses
+     * the world default. an island runs the max over all of its contacts and constraints @see DEFAULT_RIGID_BODY_SETTINGS
+     */
+    numVelocityStepsOverride?: number;
+    /**
+     * used only when this body is dynamic and colliding. override for the number of solver position iterations, 0 uses
+     * the world default. an island runs the max over all of its contacts and constraints @see DEFAULT_RIGID_BODY_SETTINGS
+     */
+    numPositionStepsOverride?: number;
     /** body friction @see DEFAULT_RIGID_BODY_SETTINGS */
     friction?: number;
     /** body restitution @see DEFAULT_RIGID_BODY_SETTINGS */
@@ -90,6 +100,8 @@ export declare const DEFAULT_RIGID_BODY_SETTINGS: {
     angularDamping: number;
     maxLinearVelocity: number;
     maxAngularVelocity: number;
+    numVelocityStepsOverride: number;
+    numPositionStepsOverride: number;
     allowSleeping: boolean;
     friction: number;
     restitution: number;

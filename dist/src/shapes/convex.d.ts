@@ -1,9 +1,12 @@
 import type { Mat4, Vec3 } from 'math';
+import { type SubShapeId } from '../body/sub-shape.js';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape.js';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape.js';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape.js';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape.js';
-import type { Shape } from './shapes.js';
+import type { ConvexShape, Shape } from './shapes.js';
+/** a convex shape is a single leaf with a single material */
+export declare function getConvexMaterial(shape: ConvexShape, subShapeId: SubShapeId): number;
 /** cast ray implementation for convex shapes */
 export declare function castRayVsConvex(collector: CastRayCollector, settings: CastRaySettings, originX: number, originY: number, originZ: number, directionX: number, directionY: number, directionZ: number, length: number, shape: Shape, subShapeId: number, _subShapeIdBits: number, posX: number, posY: number, posZ: number, quatX: number, quatY: number, quatZ: number, quatW: number, scaleX: number, scaleY: number, scaleZ: number): void;
 /** collide point implementation for convex shapes */
