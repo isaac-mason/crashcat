@@ -409,19 +409,11 @@ describe('TriangleMeshBuilder', () => {
             expect(getActiveEdges(result.data, 0)).toBe(0b111);
         });
 
-        test('non-manifold edges remain active', () => {
-            // Create three triangles sharing a common edge
-            // This creates a non-manifold configuration
+        test('back to back triangles keep the shared edge active', () => {
+            // two triangles on the edge 0-1 with opposite windings: their normals are opposite
             const result = buildTriangleMesh({
                 positions: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1, 0],
-                indices: [
-                    0,
-                    1,
-                    2, // Triangle 1
-                    0,
-                    1,
-                    3, // Triangle 2 (shares edge 0-1)
-                ],
+                indices: [0, 1, 2, 0, 1, 3],
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
@@ -429,12 +421,25 @@ describe('TriangleMeshBuilder', () => {
             });
 
             expect(result.data.triangleCount).toBe(2);
-
-            // Edge 0-1 is shared by both and has dihedral angle 180° (opposite faces)
-            // Normals should be opposite, dot product should be negative/low
-            // Both triangles should have the edge active
             expect(getActiveEdges(result.data, 0) & 0b001).toBe(0b001);
             expect(getActiveEdges(result.data, 1) & 0b001).toBe(0b001);
+        });
+
+        test('non-manifold edges remain active', () => {
+            // three coplanar triangles on the edge 0-1: an edge with more than two triangles is always active
+            const result = buildTriangleMesh({
+                positions: [0, 0, 0, 1, 0, 0, 0.5, 1, 0, 0.5, -1, 0, 0.5, 2, 0],
+                indices: [0, 1, 2, 1, 0, 3, 0, 1, 4],
+                degenerateTolerance: 1e-6,
+                bvhMaxLeafTris: 2,
+                bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
+                activeEdgeCosThresholdAngle,
+            });
+
+            expect(result.data.triangleCount).toBe(3);
+            for (let t = 0; t < 3; t++) {
+                expect(getActiveEdges(result.data, t)).toBe(0b111);
+            }
         });
 
         test('mixed smooth and sharp edges', () => {
