@@ -23,6 +23,7 @@ import {
     setCastShapeFn,
     setCollideShapeFn,
     shapeDefs,
+    transformScale,
 } from './shapes';
 import * as bvh from './utils/bvh';
 import type { BvhBuildSettings, StaticCompoundBVH } from './utils/static-compound-bvh';
@@ -159,6 +160,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -233,6 +235,14 @@ function computeMassProperties(out: MassProperties, shape: StaticCompoundShape):
 
 const _getSurfaceNormal_invRotation = /* @__PURE__ */ quat.create();
 
+function getMaterial(shape: StaticCompoundShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childIndex = _subShapeIdPopResult.value;
+    assert(childIndex < shape.children.length, 'Invalid SubShapeID for StaticCompoundShape');
+    const child = shape.children[childIndex].shape;
+    return shapeDefs[child.type].getMaterial(child, _subShapeIdPopResult.remainder);
+}
+
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundShape, subShapeId: number): void {
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
 
@@ -288,6 +298,9 @@ function getSupportingFace(
     // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
     mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
 
+    // the child sees the scale in its own space
+    transformScale(ioResult.scale, child.quaternion, ioResult.scale[0], ioResult.scale[1], ioResult.scale[2]);
+
     shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
 }
 
@@ -331,10 +344,14 @@ function getSubShapeTransformedShape(
     vec3.transformQuat(childPosition, childPosition, out.rotation);
     vec3.add(out.position, out.position, childPosition);
     quat.multiply(out.rotation, out.rotation, child.quaternion);
+    transformScale(out.scale, child.quaternion, out.scale[0], out.scale[1], out.scale[2]);
 
     const childShapeDef = shapeDefs[child.shape.type];
     childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
 }
+
+/** the scale a child is dispatched with, see transformScale */
+const _childScale = /* @__PURE__ */ vec3.create();
 
 /* cast ray */
 
@@ -492,6 +509,7 @@ function castRay(
                     _castRayVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_castRayVsStaticCompound_worldRot, _castRayVsStaticCompound_quat, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleX, scaleY, scaleZ);
 
                 const childShapeDef = shapeDefs[child.shape.type];
                 childShapeDef.castRay(
@@ -514,9 +532,9 @@ function castRay(
                     _castRayVsStaticCompound_worldRot[1],
                     _castRayVsStaticCompound_worldRot[2],
                     _castRayVsStaticCompound_worldRot[3],
-                    scaleX,
-                    scaleY,
-                    scaleZ,
+                    childScale[0],
+                    childScale[1],
+                    childScale[2],
                 );
 
                 earlyOut = collector.earlyOutFraction;
@@ -712,6 +730,7 @@ function collidePoint(
                     _collidePointVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_collidePointVsStaticCompound_worldRot, _collidePointVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const childShapeDef = shapeDefs[child.shape.type];
                 childShapeDef.collidePoint(
@@ -730,9 +749,9 @@ function collidePoint(
                     _collidePointVsStaticCompound_worldRot[1],
                     _collidePointVsStaticCompound_worldRot[2],
                     _collidePointVsStaticCompound_worldRot[3],
-                    scaleBX,
-                    scaleBY,
-                    scaleBZ,
+                    childScale[0],
+                    childScale[1],
+                    childScale[2],
                 );
             }
             _collidePointVsStaticCompound_stackTop = stackBase;
@@ -942,6 +961,7 @@ function collideStaticCompoundVsShape(
                     _collideStaticCompoundVsShape_transformedTranslation,
                 );
                 quat.multiply(_collideStaticCompoundVsShape_worldRot, _collideStaticCompoundVsShape_quatA, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
                 const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
                 if (fn) {
@@ -958,9 +978,9 @@ function collideStaticCompoundVsShape(
                         _collideStaticCompoundVsShape_worldRot[1],
                         _collideStaticCompoundVsShape_worldRot[2],
                         _collideStaticCompoundVsShape_worldRot[3],
-                        scaleAX,
-                        scaleAY,
-                        scaleAZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                         shapeB,
                         subShapeIdB,
                         subShapeIdBitsB,
@@ -1155,6 +1175,7 @@ function collideShapeVsStaticCompound(
                     _collideShapeVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_collideShapeVsStaticCompound_worldRot, _collideShapeVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
                 if (fn) {
@@ -1184,9 +1205,9 @@ function collideShapeVsStaticCompound(
                         _collideShapeVsStaticCompound_worldRot[1],
                         _collideShapeVsStaticCompound_worldRot[2],
                         _collideShapeVsStaticCompound_worldRot[3],
-                        scaleBX,
-                        scaleBY,
-                        scaleBZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                     );
                 }
             }
@@ -1395,6 +1416,7 @@ function castStaticCompoundVsShape(
                     _castStaticCompoundVsShape_transformedTranslation,
                 );
                 quat.multiply(_castStaticCompoundVsShape_worldRot, _castStaticCompoundVsShape_quatA, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
                 vec3.set(_castStaticCompoundVsShape_displacementA, dispAX, dispAY, dispAZ);
 
@@ -1413,9 +1435,9 @@ function castStaticCompoundVsShape(
                         _castStaticCompoundVsShape_worldRot[1],
                         _castStaticCompoundVsShape_worldRot[2],
                         _castStaticCompoundVsShape_worldRot[3],
-                        scaleAX,
-                        scaleAY,
-                        scaleAZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                         dispAX,
                         dispAY,
                         dispAZ,
@@ -1690,6 +1712,7 @@ function castShapeVsStaticCompound(
                     _castShapeVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_castShapeVsStaticCompound_worldRot, _castShapeVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
 
@@ -1723,9 +1746,9 @@ function castShapeVsStaticCompound(
                         _castShapeVsStaticCompound_worldRot[1],
                         _castShapeVsStaticCompound_worldRot[2],
                         _castShapeVsStaticCompound_worldRot[3],
-                        scaleBX,
-                        scaleBY,
-                        scaleBZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                     );
                 }
             }

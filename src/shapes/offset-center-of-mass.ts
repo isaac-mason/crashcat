@@ -90,6 +90,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         castRay: castRayVsOffsetCenterOfMass,
         collidePoint: collidePointVsOffsetCenterOfMass,
@@ -114,6 +115,10 @@ function computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassSha
     // translate inertia by offset using parallel axis theorem
     // this shifts the inertia tensor from the inner shape's COM to the new COM
     massProperties.translate(out, _childMassProperties, shape.offset);
+}
+
+function getMaterial(shape: OffsetCenterOfMassShape, subShapeId: number): number {
+    return shapeDefs[shape.shape.type].getMaterial(shape.shape, subShapeId);
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {

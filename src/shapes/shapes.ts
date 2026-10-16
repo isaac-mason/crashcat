@@ -306,6 +306,7 @@ export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): 
         computeMassProperties,
         getSurfaceNormal: shapeDef.getSurfaceNormal,
         getSupportingFace: shapeDef.getSupportingFace,
+        getMaterial: shapeDef.getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -325,6 +326,8 @@ export type GetSupportingFaceImpl<S extends ShapeBase> = (
     shape: S,
     subShapeId: number,
 ) => void;
+
+export type GetMaterialImpl<S extends ShapeBase> = (shape: S, subShapeId: SubShapeId) => number;
 
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 
@@ -366,6 +369,9 @@ export type ShapeDef<S extends ShapeBase> = {
 
     /** get supporting face */
     getSupportingFace: GetSupportingFaceImpl<S>;
+
+    /** get the material id of the leaf a sub shape id names, -1 for none */
+    getMaterial: GetMaterialImpl<S>;
 
     /** get inner radius - radius of the biggest sphere that fits entirely in the shape */
     getInnerRadius: GetInnerRadiusImpl<S>;
@@ -504,4 +510,54 @@ export function getShapeSupportingFace(
 export function getShapeInnerRadius(shape: Shape): number {
     const shapeDef = shapeDefs[shape.type];
     return shapeDef.getInnerRadius(shape);
+}
+
+/**
+ * the scale a rotated child sees: a scale in its parent's space carried into the child's space, the diagonal of
+ * rotation^T * scale * rotation. a uniform scale or an identity rotation passes through unchanged. only exact where
+ * the rotation keeps the scale's axes aligned (multiples of 90 degrees), otherwise the child would need a shear
+ * (jolt: ScaleHelpers::RotateScale behind the child's TransformScale)
+ */
+export function transformScale(out: Vec3, rotation: Quat, scaleX: number, scaleY: number, scaleZ: number): Vec3 {
+    const x = rotation[0];
+    const y = rotation[1];
+    const z = rotation[2];
+    const w = rotation[3];
+
+    // identity rotation (q or -q), within jolt's quat closeness tolerance
+    const identityDistanceSq = Math.min(x * x + y * y + z * z + (w - 1) * (w - 1), x * x + y * y + z * z + (w + 1) * (w + 1));
+
+    // uniform scale, within jolt's scale tolerance
+    const dxy = scaleY - scaleX;
+    const dyz = scaleZ - scaleY;
+    const dzx = scaleX - scaleZ;
+    const uniform = dxy * dxy + dyz * dyz + dzx * dzx <= 1.0e-8;
+
+    if (identityDistanceSq <= 1.0e-12 || uniform) {
+        out[0] = scaleX;
+        out[1] = scaleY;
+        out[2] = scaleZ;
+        return out;
+    }
+
+    // rotation matrix entries r<row><column>
+    const r00 = 1 - 2 * (y * y + z * z);
+    const r01 = 2 * (x * y - w * z);
+    const r02 = 2 * (x * z + w * y);
+    const r10 = 2 * (x * y + w * z);
+    const r11 = 1 - 2 * (x * x + z * z);
+    const r12 = 2 * (y * z - w * x);
+    const r20 = 2 * (x * z - w * y);
+    const r21 = 2 * (y * z + w * x);
+    const r22 = 1 - 2 * (x * x + y * y);
+
+    out[0] = scaleX * r00 * r00 + scaleY * r10 * r10 + scaleZ * r20 * r20;
+    out[1] = scaleX * r01 * r01 + scaleY * r11 * r11 + scaleZ * r21 * r21;
+    out[2] = scaleX * r02 * r02 + scaleY * r12 * r12 + scaleZ * r22 * r22;
+    return out;
+}
+
+/** the material id of the leaf a sub shape id names, -1 for none */
+export function getShapeMaterial(shape: Shape, subShapeId: SubShapeId): number {
+    return shapeDefs[shape.type].getMaterial(shape, subShapeId);
 }

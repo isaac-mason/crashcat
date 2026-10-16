@@ -478,11 +478,9 @@ describe('Supporting Face - Complex Decorated Shapes', () => {
         getShapeSupportingFace(face, scaledShape, 0, direction, mat4.create(), vec3.fromValues(1, 1, 1));
 
         expect(face.numVertices).toBe(4);
-        // Face at -1, transformed by +5 to 4, then scaled by 2 to 8
-        // Actually: transformed.create(scaled.create()) means we traverse: scaled -> transformed
-        // So: Face at -1, scaled by 2 to -2, then transformed by +5 to 3
+        // the scale applies to the transformed shape's offset too: face at -1, moved by +5 to 4, then scaled by 2 to 8
         for (let i = 0; i < 4; i++) {
-            expect(face.vertices[i * 3]).toBeCloseTo(3); // 5 + (-1 * 2)
+            expect(face.vertices[i * 3]).toBeCloseTo(8);
         }
     });
 });

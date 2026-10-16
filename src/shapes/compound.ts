@@ -22,6 +22,7 @@ import {
     setCastShapeFn,
     setCollideShapeFn,
     shapeDefs,
+    transformScale,
 } from './shapes';
 
 export type CompoundShapeChild = {
@@ -264,6 +265,7 @@ export const def = /* @__PURE__ */ (() =>
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -341,6 +343,14 @@ function computeMassProperties(out: MassProperties, shape: CompoundShape): void 
     out.inertia[15] = 1.0;
 }
 
+function getMaterial(shape: CompoundShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childIndex = _subShapeIdPopResult.value;
+    assert(childIndex < shape.children.length, 'Invalid SubShapeID for CompoundShape');
+    const child = shape.children[childIndex].shape;
+    return shapeDefs[child.type].getMaterial(child, _subShapeIdPopResult.remainder);
+}
+
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CompoundShape, subShapeId: number): void {
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
 
@@ -388,6 +398,9 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
     // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
     mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
 
+    // the child sees the scale in its own space
+    transformScale(ioResult.scale, child.quaternion, ioResult.scale[0], ioResult.scale[1], ioResult.scale[2]);
+
     shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
 }
 
@@ -428,11 +441,15 @@ function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, sha
     vec3.transformQuat(childPosition, childPosition, out.rotation);
     vec3.add(out.position, out.position, childPosition);
     quat.multiply(out.rotation, out.rotation, child.quaternion);
+    transformScale(out.scale, child.quaternion, out.scale[0], out.scale[1], out.scale[2]);
 
     // recursively get transformed shape from child
     const childShapeDef = shapeDefs[child.shape.type];
     childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
 }
+
+/** the scale a child is dispatched with, see transformScale */
+const _childScale = /* @__PURE__ */ vec3.create();
 
 /* cast ray */
 
@@ -528,6 +545,7 @@ function castRayVsCompound(
         );
         vec3.add(_castRayVsCompound_worldPos, _castRayVsCompound_pos, _castRayVsCompound_transformedTranslation);
         quat.multiply(_castRayVsCompound_worldRot, _castRayVsCompound_quat, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleX, scaleY, scaleZ);
 
         const childShapeDef = shapeDefs[child.shape.type];
         childShapeDef.castRay(
@@ -550,9 +568,9 @@ function castRayVsCompound(
             _castRayVsCompound_worldRot[1],
             _castRayVsCompound_worldRot[2],
             _castRayVsCompound_worldRot[3],
-            scaleX,
-            scaleY,
-            scaleZ,
+            childScale[0],
+            childScale[1],
+            childScale[2],
         );
     }
 }
@@ -642,6 +660,7 @@ function collidePointVsCompound(
         );
         vec3.add(_collidePointVsCompound_worldPos, _collidePointVsCompound_posB, _collidePointVsCompound_transformedTranslation);
         quat.multiply(_collidePointVsCompound_worldRot, _collidePointVsCompound_quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const childShapeDef = shapeDefs[child.shape.type];
         childShapeDef.collidePoint(
@@ -660,9 +679,9 @@ function collidePointVsCompound(
             _collidePointVsCompound_worldRot[1],
             _collidePointVsCompound_worldRot[2],
             _collidePointVsCompound_worldRot[3],
-            scaleBX,
-            scaleBY,
-            scaleBZ,
+            childScale[0],
+            childScale[1],
+            childScale[2],
         );
     }
 }
@@ -752,6 +771,7 @@ function collideCompoundVsShape(
         vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatA);
         vec3.add(_worldPos, _posA, _transformedTranslation);
         quat.multiply(_worldRot, _quatA, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
         const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
         if (fn) {
@@ -768,9 +788,9 @@ function collideCompoundVsShape(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleAX,
-                scaleAY,
-                scaleAZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
                 shapeB,
                 subShapeIdB,
                 subShapeIdBitsB,
@@ -869,6 +889,7 @@ function collideShapeVsCompound(
         vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatB);
         vec3.add(_worldPos, _posB, _transformedTranslation);
         quat.multiply(_worldRot, _quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
         if (fn) {
@@ -898,9 +919,9 @@ function collideShapeVsCompound(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleBX,
-                scaleBY,
-                scaleBZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
             );
         }
     }
@@ -973,6 +994,7 @@ function castCompoundVsShape(
         vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatA);
         vec3.add(_worldPos, _posA, _castDecorated_temp);
         quat.multiply(_worldRot, _quatA, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
         const fn = collisionDispatch.castFns.get(child.shape.type)?.get(shapeB.type);
         if (fn) {
@@ -989,9 +1011,9 @@ function castCompoundVsShape(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleAX,
-                scaleAY,
-                scaleAZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
                 dispAX,
                 dispAY,
                 dispAZ,
@@ -1103,6 +1125,7 @@ function castShapeVsCompound(
         vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatB);
         vec3.add(_worldPos, _posB, _castDecorated_temp);
         quat.multiply(_worldRot, _quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
         if (fn) {
@@ -1135,9 +1158,9 @@ function castShapeVsCompound(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleBX,
-                scaleBY,
-                scaleBZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
             );
         }
     }
