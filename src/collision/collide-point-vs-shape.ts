@@ -83,7 +83,7 @@ export class AnyCollidePointCollector implements CollidePointCollector {
     addHit(h: CollidePointHit): void {
         copyCollidePointHit(this._hit, h);
         this.hit = this._hit;
-        this.earlyOutFraction = 0; // early out immediately
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {

@@ -120,7 +120,8 @@ export class AnyCollideShapeCollector implements CollideShapeCollector {
     addHit(h: CollideShapeHit): void {
         copyCollideShapeHit(this._hit, h);
         this.hit = this._hit;
-        this.earlyOutFraction = 0; // early out immediately
+        // the bound is -penetration, so -infinity prunes every further candidate
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {
@@ -185,7 +186,7 @@ export type CollideShapeSettings = {
     /** a factor that determines the accuracy of the penetration depth calculation. If the change of the squared distance is less than tolerance * current_penetration_depth^2 the algorithm will terminate. (unit: dimensionless) */
     penetrationTolerance: number;
 
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
+    /** if true, back facing triangles (triangle meshes) are collided with, otherwise they are ignored */
     collideWithBackfaces: boolean;
 
     /** how active edges (edges that a moving object should bump into) are handled */

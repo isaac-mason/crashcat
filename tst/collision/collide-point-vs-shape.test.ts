@@ -1383,3 +1383,24 @@ describe('collidePointVsShape - Plane', () => {
         expect(collector.hit).toBeNull();
     });
 });
+
+describe('collidePointVsShape - any collector early out', () => {
+    test('the first hit forces the deepest possible early out, as for collide shape', () => {
+        const collector = createAnyCollidePointCollector();
+        // biome-ignore format: readability
+        collidePointVsShape(
+            collector,
+            settings,
+            0, 0, 0,
+            sphere.create({ radius: 1.0 }),
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        expect(collector.hit).not.toBeNull();
+        expect(collector.earlyOutFraction).toBe(-Infinity);
+        expect(collector.shouldEarlyOut()).toBe(true);
+    });
+});

@@ -1,8 +1,10 @@
 import { euler, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
+    AnyCollideShapeCollector,
     box,
     ClosestCollideShapeCollector,
+    type CollideShapeCollector,
     type CollideShapeHit,
     capsule,
     collideShapeVsShape,
@@ -3168,5 +3170,51 @@ describe('ClosestCollideShapeCollector early out', () => {
         expect(collector.hitsReceived).toBe(2);
         expect(collector.hit?.penetration).toBeCloseTo(0.3, 5);
         expect(collector.earlyOutFraction).toBeCloseTo(-0.3, 5);
+    });
+});
+
+describe('collideShapeVsShape - any collector early out', () => {
+    class CountingAnyCollideShapeCollector extends AnyCollideShapeCollector {
+        hitCount = 0;
+
+        addHit(hit: CollideShapeHit): void {
+            this.hitCount++;
+            super.addHit(hit);
+        }
+    }
+
+    const cylinderA = cylinder.create({ halfHeight: 1, radius: 0.5 });
+    const cylinderB = cylinder.create({ halfHeight: 1, radius: 0.5 });
+
+    // two upright cylinders of radius 0.5 whose axes are `distance` apart overlap by 1 - distance
+    const collideAtDistance = (collector: CollideShapeCollector, distance: number) => {
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            cylinderA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            cylinderB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            distance, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    test('after the first hit, a deeper candidate is pruned before it reaches the collector', () => {
+        const collector = new CountingAnyCollideShapeCollector();
+
+        collideAtDistance(collector, 0.9);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.1, 3);
+        expect(collector.shouldEarlyOut()).toBe(true);
+
+        collideAtDistance(collector, 0.5);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.1, 3);
     });
 });
