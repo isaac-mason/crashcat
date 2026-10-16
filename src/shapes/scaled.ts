@@ -76,23 +76,20 @@ function computeScaledVolume(shape: ScaledShape): number {
 function computeScaledLocalBounds(out: Box3, shape: ScaledShape): void {
     const innerAABB = shape.shape.aabb;
 
-    const scaleX = Math.abs(shape.scale[0]);
-    const scaleY = Math.abs(shape.scale[1]);
-    const scaleZ = Math.abs(shape.scale[2]);
-
-    out[0] = innerAABB[0] * scaleX;
-    out[1] = innerAABB[1] * scaleY;
-    out[2] = innerAABB[2] * scaleZ;
-
-    out[3] = innerAABB[3] * scaleX;
-    out[4] = innerAABB[4] * scaleY;
-    out[5] = innerAABB[5] * scaleZ;
+    // a negative scale swaps an axis' min and max
+    for (let i = 0; i < 3; i++) {
+        const scaledMin = innerAABB[i] * shape.scale[i];
+        const scaledMax = innerAABB[i + 3] * shape.scale[i];
+        out[i] = Math.min(scaledMin, scaledMax);
+        out[i + 3] = Math.max(scaledMin, scaledMax);
+    }
 }
 
 function computeScaledCenterOfMass(out: Vec3, shape: ScaledShape): void {
-    out[0] = shape.centerOfMass[0] * shape.scale[0];
-    out[1] = shape.centerOfMass[1] * shape.scale[1];
-    out[2] = shape.centerOfMass[2] * shape.scale[2];
+    const innerCenterOfMass = shape.shape.centerOfMass;
+    out[0] = innerCenterOfMass[0] * shape.scale[0];
+    out[1] = innerCenterOfMass[1] * shape.scale[1];
+    out[2] = innerCenterOfMass[2] * shape.scale[2];
 }
 
 /** updates a scaled shape after it's properties have changed */

@@ -9,6 +9,8 @@ import type { CollideShapeCollector, CollideShapeSettings } from '../collision/c
 import {
     collisionDispatch,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
     ShapeType,
@@ -92,6 +94,8 @@ export const def = /* @__PURE__ */ (() =>
         getSupportingFace,
         getMaterial,
         getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsOffsetCenterOfMass,
         collidePoint: collidePointVsOffsetCenterOfMass,
 
@@ -139,6 +143,20 @@ function getSupportingFace(
 function getInnerRadius(shape: OffsetCenterOfMassShape): number {
     // inner radius doesn't change with COM offset
     return getShapeInnerRadius(shape.shape);
+}
+
+function getLeafShape(outResult: GetLeafShapeResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
+    // pass through to inner shape
+    shapeDefs[shape.shape.type].getLeafShape(outResult, shape.shape, subShapeId);
+}
+
+function getSubShapeTransformedShape(
+    outResult: GetSubShapeTransformedShapeResult,
+    shape: OffsetCenterOfMassShape,
+    subShapeId: number,
+): void {
+    // the inner shape sits where this shape does
+    shapeDefs[shape.shape.type].getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
 }
 
 // in crashcat, collision geometry is at origin, not COM-centered
