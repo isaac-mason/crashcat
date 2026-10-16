@@ -150,7 +150,7 @@ export class ClosestCollideShapeCollector implements CollideShapeCollector {
 
     addHit(h: CollideShapeHit): void {
         if (this.hit === null || h.penetration > this.hit.penetration) {
-            this.earlyOutFraction = h.penetration;
+            this.earlyOutFraction = -h.penetration;
             copyCollideShapeHit(this._hit, h);
             this.hit = this._hit;
         }

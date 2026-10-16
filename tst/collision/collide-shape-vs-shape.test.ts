@@ -2,6 +2,8 @@ import { euler, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
+    ClosestCollideShapeCollector,
+    type CollideShapeHit,
     capsule,
     collideShapeVsShape,
     compound,
@@ -3072,5 +3074,57 @@ describe('collideShapeVsShape - Box vs Plane', () => {
 
         expect(results.length).toBe(1);
         expect(results[0].penetration).toBeCloseTo(1.5, 4);
+    });
+});
+
+describe('ClosestCollideShapeCollector early out', () => {
+    // counts the hits that get past the shape's early-out check and reach the collector
+    class CountingClosestCollector extends ClosestCollideShapeCollector {
+        hitsReceived = 0;
+        override addHit(h: CollideShapeHit): void {
+            this.hitsReceived++;
+            super.addHit(h);
+        }
+    }
+
+    const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+    // unit boxes overlapping along x by the given penetration depth
+    const collideBoxes = (collector: CountingClosestCollector, penetration: number) => {
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            2 - penetration, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    test('the bound is the negated deepest penetration and prunes shallower candidates only', () => {
+        const collector = new CountingClosestCollector();
+
+        collideBoxes(collector, 0.2);
+        expect(collector.hitsReceived).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.2, 5);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.2, 5);
+
+        // shallower: rejected by the convex early-out check before reaching the collector
+        collideBoxes(collector, 0.1);
+        expect(collector.hitsReceived).toBe(1);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.2, 5);
+
+        // deeper: passes the check and becomes the closest hit
+        collideBoxes(collector, 0.3);
+        expect(collector.hitsReceived).toBe(2);
+        expect(collector.hit?.penetration).toBeCloseTo(0.3, 5);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.3, 5);
     });
 });
