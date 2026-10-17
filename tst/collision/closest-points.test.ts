@@ -96,6 +96,20 @@ describe('computeBarycentricCoordinates3d', () => {
 
         expect(result.isValid).toBe(false);
     });
+    test('treats a long thin sliver as degenerate, falling back to an edge', () => {
+        // the apex is 1e-5 off a 20 long base: the angle at the base is about 6e-5 degrees, far under the 0.06 degree
+        // cutoff, though the denominator itself (about 4e-8) is far above any absolute epsilon
+        const result = { u: 0, v: 0, w: 0, isValid: true };
+        const a = vec3.fromValues(-10, 1, 0);
+        const b = vec3.fromValues(10, 1, 0);
+        const c = vec3.fromValues(0, 1.00001, 0);
+
+        computeBarycentricCoordinates3d(result, a, b, c, 1e-12);
+
+        expect(result.isValid).toBe(false);
+        expect(result.u + result.v + result.w).toBeCloseTo(1, 10);
+        expect(result.u === 0 || result.v === 0 || result.w === 0).toBe(true);
+    });
 });
 
 describe('barycentric coordinates properties', () => {
