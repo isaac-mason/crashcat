@@ -162,21 +162,12 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         /* setup velocity constraints for user constraints */
         constraints.setupVelocityConstraints(world.constraints, world.bodies, timeStep);
 
-        /* warm start velocity constraints with dynamic ratio */
-        if (world.settings.solver.warmStarting) {
-            /* calculate warm start impulse ratio to account for variable frame rates */
-            // scale cached impulses based on the ratio of current to previous delta time.
-            // this prevents impulse overshoot/undershoot when frame rate varies.
-            // if previous delta time is 0 (first frame), ratio is 0 (no warm start).
-            const warmStartImpulseRatio =
-                world.settings.solver.warmStarting && world.previousTimeStep > 0 ? timeStep / world.previousTimeStep : 0.0;
-
-            // warm start contact constraints
-            contactConstraints.warmStartVelocityConstraints(world.contactConstraints, world.bodies, warmStartImpulseRatio);
-
-            // warm start user constraints
-            constraints.warmStartVelocityConstraints(world.constraints, world.bodies, warmStartImpulseRatio);
-        }
+        /* warm start impulse ratio for variable frame rates */
+        // scale cached impulses based on the ratio of current to previous delta time.
+        // this prevents impulse overshoot/undershoot when frame rate varies.
+        // if previous delta time is 0 (first frame), ratio is 0 (no warm start).
+        const warmStartImpulseRatio =
+            world.settings.solver.warmStarting && world.previousTimeStep > 0 ? timeStep / world.previousTimeStep : 0.0;
 
         /* store current delta time for next frame's warm start calculation */
         world.previousTimeStep = timeStep;
@@ -191,6 +182,22 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
             /* sort for deterministic simulation, order will remain stable for position solving later */
             constraints.sortConstraintIds(world.constraints, island.constraintIds);
             contactConstraints.sortContactIndices(world.contactConstraints, world.bodies, island.contactIndices);
+
+            /* warm start in the sorted order, so the result does not depend on the order contacts were found */
+            if (world.settings.solver.warmStarting) {
+                constraints.warmStartVelocityConstraints(
+                    world.constraints,
+                    world.bodies,
+                    island.constraintIds,
+                    warmStartImpulseRatio,
+                );
+                contactConstraints.warmStartVelocityConstraints(
+                    world.contactConstraints,
+                    world.bodies,
+                    island.contactIndices,
+                    warmStartImpulseRatio,
+                );
+            }
 
             /* solve velocity constraints for this island */
             for (let i = 0; i < island.numVelocitySteps; i++) {

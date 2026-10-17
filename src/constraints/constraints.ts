@@ -286,16 +286,20 @@ export function setupVelocityConstraints(constraintsState: Constraints, bodies: 
     }
 }
 
-/** warm start velocity constraints for all active user constraints */
-export function warmStartVelocityConstraints(constraintsState: Constraints, bodies: Bodies, warmStartImpulseRatio: number): void {
-    for (const type in constraintsState.pools) {
-        const pool = constraintsState.pools[type as unknown as ConstraintType]!;
-        const def = constraintDefs[pool.type]!;
-        for (const constraint of pool.constraints) {
-            if (!constraint._pooled && constraint.enabled && !constraint._sleeping) {
-                def.warmStartVelocity(constraint, bodies, warmStartImpulseRatio);
-            }
-        }
+/** warm start velocity constraints for an island's user constraints, in their solve order */
+export function warmStartVelocityConstraints(
+    constraints: Constraints,
+    bodies: Bodies,
+    constraintIds: ConstraintId[],
+    warmStartImpulseRatio: number,
+): void {
+    for (const constraintId of constraintIds) {
+        const type = getConstraintIdType(constraintId);
+        const index = getConstraintIdIndex(constraintId);
+        const def = constraintDefs[type];
+        const pool = constraints.pools[type];
+        if (!pool || !def) continue;
+        def.warmStartVelocity(pool.constraints[index], bodies, warmStartImpulseRatio);
     }
 }
 

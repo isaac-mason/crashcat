@@ -1209,15 +1209,17 @@ function createContactConstraint(): ContactConstraint {
  * buffers for us.
  *
  * @param contactConstraints contact constraint state
+ * @param constraintIndices an island's contact constraint indices, in their solve order
  * @param warmStartRatio scale factor for warm start impulses (usually 1.0)
  */
 export function warmStartVelocityConstraints(
     contactConstraints: ContactConstraints,
     bodies: Bodies,
+    constraintIndices: number[],
     warmStartRatio: number,
 ): void {
-    for (let i = 0; i < contactConstraints.count; i++) {
-        const constraint = contactConstraints.pool[i];
+    for (let i = 0; i < constraintIndices.length; i++) {
+        const constraint = contactConstraints.pool[constraintIndices[i]];
         const bodyA = bodies.pool[constraint.bodyIndexA]!;
         const bodyB = bodies.pool[constraint.bodyIndexB]!;
         const isDynamicA = bodyA.motionType === MotionType.DYNAMIC;
