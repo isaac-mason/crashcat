@@ -10,6 +10,7 @@ import type { ContactManifold } from '../manifold/manifold';
 import * as manifold from '../manifold/manifold';
 import type { Pairs } from '../pairs';
 import { getShapeMaterial } from '../shapes/shapes';
+import { MIN_NORMAL } from '../utils/float';
 import type { WorldSettings } from '../world-settings';
 import { combineMaterial } from './combine-material';
 import * as angularFrictionConstraintPart from './constraint-part/angular-friction-constraint-part';
@@ -1546,7 +1547,8 @@ export function solveVelocityConstraintsForIsland(
             const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
             const maxLinearFrictionSq = maxLinearFriction * maxLinearFriction;
 
-            if (frictionMagnitudeSq > maxLinearFrictionSq) {
+            // the + MIN_NORMAL keeps a frictionMagnitudeSq too small to divide by from being scaled
+            if (frictionMagnitudeSq > maxLinearFrictionSq + MIN_NORMAL) {
                 const scale = maxLinearFriction / Math.sqrt(frictionMagnitudeSq);
                 lambda1 *= scale;
                 lambda2 *= scale;

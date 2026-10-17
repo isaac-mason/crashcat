@@ -3,6 +3,7 @@ import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { ContactManifold } from '../manifold/manifold';
+import { MIN_NORMAL } from '../utils/float';
 
 /**
  * Result of estimating collision response between two bodies.
@@ -494,7 +495,8 @@ export function estimateCollisionResponse(
 
             const maxLinear = combinedFriction * sumNormal;
             const magSq = lambda1 * lambda1 + lambda2 * lambda2;
-            if (magSq > maxLinear * maxLinear) {
+            // the + MIN_NORMAL keeps a magSq too small to divide by from being scaled
+            if (magSq > maxLinear * maxLinear + MIN_NORMAL) {
                 const scale = maxLinear / Math.sqrt(magSq);
                 lambda1 *= scale;
                 lambda2 *= scale;
