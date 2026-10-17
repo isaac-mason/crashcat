@@ -186,3 +186,46 @@ describe('contact constraints: sort key', () => {
         expect(compared).toBeGreaterThan(5);
     });
 });
+
+describe('contact constraints: warm start across a change of step length', () => {
+    test('a box that just landed on another is not launched when the next step is far longer', () => {
+        const { world, layers } = createTestWorld();
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: [10, 0.5, 10] }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: [0, -0.5, 0],
+        });
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, 0.5, 0],
+        });
+        const top = rigidBody.create(world, {
+            shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, 3, 0],
+        });
+
+        // short steps until the step that stops the falling box: its contact now holds the large stopping impulse
+        const short = 1 / 240;
+        let previousVelocity = 0;
+        for (let i = 0; i < 400; i++) {
+            updateWorld(world, undefined, short);
+            const velocity = top.motionProperties.linearVelocity[1];
+            if (previousVelocity < -2 && Math.abs(velocity) < 0.5) break;
+            previousVelocity = velocity;
+        }
+        expect(top.position[1]).toBeCloseTo(1.5, 1);
+
+        // 32 times longer steps: the warm start scales by at most 4, which the solver takes back, so the box stays put
+        let highest = top.position[1];
+        for (let i = 0; i < 30; i++) {
+            updateWorld(world, undefined, short * 32);
+            highest = Math.max(highest, top.position[1]);
+        }
+        expect(highest).toBeLessThan(1.51);
+    });
+});

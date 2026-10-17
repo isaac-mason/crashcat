@@ -166,8 +166,13 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         // scale cached impulses based on the ratio of current to previous delta time.
         // this prevents impulse overshoot/undershoot when frame rate varies.
         // if previous delta time is 0 (first frame), ratio is 0 (no warm start).
+        // the ratio is clamped: a body that just landed carries the large impulse that stopped it, far more than resting
+        // needs, and scaled up by a much longer step it would gain a velocity the solver can no longer take back (a stack
+        // in equilibrium is a little less stable across a big jump in step length)
         const warmStartImpulseRatio =
-            world.settings.solver.warmStarting && world.previousTimeStep > 0 ? timeStep / world.previousTimeStep : 0.0;
+            world.settings.solver.warmStarting && world.previousTimeStep > 0
+                ? Math.min(timeStep / world.previousTimeStep, 4)
+                : 0.0;
 
         /* store current delta time for next frame's warm start calculation */
         world.previousTimeStep = timeStep;
