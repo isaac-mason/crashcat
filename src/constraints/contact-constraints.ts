@@ -931,7 +931,7 @@ export function addContactConstraint(
                     const dist2Sq = vec3.squaredDistance(cp.localPositionB, point.position2);
                     const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
 
-                    if (dist1Sq < threshold && dist2Sq < threshold) {
+                    if (dist1Sq <= threshold && dist2Sq <= threshold) {
                         cp.normalConstraint.totalLambda = point.normalLambda;
                         lambdaSet = true;
                         break;
