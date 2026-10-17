@@ -706,10 +706,10 @@ export function castConvexVsConvexLocal(
         return;
     }
 
-    // back-face culling: reject if shapes are separating (moving apart)
+    // back-face culling: reject if shapes are separating (moving apart); a normal perpendicular to the cast is not a back face
     if (!settings.collideWithBackfacesConvex) {
         const dotProduct = vec3.dot(_castConvex_gjkResult.separatingAxis, displacementInB);
-        if (dotProduct <= 0) {
+        if (dotProduct < 0) {
             collector.addMiss();
             return;
         }
