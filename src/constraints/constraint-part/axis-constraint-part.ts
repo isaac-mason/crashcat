@@ -710,41 +710,36 @@ export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB
     const mpA = bodyA.motionProperties;
     const mpB = bodyB.motionProperties;
 
-    // calculate jacobian multiplied by linear velocity
-    let jv: number;
+    // jacobian multiplied by velocity: the linear and angular terms summed per component, reduced once
+    let x: number;
+    let y: number;
+    let z: number;
     if (movingA && movingB) {
-        // vec3.subtract(_acp_gtl_velDiff, mpA.linearVelocity, mpB.linearVelocity);
-        const dx = mpA.linearVelocity[0] - mpB.linearVelocity[0];
-        const dy = mpA.linearVelocity[1] - mpB.linearVelocity[1];
-        const dz = mpA.linearVelocity[2] - mpB.linearVelocity[2];
-        // jv = vec3.dot(axis, _acp_gtl_velDiff);
-        jv = axis[0] * dx + axis[1] * dy + axis[2] * dz;
+        x = axis[0] * (mpA.linearVelocity[0] - mpB.linearVelocity[0]);
+        y = axis[1] * (mpA.linearVelocity[1] - mpB.linearVelocity[1]);
+        z = axis[2] * (mpA.linearVelocity[2] - mpB.linearVelocity[2]);
     } else if (movingA) {
-        // jv = vec3.dot(axis, mpA.linearVelocity);
-        jv = axis[0] * mpA.linearVelocity[0] + axis[1] * mpA.linearVelocity[1] + axis[2] * mpA.linearVelocity[2];
+        x = axis[0] * mpA.linearVelocity[0];
+        y = axis[1] * mpA.linearVelocity[1];
+        z = axis[2] * mpA.linearVelocity[2];
     } else if (movingB) {
-        // jv = -vec3.dot(axis, mpB.linearVelocity);
-        jv = -(axis[0] * mpB.linearVelocity[0] + axis[1] * mpB.linearVelocity[1] + axis[2] * mpB.linearVelocity[2]);
+        x = axis[0] * -mpB.linearVelocity[0];
+        y = axis[1] * -mpB.linearVelocity[1];
+        z = axis[2] * -mpB.linearVelocity[2];
     } else {
-        jv = 0;
+        x = y = z = 0;
     }
-
-    // calculate jacobian multiplied by angular velocity
     if (movingA) {
-        // jv += vec3.dot(part.r1PlusUxAxis, mpA.angularVelocity);
-        jv +=
-            part.r1PlusUxAxis[0] * mpA.angularVelocity[0] +
-            part.r1PlusUxAxis[1] * mpA.angularVelocity[1] +
-            part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
+        x += part.r1PlusUxAxis[0] * mpA.angularVelocity[0];
+        y += part.r1PlusUxAxis[1] * mpA.angularVelocity[1];
+        z += part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
     }
-
     if (movingB) {
-        // jv -= vec3.dot(part.r2xAxis, mpB.angularVelocity);
-        jv -=
-            part.r2xAxis[0] * mpB.angularVelocity[0] +
-            part.r2xAxis[1] * mpB.angularVelocity[1] +
-            part.r2xAxis[2] * mpB.angularVelocity[2];
+        x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+        y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+        z -= part.r2xAxis[2] * mpB.angularVelocity[2];
     }
+    const jv = x + y + z;
 
     // calculate lambda
     const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));

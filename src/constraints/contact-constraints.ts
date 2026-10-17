@@ -1507,38 +1507,65 @@ export function solveVelocityConstraintsForIsland(
             const friction1 = constraint.frictionConstraint1;
             const friction2 = constraint.frictionConstraint2;
 
-            // jacobian x velocity, from our locals. the linear term differs by which bodies move, so
-            // the branches mirror the one-sided cases rather than multiplying by zero.
-            let jv1: number;
-            let jv2: number;
+            // jacobian x velocity, from our locals: the linear and angular terms are summed per component
+            // and reduced once. the linear term differs by which bodies move, so the branches mirror the
+            // one-sided cases rather than multiplying by zero.
+            let jv1x: number;
+            let jv1y: number;
+            let jv1z: number;
+            let jv2x: number;
+            let jv2y: number;
+            let jv2z: number;
             if (movingA && movingB) {
                 const dx = linVelAx - linVelBx;
                 const dy = linVelAy - linVelBy;
                 const dz = linVelAz - linVelBz;
-                jv1 = tangent1[0] * dx + tangent1[1] * dy + tangent1[2] * dz;
-                jv2 = tangent2[0] * dx + tangent2[1] * dy + tangent2[2] * dz;
+                jv1x = tangent1[0] * dx;
+                jv1y = tangent1[1] * dy;
+                jv1z = tangent1[2] * dz;
+                jv2x = tangent2[0] * dx;
+                jv2y = tangent2[1] * dy;
+                jv2z = tangent2[2] * dz;
             } else if (movingA) {
-                jv1 = tangent1[0] * linVelAx + tangent1[1] * linVelAy + tangent1[2] * linVelAz;
-                jv2 = tangent2[0] * linVelAx + tangent2[1] * linVelAy + tangent2[2] * linVelAz;
+                jv1x = tangent1[0] * linVelAx;
+                jv1y = tangent1[1] * linVelAy;
+                jv1z = tangent1[2] * linVelAz;
+                jv2x = tangent2[0] * linVelAx;
+                jv2y = tangent2[1] * linVelAy;
+                jv2z = tangent2[2] * linVelAz;
             } else if (movingB) {
-                jv1 = -(tangent1[0] * linVelBx + tangent1[1] * linVelBy + tangent1[2] * linVelBz);
-                jv2 = -(tangent2[0] * linVelBx + tangent2[1] * linVelBy + tangent2[2] * linVelBz);
+                jv1x = tangent1[0] * -linVelBx;
+                jv1y = tangent1[1] * -linVelBy;
+                jv1z = tangent1[2] * -linVelBz;
+                jv2x = tangent2[0] * -linVelBx;
+                jv2y = tangent2[1] * -linVelBy;
+                jv2z = tangent2[2] * -linVelBz;
             } else {
-                jv1 = 0;
-                jv2 = 0;
+                jv1x = jv1y = jv1z = 0;
+                jv2x = jv2y = jv2z = 0;
             }
             if (movingA) {
                 const r1 = friction1.r1PlusUxAxis;
                 const r2 = friction2.r1PlusUxAxis;
-                jv1 += r1[0] * angVelAx + r1[1] * angVelAy + r1[2] * angVelAz;
-                jv2 += r2[0] * angVelAx + r2[1] * angVelAy + r2[2] * angVelAz;
+                jv1x += r1[0] * angVelAx;
+                jv1y += r1[1] * angVelAy;
+                jv1z += r1[2] * angVelAz;
+                jv2x += r2[0] * angVelAx;
+                jv2y += r2[1] * angVelAy;
+                jv2z += r2[2] * angVelAz;
             }
             if (movingB) {
                 const r1 = friction1.r2xAxis;
                 const r2 = friction2.r2xAxis;
-                jv1 -= r1[0] * angVelBx + r1[1] * angVelBy + r1[2] * angVelBz;
-                jv2 -= r2[0] * angVelBx + r2[1] * angVelBy + r2[2] * angVelBz;
+                jv1x -= r1[0] * angVelBx;
+                jv1y -= r1[1] * angVelBy;
+                jv1z -= r1[2] * angVelBz;
+                jv2x -= r2[0] * angVelBx;
+                jv2y -= r2[1] * angVelBy;
+                jv2z -= r2[2] * angVelBz;
             }
+            const jv1 = jv1x + jv1y + jv1z;
+            const jv2 = jv2x + jv2y + jv2z;
 
             let lambda1 = axisConstraintPart.totalLambdaFor(friction1, jv1);
             let lambda2 = axisConstraintPart.totalLambdaFor(friction2, jv2);
@@ -1641,27 +1668,37 @@ export function solveVelocityConstraintsForIsland(
             const cp = constraint.contactPoints[i];
 
             const normalConstraint = cp.normalConstraint;
-            let jv: number;
+            let jvx: number;
+            let jvy: number;
+            let jvz: number;
             if (movingA && movingB) {
-                const dx = linVelAx - linVelBx;
-                const dy = linVelAy - linVelBy;
-                const dz = linVelAz - linVelBz;
-                jv = normal[0] * dx + normal[1] * dy + normal[2] * dz;
+                jvx = normal[0] * (linVelAx - linVelBx);
+                jvy = normal[1] * (linVelAy - linVelBy);
+                jvz = normal[2] * (linVelAz - linVelBz);
             } else if (movingA) {
-                jv = normal[0] * linVelAx + normal[1] * linVelAy + normal[2] * linVelAz;
+                jvx = normal[0] * linVelAx;
+                jvy = normal[1] * linVelAy;
+                jvz = normal[2] * linVelAz;
             } else if (movingB) {
-                jv = -(normal[0] * linVelBx + normal[1] * linVelBy + normal[2] * linVelBz);
+                jvx = normal[0] * -linVelBx;
+                jvy = normal[1] * -linVelBy;
+                jvz = normal[2] * -linVelBz;
             } else {
-                jv = 0;
+                jvx = jvy = jvz = 0;
             }
             if (movingA) {
                 const r = normalConstraint.r1PlusUxAxis;
-                jv += r[0] * angVelAx + r[1] * angVelAy + r[2] * angVelAz;
+                jvx += r[0] * angVelAx;
+                jvy += r[1] * angVelAy;
+                jvz += r[2] * angVelAz;
             }
             if (movingB) {
                 const r = normalConstraint.r2xAxis;
-                jv -= r[0] * angVelBx + r[1] * angVelBy + r[2] * angVelBz;
+                jvx -= r[0] * angVelBx;
+                jvy -= r[1] * angVelBy;
+                jvz -= r[2] * angVelBz;
             }
+            const jv = jvx + jvy + jvz;
 
             // clamp to [0, ∞) — contacts can only push, never pull
             const clampedLambda = Math.max(0, axisConstraintPart.totalLambdaFor(normalConstraint, jv));

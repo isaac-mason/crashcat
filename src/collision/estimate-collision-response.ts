@@ -103,7 +103,6 @@ function createMiniAngularConstraint(): MiniAngularConstraint {
 
 const _ecr_r1CrossAxis = /* @__PURE__ */ vec3.create();
 const _ecr_r2CrossAxis = /* @__PURE__ */ vec3.create();
-const _ecr_temp = /* @__PURE__ */ vec3.create();
 
 /** initialize a mini axis constraint */
 function initConstraint(
@@ -141,7 +140,7 @@ function initAngularConstraint(constraint: MiniAngularConstraint, invInertia1: M
     constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
 }
 
-/** compute relative velocity along constraint axis */
+/** compute relative velocity along constraint axis: the linear and angular terms summed per component, reduced once */
 function getRelativeVelocity(
     constraint: MiniAxisConstraint,
     linVel1: Vec3,
@@ -150,10 +149,12 @@ function getRelativeVelocity(
     angVel2: Vec3,
     axis: Vec3,
 ): number {
-    const linearComponent = vec3.dot(axis, vec3.sub(_ecr_temp, linVel1, linVel2));
-    const angularComponent1 = vec3.dot(constraint.r1PlusUxAxis, angVel1);
-    const angularComponent2 = vec3.dot(constraint.r2xAxis, angVel2);
-    return linearComponent + angularComponent1 - angularComponent2;
+    const r1 = constraint.r1PlusUxAxis;
+    const r2 = constraint.r2xAxis;
+    const x = axis[0] * (linVel1[0] - linVel2[0]) + r1[0] * angVel1[0] - r2[0] * angVel2[0];
+    const y = axis[1] * (linVel1[1] - linVel2[1]) + r1[1] * angVel1[1] - r2[1] * angVel2[1];
+    const z = axis[2] * (linVel1[2] - linVel2[2]) + r1[2] * angVel1[2] - r2[2] * angVel2[2];
+    return x + y + z;
 }
 
 /** solve and get the unclamped lambda increment */
