@@ -26,9 +26,8 @@ export type CollisionEstimationResult = {
     angularVelocity2: Vec3;
 
     /**
-     * Average ("friction") contact point — unweighted mean of contact midpoints, in the
-     * same space as `manifold.baseOffset` (i.e. relative to baseOffset, like the manifold
-     * relativeContactPoints arrays). Friction impulses act at this point.
+     * Where friction acts: halfway between the two bodies' friction points (each the mean of that body's
+     * contact points), relative to `manifold.baseOffset` like the manifold's relativeContactPoints arrays.
      */
     frictionPoint: Vec3;
 
@@ -225,7 +224,6 @@ function applyAngularLambda(constraint: MiniAngularConstraint, lambda: number, a
 
 const _ecr_com1 = /* @__PURE__ */ vec3.create();
 const _ecr_com2 = /* @__PURE__ */ vec3.create();
-const _ecr_contactPoint = /* @__PURE__ */ vec3.create();
 const _ecr_r1 = /* @__PURE__ */ vec3.create();
 const _ecr_r2 = /* @__PURE__ */ vec3.create();
 const _ecr_relVel = /* @__PURE__ */ vec3.create();
@@ -238,12 +236,10 @@ const _ecr_rotation2 = /* @__PURE__ */ mat4.create();
 
 const _ecr_normalConstraints: MiniAxisConstraint[] = [];
 const _ecr_distanceToFrictionCenter: number[] = [];
-const _ecr_midpoints: Vec3[] = [];
 
 for (let i = 0; i < 64; i++) {
     _ecr_normalConstraints.push(createMiniConstraint());
     _ecr_distanceToFrictionCenter.push(0);
-    _ecr_midpoints.push(vec3.create());
 }
 
 const _ecr_tangent1 = /* @__PURE__ */ vec3.create();
@@ -338,13 +334,18 @@ export function estimateCollisionResponse(
     vec3.sub(_ecr_com1, body1.centerOfMassPosition, manifold.baseOffset);
     vec3.sub(_ecr_com2, body2.centerOfMassPosition, manifold.baseOffset);
 
-    // per-contact-point setup: normal constraint + cache midpoint
+    // per-contact-point setup: each body's own contact point gives its moment arm
     const relativePointsA = manifold.relativeContactPointsOnA;
     const relativePointsB = manifold.relativeContactPointsOnB;
 
-    let fpx = 0;
-    let fpy = 0;
-    let fpz = 0;
+    // each body's friction point accumulates its own contact points, so the friction lever arms are not perturbed by
+    // the separation along the normal of a speculative contact
+    let fpax = 0;
+    let fpay = 0;
+    let fpaz = 0;
+    let fpbx = 0;
+    let fpby = 0;
+    let fpbz = 0;
 
     for (let c = 0; c < numContactPoints; c++) {
         const i = c * 3;
@@ -355,17 +356,15 @@ export function estimateCollisionResponse(
         const by = relativePointsB[i + 1];
         const bz = relativePointsB[i + 2];
 
-        const mx = (ax + bx) * 0.5;
-        const my = (ay + by) * 0.5;
-        const mz = (az + bz) * 0.5;
-        vec3.set(_ecr_midpoints[c], mx, my, mz);
-        fpx += mx;
-        fpy += my;
-        fpz += mz;
-        vec3.set(_ecr_contactPoint, mx, my, mz);
+        fpax += ax;
+        fpay += ay;
+        fpaz += az;
+        fpbx += bx;
+        fpby += by;
+        fpbz += bz;
 
-        vec3.sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-        vec3.sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
+        vec3.set(_ecr_r1, ax - _ecr_com1[0], ay - _ecr_com1[1], az - _ecr_com1[2]);
+        vec3.set(_ecr_r2, bx - _ecr_com2[0], by - _ecr_com2[1], bz - _ecr_com2[2]);
 
         const normalConstraint = _ecr_normalConstraints[c];
         initConstraint(normalConstraint, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, normal);
@@ -387,22 +386,24 @@ export function estimateCollisionResponse(
 
     if (numContactPoints === 0) return;
 
-    // friction point = unweighted mean of midpoints; compute per-point moment arm
-    const invN = 1 / numContactPoints;
-    fpx *= invN;
-    fpy *= invN;
-    fpz *= invN;
-    vec3.set(result.frictionPoint, fpx, fpy, fpz);
+    // each body's friction point = the mean of its contact points; per-point moment arm to body 1's
+    fpax /= numContactPoints;
+    fpay /= numContactPoints;
+    fpaz /= numContactPoints;
+    fpbx /= numContactPoints;
+    fpby /= numContactPoints;
+    fpbz /= numContactPoints;
+    vec3.set(result.frictionPoint, 0.5 * (fpax + fpbx), 0.5 * (fpay + fpby), 0.5 * (fpaz + fpbz));
 
     const nx = normal[0];
     const ny = normal[1];
     const nz = normal[2];
 
     for (let c = 0; c < numContactPoints; c++) {
-        const m = _ecr_midpoints[c];
-        const dx = m[0] - fpx;
-        const dy = m[1] - fpy;
-        const dz = m[2] - fpz;
+        const i = c * 3;
+        const dx = relativePointsA[i] - fpax;
+        const dy = relativePointsA[i + 1] - fpay;
+        const dz = relativePointsA[i + 2] - fpaz;
         const dotN = dx * nx + dy * ny + dz * nz;
         const tx = dx - dotN * nx;
         const ty = dy - dotN * ny;
@@ -410,11 +411,10 @@ export function estimateCollisionResponse(
         _ecr_distanceToFrictionCenter[c] = Math.sqrt(tx * tx + ty * ty + tz * tz);
     }
 
-    // manifold-level friction constraints anchored at the friction point
+    // manifold-level friction constraints anchored at each body's friction point
     if (combinedFriction > 0) {
-        vec3.set(_ecr_contactPoint, fpx, fpy, fpz);
-        vec3.sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-        vec3.sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
+        vec3.set(_ecr_r1, fpax - _ecr_com1[0], fpay - _ecr_com1[1], fpaz - _ecr_com1[2]);
+        vec3.set(_ecr_r2, fpbx - _ecr_com2[0], fpby - _ecr_com2[1], fpbz - _ecr_com2[2]);
 
         initConstraint(
             _ecr_frictionConstraint1,

@@ -68,20 +68,14 @@ export type ContactConstraint = {
     contactPoints: [WorldContactPoint, WorldContactPoint, WorldContactPoint, WorldContactPoint];
 
     /**
-     * Average contact point ("friction point") in world space — unweighted mean of contact
-     * midpoints. The two linear friction constraints are anchored at this point.
-     */
-    frictionPoint: Vec3;
-
-    /**
-     * Linear friction constraint along tangent1, anchored at frictionPoint.
+     * Linear friction constraint along tangent1, anchored on each body at the mean of that body's contact points.
      * Lambda clamping (joint with frictionConstraint2):
      * λ1² + λ2² ≤ (μ · Σ_i normalLambda_i)²
      */
     frictionConstraint1: axisConstraintPart.AxisConstraintPart;
 
     /**
-     * Linear friction constraint along tangent2, anchored at frictionPoint.
+     * Linear friction constraint along tangent2, anchored on each body at the mean of that body's contact points.
      * Lambda clamping (joint with frictionConstraint1):
      * λ1² + λ2² ≤ (μ · Σ_i normalLambda_i)²
      */
@@ -121,9 +115,9 @@ export type ContactConstraint = {
  * Links world-space geometry to constraint solving.
  *
  * Friction is no longer per-contact-point — it lives on the parent
- * ContactConstraint (anchored at frictionPoint). Each WorldContactPoint
- * only owns the 1-DOF non-penetration constraint plus a cached moment-arm
- * to the friction point for computing the angular friction cap.
+ * ContactConstraint. Each WorldContactPoint only owns the 1-DOF
+ * non-penetration constraint plus a cached moment-arm to the friction
+ * center for computing the angular friction cap.
  */
 export type WorldContactPoint = {
     /**
@@ -158,7 +152,7 @@ export type WorldContactPoint = {
     normalConstraint: axisConstraintPart.AxisConstraintPart;
 
     /**
-     * Distance from this contact point to the manifold's friction point, projected onto
+     * Distance from this contact point on body A to the mean of body A's contact points, projected onto
      * the plane perpendicular to the contact normal. Used as the moment arm when computing
      * the angular friction cap: μ · Σ_i (distanceToFrictionCenter_i · normalLambda_i).
      */
@@ -294,11 +288,10 @@ const _calcBias_v2 = /* @__PURE__ */ vec3.create();
  *
  * @param bodyA first body in contact
  * @param bodyB second body in contact
- * @param positionA contact position on body A (world space)
- * @param positionB contact position on body B (world space)
+ * @param penetration how far the contact points overlap along the normal (> 0 penetrating, < 0 separated)
  * @param normal contact normal (world space, points from A to B)
- * @param rA moment arm from body A's COM to contact point
- * @param rB moment arm from body B's COM to contact point
+ * @param rA moment arm from body A's COM to its contact point
+ * @param rB moment arm from body B's COM to its contact point
  * @param combinedRestitution combined restitution coefficient
  * @param deltaTime physics time step
  * @param gravity gravity vector
@@ -308,8 +301,7 @@ const _calcBias_v2 = /* @__PURE__ */ vec3.create();
 function calculateNormalVelocityBias(
     bodyA: body.RigidBody,
     bodyB: body.RigidBody,
-    positionA: Vec3,
-    positionB: Vec3,
+    penetration: number,
     normal: Vec3,
     rA: Vec3,
     rB: Vec3,
@@ -356,22 +348,14 @@ function calculateNormalVelocityBias(
     // normalVelocity = relativeVelocity · normal
     const normalVelocity = relVelX * normal[0] + relVelY * normal[1] + relVelZ * normal[2];
 
-    // step 2: calculate penetration depth
-    // penetration = (posA - posB) · normal
-    // positive = penetrating, negative = separated
-    const diffX = positionA[0] - positionB[0];
-    const diffY = positionA[1] - positionB[1];
-    const diffZ = positionA[2] - positionB[2];
-    const penetration = diffX * normal[0] + diffY * normal[1] + diffZ * normal[2];
-
-    // step 3: speculative contact bias
+    // step 2: speculative contact bias
     // if there is no penetration, this is a speculative contact and we will apply a bias to the contact constraint
     // so that the constraint becomes relative_velocity . contact normal > -penetration / delta_time
     // instead of relative_velocity . contact normal > 0
     // see: GDC 2013: "Physics for Game Programmers; Continuous Collision" - Erin Catto
     const speculativeContactVelocityBias = Math.max(0, -penetration / deltaTime);
 
-    // step 4: determine final bias with restitution
+    // step 3: determine final bias with restitution
     let normalVelocityBias: number;
 
     if (combinedRestitution > 0 && normalVelocity < -minVelocityForRestitution) {
@@ -457,61 +441,76 @@ const _addContactConstraint_scaledInvInertiaB = /* @__PURE__ */ mat4.create();
 let _invInertiaA: Mat4 = _addContactConstraint_scaledInvInertiaA;
 let _invInertiaB: Mat4 = _addContactConstraint_scaledInvInertiaB;
 const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
-const _addContactConstraint_midpoints: [Vec3, Vec3, Vec3, Vec3] = [
+// each point's moment arms, from each body's centre of mass to its own contact point (world space)
+const _addContactConstraint_rAs: [Vec3, Vec3, Vec3, Vec3] = [
     /* @__PURE__ */ vec3.create(),
     /* @__PURE__ */ vec3.create(),
     /* @__PURE__ */ vec3.create(),
     /* @__PURE__ */ vec3.create(),
 ];
+const _addContactConstraint_rBs: [Vec3, Vec3, Vec3, Vec3] = [
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+    /* @__PURE__ */ vec3.create(),
+];
+const _addContactConstraint_comMinusBaseA = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_comMinusBaseB = /* @__PURE__ */ vec3.create();
+const _addContactConstraint_deltaCom = /* @__PURE__ */ vec3.create();
 
 /**
- * Compute the manifold-level friction setup: average "friction point", per-point moment arm
- * to it, and the 2 linear + 1 angular friction constraint properties anchored at that point.
- *
- * Must be called after all per-point non-penetration constraints have been initialised, so
- * the midpoints are known.
+ * Compute the manifold-level friction setup: each body's friction point (the mean of that body's own contact
+ * points, so a speculative contact's separation along the normal does not lengthen the lever arms), each point's
+ * moment arm to body A's friction point, and the 2 linear + 1 angular friction constraint properties.
  *
  * @param constraint contact constraint (already populated with N points and normal/tangents)
  * @param bodyA first body
  * @param bodyB second body
- * @param midpoints world-space midpoints (0.5*(positionA + positionB)) for each contact point
+ * @param rAs each point on body A relative to body A's center of mass (world space)
+ * @param rBs each point on body B relative to body B's center of mass (world space)
  * @param settings contact settings (used for surface velocities)
  */
 function calculateFrictionConstraintProperties(
     constraint: ContactConstraint,
     bodyA: body.RigidBody,
     bodyB: body.RigidBody,
-    midpoints: Vec3[],
+    rAs: Vec3[],
+    rBs: Vec3[],
     settings: ContactSettings,
 ): void {
     const N = constraint.numContactPoints;
 
-    // friction point = unweighted mean of midpoints
-    let fpx = 0;
-    let fpy = 0;
-    let fpz = 0;
-    for (let i = 0; i < N; i++) {
-        fpx += midpoints[i][0];
-        fpy += midpoints[i][1];
-        fpz += midpoints[i][2];
+    // friction points = the mean of each body's own contact points
+    let fpax = rAs[0][0];
+    let fpay = rAs[0][1];
+    let fpaz = rAs[0][2];
+    let fpbx = rBs[0][0];
+    let fpby = rBs[0][1];
+    let fpbz = rBs[0][2];
+    for (let i = 1; i < N; i++) {
+        fpax += rAs[i][0];
+        fpay += rAs[i][1];
+        fpaz += rAs[i][2];
+        fpbx += rBs[i][0];
+        fpby += rBs[i][1];
+        fpbz += rBs[i][2];
     }
-    const invN = 1 / N;
-    fpx *= invN;
-    fpy *= invN;
-    fpz *= invN;
-    constraint.frictionPoint[0] = fpx;
-    constraint.frictionPoint[1] = fpy;
-    constraint.frictionPoint[2] = fpz;
+    fpax /= N;
+    fpay /= N;
+    fpaz /= N;
+    fpbx /= N;
+    fpby /= N;
+    fpbz /= N;
 
     const nx = constraint.normal[0];
     const ny = constraint.normal[1];
     const nz = constraint.normal[2];
 
-    // per-point moment arm to the friction point, projected onto the contact plane
+    // per-point moment arm to body A's friction point, projected onto the contact plane
     for (let i = 0; i < N; i++) {
-        const dx = midpoints[i][0] - fpx;
-        const dy = midpoints[i][1] - fpy;
-        const dz = midpoints[i][2] - fpz;
+        const dx = rAs[i][0] - fpax;
+        const dy = rAs[i][1] - fpay;
+        const dz = rAs[i][2] - fpaz;
         const dotN = dx * nx + dy * ny + dz * nz;
         const tx = dx - dotN * nx;
         const ty = dy - dotN * ny;
@@ -519,15 +518,11 @@ function calculateFrictionConstraintProperties(
         constraint.contactPoints[i].distanceToFrictionCenter = Math.sqrt(tx * tx + ty * ty + tz * tz);
     }
 
-    // r1, r2 from friction point to body COMs (linear friction parts are anchored here)
+    // the linear friction parts act at each body's friction point
     const rA = _addContactConstraint_rA;
     const rB = _addContactConstraint_rB;
-    rA[0] = fpx - bodyA.centerOfMassPosition[0];
-    rA[1] = fpy - bodyA.centerOfMassPosition[1];
-    rA[2] = fpz - bodyA.centerOfMassPosition[2];
-    rB[0] = fpx - bodyB.centerOfMassPosition[0];
-    rB[1] = fpy - bodyB.centerOfMassPosition[1];
-    rB[2] = fpz - bodyB.centerOfMassPosition[2];
+    vec3.set(rA, fpax, fpay, fpaz);
+    vec3.set(rB, fpbx, fpby, fpbz);
 
     const frictionBias1 = calculateFrictionBias(settings, rA, constraint.tangent1);
     const frictionBias2 = calculateFrictionBias(settings, rA, constraint.tangent2);
@@ -579,6 +574,15 @@ function calculateFrictionConstraintProperties(
     } else {
         angularFrictionConstraintPart.deactivate(constraint.angularFrictionConstraint);
     }
+}
+
+const _toBodySpace_offset = /* @__PURE__ */ vec3.create();
+
+/** a point relative to a manifold's base offset into body space: rot^T * point - rot^T * (com - baseOffset) */
+function toBodySpace(out: Vec3, rotation: Mat4, point: Vec3, comMinusBase: Vec3): Vec3 {
+    mat4.multiply3x3TransposedVec(_toBodySpace_offset, rotation, comMinusBase);
+    mat4.multiply3x3TransposedVec(out, rotation, point);
+    return vec3.subtract(out, out, _toBodySpace_offset);
 }
 
 /**
@@ -692,36 +696,29 @@ function beginContactConstraint(
 }
 
 /**
- * finish contact point i of a constraint whose world positions, local positions and warm start
- * lambda are already set: friction midpoint, moment arms, restitution / speculative velocity bias
- * and the non-penetration constraint part.
+ * finish contact point i of a constraint whose local positions and warm start lambda are already set: its
+ * restitution / speculative velocity bias and its non-penetration constraint part, with the moment arms rA / rB
+ * from each body's center of mass to that body's own contact point
  */
 function setupContactPoint(
     constraint: ContactConstraint,
     i: number,
     bodyA: body.RigidBody,
     bodyB: body.RigidBody,
+    rA: Vec3,
+    rB: Vec3,
+    penetration: number,
     contactSettings: ContactSettings,
     settings: WorldSettings,
     deltaTime: number,
 ): void {
     const cp = constraint.contactPoints[i];
 
-    // calculate collision points relative to body
-    const midpoint = _addContactConstraint_midpoints[i];
-    const rA = _addContactConstraint_rA;
-    const rB = _addContactConstraint_rB;
-
-    vec3.lerp(midpoint, cp.positionA, cp.positionB, 0.5);
-    vec3.subtract(rA, midpoint, bodyA.centerOfMassPosition);
-    vec3.subtract(rB, midpoint, bodyB.centerOfMassPosition);
-
     // calculate normal velocity bias with restitution and speculative contacts
     const normalVelocityBias = calculateNormalVelocityBias(
         bodyA,
         bodyB,
-        cp.positionA,
-        cp.positionB,
+        penetration,
         constraint.normal,
         rA,
         rB,
@@ -747,7 +744,7 @@ function setupContactPoint(
 }
 
 /**
- * manifold-level friction: 2 linear parts + 1 angular part anchored at the average "friction point",
+ * manifold-level friction: 2 linear parts + 1 angular part anchored at each body's friction point,
  * with the previous step's lambdas transferred wholesale (zero for a new contact). the transferred
  * lambdas are mirrored into the write-side cache so they're a no-op if the constraint never runs
  * (e.g. fully kinematic pair).
@@ -767,7 +764,14 @@ function setupFrictionConstraints(
         constraint.frictionConstraint2.totalLambda = prevFrictionLambda2;
         constraint.angularFrictionConstraint.totalLambda = prevAngularFrictionLambda;
 
-        calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
+        calculateFrictionConstraintProperties(
+            constraint,
+            bodyA,
+            bodyB,
+            _addContactConstraint_rAs,
+            _addContactConstraint_rBs,
+            contactSettings,
+        );
 
         curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
         curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
@@ -881,28 +885,37 @@ export function addContactConstraint(
             stepStamp,
         );
 
+        // each body's centre of mass relative to the manifold's base offset: the points convert to body space and to
+        // moment arms without passing through world space
+        const comMinusBaseA = vec3.subtract(
+            _addContactConstraint_comMinusBaseA,
+            bodyA.centerOfMassPosition,
+            contactManifold.baseOffset,
+        );
+        const comMinusBaseB = vec3.subtract(
+            _addContactConstraint_comMinusBaseB,
+            bodyB.centerOfMassPosition,
+            contactManifold.baseOffset,
+        );
+
         // create contact points with matching
         for (let i = 0; i < contactManifold.numContactPoints; i++) {
             const cp = constraint.contactPoints[constraint.numContactPoints];
             constraint.numContactPoints++;
 
-            // get relative contact points from manifold
+            // contact points relative to the manifold's base offset
             const contactPointIndex = i * 3;
-            const scratchA = _addContactConstraint_relativePointOnA;
-            const scratchB = _addContactConstraint_relativePointOnB;
+            const pointA = _addContactConstraint_relativePointOnA;
+            const pointB = _addContactConstraint_relativePointOnB;
+            vec3.fromBuffer(pointA, contactManifold.relativeContactPointsOnA, contactPointIndex);
+            vec3.fromBuffer(pointB, contactManifold.relativeContactPointsOnB, contactPointIndex);
 
-            vec3.fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
-            vec3.fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
+            vec3.add(cp.positionA, contactManifold.baseOffset, pointA);
+            vec3.add(cp.positionB, contactManifold.baseOffset, pointB);
 
-            vec3.add(cp.positionA, contactManifold.baseOffset, scratchA);
-            vec3.add(cp.positionB, contactManifold.baseOffset, scratchB);
-
-            // cp.localPosition* = rot*^T * (cp.position* - bodyCOM); reuse the
-            // scratch vec3s now that we're done with the relative points.
-            vec3.subtract(scratchA, cp.positionA, bodyA.centerOfMassPosition);
-            vec3.subtract(scratchB, cp.positionB, bodyB.centerOfMassPosition);
-            mat4.multiply3x3TransposedVec(cp.localPositionA, rotA, scratchA);
-            mat4.multiply3x3TransposedVec(cp.localPositionB, rotB, scratchB);
+            // body-local points: rot^T * point - rot^T * (com - baseOffset)
+            toBodySpace(cp.localPositionA, rotA, pointA, comMinusBaseA);
+            toBodySpace(cp.localPositionB, rotB, pointB, comMinusBaseB);
 
             // check if we have a close contact point from last update
             // match to cached contact point (first match wins)
@@ -930,7 +943,15 @@ export function addContactConstraint(
                 cp.normalConstraint.totalLambda = 0;
             }
 
-            setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
+            // penetration along the normal, then the points relative to each body's centre of mass
+            const penetration =
+                (pointA[0] - pointB[0]) * contactManifold.worldSpaceNormal[0] +
+                (pointA[1] - pointB[1]) * contactManifold.worldSpaceNormal[1] +
+                (pointA[2] - pointB[2]) * contactManifold.worldSpaceNormal[2];
+            const rA = vec3.subtract(_addContactConstraint_rAs[i], pointA, comMinusBaseA);
+            const rB = vec3.subtract(_addContactConstraint_rBs[i], pointB, comMinusBaseB);
+
+            setupContactPoint(constraint, i, bodyA, bodyB, rA, rB, penetration, contactSettings, settings, deltaTime);
 
             // store to write-side cache for next frame's warm starting
             const cachedPoint = curr.contactPoints[i];
@@ -962,22 +983,27 @@ export function addContactConstraint(
     // if no dynamic bodies, or is a sensor, we skip creating the contact constraint
     // store sensor contact points to the write-side cache
     // this ensures proper onContactAdded/onContactPersisted semantics for sensors
+    const comMinusBaseA = vec3.subtract(
+        _addContactConstraint_comMinusBaseA,
+        bodyA.centerOfMassPosition,
+        contactManifold.baseOffset,
+    );
+    const comMinusBaseB = vec3.subtract(
+        _addContactConstraint_comMinusBaseB,
+        bodyB.centerOfMassPosition,
+        contactManifold.baseOffset,
+    );
     for (let i = 0; i < contactManifold.numContactPoints; i++) {
         const contactPointIndex = i * 3;
         const scratchA = _addContactConstraint_relativePointOnA;
         const scratchB = _addContactConstraint_relativePointOnB;
         const cachedPoint = curr.contactPoints[i];
 
-        // scratch = manifold relative point; then add baseOffset for world; then
-        // subtract COM for body-local; then rot^T * local for cached position.
+        // the manifold's point relative to the base offset, into body space
         vec3.fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
         vec3.fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
-        vec3.add(scratchA, contactManifold.baseOffset, scratchA);
-        vec3.add(scratchB, contactManifold.baseOffset, scratchB);
-        vec3.subtract(scratchA, scratchA, bodyA.centerOfMassPosition);
-        vec3.subtract(scratchB, scratchB, bodyB.centerOfMassPosition);
-        mat4.multiply3x3TransposedVec(cachedPoint.position1, rotA, scratchA);
-        mat4.multiply3x3TransposedVec(cachedPoint.position2, rotB, scratchB);
+        toBodySpace(cachedPoint.position1, rotA, scratchA, comMinusBaseA);
+        toBodySpace(cachedPoint.position2, rotB, scratchB, comMinusBaseB);
 
         // reset impulses (sensors don't apply forces)
         cachedPoint.normalLambda = 0;
@@ -1116,6 +1142,9 @@ export function addContactConstraintFromCache(
             stepStamp,
         );
 
+        // body a's centre of mass relative to body b's
+        const deltaCom = vec3.subtract(_addContactConstraint_deltaCom, bodyA.centerOfMassPosition, bodyB.centerOfMassPosition);
+
         for (let i = 0; i < numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
             constraint.numContactPoints++;
@@ -1127,7 +1156,15 @@ export function addContactConstraintFromCache(
             vec3.copy(cp.localPositionB, prevPoint.position2);
             cp.normalConstraint.totalLambda = prevPoint.normalLambda;
 
-            setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
+            // the cached points relative to each body's centre of mass, and their penetration along the normal
+            const rA = mat4.multiply3x3Vec(_addContactConstraint_rAs[i], rotA, prevPoint.position1);
+            const rB = mat4.multiply3x3Vec(_addContactConstraint_rBs[i], rotB, prevPoint.position2);
+            const penetration =
+                (rA[0] - rB[0] + deltaCom[0]) * worldSpaceNormal[0] +
+                (rA[1] - rB[1] + deltaCom[1]) * worldSpaceNormal[1] +
+                (rA[2] - rB[2] + deltaCom[2]) * worldSpaceNormal[2];
+
+            setupContactPoint(constraint, i, bodyA, bodyB, rA, rB, penetration, contactSettings, settings, deltaTime);
         }
 
         setupFrictionConstraints(
@@ -1185,7 +1222,6 @@ function createContactConstraint(): ContactConstraint {
             createWorldContactPoint(),
             createWorldContactPoint(),
         ],
-        frictionPoint: vec3.create(),
         frictionConstraint1: axisConstraintPart.create(),
         frictionConstraint2: axisConstraintPart.create(),
         angularFrictionConstraint: angularFrictionConstraintPart.create(),
@@ -1782,8 +1818,6 @@ export function storeAppliedImpulses(contactConstraints: ContactConstraints, con
     }
 }
 
-const _solvePos_worldRa = /* @__PURE__ */ vec3.create();
-const _solvePos_worldRb = /* @__PURE__ */ vec3.create();
 const _solvePos_rA = /* @__PURE__ */ vec3.create();
 const _solvePos_rB = /* @__PURE__ */ vec3.create();
 const _solvePos_invInertiaA = /* @__PURE__ */ mat4.create();
@@ -1831,6 +1865,11 @@ export function solvePositionConstraintsForIsland(
         mat4.fromQuat(_solvePos_rotA, bodyA.quaternion);
         mat4.fromQuat(_solvePos_rotB, bodyB.quaternion);
 
+        // body a's centre of mass relative to body b's
+        const deltaComX = bodyA.centerOfMassPosition[0] - bodyB.centerOfMassPosition[0];
+        const deltaComY = bodyA.centerOfMassPosition[1] - bodyB.centerOfMassPosition[1];
+        const deltaComZ = bodyA.centerOfMassPosition[2] - bodyB.centerOfMassPosition[2];
+
         // world inverse inertia is recomputed lazily on the first penetrating point — a
         // constraint whose points are all separated (speculative contacts) skips it entirely
         let inertiaComputed = false;
@@ -1838,26 +1877,17 @@ export function solvePositionConstraintsForIsland(
         for (let i = 0; i < constraint.numContactPoints; i++) {
             const cp = constraint.contactPoints[i];
 
-            // transform contact points from local to world space (bodies may have moved)
-            mat4.multiply3x3Vec(_solvePos_worldRa, _solvePos_rotA, cp.localPositionA);
-            // pointA = bodyA.centerOfMassPosition + _solvePos_worldRa
-            const pointAX = bodyA.centerOfMassPosition[0] + _solvePos_worldRa[0];
-            const pointAY = bodyA.centerOfMassPosition[1] + _solvePos_worldRa[1];
-            const pointAZ = bodyA.centerOfMassPosition[2] + _solvePos_worldRa[2];
+            // contact points relative to each body's centre of mass in world space (the bodies may have moved)
+            const rA = mat4.multiply3x3Vec(_solvePos_rA, _solvePos_rotA, cp.localPositionA);
+            const rB = mat4.multiply3x3Vec(_solvePos_rB, _solvePos_rotB, cp.localPositionB);
 
-            mat4.multiply3x3Vec(_solvePos_worldRb, _solvePos_rotB, cp.localPositionB);
-            // pointB = bodyB.centerOfMassPosition + _solvePos_worldRb
-            const pointBX = bodyB.centerOfMassPosition[0] + _solvePos_worldRb[0];
-            const pointBY = bodyB.centerOfMassPosition[1] + _solvePos_worldRb[1];
-            const pointBZ = bodyB.centerOfMassPosition[2] + _solvePos_worldRb[2];
-
-            // calculate penetration vector and separation
-            // penetrationVector = pointB - pointA
-            const penVecX = pointBX - pointAX;
-            const penVecY = pointBY - pointAY;
-            const penVecZ = pointBZ - pointAZ;
-            // separation = penetrationVector · normal + penetrationSlop
-            let separation = penVecX * normal[0] + penVecY * normal[1] + penVecZ * normal[2] + penetrationSlop;
+            // separation along the normal (negative if interpenetrating): (rB - rA - (comA - comB)) · normal, allowing a
+            // little penetration (the slop) and clamped so a deep overlap doesn't take a huge impulse
+            let separation =
+                (rB[0] - rA[0] - deltaComX) * normal[0] +
+                (rB[1] - rA[1] - deltaComY) * normal[1] +
+                (rB[2] - rA[2] - deltaComZ) * normal[2] +
+                penetrationSlop;
             separation = Math.max(separation, -maxPenetrationDistance);
 
             // early exit if not penetrating
@@ -1875,22 +1905,6 @@ export function solvePositionConstraintsForIsland(
                 }
             }
 
-            // calculate midpoint and moment arms
-            // midpoint = (pointA + pointB) * 0.5
-            const midpointX = (pointAX + pointBX) * 0.5;
-            const midpointY = (pointAY + pointBY) * 0.5;
-            const midpointZ = (pointAZ + pointBZ) * 0.5;
-
-            // _solvePos_rA = midpoint - bodyA.centerOfMassPosition
-            _solvePos_rA[0] = midpointX - bodyA.centerOfMassPosition[0];
-            _solvePos_rA[1] = midpointY - bodyA.centerOfMassPosition[1];
-            _solvePos_rA[2] = midpointZ - bodyA.centerOfMassPosition[2];
-
-            // _solvePos_rB = midpoint - bodyB.centerOfMassPosition
-            _solvePos_rB[0] = midpointX - bodyB.centerOfMassPosition[0];
-            _solvePos_rB[1] = midpointY - bodyB.centerOfMassPosition[1];
-            _solvePos_rB[2] = midpointZ - bodyB.centerOfMassPosition[2];
-
             // recalculate constraint properties with current inertia and moment arms
             axisConstraintPart.calculateConstraintPropertiesWithMassOverride(
                 cp.normalConstraint,
@@ -1902,8 +1916,8 @@ export function solvePositionConstraintsForIsland(
                 constraint.invInertiaScaleB,
                 _solvePos_invInertiaA,
                 _solvePos_invInertiaB,
-                _solvePos_rA,
-                _solvePos_rB,
+                rA,
+                rB,
                 normal,
                 0,
             );

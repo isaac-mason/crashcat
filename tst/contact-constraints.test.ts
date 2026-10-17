@@ -229,3 +229,37 @@ describe('contact constraints: warm start across a change of step length', () =>
         expect(highest).toBeLessThan(1.51);
     });
 });
+
+describe('contact constraints: friction lever arms', () => {
+    test("a speculative contact's friction acts at each body's own contact point, not halfway across the gap", () => {
+        const { world, layers } = createTestWorld();
+        const radius = 0.5;
+        const gap = 0.01;
+        // the sphere first, so it is body a
+        const ball = rigidBody.create(world, {
+            shape: sphere.create({ radius }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, radius + gap, 0],
+            friction: 0.5,
+        });
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: [10, 0.5, 10] }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: [0, -0.5, 0],
+            friction: 0.5,
+        });
+        rigidBody.setLinearVelocity(world, ball, [1, 0, 0]);
+        world.settings.gravityEnabled = false;
+
+        updateWorld(world, undefined, 1 / 60);
+
+        expect(world.contactConstraints.count).toBe(1);
+        const constraint = world.contactConstraints.pool[0];
+        expect(constraint.bodyIndexA).toBe(ball.index);
+        // the ball's lever arm for both friction directions is its radius: r x t with r straight down, length radius
+        expect(vec3.length(constraint.frictionConstraint1.r1PlusUxAxis)).toBeCloseTo(radius, 6);
+        expect(vec3.length(constraint.frictionConstraint2.r1PlusUxAxis)).toBeCloseTo(radius, 6);
+    });
+});
