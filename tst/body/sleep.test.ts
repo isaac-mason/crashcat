@@ -1,7 +1,7 @@
-import { vec3 } from 'math';
+import { type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, MotionType, type RigidBody, rigidBody, sphere, updateWorld } from '../../src';
-import { resetSleepTimer, updateSleepState } from '../../src/body/sleep';
+import { getSleepTestPoints, resetSleepTimer, updateSleepState } from '../../src/body/sleep';
 import { createTestWorld } from '../helpers';
 
 describe('Body Sleeping', () => {
@@ -406,6 +406,21 @@ describe('sleep test', () => {
         }
         return -1;
     }
+
+    test('a cube tests its x and z axes', () => {
+        const { world, layers } = createTestWorld();
+        const body = rigidBody.create(world, {
+            shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [1, 2, 3],
+        });
+        const points: [Vec3, Vec3, Vec3] = [vec3.create(), vec3.create(), vec3.create()];
+        getSleepTestPoints(body, points);
+        expect(Array.from(points[0])).toEqual([1, 2, 3]);
+        expect(Array.from(points[1])).toEqual([1.5, 2, 3]);
+        expect(Array.from(points[2])).toEqual([1, 2, 3.5]);
+    });
 
     test('a body at rest may sleep once the timer runs out', () => {
         const atRest = stepsUntilSleep(0, 120);

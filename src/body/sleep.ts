@@ -33,7 +33,9 @@ export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3
     const qw = body.quaternion[3];
     const p1 = outPoints[1];
     const p2 = outPoints[2];
-    if (ex <= ey && ex <= ez) {
+    // the smallest extent's index, ties going to the later axis but z only when strictly smallest (a cube tests x and z)
+    const lowest = ex < ey ? (ez < ex ? 2 : 0) : ez < ey ? 2 : 1;
+    if (lowest === 0) {
         // x is smallest: y and z axes
         p1[0] = com[0] + 2 * (qx * qy - qw * qz) * ey;
         p1[1] = com[1] + (1 - 2 * (qx * qx + qz * qz)) * ey;
@@ -41,7 +43,7 @@ export function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3
         p2[0] = com[0] + 2 * (qx * qz + qw * qy) * ez;
         p2[1] = com[1] + 2 * (qy * qz - qw * qx) * ez;
         p2[2] = com[2] + (1 - 2 * (qx * qx + qy * qy)) * ez;
-    } else if (ey <= ez) {
+    } else if (lowest === 1) {
         // y is smallest: x and z axes
         p1[0] = com[0] + (1 - 2 * (qy * qy + qz * qz)) * ex;
         p1[1] = com[1] + 2 * (qx * qy + qw * qz) * ex;
