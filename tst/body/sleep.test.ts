@@ -1,6 +1,7 @@
 import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { box, capsule, MotionType, type RigidBody, rigidBody, sphere, updateWorld } from '../../src';
+import { resetSleepTimer, updateSleepState } from '../../src/body/sleep';
 import { createTestWorld } from '../helpers';
 
 describe('Body Sleeping', () => {
@@ -379,5 +380,43 @@ describe('Body Sleeping', () => {
 
         // Body should not be sleeping (has velocity)
         expect(body.sleeping).toBe(false);
+    });
+});
+
+describe('sleep test', () => {
+    // the default settings: time_before_sleep 0.5 s, point velocity threshold 0.03 m/s, so each test point's sphere may
+    // grow to a radius of 0.03 * 0.5 m before the timer restarts
+    const TIME_BEFORE_SLEEP = 0.5;
+    const MAX_MOVEMENT = 0.03 * TIME_BEFORE_SLEEP;
+    const DT = 1 / 60;
+
+    /** the step on which a unit box moving at `velocity` m/s along x may first sleep, or -1 */
+    function stepsUntilSleep(velocity: number, maxSteps: number): number {
+        const { world, layers } = createTestWorld();
+        const body = rigidBody.create(world, {
+            shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, 1, 0],
+        });
+        resetSleepTimer(body);
+        for (let step = 1; step <= maxSteps; step++) {
+            body.centerOfMassPosition[0] += velocity * DT;
+            if (updateSleepState(body, DT, MAX_MOVEMENT, TIME_BEFORE_SLEEP)) return step;
+        }
+        return -1;
+    }
+
+    test('a body at rest may sleep once the timer runs out', () => {
+        const atRest = stepsUntilSleep(0, 120);
+        expect(atRest).toBeGreaterThanOrEqual(30);
+        expect(atRest).toBeLessThanOrEqual(31);
+    });
+
+    test('a straight drift is measured by half its length, as the smallest sphere holding the path', () => {
+        // 0.05 m/s covers 0.025 m in 0.5 s: a 0.0125 m sphere, inside the 0.015 m allowed, so it sleeps on time
+        expect(stepsUntilSleep(0.05, 120)).toBe(stepsUntilSleep(0, 120));
+        // 0.07 m/s spans the 0.03 m diameter in 0.43 s, so the timer keeps restarting
+        expect(stepsUntilSleep(0.07, 600)).toBe(-1);
     });
 });

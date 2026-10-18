@@ -71,6 +71,26 @@ export function resetSleepTestSpheres(mp: MotionProperties, points: [Vec3, Vec3,
 
 const _updateSleepState_points: [Vec3, Vec3, Vec3] = [vec3.create(), vec3.create(), vec3.create()];
 
+/**
+ * grow the sphere just enough to hold the point: its diameter becomes the old radius plus the point's distance, and the
+ * centre moves toward the point, so a body drifting one way is measured by half its travel
+ */
+function encapsulatePoint(sphere: { center: Vec3; radius: number }, point: Vec3): void {
+    const dx = point[0] - sphere.center[0];
+    const dy = point[1] - sphere.center[1];
+    const dz = point[2] - sphere.center[2];
+    const distanceSq = dx * dx + dy * dy + dz * dz;
+    if (distanceSq > sphere.radius * sphere.radius) {
+        const distance = Math.sqrt(distanceSq);
+        const radius = 0.5 * (sphere.radius + distance);
+        const shift = (radius - sphere.radius) / distance;
+        sphere.center[0] += dx * shift;
+        sphere.center[1] += dy * shift;
+        sphere.center[2] += dz * shift;
+        sphere.radius = radius;
+    }
+}
+
 /** update the sleep state of a body, returns true if the body can sleep, false if it cannot */
 export function updateSleepState(body: RigidBody, deltaTime: number, maxMovement: number, timeBeforeSleep: number): boolean {
     const mp = body.motionProperties;
@@ -87,9 +107,7 @@ export function updateSleepState(body: RigidBody, deltaTime: number, maxMovement
     for (let i = 0; i < 3; i++) {
         const sphere = mp.sleepTestSpheres[i];
 
-        // grow sphere to encapsulate the current point
-        const distanceToPoint = vec3.distance(sphere.center, _updateSleepState_points[i]);
-        sphere.radius = Math.max(sphere.radius, distanceToPoint);
+        encapsulatePoint(sphere, _updateSleepState_points[i]);
 
         // if exceeded threshold, reset and return cannot sleep
         if (sphere.radius > maxMovement) {
