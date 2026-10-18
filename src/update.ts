@@ -75,12 +75,19 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
     pairs.findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
 
     /* narrowphase: check collision for each potentially colliding pair */
-    const collidingPairs = world.pairs.collidingPairs;
-    const collidingPairCount = world.pairs.collidingPairCount;
-
     const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
+    const speculativeContactDistance = world.settings.narrowphase.speculativeContactDistance;
 
-    for (let i = 0; i < collidingPairCount; i++) {
+    for (let i = 0; ; i++) {
+        // the colliding pairs run out: a body a contact woke since the pairs were found brings its own, so a stack woken
+        // from the top is solved whole this step rather than one body deeper per step
+        while (i === world.pairs.collidingPairCount && world.pairs.activeReadIndex < world.bodies.activeBodyCount) {
+            const woken = world.bodies.pool[world.bodies.activeBodyIndices[world.pairs.activeReadIndex++]];
+            pairs.emitWokenBodyPairs(world, woken, speculativeContactDistance, listener);
+        }
+        if (i === world.pairs.collidingPairCount) break;
+
+        const collidingPairs = world.pairs.collidingPairs;
         const bodyIndexA = collidingPairs[i * 3];
         const bodyIndexB = collidingPairs[i * 3 + 1];
         const pairRecordIndex = collidingPairs[i * 3 + 2];

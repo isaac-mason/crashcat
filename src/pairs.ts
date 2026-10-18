@@ -77,6 +77,12 @@ export type Pairs = {
      * (invariant: flag set ⟺ index present here); insertion order is deterministic.
      */
     moved: number[];
+
+    /**
+     * how far into the active body list this step's pairs have been found. a body a contact wakes during the
+     * narrowphase lands past it, and still needs its own pairs this step (emitWokenBodyPairs).
+     */
+    activeReadIndex: number;
 };
 
 /** stride of a pair record: [bodyIndexA, bodyIndexB, prevEdgeA, nextEdgeA, prevEdgeB, nextEdgeB] */
@@ -108,6 +114,7 @@ export function init(): Pairs {
         firstContact: [],
         collidingPairCount: 0,
         moved: [],
+        activeReadIndex: 0,
     };
 }
 
@@ -542,6 +549,51 @@ export function findCollidingPairs(world: World, speculativeContactDistance: num
         moved.copyWithin(0, discoveredCount);
     }
     moved.length -= discoveredCount;
+
+    pairs.activeReadIndex = world.bodies.activeBodyCount;
+}
+
+const _woken_fatA = /* @__PURE__ */ box3.create();
+const _woken_fatB = /* @__PURE__ */ box3.create();
+const _woken_expanded = /* @__PURE__ */ box3.create();
+
+/**
+ * emit the pairs of a body woken after the sweep (a contact woke it in the narrowphase), so they run in the same step's
+ * narrowphase: its records that pass the sweep's overlap tests and that it reports (the other body asleep, or woken after
+ * it; a body active at the sweep already reported its pair). a record that no longer overlaps is left for the next sweep
+ * to destroy.
+ */
+export function emitWokenBodyPairs(
+    world: World,
+    body: RigidBody,
+    speculativeContactDistance: number,
+    listener: Listener | undefined,
+): void {
+    const layers = world.settings.layers;
+    const broadphase = world.broadphase;
+    const pairs = world.pairs;
+    const pool = world.bodies.pool;
+    const records = pairs.records;
+
+    let edgeKey = body.headPairKey;
+    while (edgeKey !== INVALID_PAIR_KEY) {
+        const rec = getPairEdgeRecord(edgeKey);
+        const side = getPairEdgeSide(edgeKey);
+        edgeKey = records[edgePrevSlot(rec, side) + 1];
+        const other = pool[records[rec * RECORD_STRIDE + (1 - side)]];
+        if (body.dbvtNode === -1 || other.dbvtNode === -1) continue;
+
+        // the sweep's tests: fat leaves overlapping (with the speculative reach), then the more active body's tight aabb
+        const fatA = dbvt.readNodeAabb(_woken_fatA, broadphase.dbvts[body.broadphaseLayer], body.dbvtNode);
+        const fatB = dbvt.readNodeAabb(_woken_fatB, broadphase.dbvts[other.broadphaseLayer], other.dbvtNode);
+        box3.expandByMargin(_woken_expanded, fatA, speculativeContactDistance);
+        if (!box3.intersectsBox3(_woken_expanded, fatB)) continue;
+
+        box3.expandByMargin(_woken_expanded, body.aabb, speculativeContactDistance);
+        if (box3.intersectsBox3(_woken_expanded, other.aabb) && shouldReportPair(layers, body, other)) {
+            emitCollidingPair(pairs, body, other, rec, listener);
+        }
+    }
 }
 
 /**

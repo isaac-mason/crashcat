@@ -383,6 +383,44 @@ describe('Body Sleeping', () => {
     });
 });
 
+describe('waking', () => {
+    test('a body hitting a sleeping stack wakes the whole stack in the step it lands', () => {
+        const { world, layers } = createTestWorld();
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: [10, 0.5, 10] }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: [0, -0.5, 0],
+        });
+        const stack: RigidBody[] = [];
+        for (let i = 0; i < 4; i++) {
+            stack.push(
+                rigidBody.create(world, {
+                    shape: box.create({ halfExtents: [0.5, 0.5, 0.5] }),
+                    objectLayer: layers.OBJECT_LAYER_MOVING,
+                    motionType: MotionType.DYNAMIC,
+                    position: [0, 0.5 + i, 0],
+                }),
+            );
+        }
+        for (let i = 0; i < 300 && stack.some((body) => !body.sleeping); i++) updateWorld(world, undefined, 1 / 60);
+        expect(stack.every((body) => body.sleeping)).toBe(true);
+
+        rigidBody.create(world, {
+            shape: sphere.create({ radius: 0.4 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, 5, 0],
+        });
+        const top = stack[stack.length - 1];
+        for (let i = 0; i < 120 && top.sleeping; i++) updateWorld(world, undefined, 1 / 60);
+
+        // the contact that woke the top box found the pairs below it in the same step, down to the floor
+        expect(top.sleeping).toBe(false);
+        expect(stack.every((body) => !body.sleeping)).toBe(true);
+    });
+});
+
 describe('sleep test', () => {
     // the default settings: time_before_sleep 0.5 s, point velocity threshold 0.03 m/s, so each test point's sphere may
     // grow to a radius of 0.03 * 0.5 m before the timer restarts
