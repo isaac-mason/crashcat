@@ -1082,7 +1082,10 @@ function wakeBodiesInUserConstraints(world: World): void {
                 const bodyA = bodies.pool[constraint.bodyIndexA];
                 const bodyB = bodies.pool[constraint.bodyIndexB];
 
-                const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
+                // a static body is never active: a sleeping body jointed to one stays asleep
+                const hasActiveBody =
+                    (bodyA.motionType !== MotionType.STATIC && !bodyA.sleeping) ||
+                    (bodyB.motionType !== MotionType.STATIC && !bodyB.sleeping);
                 const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
 
                 if (hasActiveBody && hasDynamicBody) {

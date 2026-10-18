@@ -1,4 +1,5 @@
 import type { Bodies } from '../body/bodies';
+import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
 import type { ConeConstraint } from './cone-constraint';
 import {
@@ -268,7 +269,10 @@ export function updateSleeping(constraintsState: Constraints, bodies: Bodies): v
             if (constraint._pooled) continue;
             const bodyA = bodies.pool[constraint.bodyIndexA];
             const bodyB = bodies.pool[constraint.bodyIndexB];
-            constraint._sleeping = bodyA.sleeping && bodyB.sleeping;
+            // asleep unless a body is active; a static body never is
+            constraint._sleeping =
+                (bodyA.motionType === MotionType.STATIC || bodyA.sleeping) &&
+                (bodyB.motionType === MotionType.STATIC || bodyB.sleeping);
         }
     }
 }
