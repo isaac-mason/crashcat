@@ -318,6 +318,10 @@ const voxelShapeDef = defineShape<VoxelShape>({
     },
     castRay: castRayVsVoxels,
     collidePoint: collidePointVsVoxels,
+    getMaterial(): number {
+        // voxels carry no material, every face uses the default
+        return -1;
+    },
     getSurfaceNormal(out, _shape, subShapeId) {
         // decode face from subShapeId (only 3 bits)
         subShape.popIndex(_subShapeIdPopResult, subShapeId, VOXEL_FACE_COUNT);
