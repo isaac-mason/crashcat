@@ -1,4 +1,5 @@
 import type { Bodies } from '../body/bodies';
+import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
 import type { ConeConstraint } from './cone-constraint';
 import {
@@ -268,7 +269,10 @@ export function updateSleeping(constraintsState: Constraints, bodies: Bodies): v
             if (constraint._pooled) continue;
             const bodyA = bodies.pool[constraint.bodyIndexA];
             const bodyB = bodies.pool[constraint.bodyIndexB];
-            constraint._sleeping = bodyA.sleeping && bodyB.sleeping;
+            // asleep unless a body is active; a static body never is
+            constraint._sleeping =
+                (bodyA.motionType === MotionType.STATIC || bodyA.sleeping) &&
+                (bodyB.motionType === MotionType.STATIC || bodyB.sleeping);
         }
     }
 }
@@ -286,16 +290,20 @@ export function setupVelocityConstraints(constraintsState: Constraints, bodies: 
     }
 }
 
-/** warm start velocity constraints for all active user constraints */
-export function warmStartVelocityConstraints(constraintsState: Constraints, bodies: Bodies, warmStartImpulseRatio: number): void {
-    for (const type in constraintsState.pools) {
-        const pool = constraintsState.pools[type as unknown as ConstraintType]!;
-        const def = constraintDefs[pool.type]!;
-        for (const constraint of pool.constraints) {
-            if (!constraint._pooled && constraint.enabled && !constraint._sleeping) {
-                def.warmStartVelocity(constraint, bodies, warmStartImpulseRatio);
-            }
-        }
+/** warm start velocity constraints for an island's user constraints, in their solve order */
+export function warmStartVelocityConstraints(
+    constraints: Constraints,
+    bodies: Bodies,
+    constraintIds: ConstraintId[],
+    warmStartImpulseRatio: number,
+): void {
+    for (const constraintId of constraintIds) {
+        const type = getConstraintIdType(constraintId);
+        const index = getConstraintIdIndex(constraintId);
+        const def = constraintDefs[type];
+        const pool = constraints.pools[type];
+        if (!pool || !def) continue;
+        def.warmStartVelocity(pool.constraints[index], bodies, warmStartImpulseRatio);
     }
 }
 

@@ -409,19 +409,11 @@ describe('TriangleMeshBuilder', () => {
             expect(getActiveEdges(result.data, 0)).toBe(0b111);
         });
 
-        test('non-manifold edges remain active', () => {
-            // Create three triangles sharing a common edge
-            // This creates a non-manifold configuration
+        test('back to back triangles keep the shared edge active', () => {
+            // two triangles on the edge 0-1 with opposite windings: their normals are opposite
             const result = buildTriangleMesh({
                 positions: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -1, 0],
-                indices: [
-                    0,
-                    1,
-                    2, // Triangle 1
-                    0,
-                    1,
-                    3, // Triangle 2 (shares edge 0-1)
-                ],
+                indices: [0, 1, 2, 0, 1, 3],
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
                 bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
@@ -429,12 +421,25 @@ describe('TriangleMeshBuilder', () => {
             });
 
             expect(result.data.triangleCount).toBe(2);
-
-            // Edge 0-1 is shared by both and has dihedral angle 180° (opposite faces)
-            // Normals should be opposite, dot product should be negative/low
-            // Both triangles should have the edge active
             expect(getActiveEdges(result.data, 0) & 0b001).toBe(0b001);
             expect(getActiveEdges(result.data, 1) & 0b001).toBe(0b001);
+        });
+
+        test('non-manifold edges remain active', () => {
+            // three coplanar triangles on the edge 0-1: an edge with more than two triangles is always active
+            const result = buildTriangleMesh({
+                positions: [0, 0, 0, 1, 0, 0, 0.5, 1, 0, 0.5, -1, 0, 0.5, 2, 0],
+                indices: [0, 1, 2, 1, 0, 3, 0, 1, 4],
+                degenerateTolerance: 1e-6,
+                bvhMaxLeafTris: 2,
+                bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
+                activeEdgeCosThresholdAngle,
+            });
+
+            expect(result.data.triangleCount).toBe(3);
+            for (let t = 0; t < 3; t++) {
+                expect(getActiveEdges(result.data, t)).toBe(0b111);
+            }
         });
 
         test('mixed smooth and sharp edges', () => {
@@ -481,10 +486,10 @@ describe('TriangleMeshBuilder', () => {
         });
 
         test('all edges with extreme angle difference', () => {
-            // Create two triangles with 170° dihedral angle (very sharp)
+            // Create two triangles folded sharply into a convex ridge
             // This tests the cosine threshold more thoroughly
             const result = buildTriangleMesh({
-                positions: [0, 0, 0, 1, 0, 0, 0.5, 0.1, 0, 0.5, -0.1, 0.5],
+                positions: [0, 0, 0, 1, 0, 0, 0.5, 0.1, 0, 0.5, -0.1, -0.5],
                 indices: [0, 1, 2, 1, 0, 3],
                 degenerateTolerance: 1e-6,
                 bvhMaxLeafTris: 2,
@@ -541,5 +546,50 @@ describe('TriangleMeshBuilder', () => {
             expect(typeof getActiveEdges(result.data, 0)).toBe('number');
             expect(typeof getActiveEdges(result.data, 1)).toBe('number');
         });
+    });
+});
+
+describe('TriangleMeshBuilder active edges per jolt', () => {
+    // active edge bits per triangle: bit 0 = AB, bit 1 = BC, bit 2 = CA
+    const cosTenDegrees = Math.cos((10 * Math.PI) / 180);
+
+    // triangle 0 = (0, 1, 2) lies in z = 0 with normal +z, triangle 1 = (1, 0, 3) shares the edge
+    // from (0, 0, 0) to (1, 0, 0) as its AB edge too. the fold is the angle between the two normals:
+    // folding triangle 1 below the plane makes a convex ridge, folding it above makes a concave valley
+    const buildFold = (foldDegrees: number, valley: boolean) => {
+        const fold = (foldDegrees * Math.PI) / 180;
+        const z = valley ? Math.sin(fold) : -Math.sin(fold);
+        return buildTriangleMesh({
+            positions: [0, 0, 0, 1, 0, 0, 0.5, 1, 0, 0.5, -Math.cos(fold), z],
+            indices: [0, 1, 2, 1, 0, 3],
+            degenerateTolerance: 1e-6,
+            bvhMaxLeafTris: 2,
+            bvhSplitStrategy: triangleMeshBvh.BvhSplitStrategy.SAH,
+            activeEdgeCosThresholdAngle: cosTenDegrees,
+        });
+    };
+
+    const expectSharedEdge = (result: ReturnType<typeof buildTriangleMesh>, active: boolean) => {
+        expect(result.data.triangleCount).toBe(2);
+        // the shared edge is AB on both triangles, the other edges are boundaries and stay active
+        const expected = active ? 0b111 : 0b110;
+        expect(getActiveEdges(result.data, 0)).toBe(expected);
+        expect(getActiveEdges(result.data, 1)).toBe(expected);
+    };
+
+    test('the shared edge of a flat quad is inactive', () => {
+        expectSharedEdge(buildFold(0, false), false);
+    });
+
+    test('a convex ridge past the threshold is active on both triangles', () => {
+        expectSharedEdge(buildFold(30, false), true);
+    });
+
+    test('a concave valley of the same angle is inactive', () => {
+        expectSharedEdge(buildFold(30, true), false);
+    });
+
+    test('a convex fold just under the threshold is inactive', () => {
+        expectSharedEdge(buildFold(9, false), false);
     });
 });

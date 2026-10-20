@@ -1,5 +1,5 @@
-import type { Mat4, Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Mat4, Quat, Vec3 } from 'math';
+import { mat3, mat4, quat, vec3 } from 'math';
 import * as motionProperties from '../../body/motion-properties';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
@@ -94,7 +94,7 @@ const _getInvInitialOrientationXY_q2 = /* @__PURE__ */ quat.create();
  */
 export function getInvInitialOrientationXY(axisX1: Vec3, axisY1: Vec3, axisX2: Vec3, axisY2: Vec3): Quat {
     // if axes are identical, return identity
-    if (vec3.equals(axisX1, axisX2) && vec3.equals(axisY1, axisY2)) {
+    if (vec3.exactEquals(axisX1, axisX2) && vec3.exactEquals(axisY1, axisY2)) {
         return quat.create(); // identity
     }
 
@@ -154,16 +154,23 @@ export function calculateConstraintProperties(
     _rotationA: Mat4,
     bodyB: RigidBody,
     _rotationB: Mat4,
+    stepStamp: number,
 ): void {
     // get inverse inertia in world space for both bodies
     if (bodyA.motionType === MotionType.DYNAMIC) {
-        motionProperties.getInverseInertiaForRotation(part.invI1, bodyA.motionProperties, _rotationA);
+        mat4.copy(
+            part.invI1,
+            motionProperties.getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp),
+        );
     } else {
         mat4.zero(part.invI1);
     }
 
     if (bodyB.motionType === MotionType.DYNAMIC) {
-        motionProperties.getInverseInertiaForRotation(part.invI2, bodyB.motionProperties, _rotationB);
+        mat4.copy(
+            part.invI2,
+            motionProperties.getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp),
+        );
     } else {
         mat4.zero(part.invI2);
     }

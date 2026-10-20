@@ -53,6 +53,14 @@ export function create(): SpringSettings {
     };
 }
 
+/** reset spring settings to the defaults (hard constraint, no spring) */
+export function reset(out: SpringSettings): SpringSettings {
+    out.mode = SpringMode.FREQUENCY_AND_DAMPING;
+    out.frequencyOrStiffness = 0;
+    out.damping = 0;
+    return out;
+}
+
 /** copy spring settings from source to out */
 export function copy(out: SpringSettings, source: SpringSettings) {
     out.mode = source.mode;
@@ -63,4 +71,9 @@ export function copy(out: SpringSettings, source: SpringSettings) {
 /** check if the spring has valid frequency/stiffness (soft constraint), if false, the spring will be hard */
 export function hasStiffness(settings: SpringSettings): boolean {
     return settings.frequencyOrStiffness > 0;
+}
+
+/** check if the spring has stiffness or damping, which makes it active. if false, the constraint will be hard */
+export function hasStiffnessOrDamping(settings: SpringSettings): boolean {
+    return settings.frequencyOrStiffness > 0 || (settings.mode !== SpringMode.FREQUENCY_AND_DAMPING && settings.damping > 0);
 }

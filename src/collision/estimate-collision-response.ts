@@ -1,8 +1,9 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import { getInverseInertiaForRotation } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
 import type { ContactManifold } from '../manifold/manifold';
+import { MIN_NORMAL } from '../utils/float';
 
 /**
  * Result of estimating collision response between two bodies.
@@ -24,27 +25,17 @@ export type CollisionEstimationResult = {
     /** predicted post-collision angular velocity of body 2 */
     angularVelocity2: Vec3;
 
-    /** first friction tangent direction (perpendicular to normal) */
-    tangent1: Vec3;
-
-    /** second friction tangent direction (normal × tangent1) */
-    tangent2: Vec3;
-
     /**
-     * Average ("friction") contact point — unweighted mean of contact midpoints, in the
-     * same space as `manifold.baseOffset` (i.e. relative to baseOffset, like the manifold
-     * relativeContactPoints arrays). Friction impulses act at this point.
+     * Where friction acts: halfway between the two bodies' friction points (each the mean of that body's
+     * contact points), relative to `manifold.baseOffset` like the manifold's relativeContactPoints arrays.
      */
     frictionPoint: Vec3;
 
     /** per-contact-point normal impulse (kg⋅m/s) */
     contactImpulse: number[];
 
-    /** manifold-level linear friction impulse along tangent1 */
-    frictionImpulse1: number;
-
-    /** manifold-level linear friction impulse along tangent2 */
-    frictionImpulse2: number;
+    /** manifold-level linear friction impulse (kg⋅m/s), in the contact plane */
+    frictionImpulse: Vec3;
 
     /** manifold-level angular friction impulse around the contact normal */
     angularFrictionImpulse: number;
@@ -63,12 +54,9 @@ export function createCollisionEstimationResult(): CollisionEstimationResult {
         angularVelocity1: vec3.create(),
         linearVelocity2: vec3.create(),
         angularVelocity2: vec3.create(),
-        tangent1: vec3.create(),
-        tangent2: vec3.create(),
         frictionPoint: vec3.create(),
         contactImpulse,
-        frictionImpulse1: 0,
-        frictionImpulse2: 0,
+        frictionImpulse: vec3.create(),
         angularFrictionImpulse: 0,
         numImpulses: 0,
     };
@@ -114,7 +102,6 @@ function createMiniAngularConstraint(): MiniAngularConstraint {
 
 const _ecr_r1CrossAxis = /* @__PURE__ */ vec3.create();
 const _ecr_r2CrossAxis = /* @__PURE__ */ vec3.create();
-const _ecr_temp = /* @__PURE__ */ vec3.create();
 
 /** initialize a mini axis constraint */
 function initConstraint(
@@ -152,7 +139,7 @@ function initAngularConstraint(constraint: MiniAngularConstraint, invInertia1: M
     constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
 }
 
-/** compute relative velocity along constraint axis */
+/** compute relative velocity along constraint axis: the linear and angular terms summed per component, reduced once */
 function getRelativeVelocity(
     constraint: MiniAxisConstraint,
     linVel1: Vec3,
@@ -161,10 +148,12 @@ function getRelativeVelocity(
     angVel2: Vec3,
     axis: Vec3,
 ): number {
-    const linearComponent = vec3.dot(axis, vec3.sub(_ecr_temp, linVel1, linVel2));
-    const angularComponent1 = vec3.dot(constraint.r1PlusUxAxis, angVel1);
-    const angularComponent2 = vec3.dot(constraint.r2xAxis, angVel2);
-    return linearComponent + angularComponent1 - angularComponent2;
+    const r1 = constraint.r1PlusUxAxis;
+    const r2 = constraint.r2xAxis;
+    const x = axis[0] * (linVel1[0] - linVel2[0]) + r1[0] * angVel1[0] - r2[0] * angVel2[0];
+    const y = axis[1] * (linVel1[1] - linVel2[1]) + r1[1] * angVel1[1] - r2[1] * angVel2[1];
+    const z = axis[2] * (linVel1[2] - linVel2[2]) + r1[2] * angVel1[2] - r2[2] * angVel2[2];
+    return x + y + z;
 }
 
 /** solve and get the unclamped lambda increment */
@@ -235,7 +224,6 @@ function applyAngularLambda(constraint: MiniAngularConstraint, lambda: number, a
 
 const _ecr_com1 = /* @__PURE__ */ vec3.create();
 const _ecr_com2 = /* @__PURE__ */ vec3.create();
-const _ecr_contactPoint = /* @__PURE__ */ vec3.create();
 const _ecr_r1 = /* @__PURE__ */ vec3.create();
 const _ecr_r2 = /* @__PURE__ */ vec3.create();
 const _ecr_relVel = /* @__PURE__ */ vec3.create();
@@ -248,14 +236,14 @@ const _ecr_rotation2 = /* @__PURE__ */ mat4.create();
 
 const _ecr_normalConstraints: MiniAxisConstraint[] = [];
 const _ecr_distanceToFrictionCenter: number[] = [];
-const _ecr_midpoints: Vec3[] = [];
 
 for (let i = 0; i < 64; i++) {
     _ecr_normalConstraints.push(createMiniConstraint());
     _ecr_distanceToFrictionCenter.push(0);
-    _ecr_midpoints.push(vec3.create());
 }
 
+const _ecr_tangent1 = /* @__PURE__ */ vec3.create();
+const _ecr_tangent2 = /* @__PURE__ */ vec3.create();
 const _ecr_frictionConstraint1: MiniAxisConstraint = /* @__PURE__ */ createMiniConstraint();
 const _ecr_frictionConstraint2: MiniAxisConstraint = /* @__PURE__ */ createMiniConstraint();
 const _ecr_angularFrictionConstraint: MiniAngularConstraint = /* @__PURE__ */ createMiniAngularConstraint();
@@ -291,15 +279,16 @@ export function estimateCollisionResponse(
 
     // zero impulses
     for (let i = 0; i < numContactPoints; i++) result.contactImpulse[i] = 0;
-    result.frictionImpulse1 = 0;
-    result.frictionImpulse2 = 0;
+    vec3.zero(result.frictionImpulse);
     result.angularFrictionImpulse = 0;
 
     // friction basis: tangent1 perpendicular to normal, tangent2 = normal × tangent1
     const normal = manifold.worldSpaceNormal;
-    vec3.perpendicular(result.tangent1, normal);
-    vec3.normalize(result.tangent1, result.tangent1);
-    vec3.cross(result.tangent2, normal, result.tangent1);
+    const tangent1 = _ecr_tangent1;
+    const tangent2 = _ecr_tangent2;
+    vec3.perpendicular(tangent1, normal);
+    vec3.normalize(tangent1, tangent1);
+    vec3.cross(tangent2, normal, tangent1);
 
     // copy body velocities (zero only for static)
     const isStatic1 = body1.motionType === MotionType.STATIC;
@@ -345,13 +334,18 @@ export function estimateCollisionResponse(
     vec3.sub(_ecr_com1, body1.centerOfMassPosition, manifold.baseOffset);
     vec3.sub(_ecr_com2, body2.centerOfMassPosition, manifold.baseOffset);
 
-    // per-contact-point setup: normal constraint + cache midpoint
+    // per-contact-point setup: each body's own contact point gives its moment arm
     const relativePointsA = manifold.relativeContactPointsOnA;
     const relativePointsB = manifold.relativeContactPointsOnB;
 
-    let fpx = 0;
-    let fpy = 0;
-    let fpz = 0;
+    // each body's friction point accumulates its own contact points, so the friction lever arms are not perturbed by
+    // the separation along the normal of a speculative contact
+    let fpax = 0;
+    let fpay = 0;
+    let fpaz = 0;
+    let fpbx = 0;
+    let fpby = 0;
+    let fpbz = 0;
 
     for (let c = 0; c < numContactPoints; c++) {
         const i = c * 3;
@@ -362,17 +356,15 @@ export function estimateCollisionResponse(
         const by = relativePointsB[i + 1];
         const bz = relativePointsB[i + 2];
 
-        const mx = (ax + bx) * 0.5;
-        const my = (ay + by) * 0.5;
-        const mz = (az + bz) * 0.5;
-        vec3.set(_ecr_midpoints[c], mx, my, mz);
-        fpx += mx;
-        fpy += my;
-        fpz += mz;
-        vec3.set(_ecr_contactPoint, mx, my, mz);
+        fpax += ax;
+        fpay += ay;
+        fpaz += az;
+        fpbx += bx;
+        fpby += by;
+        fpbz += bz;
 
-        vec3.sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-        vec3.sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
+        vec3.set(_ecr_r1, ax - _ecr_com1[0], ay - _ecr_com1[1], az - _ecr_com1[2]);
+        vec3.set(_ecr_r2, bx - _ecr_com2[0], by - _ecr_com2[1], bz - _ecr_com2[2]);
 
         const normalConstraint = _ecr_normalConstraints[c];
         initConstraint(normalConstraint, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, normal);
@@ -394,22 +386,24 @@ export function estimateCollisionResponse(
 
     if (numContactPoints === 0) return;
 
-    // friction point = unweighted mean of midpoints; compute per-point moment arm
-    const invN = 1 / numContactPoints;
-    fpx *= invN;
-    fpy *= invN;
-    fpz *= invN;
-    vec3.set(result.frictionPoint, fpx, fpy, fpz);
+    // each body's friction point = the mean of its contact points; per-point moment arm to body 1's
+    fpax /= numContactPoints;
+    fpay /= numContactPoints;
+    fpaz /= numContactPoints;
+    fpbx /= numContactPoints;
+    fpby /= numContactPoints;
+    fpbz /= numContactPoints;
+    vec3.set(result.frictionPoint, 0.5 * (fpax + fpbx), 0.5 * (fpay + fpby), 0.5 * (fpaz + fpbz));
 
     const nx = normal[0];
     const ny = normal[1];
     const nz = normal[2];
 
     for (let c = 0; c < numContactPoints; c++) {
-        const m = _ecr_midpoints[c];
-        const dx = m[0] - fpx;
-        const dy = m[1] - fpy;
-        const dz = m[2] - fpz;
+        const i = c * 3;
+        const dx = relativePointsA[i] - fpax;
+        const dy = relativePointsA[i + 1] - fpay;
+        const dz = relativePointsA[i + 2] - fpaz;
         const dotN = dx * nx + dy * ny + dz * nz;
         const tx = dx - dotN * nx;
         const ty = dy - dotN * ny;
@@ -417,11 +411,10 @@ export function estimateCollisionResponse(
         _ecr_distanceToFrictionCenter[c] = Math.sqrt(tx * tx + ty * ty + tz * tz);
     }
 
-    // manifold-level friction constraints anchored at the friction point
+    // manifold-level friction constraints anchored at each body's friction point
     if (combinedFriction > 0) {
-        vec3.set(_ecr_contactPoint, fpx, fpy, fpz);
-        vec3.sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-        vec3.sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
+        vec3.set(_ecr_r1, fpax - _ecr_com1[0], fpay - _ecr_com1[1], fpaz - _ecr_com1[2]);
+        vec3.set(_ecr_r2, fpbx - _ecr_com2[0], fpby - _ecr_com2[1], fpbz - _ecr_com2[2]);
 
         initConstraint(
             _ecr_frictionConstraint1,
@@ -431,7 +424,7 @@ export function estimateCollisionResponse(
             _ecr_invInertia2,
             _ecr_r1,
             _ecr_r2,
-            result.tangent1,
+            tangent1,
         );
         _ecr_frictionConstraint1.bias = 0;
 
@@ -443,7 +436,7 @@ export function estimateCollisionResponse(
             _ecr_invInertia2,
             _ecr_r1,
             _ecr_r2,
-            result.tangent2,
+            tangent2,
         );
         _ecr_frictionConstraint2.bias = 0;
 
@@ -457,6 +450,8 @@ export function estimateCollisionResponse(
 
     // iterative PGS solve. Caps are derived from the previous iteration's accumulated
     // contact impulse (matches the real solver — no special "skip iter 0" branch).
+    let frictionLambda1 = 0;
+    let frictionLambda2 = 0;
     const iterations = numContactPoints === 1 && combinedFriction === 0 ? 1 : numIterations;
 
     for (let iter = 0; iter < iterations; iter++) {
@@ -472,29 +467,30 @@ export function estimateCollisionResponse(
 
             // joint cone clamp on the two linear friction parts
             let lambda1 =
-                result.frictionImpulse1 +
+                frictionLambda1 +
                 solveGetLambda(
                     _ecr_frictionConstraint1,
                     result.linearVelocity1,
                     result.angularVelocity1,
                     result.linearVelocity2,
                     result.angularVelocity2,
-                    result.tangent1,
+                    tangent1,
                 );
             let lambda2 =
-                result.frictionImpulse2 +
+                frictionLambda2 +
                 solveGetLambda(
                     _ecr_frictionConstraint2,
                     result.linearVelocity1,
                     result.angularVelocity1,
                     result.linearVelocity2,
                     result.angularVelocity2,
-                    result.tangent2,
+                    tangent2,
                 );
 
             const maxLinear = combinedFriction * sumNormal;
             const magSq = lambda1 * lambda1 + lambda2 * lambda2;
-            if (magSq > maxLinear * maxLinear) {
+            // the + MIN_NORMAL keeps a magSq too small to divide by from being scaled
+            if (magSq > maxLinear * maxLinear + MIN_NORMAL) {
                 const scale = maxLinear / Math.sqrt(magSq);
                 lambda1 *= scale;
                 lambda2 *= scale;
@@ -502,28 +498,28 @@ export function estimateCollisionResponse(
 
             applyLambda(
                 _ecr_frictionConstraint1,
-                lambda1 - result.frictionImpulse1,
+                lambda1 - frictionLambda1,
                 invMass1,
                 invMass2,
                 result.linearVelocity1,
                 result.angularVelocity1,
                 result.linearVelocity2,
                 result.angularVelocity2,
-                result.tangent1,
+                tangent1,
             );
             applyLambda(
                 _ecr_frictionConstraint2,
-                lambda2 - result.frictionImpulse2,
+                lambda2 - frictionLambda2,
                 invMass1,
                 invMass2,
                 result.linearVelocity1,
                 result.angularVelocity1,
                 result.linearVelocity2,
                 result.angularVelocity2,
-                result.tangent2,
+                tangent2,
             );
-            result.frictionImpulse1 = lambda1;
-            result.frictionImpulse2 = lambda2;
+            frictionLambda1 = lambda1;
+            frictionLambda2 = lambda2;
 
             // angular friction with symmetric clamp
             if (_ecr_angularFrictionConstraint.effectiveMass !== 0) {
@@ -567,4 +563,7 @@ export function estimateCollisionResponse(
             );
         }
     }
+
+    vec3.scale(result.frictionImpulse, tangent1, frictionLambda1);
+    vec3.scaleAndAdd(result.frictionImpulse, result.frictionImpulse, tangent2, frictionLambda2);
 }

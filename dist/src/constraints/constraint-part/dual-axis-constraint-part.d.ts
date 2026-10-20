@@ -1,4 +1,4 @@
-import type { Mat2, Mat4, Vec2, Vec3 } from 'mathcat';
+import type { Mat2, Vec2, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * Constrains movement on 2 axes perpendicular to a sliding axis.
@@ -66,7 +66,7 @@ export declare function isActive(part: DualAxisConstraintPart): boolean;
  * @param n1 First constraint axis (normalized, perpendicular to slider axis)
  * @param n2 Second constraint axis (normalized, perpendicular to slider axis and n1)
  */
-export declare function calculateConstraintProperties(part: DualAxisConstraintPart, bodyA: RigidBody, rotationA: Mat4, r1PlusU: Vec3, bodyB: RigidBody, rotationB: Mat4, r2: Vec3, n1: Vec3, n2: Vec3): void;
+export declare function calculateConstraintProperties(part: DualAxisConstraintPart, bodyA: RigidBody, r1PlusU: Vec3, bodyB: RigidBody, r2: Vec3, n1: Vec3, n2: Vec3, stepStamp: number): void;
 /**
  * Warm start the velocity constraint by applying cached impulses.
  * Scales the previous frame's impulses by the warm start ratio.

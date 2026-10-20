@@ -39,15 +39,18 @@ export function copyCastRayHit(out: CastRayHit, src: CastRayHit): void {
 }
 
 export type CastRaySettings = {
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
-    collideWithBackfaces: boolean;
+    /** if true, back facing triangles (triangle meshes) are hit, otherwise they are ignored */
+    collideWithBackfacesTriangles: boolean;
+    /** if true, convex shapes (and planes) are also hit where the ray exits them, otherwise only where it enters */
+    collideWithBackfacesConvex: boolean;
     /** if true, ray starting inside convex shape returns hit at fraction 0. when false, only surface hits are reported */
     treatConvexAsSolid: boolean;
 };
 
 export function createDefaultCastRaySettings(): CastRaySettings {
     return {
-        collideWithBackfaces: false,
+        collideWithBackfacesTriangles: false,
+        collideWithBackfacesConvex: false,
         treatConvexAsSolid: true,
     };
 }
@@ -59,6 +62,10 @@ export type CastRayCollector = {
     addMiss(): void;
     shouldEarlyOut(): boolean;
 };
+
+function compareCastRayHits(a: CastRayHit, b: CastRayHit): number {
+    return a.fraction < b.fraction ? -1 : a.fraction > b.fraction ? 1 : 0;
+}
 
 export class AllCastRayCollector implements CastRayCollector {
     bodyIdB = -1;
@@ -85,6 +92,11 @@ export class AllCastRayCollector implements CastRayCollector {
         this.hitPool.reset();
         this.hits.length = 0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+    }
+
+    /** orders hits closest first */
+    sort(): void {
+        this.hits.sort(compareCastRayHits);
     }
 }
 

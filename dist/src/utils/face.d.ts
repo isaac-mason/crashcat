@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 export type Face = {
     /**
      * the face vertices as a flat array of numbers
@@ -11,6 +11,8 @@ export type Face = {
 export declare const FACE_MAX_VERTICES = 64;
 export declare function createFace(): Face;
 export declare function cloneFace(face: Face): Face;
+/** move every face vertex by an offset */
+export declare function translateFace(face: Face, offset: Vec3): void;
 /**
  * transform face vertices using a pre-computed transformation matrix (rotation + translation only, no scale).
  * assumes vertices are already scaled.

@@ -11,7 +11,11 @@ export type PopResult = {
 };
 /** create new sub shape id builder in empty state */
 export declare function builder(): SubShapeIdBuilder;
-/** check if sub shape id is empty */
+/**
+ * check if sub shape id is empty.
+ * a real path can be all ones too (the last child of a power of two count), so shapes never test this
+ * while navigating; they pop their level and range check it.
+ */
 export declare function isEmpty(subShapeId: SubShapeId): boolean;
 /** pop a level off the sub shape id */
 export declare function pop(out: PopResult, subShapeID: SubShapeId, numBits: number): void;

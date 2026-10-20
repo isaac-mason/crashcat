@@ -29,8 +29,8 @@ import {
     sphere,
     type World,
 } from 'crashcat';
-import type { Box3 } from 'mathcat';
-import { quat, vec3 } from 'mathcat';
+import type { Box3 } from 'math/shapes';
+import { quat, vec3 } from 'math';
 
 declare const world: World;
 declare const OBJECT_LAYER_DEBRIS: number;

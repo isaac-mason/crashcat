@@ -1,5 +1,7 @@
-import type { Box3, Vec3 } from 'mathcat';
-import { box3, vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
+import { box3 } from 'math/shapes';
 import type { Bodies } from './body/bodies';
 import type { RigidBody } from './body/rigid-body';
 import type { ContactSettings } from './constraints/contact-constraints';
@@ -10,6 +12,9 @@ import { pool } from './utils/pool';
 export type CCD = {
     /** CCD bodies detected this frame */
     ccdBodies: CCDBody[];
+
+    /** indices into ccdBodies in time of impact order, so the records and every body's ccdBodyIndex stay put */
+    order: number[];
 };
 
 /**
@@ -98,6 +103,7 @@ export function resetCCDBody(ccdBody: CCDBody): void {
 export function init(): CCD {
     return {
         ccdBodies: [],
+        order: [],
     };
 }
 
@@ -105,21 +111,18 @@ export const ccdBodyPool = /* @__PURE__ */ pool(createCCDBody);
 
 /** clear CCD state for a new physics step, clears state from previous frame */
 export function clear(state: CCD, bodies: Bodies): void {
-    // release ccd bodies
+    // release ccd bodies and unlink their bodies. only bodies with a ccd record ever point at one,
+    // so this stays proportional to the ccd body count rather than the body pool. a slot recycled
+    // by a body removed and re-created between steps already reads -1, so the write is harmless.
     for (let i = 0; i < state.ccdBodies.length; i++) {
         const ccdBody = state.ccdBodies[i];
+        bodies.pool[ccdBody.bodyIndex].ccdBodyIndex = -1;
         ccdBodyPool.release(ccdBody);
-    }
-
-    // reset pointers
-    for (let i = 0; i < bodies.pool.length; i++) {
-        const body = bodies.pool[i];
-        if (body._pooled) continue;
-        body.ccdBodyIndex = -1;
     }
 
     // empty ccd bodies array
     state.ccdBodies.length = 0;
+    state.order.length = 0;
 }
 
 const _computeSweptAABB_endAABB = /* @__PURE__ */ box3.create();

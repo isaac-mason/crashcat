@@ -1,4 +1,5 @@
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import {
     NODE_AXIS_OR_COUNT,
     NODE_MAX_X,
@@ -76,28 +77,34 @@ export function nodeTriCount(buffer: number[], offset: number): number {
 }
 
 /**
- * Stride for precomputed triangle build data.
- * Layout per triangle: [centerX, halfExtentX, centerY, halfExtentY, centerZ, halfExtentZ]
+ * stride for precomputed triangle build data.
+ * layout per triangle: [minX, minY, minZ, maxX, maxY, maxZ], the triangle's exact aabb, so node
+ * bounds built as unions of these contain their triangles exactly.
  */
 const BUILD_DATA_STRIDE = 6;
 
-/** Offset to centerX in build data */
-const BUILD_DATA_CENTER_X = 0;
+/** offset to minX in build data; minY and minZ follow */
+const BUILD_DATA_MIN_X = 0;
 
-/** Offset to halfExtentX in build data */
-const BUILD_DATA_HALF_EXTENT_X = 1;
+/** offset to minY in build data */
+const BUILD_DATA_MIN_Y = 1;
 
-/** Offset to centerY in build data */
-const BUILD_DATA_CENTER_Y = 2;
+/** offset to minZ in build data */
+const BUILD_DATA_MIN_Z = 2;
 
-/** Offset to halfExtentY in build data */
-const BUILD_DATA_HALF_EXTENT_Y = 3;
+/** offset to maxX in build data; maxY and maxZ follow */
+const BUILD_DATA_MAX_X = 3;
 
-/** Offset to centerZ in build data */
-const BUILD_DATA_CENTER_Z = 4;
+/** offset to maxY in build data */
+const BUILD_DATA_MAX_Y = 4;
 
-/** Offset to halfExtentZ in build data */
-const BUILD_DATA_HALF_EXTENT_Z = 5;
+/** offset to maxZ in build data */
+const BUILD_DATA_MAX_Z = 5;
+
+/** the triangle's aabb center along axis (0=x, 1=y, 2=z), from its build data at offset */
+function buildDataCenter(buildData: number[], offset: number, axis: number): number {
+    return (buildData[offset + BUILD_DATA_MIN_X + axis] + buildData[offset + BUILD_DATA_MAX_X + axis]) * 0.5;
+}
 
 const _buildDataPool: number[] = [];
 
@@ -113,8 +120,6 @@ type PreallocatedSahBin = {
     /** Split candidate position (center value) */
     candidate: number;
 };
-
-const sahBinSort = (a: PreallocatedSahBin, b: PreallocatedSahBin): number => a.candidate - b.candidate;
 
 const _sahBins: PreallocatedSahBin[] = /* @__PURE__ */ new Array(BIN_COUNT)
     .fill(null)
@@ -199,21 +204,12 @@ function precomputeTriangleBuildData(out: number[], data: TriangleMeshData): voi
         if (cy > maxY) maxY = cy;
         if (cz > maxZ) maxZ = cz;
 
-        // compute center and half-extent
-        const centerX = (minX + maxX) * 0.5;
-        const centerY = (minY + maxY) * 0.5;
-        const centerZ = (minZ + maxZ) * 0.5;
-        const halfExtentX = (maxX - minX) * 0.5;
-        const halfExtentY = (maxY - minY) * 0.5;
-        const halfExtentZ = (maxZ - minZ) * 0.5;
-
-        // store: centerX, halfExtentX, centerY, halfExtentY, centerZ, halfExtentZ
-        out[buildOffset + BUILD_DATA_CENTER_X] = centerX;
-        out[buildOffset + BUILD_DATA_HALF_EXTENT_X] = halfExtentX;
-        out[buildOffset + BUILD_DATA_CENTER_Y] = centerY;
-        out[buildOffset + BUILD_DATA_HALF_EXTENT_Y] = halfExtentY;
-        out[buildOffset + BUILD_DATA_CENTER_Z] = centerZ;
-        out[buildOffset + BUILD_DATA_HALF_EXTENT_Z] = halfExtentZ;
+        out[buildOffset + BUILD_DATA_MIN_X] = minX;
+        out[buildOffset + BUILD_DATA_MIN_Y] = minY;
+        out[buildOffset + BUILD_DATA_MIN_Z] = minZ;
+        out[buildOffset + BUILD_DATA_MAX_X] = maxX;
+        out[buildOffset + BUILD_DATA_MAX_Y] = maxY;
+        out[buildOffset + BUILD_DATA_MAX_Z] = maxZ;
     }
 }
 
@@ -250,7 +246,7 @@ export function build(data: TriangleMeshData, settings: BvhBuildSettings): Trian
         return { buffer: [] };
     }
 
-    // Precompute triangle bounds (center-halfExtent format)
+    // precompute triangle bounds (exact min and max)
     precomputeTriangleBuildData(_buildDataPool, data);
 
     // Build tree structure with temp nodes
@@ -332,21 +328,17 @@ function buildRecursive(
     if (count > 0) {
         // initialize with first triangle from precomputed data
         let offset = startIndex * BUILD_DATA_STRIDE;
-        const cx = buildData[offset + BUILD_DATA_CENTER_X];
-        const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-        const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-        const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-        const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-        const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
-
-        node.bounds[0] = cx - hx; // minX
-        node.bounds[1] = cy - hy; // minY
-        node.bounds[2] = cz - hz; // minZ
-        node.bounds[3] = cx + hx; // maxX
-        node.bounds[4] = cy + hy; // maxY
-        node.bounds[5] = cz + hz; // maxZ
+        node.bounds[0] = buildData[offset + BUILD_DATA_MIN_X];
+        node.bounds[1] = buildData[offset + BUILD_DATA_MIN_Y];
+        node.bounds[2] = buildData[offset + BUILD_DATA_MIN_Z];
+        node.bounds[3] = buildData[offset + BUILD_DATA_MAX_X];
+        node.bounds[4] = buildData[offset + BUILD_DATA_MAX_Y];
+        node.bounds[5] = buildData[offset + BUILD_DATA_MAX_Z];
 
         // center bounds initialization
+        const cx = buildDataCenter(buildData, offset, 0);
+        const cy = buildDataCenter(buildData, offset, 1);
+        const cz = buildDataCenter(buildData, offset, 2);
         _centerMin[0] = cx;
         _centerMin[1] = cy;
         _centerMin[2] = cz;
@@ -357,21 +349,14 @@ function buildRecursive(
         // expand by remaining triangles (single pass for both bounds and centers)
         for (let i = startIndex + 1; i < endIndex; i++) {
             offset = i * BUILD_DATA_STRIDE;
-            const cx = buildData[offset + BUILD_DATA_CENTER_X];
-            const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-            const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-            const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-            const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-            const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
+            const minX = buildData[offset + BUILD_DATA_MIN_X];
+            const minY = buildData[offset + BUILD_DATA_MIN_Y];
+            const minZ = buildData[offset + BUILD_DATA_MIN_Z];
+            const maxX = buildData[offset + BUILD_DATA_MAX_X];
+            const maxY = buildData[offset + BUILD_DATA_MAX_Y];
+            const maxZ = buildData[offset + BUILD_DATA_MAX_Z];
 
             // expand node bounds
-            const minX = cx - hx;
-            const minY = cy - hy;
-            const minZ = cz - hz;
-            const maxX = cx + hx;
-            const maxY = cy + hy;
-            const maxZ = cz + hz;
-
             if (minX < node.bounds[0]) node.bounds[0] = minX;
             if (minY < node.bounds[1]) node.bounds[1] = minY;
             if (minZ < node.bounds[2]) node.bounds[2] = minZ;
@@ -380,6 +365,9 @@ function buildRecursive(
             if (maxZ > node.bounds[5]) node.bounds[5] = maxZ;
 
             // expand center bounds
+            const cx = (minX + maxX) * 0.5;
+            const cy = (minY + maxY) * 0.5;
+            const cz = (minZ + maxZ) * 0.5;
             if (cx < _centerMin[0]) _centerMin[0] = cx;
             if (cy < _centerMin[1]) _centerMin[1] = cy;
             if (cz < _centerMin[2]) _centerMin[2] = cz;
@@ -439,7 +427,7 @@ const _centerMax = /* @__PURE__ */ vec3.create();
  * - AVERAGE: longest node bounds extent
  * - SAH: evaluates all axes for cost
  *
- * @param buildData Precomputed triangle bounds (center-halfExtent format)
+ * @param buildData precomputed triangle bounds (exact min and max)
  * @param startIndex First triangle in range
  * @param endIndex One past last triangle
  * @param nodeBounds Node AABB bounds (precomputed)
@@ -524,30 +512,30 @@ function getOptimalSplit(
                         const triIdx = startIndex + i;
                         const offset = triIdx * BUILD_DATA_STRIDE;
 
-                        const cx = buildData[offset + BUILD_DATA_CENTER_X];
-                        const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-                        const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-                        const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-                        const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-                        const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
-
-                        const center = buildData[offset + a * 2]; // centerX/Y/Z based on axis
-
                         const bin = _sahBins[i];
                         resetSahBin(bin);
-                        bin.candidate = center;
+                        bin.candidate = buildDataCenter(buildData, offset, a);
 
-                        // initialize bounds with this triangle's AABB
-                        bin.bounds[0] = cx - hx;
-                        bin.bounds[1] = cy - hy;
-                        bin.bounds[2] = cz - hz;
-                        bin.bounds[3] = cx + hx;
-                        bin.bounds[4] = cy + hy;
-                        bin.bounds[5] = cz + hz;
+                        // initialize bounds with this triangle's aabb
+                        bin.bounds[0] = buildData[offset + BUILD_DATA_MIN_X];
+                        bin.bounds[1] = buildData[offset + BUILD_DATA_MIN_Y];
+                        bin.bounds[2] = buildData[offset + BUILD_DATA_MIN_Z];
+                        bin.bounds[3] = buildData[offset + BUILD_DATA_MAX_X];
+                        bin.bounds[4] = buildData[offset + BUILD_DATA_MAX_Y];
+                        bin.bounds[5] = buildData[offset + BUILD_DATA_MAX_Z];
                     }
 
-                    // Sort bins by candidate position (sort in-place, only first 'count' bins)
-                    _sahBins.sort(sahBinSort);
+                    // sort the first `count` bins by candidate position (stable insertion sort, in place).
+                    // bins past `count` hold stale candidates from earlier axes and nodes and must not take part
+                    for (let i = 1; i < count; i++) {
+                        const moving = _sahBins[i];
+                        let j = i;
+                        while (j > 0 && _sahBins[j - 1].candidate > moving.candidate) {
+                            _sahBins[j] = _sahBins[j - 1];
+                            j--;
+                        }
+                        _sahBins[j] = moving;
+                    }
 
                     // Remove duplicate candidates by tracking split count
                     // Instead of splice, we compact valid bins to the front
@@ -571,21 +559,14 @@ function getOptimalSplit(
                     for (let i = startIndex; i < endIndex; i++) {
                         const offset = i * BUILD_DATA_STRIDE;
 
-                        const cx = buildData[offset + BUILD_DATA_CENTER_X];
-                        const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-                        const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-                        const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-                        const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-                        const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
+                        const minX = buildData[offset + BUILD_DATA_MIN_X];
+                        const minY = buildData[offset + BUILD_DATA_MIN_Y];
+                        const minZ = buildData[offset + BUILD_DATA_MIN_Z];
+                        const maxX = buildData[offset + BUILD_DATA_MAX_X];
+                        const maxY = buildData[offset + BUILD_DATA_MAX_Y];
+                        const maxZ = buildData[offset + BUILD_DATA_MAX_Z];
 
-                        const minX = cx - hx;
-                        const minY = cy - hy;
-                        const minZ = cz - hz;
-                        const maxX = cx + hx;
-                        const maxY = cy + hy;
-                        const maxZ = cz + hz;
-
-                        const center = buildData[offset + a * 2];
+                        const center = buildDataCenter(buildData, offset, a);
 
                         for (let bi = 0; bi < splitCount; bi++) {
                             const bin = _sahBins[bi];
@@ -648,21 +629,14 @@ function getOptimalSplit(
                     for (let i = startIndex; i < endIndex; i++) {
                         const offset = i * BUILD_DATA_STRIDE;
 
-                        const cx = buildData[offset + BUILD_DATA_CENTER_X];
-                        const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-                        const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-                        const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-                        const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-                        const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
+                        const minX = buildData[offset + BUILD_DATA_MIN_X];
+                        const minY = buildData[offset + BUILD_DATA_MIN_Y];
+                        const minZ = buildData[offset + BUILD_DATA_MIN_Z];
+                        const maxX = buildData[offset + BUILD_DATA_MAX_X];
+                        const maxY = buildData[offset + BUILD_DATA_MAX_Y];
+                        const maxZ = buildData[offset + BUILD_DATA_MAX_Z];
 
-                        const minX = cx - hx;
-                        const minY = cy - hy;
-                        const minZ = cz - hz;
-                        const maxX = cx + hx;
-                        const maxY = cy + hy;
-                        const maxZ = cz + hz;
-
-                        const center = buildData[offset + a * 2];
+                        const center = buildDataCenter(buildData, offset, a);
 
                         // Determine bin index (relativePos >= 0 always since center >= axisLeft)
                         const relativePos = center - axisLeft;
@@ -760,7 +734,7 @@ function getOptimalSplit(
  *
  * Note: This is MEAN, not MEDIAN.
  *
- * @param buildData Precomputed triangle bounds (center-halfExtent format)
+ * @param buildData precomputed triangle bounds (exact min and max)
  * @param startIndex First triangle in range
  * @param endIndex One past last triangle
  * @param axis Axis to average (0=x, 1=y, 2=z)
@@ -770,10 +744,8 @@ function getAverageCenter(buildData: number[], startIndex: number, endIndex: num
     let sum = 0;
     const count = endIndex - startIndex;
 
-    // Center is at offset axis * 2 in buildData (0=centerX, 2=centerY, 4=centerZ)
-    const centerOffset = axis * 2;
     for (let i = startIndex; i < endIndex; i++) {
-        sum += buildData[i * BUILD_DATA_STRIDE + centerOffset];
+        sum += buildDataCenter(buildData, i * BUILD_DATA_STRIDE, axis);
     }
 
     return sum / count;
@@ -789,7 +761,7 @@ function getAverageCenter(buildData: number[], startIndex: number, endIndex: num
  * after BVH construction, allowing leaf nodes to store contiguous ranges.
  *
  * @param data triangle mesh data (triangle buffer modified in-place)
- * @param buildData precomputed build data (center-halfExtent format)
+ * @param buildData precomputed build data (exact min and max)
  * @param startIndex First triangle index
  * @param endIndex One past last triangle index
  * @param axis Axis to partition on (0=x, 1=y, 2=z)
@@ -807,15 +779,12 @@ function partitionTriangles(
     let left = startIndex;
     let right = endIndex - 1;
 
-    // Center is at offset axis * 2 in buildData (0=centerX, 2=centerY, 4=centerZ)
-    const centerOffset = axis * 2;
-
     while (left <= right) {
-        const leftCenter = buildData[left * BUILD_DATA_STRIDE + centerOffset];
+        const leftCenter = buildDataCenter(buildData, left * BUILD_DATA_STRIDE, axis);
         if (leftCenter < splitPos) {
             left++;
         } else {
-            const rightCenter = buildData[right * BUILD_DATA_STRIDE + centerOffset];
+            const rightCenter = buildDataCenter(buildData, right * BUILD_DATA_STRIDE, axis);
             if (rightCenter >= splitPos) {
                 right--;
             } else {

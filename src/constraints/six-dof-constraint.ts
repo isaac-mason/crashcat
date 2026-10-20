@@ -1,9 +1,10 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { euler, mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { euler, mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
-import { getInverseInertiaForRotation } from '../body/motion-properties';
+import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -18,7 +19,9 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part';
 import * as axisConstraintPart from './constraint-part/axis-constraint-part';
-import { MotorState } from './constraint-part/motor-settings';
+import type { MotorSettings } from './constraint-part/motor-settings';
+import * as motorSettings from './constraint-part/motor-settings';
+import { isPositionMotor, MotorState } from './constraint-part/motor-settings';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part';
@@ -46,7 +49,7 @@ function getTwistAroundAxis(q: Quat, axis: Vec3, outTwist: Quat): void {
     // twist = normalize([q.xyz · axis * axis, q.w])
     const dot = q[0] * axis[0] + q[1] * axis[1] + q[2] * axis[2];
     const lenSq = dot * dot + q[3] * q[3];
-    if (lenSq > 1e-10) {
+    if (lenSq !== 0) {
         const invLen = 1 / Math.sqrt(lenSq);
         quat.set(outTwist, dot * axis[0] * invLen, dot * axis[1] * invLen, dot * axis[2] * invLen, q[3] * invLen);
     } else {
@@ -89,9 +92,8 @@ export type SixDOFConstraint = ConstraintBase & {
 
     // motor configuration
     motorState: MotorState[];
-    motorSpringSettings: SpringSettings[];
-    motorMinForceLimit: [number, number, number, number, number, number];
-    motorMaxForceLimit: [number, number, number, number, number, number];
+    /** per axis motor settings: translation motors use the force limits, rotation motors the torque limits */
+    motorSettings: MotorSettings[];
 
     // motor targets
     targetVelocity: Vec3;
@@ -135,16 +137,14 @@ function makeSixDOFConstraint(): SixDOFConstraint {
         limitsSpringSettings: [springSettings.create(), springSettings.create(), springSettings.create()],
         maxFriction: [0, 0, 0, 0, 0, 0],
         motorState: [MotorState.OFF, MotorState.OFF, MotorState.OFF, MotorState.OFF, MotorState.OFF, MotorState.OFF],
-        motorSpringSettings: [
-            springSettings.create(),
-            springSettings.create(),
-            springSettings.create(),
-            springSettings.create(),
-            springSettings.create(),
-            springSettings.create(),
+        motorSettings: [
+            motorSettings.create(),
+            motorSettings.create(),
+            motorSettings.create(),
+            motorSettings.create(),
+            motorSettings.create(),
+            motorSettings.create(),
         ],
-        motorMinForceLimit: [-Infinity, -Infinity, -Infinity, -Infinity, -Infinity, -Infinity],
-        motorMaxForceLimit: [Infinity, Infinity, Infinity, Infinity, Infinity, Infinity],
         targetVelocity: vec3.create(),
         targetAngularVelocity: vec3.create(),
         targetPosition: vec3.create(),
@@ -201,12 +201,8 @@ export type SixDOFConstraintSettings = {
     maxFriction?: number[];
     /** translation limit spring settings */
     limitsSpringSettings?: SpringSettings[];
-    /** per-axis motor spring settings */
-    motorSpringSettings?: SpringSettings[];
-    /** per-axis motor min force limits */
-    motorMinForceLimit?: number[];
-    /** per-axis motor max force limits */
-    motorMaxForceLimit?: number[];
+    /** per-axis motor settings (default: 2 Hz critically damped spring, no force or torque limits) */
+    motorSettings?: MotorSettings[];
     /** constraint priority (higher = solved first) @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
@@ -279,6 +275,9 @@ function updateRotationLimits(constraint: SixDOFConstraint): void {
 }
 
 function updateFixedFreeAxis(constraint: SixDOFConstraint): void {
+    const oldFreeAxis = constraint.freeAxis;
+    const oldFixedAxis = constraint.fixedAxis;
+
     constraint.freeAxis = 0;
     constraint.fixedAxis = 0;
     for (let a = 0; a < 6; a++) {
@@ -288,6 +287,16 @@ function updateFixedFreeAxis(constraint: SixDOFConstraint): void {
         } else if (constraint.limitMin[a] <= -limit && constraint.limitMax[a] >= limit) {
             constraint.freeAxis |= 1 << a;
         }
+    }
+
+    // on change, deactivate all parts to reset warm starting
+    if (oldFreeAxis !== constraint.freeAxis || oldFixedAxis !== constraint.fixedAxis) {
+        for (const part of constraint.translationConstraintPart) axisConstraintPart.deactivate(part);
+        pointConstraintPart.deactivate(constraint.pointConstraintPart);
+        swingTwistConstraintPart.deactivate(constraint.swingTwistConstraintPart);
+        rotationEulerConstraintPart.deactivate(constraint.rotationConstraintPart);
+        for (const part of constraint.motorTranslationConstraintPart) axisConstraintPart.deactivate(part);
+        for (const part of constraint.motorRotationConstraintPart) angleConstraintPart.deactivate(part);
     }
 }
 
@@ -314,7 +323,7 @@ function cacheRotationMotorActive(constraint: SixDOFConstraint): void {
 function cacheRotationPositionMotorActive(constraint: SixDOFConstraint): void {
     constraint.rotationPositionMotorActive = 0;
     for (let i = 0; i < 3; i++) {
-        if (constraint.motorState[SixDOFAxis.ROTATION_X + i] === MotorState.POSITION) {
+        if (isPositionMotor(constraint.motorState[SixDOFAxis.ROTATION_X + i])) {
             constraint.rotationPositionMotorActive |= 1 << i;
         }
     }
@@ -418,50 +427,28 @@ export function create(world: World, settings: SixDOFConstraintSettings): SixDOF
         vec3.copy(constraint.localSpacePosition2, settings.position2);
     }
 
-    // Copy limits
-    if (settings.limitMin) {
-        for (let i = 0; i < 6; i++) constraint.limitMin[i] = settings.limitMin[i] ?? constraint.limitMin[i];
-    }
-    if (settings.limitMax) {
-        for (let i = 0; i < 6; i++) constraint.limitMax[i] = settings.limitMax[i] ?? constraint.limitMax[i];
-    }
-    if (settings.maxFriction) {
-        for (let i = 0; i < 6; i++) constraint.maxFriction[i] = settings.maxFriction[i] ?? 0;
-    }
-    if (settings.limitsSpringSettings) {
-        for (let i = 0; i < 3; i++) {
-            if (settings.limitsSpringSettings[i]) {
-                springSettings.copy(constraint.limitsSpringSettings[i], settings.limitsSpringSettings[i]!);
-            }
+    // copy limits over the defaults, so a reused pooled constraint keeps nothing of the last one
+    for (let i = 0; i < 6; i++) {
+        const isRotation = i >= 3;
+        constraint.limitMin[i] = settings.limitMin?.[i] ?? (isRotation ? -Math.PI : -Infinity);
+        constraint.limitMax[i] = settings.limitMax?.[i] ?? (isRotation ? Math.PI : Infinity);
+        constraint.maxFriction[i] = settings.maxFriction?.[i] ?? 0;
+        constraint.motorState[i] = MotorState.OFF;
+        const axisMotorSettings = settings.motorSettings?.[i];
+        if (axisMotorSettings) {
+            motorSettings.copy(constraint.motorSettings[i], axisMotorSettings);
+        } else {
+            motorSettings.reset(constraint.motorSettings[i]);
         }
     }
-    // set motor spring settings (defaults: 2.0 Hz for rotation, 10.0 Hz for translation)
-    if (settings.motorSpringSettings) {
-        for (let i = 0; i < 6; i++) {
-            if (settings.motorSpringSettings[i]) {
-                springSettings.copy(constraint.motorSpringSettings[i], settings.motorSpringSettings[i]!);
-            } else {
-                // set defaults: translation axes (0-2) use 10.0 Hz, rotation axes (3-5) use 2.0 Hz
-                constraint.motorSpringSettings[i].mode = springSettings.SpringMode.FREQUENCY_AND_DAMPING;
-                constraint.motorSpringSettings[i].frequencyOrStiffness = i < 3 ? 10.0 : 2.0;
-                constraint.motorSpringSettings[i].damping = 1.0;
-            }
-        }
-    } else {
-        // no settings provided, set all defaults
-        for (let i = 0; i < 6; i++) {
-            constraint.motorSpringSettings[i].mode = springSettings.SpringMode.FREQUENCY_AND_DAMPING;
-            constraint.motorSpringSettings[i].frequencyOrStiffness = i < 3 ? 10.0 : 2.0;
-            constraint.motorSpringSettings[i].damping = 1.0;
+    for (let i = 0; i < 3; i++) {
+        const limitsSpring = settings.limitsSpringSettings?.[i];
+        if (limitsSpring) {
+            springSettings.copy(constraint.limitsSpringSettings[i], limitsSpring);
+        } else {
+            springSettings.reset(constraint.limitsSpringSettings[i]);
         }
     }
-    if (settings.motorMinForceLimit) {
-        for (let i = 0; i < 6; i++) constraint.motorMinForceLimit[i] = settings.motorMinForceLimit[i] ?? -Infinity;
-    }
-    if (settings.motorMaxForceLimit) {
-        for (let i = 0; i < 6; i++) constraint.motorMaxForceLimit[i] = settings.motorMaxForceLimit[i] ?? Infinity;
-    }
-
     updateTranslationLimits(constraint);
     updateRotationLimits(constraint);
     updateFixedFreeAxis(constraint);
@@ -604,6 +591,7 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             bodyB,
             _setup_rotB,
             constraint.localSpacePosition2,
+            bodies.stepStamp,
         );
     } else if (isTranslationConstrained(constraint) || constraint.translationMotorActive) {
         getPositionConstraintProperties(constraint, bodies, _setup_r1PlusU, _setup_r2, _setup_u);
@@ -623,13 +611,11 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             const invInertiaB = _setup_invInertiaB;
 
             if (bodyA.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_setup_rotA, bodyA.quaternion);
-                getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA);
+                mat4.copy(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, bodies.stepStamp));
             }
 
             if (bodyB.motionType === MotionType.DYNAMIC) {
-                mat4.fromQuat(_setup_rotB, bodyB.quaternion);
-                getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB);
+                mat4.copy(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, bodies.stepStamp));
             }
 
             // setup limit constraint
@@ -649,38 +635,22 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             }
 
             if (constraintActive) {
-                if (constraint.limitsSpringSettings[i].frequencyOrStiffness > 0) {
-                    axisConstraintPart.calculateConstraintPropertiesWithSettings(
-                        constraint.translationConstraintPart[i],
-                        deltaTime,
-                        bodyA,
-                        bodyB,
-                        invMassA,
-                        invMassB,
-                        invInertiaA,
-                        invInertiaB,
-                        _setup_r1PlusU,
-                        _setup_r2,
-                        translationAxis,
-                        0,
-                        constraintValue,
-                        constraint.limitsSpringSettings[i],
-                    );
-                } else {
-                    axisConstraintPart.calculateConstraintProperties(
-                        constraint.translationConstraintPart[i],
-                        bodyA,
-                        bodyB,
-                        invMassA,
-                        invMassB,
-                        invInertiaA,
-                        invInertiaB,
-                        _setup_r1PlusU,
-                        _setup_r2,
-                        translationAxis,
-                        0,
-                    );
-                }
+                axisConstraintPart.calculateConstraintPropertiesWithSettings(
+                    constraint.translationConstraintPart[i],
+                    deltaTime,
+                    bodyA,
+                    bodyB,
+                    invMassA,
+                    invMassB,
+                    invInertiaA,
+                    invInertiaB,
+                    _setup_r1PlusU,
+                    _setup_r2,
+                    translationAxis,
+                    0,
+                    constraintValue,
+                    constraint.limitsSpringSettings[i],
+                );
             } else {
                 axisConstraintPart.deactivate(constraint.translationConstraintPart[i]);
             }
@@ -721,9 +691,10 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
                         -constraint.targetVelocity[i],
                     );
                     break;
-                case MotorState.POSITION:
-                    if (constraint.motorSpringSettings[i].frequencyOrStiffness > 0) {
-                        axisConstraintPart.calculateConstraintPropertiesWithSettings(
+                case MotorState.POSITION: {
+                    const motorSpring = constraint.motorSettings[i].springSettings;
+                    if (springSettings.hasStiffness(motorSpring)) {
+                        axisConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                             constraint.motorTranslationConstraintPart[i],
                             deltaTime,
                             bodyA,
@@ -736,13 +707,38 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
                             _setup_r2,
                             translationAxis,
                             0,
-                            vec3.dot(translationAxis, _setup_u) - constraint.targetPosition[i],
-                            constraint.motorSpringSettings[i],
+                            d - constraint.targetPosition[i],
+                            motorSpring,
                         );
                     } else {
                         axisConstraintPart.deactivate(constraint.motorTranslationConstraintPart[i]);
                     }
                     break;
+                }
+                case MotorState.POSITION_AND_VELOCITY: {
+                    const motorSpring = constraint.motorSettings[i].springSettings;
+                    if (springSettings.hasStiffnessOrDamping(motorSpring)) {
+                        axisConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                            constraint.motorTranslationConstraintPart[i],
+                            deltaTime,
+                            bodyA,
+                            bodyB,
+                            invMassA,
+                            invMassB,
+                            invInertiaA,
+                            invInertiaB,
+                            _setup_r1PlusU,
+                            _setup_r2,
+                            translationAxis,
+                            -constraint.targetVelocity[i],
+                            d - constraint.targetPosition[i],
+                            motorSpring,
+                        );
+                    } else {
+                        axisConstraintPart.deactivate(constraint.motorTranslationConstraintPart[i]);
+                    }
+                    break;
+                }
             }
         }
     }
@@ -759,6 +755,7 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             _setup_rotA,
             bodyB,
             _setup_rotB,
+            bodies.stepStamp,
         );
     } else if (isRotationConstrained(constraint) || constraint.rotationMotorActive) {
         if (isRotationConstrained(constraint)) {
@@ -865,9 +862,10 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
                             -constraint.targetAngularVelocity[i],
                         );
                         break;
-                    case MotorState.POSITION:
-                        if (constraint.motorSpringSettings[axis].frequencyOrStiffness > 0) {
-                            angleConstraintPart.calculateConstraintPropertiesWithSettings(
+                    case MotorState.POSITION: {
+                        const motorSpring = constraint.motorSettings[axis].springSettings;
+                        if (springSettings.hasStiffness(motorSpring)) {
+                            angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                                 constraint.motorRotationConstraintPart[i],
                                 deltaTime,
                                 bodyA,
@@ -875,12 +873,31 @@ function setupVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
                                 rotationAxis,
                                 0,
                                 _setup_rotationError[i],
-                                constraint.motorSpringSettings[axis],
+                                motorSpring,
                             );
                         } else {
                             angleConstraintPart.deactivate(constraint.motorRotationConstraintPart[i]);
                         }
                         break;
+                    }
+                    case MotorState.POSITION_AND_VELOCITY: {
+                        const motorSpring = constraint.motorSettings[axis].springSettings;
+                        if (springSettings.hasStiffnessOrDamping(motorSpring)) {
+                            angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                                constraint.motorRotationConstraintPart[i],
+                                deltaTime,
+                                bodyA,
+                                bodyB,
+                                rotationAxis,
+                                -constraint.targetAngularVelocity[i],
+                                _setup_rotationError[i],
+                                motorSpring,
+                            );
+                        } else {
+                            angleConstraintPart.deactivate(constraint.motorRotationConstraintPart[i]);
+                        }
+                        break;
+                    }
                 }
             }
         }
@@ -975,33 +992,39 @@ function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
     const bodyB = bodies.pool[constraint.bodyIndexB];
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 
+    let impulse = false;
+
     // solve translation motors
     if (constraint.translationMotorActive) {
         for (let i = 0; i < 3; i++) {
             if (axisConstraintPart.isActive(constraint.motorTranslationConstraintPart[i])) {
                 switch (constraint.motorState[i]) {
                     case MotorState.OFF: {
+                        // apply friction only
                         const maxLambda = constraint.maxFriction[i] * deltaTime;
-                        axisConstraintPart.solveVelocityConstraint(
-                            constraint.motorTranslationConstraintPart[i],
-                            bodyA,
-                            bodyB,
-                            constraint.translationAxis[i],
-                            -maxLambda,
-                            maxLambda,
-                        );
+                        impulse =
+                            axisConstraintPart.solveVelocityConstraint(
+                                constraint.motorTranslationConstraintPart[i],
+                                bodyA,
+                                bodyB,
+                                constraint.translationAxis[i],
+                                -maxLambda,
+                                maxLambda,
+                            ) || impulse;
                         break;
                     }
                     case MotorState.VELOCITY:
                     case MotorState.POSITION:
-                        axisConstraintPart.solveVelocityConstraint(
-                            constraint.motorTranslationConstraintPart[i],
-                            bodyA,
-                            bodyB,
-                            constraint.translationAxis[i],
-                            deltaTime * constraint.motorMinForceLimit[i],
-                            deltaTime * constraint.motorMaxForceLimit[i],
-                        );
+                    case MotorState.POSITION_AND_VELOCITY:
+                        impulse =
+                            axisConstraintPart.solveVelocityConstraint(
+                                constraint.motorTranslationConstraintPart[i],
+                                bodyA,
+                                bodyB,
+                                constraint.translationAxis[i],
+                                deltaTime * constraint.motorSettings[i].minForceLimit,
+                                deltaTime * constraint.motorSettings[i].maxForceLimit,
+                            ) || impulse;
                         break;
                 }
             }
@@ -1015,27 +1038,31 @@ function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
             if (angleConstraintPart.isActive(constraint.motorRotationConstraintPart[i])) {
                 switch (constraint.motorState[axis]) {
                     case MotorState.OFF: {
+                        // apply friction only
                         const maxLambda = constraint.maxFriction[axis] * deltaTime;
-                        angleConstraintPart.solveVelocityConstraint(
-                            constraint.motorRotationConstraintPart[i],
-                            bodyA,
-                            bodyB,
-                            constraint.rotationAxis[i],
-                            -maxLambda,
-                            maxLambda,
-                        );
+                        impulse =
+                            angleConstraintPart.solveVelocityConstraint(
+                                constraint.motorRotationConstraintPart[i],
+                                bodyA,
+                                bodyB,
+                                constraint.rotationAxis[i],
+                                -maxLambda,
+                                maxLambda,
+                            ) || impulse;
                         break;
                     }
                     case MotorState.VELOCITY:
                     case MotorState.POSITION:
-                        angleConstraintPart.solveVelocityConstraint(
-                            constraint.motorRotationConstraintPart[i],
-                            bodyA,
-                            bodyB,
-                            constraint.rotationAxis[i],
-                            deltaTime * constraint.motorMinForceLimit[axis],
-                            deltaTime * constraint.motorMaxForceLimit[axis],
-                        );
+                    case MotorState.POSITION_AND_VELOCITY:
+                        impulse =
+                            angleConstraintPart.solveVelocityConstraint(
+                                constraint.motorRotationConstraintPart[i],
+                                bodyA,
+                                bodyB,
+                                constraint.rotationAxis[i],
+                                deltaTime * constraint.motorSettings[axis].minTorqueLimit,
+                                deltaTime * constraint.motorSettings[axis].maxTorqueLimit,
+                            ) || impulse;
                         break;
                 }
             }
@@ -1044,36 +1071,38 @@ function solveVelocity(constraint: SixDOFConstraint, bodies: Bodies, deltaTime: 
 
     // solve rotation constraint
     if (isRotationFullyConstrained(constraint)) {
-        rotationEulerConstraintPart.solveVelocityConstraint(constraint.rotationConstraintPart, bodyA, bodyB);
+        impulse = rotationEulerConstraintPart.solveVelocityConstraint(constraint.rotationConstraintPart, bodyA, bodyB) || impulse;
     } else if (isRotationConstrained(constraint)) {
-        swingTwistConstraintPart.solveVelocityConstraint(constraint.swingTwistConstraintPart, bodyA, bodyB);
+        impulse = swingTwistConstraintPart.solveVelocityConstraint(constraint.swingTwistConstraintPart, bodyA, bodyB) || impulse;
     }
 
     // solve translation constraint
     if (isTranslationFullyConstrained(constraint)) {
-        pointConstraintPart.solveVelocityConstraint(constraint.pointConstraintPart, bodyA, bodyB);
+        impulse = pointConstraintPart.solveVelocityConstraint(constraint.pointConstraintPart, bodyA, bodyB) || impulse;
     } else if (isTranslationConstrained(constraint)) {
         for (let i = 0; i < 3; i++) {
             if (axisConstraintPart.isActive(constraint.translationConstraintPart[i])) {
-                let limitMin = -Infinity,
-                    limitMax = Infinity;
+                // a limited axis pushes only from the side it is limited on
+                let limitMin = -Infinity;
+                let limitMax = Infinity;
                 if (!isFixedAxis(constraint, i as SixDOFAxis)) {
                     if (constraint.displacement[i] <= constraint.limitMin[i]) limitMin = 0;
                     else if (constraint.displacement[i] >= constraint.limitMax[i]) limitMax = 0;
                 }
-                axisConstraintPart.solveVelocityConstraint(
-                    constraint.translationConstraintPart[i],
-                    bodyA,
-                    bodyB,
-                    constraint.translationAxis[i],
-                    limitMin,
-                    limitMax,
-                );
+                impulse =
+                    axisConstraintPart.solveVelocityConstraint(
+                        constraint.translationConstraintPart[i],
+                        bodyA,
+                        bodyB,
+                        constraint.translationAxis[i],
+                        limitMin,
+                        limitMax,
+                    ) || impulse;
             }
         }
     }
 
-    return false;
+    return impulse;
 }
 
 const _pos_invInitialOrientation = /* @__PURE__ */ quat.create();
@@ -1107,7 +1136,7 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             constraint.limitMin[SixDOFAxis.ROTATION_X],
             constraint.limitMin[SixDOFAxis.ROTATION_Y],
             constraint.limitMin[SixDOFAxis.ROTATION_Z],
-            'xyz',
+            'zyx',
         );
         const rotLimitsMin = quat.fromEuler(_solvePosition_rotLimitsMin, rotLimitsMinEuler);
         const constraintToBody1WithOffset = _solvePosition_constraintToBody1WithOffset;
@@ -1122,6 +1151,7 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             _setup_rotA,
             bodyB,
             _setup_rotB,
+            STEP_STAMP_NONE,
         );
         impulse =
             rotationEulerConstraintPart.solvePositionConstraint(
@@ -1150,7 +1180,10 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             ) || impulse;
     }
 
-    // translation position solve
+    // translation position solve, with the rotations as the rotation solve left them
+    mat4.fromQuat(_setup_rotA, bodyA.quaternion);
+    mat4.fromQuat(_setup_rotB, bodyB.quaternion);
+
     if (isTranslationFullyConstrained(constraint)) {
         // apply translation limits min offset to localSpacePosition1
         vec3.set(
@@ -1170,6 +1203,7 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
             bodyB,
             _setup_rotB,
             constraint.localSpacePosition2,
+            STEP_STAMP_NONE,
         );
         impulse = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarte) || impulse;
     } else if (isTranslationConstrained(constraint)) {
@@ -1203,12 +1237,10 @@ function solvePosition(constraint: SixDOFConstraint, bodies: Bodies, _deltaTime:
                     mat4.identity(invInertiaA);
                     mat4.identity(invInertiaB);
                     if (bodyA.motionType === MotionType.DYNAMIC) {
-                        mat4.fromQuat(_setup_rotA, bodyA.quaternion);
-                        getInverseInertiaForRotation(invInertiaA, mpA, _setup_rotA);
+                        getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, STEP_STAMP_NONE);
                     }
                     if (bodyB.motionType === MotionType.DYNAMIC) {
-                        mat4.fromQuat(_setup_rotB, bodyB.quaternion);
-                        getInverseInertiaForRotation(invInertiaB, mpB, _setup_rotB);
+                        getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, STEP_STAMP_NONE);
                     }
 
                     axisConstraintPart.calculateConstraintProperties(
@@ -1267,6 +1299,7 @@ export function setRotationLimits(constraint: SixDOFConstraint, limitMin: Vec3, 
 
 /** Set motor state for an axis */
 export function setMotorState(constraint: SixDOFConstraint, axis: SixDOFAxis, state: MotorState): void {
+    assert(state === MotorState.OFF || motorSettings.isValid(constraint.motorSettings[axis]), 'invalid motor settings');
     if (constraint.motorState[axis] !== state) {
         constraint.motorState[axis] = state;
         if (axis === SixDOFAxis.TRANSLATION_X || axis === SixDOFAxis.TRANSLATION_Y || axis === SixDOFAxis.TRANSLATION_Z) {
@@ -1298,10 +1331,19 @@ export function setTargetPositionCS(constraint: SixDOFConstraint, position: Vec3
 
 /** Set target orientation for rotation motors */
 export function setTargetOrientationCS(constraint: SixDOFConstraint, orientation: Quat): void {
-    // Clamp to valid range
+    // clamp to valid range
     getSwingTwist(orientation, _setup_qSwing, _setup_qTwist);
-    swingTwistConstraintPart.clampSwingTwist(constraint.swingTwistConstraintPart, _setup_qSwing, _setup_qTwist);
-    quat.multiply(constraint.targetOrientation, _setup_qSwing, _setup_qTwist);
+    const clampedAxis = swingTwistConstraintPart.clampSwingTwist(
+        constraint.swingTwistConstraintPart,
+        _setup_qSwing,
+        _setup_qTwist,
+    );
+
+    if (clampedAxis !== 0) {
+        quat.multiply(constraint.targetOrientation, _setup_qSwing, _setup_qTwist);
+    } else {
+        quat.copy(constraint.targetOrientation, orientation);
+    }
 }
 
 /** Set max friction for an axis */
@@ -1313,19 +1355,15 @@ export function setMaxFriction(constraint: SixDOFConstraint, axis: number, frict
 
 /** Make an axis free (unconstrained) */
 export function makeFreeAxis(constraint: SixDOFConstraint, axis: number): void {
-    constraint.limitMin[axis] = -Infinity;
-    constraint.limitMax[axis] = Infinity;
-    updateFixedFreeAxis(constraint);
+    setLimitedAxis(constraint, axis, -Infinity, Infinity);
 }
 
 /** Make an axis fixed (locked at 0) */
 export function makeFixedAxis(constraint: SixDOFConstraint, axis: number): void {
-    constraint.limitMin[axis] = Infinity;
-    constraint.limitMax[axis] = -Infinity;
-    updateFixedFreeAxis(constraint);
+    setLimitedAxis(constraint, axis, Infinity, -Infinity);
 }
 
-/** Set limits for an axis */
+/** Set limits for an axis (if max < min, the axis becomes fixed at 0) */
 export function setLimitedAxis(constraint: SixDOFConstraint, axis: number, min: number, max: number): void {
     constraint.limitMin[axis] = min;
     constraint.limitMax[axis] = max;

@@ -1,4 +1,5 @@
-import { type Box3, mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -856,22 +857,35 @@ describe('Body Shape Navigation', () => {
         expect((leafResult.shape as any)?.radius).toBe(0.5);
     });
 
-    test('should handle empty SubShapeID for compound shapes', () => {
+    test('an all ones id is the last child of two, not a failed lookup', () => {
+        const last = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
         const compoundShape = compound.create({
             children: [
                 { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 1 }) },
-                {
-                    position: vec3.create(),
-                    quaternion: quat.create(),
-                    shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
-                },
+                { position: vec3.create(), quaternion: quat.create(), shape: last },
             ],
         });
 
         const result = rigidBody.createGetLeafShapeResult();
         rigidBody.getLeafShape(result, compoundShape, subShape.EMPTY_SUB_SHAPE_ID);
 
-        // Should return null for compound with empty SubShapeID
+        expect(result.shape).toBe(last);
+        expect(result.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
+    });
+
+    test('an id whose index is past the last child resolves to null', () => {
+        // three children take two bits; all ones pops index 3
+        const compoundShape = compound.create({
+            children: [
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 1 }) },
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 2 }) },
+                { position: vec3.create(), quaternion: quat.create(), shape: sphere.create({ radius: 3 }) },
+            ],
+        });
+
+        const result = rigidBody.createGetLeafShapeResult();
+        rigidBody.getLeafShape(result, compoundShape, subShape.EMPTY_SUB_SHAPE_ID);
+
         expect(result.shape).toBe(null);
         expect(result.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
     });
@@ -1180,5 +1194,139 @@ describe('Body - wakeInAABB', () => {
         // both should be awake
         expect(sleepingBody.sleeping).toBe(false);
         expect(awakeBody.sleeping).toBe(false);
+    });
+});
+
+describe('Body - Pooled Slot Reuse', () => {
+    test('a static body reusing a dynamic body slot has no mass or step overrides', () => {
+        const { world, layers } = createTestWorld();
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+        const dynamicBody = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        dynamicBody.motionProperties.numVelocityStepsOverride = 12;
+        dynamicBody.motionProperties.numPositionStepsOverride = 7;
+        expect(dynamicBody.motionProperties.invMass).toBeGreaterThan(0);
+
+        const index = dynamicBody.index;
+        rigidBody.remove(world, dynamicBody);
+
+        const staticBody = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+        });
+
+        expect(staticBody.index).toBe(index);
+        expect(staticBody.motionProperties.invMass).toBe(0);
+        expect(vec3.length(staticBody.motionProperties.invInertiaDiagonal)).toBe(0);
+        expect(staticBody.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(staticBody.motionProperties.numPositionStepsOverride).toBe(0);
+        expect(staticBody.motionProperties.worldInverseInertiaStamp).toBe(motionProperties.STEP_STAMP_NONE);
+    });
+
+    test('a dynamic body reusing a slot does not inherit step overrides', () => {
+        const { world, layers } = createTestWorld();
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+        const first = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+        first.motionProperties.numVelocityStepsOverride = 12;
+        first.motionProperties.numPositionStepsOverride = 7;
+
+        const index = first.index;
+        rigidBody.remove(world, first);
+
+        const second = rigidBody.create(world, { shape, objectLayer: layers.OBJECT_LAYER_MOVING, motionType: MotionType.DYNAMIC });
+
+        expect(second.index).toBe(index);
+        expect(second.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(second.motionProperties.numPositionStepsOverride).toBe(0);
+    });
+});
+
+describe('Body - Removal', () => {
+    test('a removed body no longer holds its shape or user data', () => {
+        const { world, layers } = createTestWorld();
+        const shape = sphere.create({ radius: 1.0 });
+        const body = rigidBody.create(world, {
+            shape,
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            userData: { name: 'ball' },
+        });
+
+        expect(rigidBody.remove(world, body)).toBe(true);
+
+        expect(body.shape).not.toBe(shape);
+        expect(body.shape.type).toBe(ShapeType.EMPTY);
+        expect(body.userData).toBeNull();
+    });
+
+    test('a removed body holds the same shape as a never used pool slot', () => {
+        const { world, layers } = createTestWorld();
+        const first = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+        const second = rigidBody.create(world, {
+            shape: box.create({ halfExtents: [1, 1, 1] }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+
+        rigidBody.remove(world, first);
+        rigidBody.remove(world, second);
+
+        expect(first.shape).toBe(second.shape);
+    });
+});
+
+describe('Body - Solver Step Overrides', () => {
+    test('a body created with step overrides reports them on its motion properties', () => {
+        const { world, layers } = createTestWorld();
+        const body = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            numVelocityStepsOverride: 20,
+            numPositionStepsOverride: 5,
+        });
+
+        expect(body.motionProperties.numVelocityStepsOverride).toBe(20);
+        expect(body.motionProperties.numPositionStepsOverride).toBe(5);
+    });
+
+    test('step overrides default to 0 and do not leak into a reused pool slot', () => {
+        const { world, layers } = createTestWorld();
+        const first = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            numVelocityStepsOverride: 20,
+            numPositionStepsOverride: 5,
+        });
+        rigidBody.remove(world, first);
+
+        const second = rigidBody.create(world, {
+            shape: sphere.create({ radius: 1.0 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+        });
+
+        expect(second.motionProperties).toBe(first.motionProperties);
+        expect(second.motionProperties.numVelocityStepsOverride).toBe(0);
+        expect(second.motionProperties.numPositionStepsOverride).toBe(0);
+    });
+
+    test('overrides above what jolt stores in a byte are rejected', () => {
+        const { world, layers } = createTestWorld();
+        expect(() =>
+            rigidBody.create(world, {
+                shape: sphere.create({ radius: 1.0 }),
+                objectLayer: layers.OBJECT_LAYER_MOVING,
+                motionType: MotionType.DYNAMIC,
+                numVelocityStepsOverride: 256,
+            }),
+        ).toThrow();
     });
 });

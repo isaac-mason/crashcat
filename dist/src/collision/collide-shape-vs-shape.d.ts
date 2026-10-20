@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { CollideShapeVsShapeFn } from '../shapes/shapes.js';
 import { type Face } from '../utils/face.js';
 export type CollideShapeHit = {
@@ -50,6 +50,8 @@ export declare class AllCollideShapeCollector implements CollideShapeCollector {
     addMiss(): void;
     shouldEarlyOut(): boolean;
     reset(): void;
+    /** orders hits deepest first */
+    sort(): void;
 }
 export declare function createAllCollideShapeCollector(): AllCollideShapeCollector;
 export declare class AnyCollideShapeCollector implements CollideShapeCollector {
@@ -81,7 +83,7 @@ export type CollideShapeSettings = {
     collisionTolerance: number;
     /** a factor that determines the accuracy of the penetration depth calculation. If the change of the squared distance is less than tolerance * current_penetration_depth^2 the algorithm will terminate. (unit: dimensionless) */
     penetrationTolerance: number;
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
+    /** if true, back facing triangles (triangle meshes) are collided with, otherwise they are ignored */
     collideWithBackfaces: boolean;
     /** how active edges (edges that a moving object should bump into) are handled */
     collideOnlyWithActiveEdges: boolean;
@@ -89,7 +91,10 @@ export type CollideShapeSettings = {
     activeEdgeMovementDirection: Vec3;
     /** if true, supporting faces will be collected and stored in the collision result */
     collectFaces: boolean;
+    /** max squared distance to consider a vertex to be the same as another vertex, used by the internal edge removal algorithm to determine if two edges are shared (unit: meter^2) */
+    internalEdgeRemovalVertexToleranceSq: number;
 };
+export declare const DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ = 1e-8;
 export declare function createDefaultCollideShapeSettings(): CollideShapeSettings;
 export declare function copyCollideShapeSettings(out: CollideShapeSettings, source: CollideShapeSettings): void;
 /**

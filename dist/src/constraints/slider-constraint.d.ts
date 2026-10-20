@@ -1,4 +1,4 @@
-import type { Quat, Vec2, Vec3 } from 'mathcat';
+import type { Quat, Vec2, Vec3 } from 'math';
 import type { Bodies } from '../body/bodies.js';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
@@ -90,9 +90,9 @@ export type SliderConstraintSettings = {
     space?: ConstraintSpace;
     /** automatically detect anchor point based on body positions */
     autoDetectPoint?: boolean;
-    /** minimum position limit (default: -Infinity, must be ≤ 0) */
+    /** minimum position limit (default: -Infinity, must be <= 0) */
     limitsMin?: number;
-    /** maximum position limit (default: Infinity, must be ≥ 0) */
+    /** maximum position limit (default: Infinity, must be >= 0) */
     limitsMax?: number;
     /** spring settings for soft limits */
     limitsSpringSettings?: SpringSettings;

@@ -1,10 +1,11 @@
-import { type Box3, box3, mat3, mat4, quat, type Vec3, vec3 } from 'mathcat';
+import { mat3, mat4, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
-import { rayDistanceToBox3, rayHitsBox3 } from '../collision/cast-utils';
+import { FLT_MIN, rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
@@ -16,13 +17,13 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
     shapeDefs,
+    transformScale,
 } from './shapes';
 import * as bvh from './utils/bvh';
 import type { BvhBuildSettings, StaticCompoundBVH } from './utils/static-compound-bvh';
@@ -156,10 +157,10 @@ export function update(shape: StaticCompoundShape): void {
 export const def = /* @__PURE__ */ (() =>
     defineShape<StaticCompoundShape>({
         type: ShapeType.STATIC_COMPOUND,
-        category: ShapeCategory.COMPOSITE,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -233,7 +234,14 @@ function computeMassProperties(out: MassProperties, shape: StaticCompoundShape):
 }
 
 const _getSurfaceNormal_invRotation = /* @__PURE__ */ quat.create();
-const _getSurfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
+
+function getMaterial(shape: StaticCompoundShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childIndex = _subShapeIdPopResult.value;
+    assert(childIndex < shape.children.length, 'Invalid SubShapeID for StaticCompoundShape');
+    const child = shape.children[childIndex].shape;
+    return shapeDefs[child.type].getMaterial(child, _subShapeIdPopResult.remainder);
+}
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundShape, subShapeId: number): void {
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
@@ -248,20 +256,19 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: StaticCompoundSh
 
     const child = shape.children[childIndex];
 
+    // transform surface position to the child's local space
     vec3.subtract(ioResult.position, ioResult.position, child.position);
-
     const invRotation = quat.conjugate(_getSurfaceNormal_invRotation, child.quaternion);
-    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
     vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
 
     shapeDefs[child.shape.type].getSurfaceNormal(ioResult, child.shape, remainder);
 
-    const forwardAccumulatedRotation = quat.conjugate(_getSurfaceNormal_forwardRotation, ioResult.quaternion);
-    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+    // the normal comes back in the child's local space; this child's rotation alone takes it to the compound's
+    vec3.transformQuat(ioResult.normal, ioResult.normal, child.quaternion);
 }
 
 const _getSupportingFace_childTransform = /* @__PURE__ */ mat4.create();
+const _getSupportingFace_scaledPosition = /* @__PURE__ */ vec3.create();
 const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
 
 function getSupportingFace(
@@ -281,13 +288,18 @@ function getSupportingFace(
 
     const child = shape.children[childIndex];
 
-    // build child transform matrix and accumulate: transform = transform * childTransform
-    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, child.position);
+    // build child transform matrix and accumulate: transform = transform * childTransform.
+    // the transform carries no scale, so the child's position is scaled here
+    vec3.multiply(_getSupportingFace_scaledPosition, child.position, ioResult.scale);
+    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, _getSupportingFace_scaledPosition);
     mat4.multiply(ioResult.transform, ioResult.transform, _getSupportingFace_childTransform);
 
     // transform direction to child local space using inverse child rotation
     // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
     mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
+
+    // the child sees the scale in its own space
+    transformScale(ioResult.scale, child.quaternion, ioResult.scale[0], ioResult.scale[1], ioResult.scale[2]);
 
     shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
 }
@@ -301,42 +313,45 @@ function getInnerRadius(shape: StaticCompoundShape): number {
 }
 
 function getLeafShape(out: GetLeafShapeResult, shape: StaticCompoundShape, subShapeId: number): void {
-    if (subShape.isEmpty(subShapeId)) {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    if (_subShapeIdPopResult.value >= shape.children.length) {
+        // no longer a valid index
         out.shape = null;
         out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
         return;
     }
 
-    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
     const childShape = shape.children[_subShapeIdPopResult.value].shape;
 
     const childShapeDef = shapeDefs[childShape.type];
     childShapeDef.getLeafShape(out, childShape, _subShapeIdPopResult.remainder);
 }
 
-const _getStaticCompoundSubShapeTransformedShape_rotatedChildPos = /* @__PURE__ */ vec3.create();
+const _getSubShapeTransformedShape_childPosition = /* @__PURE__ */ vec3.create();
 
 function getSubShapeTransformedShape(
     out: GetSubShapeTransformedShapeResult,
     shape: StaticCompoundShape,
     subShapeId: number,
 ): void {
-    if (subShape.isEmpty(subShapeId)) {
-        out.shape = null;
-        out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
-        return;
-    }
-
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    assert(_subShapeIdPopResult.value < shape.children.length, 'Invalid SubShapeID for StaticCompoundShape');
     const child = shape.children[_subShapeIdPopResult.value];
 
-    vec3.transformQuat(_getStaticCompoundSubShapeTransformedShape_rotatedChildPos, child.position, out.rotation);
-    vec3.add(out.position, out.position, _getStaticCompoundSubShapeTransformedShape_rotatedChildPos);
+    // pos = pos + rotate(rot, scale * childPos), rot = rot * childRot
+    const childPosition = _getSubShapeTransformedShape_childPosition;
+    vec3.multiply(childPosition, child.position, out.scale);
+    vec3.transformQuat(childPosition, childPosition, out.rotation);
+    vec3.add(out.position, out.position, childPosition);
     quat.multiply(out.rotation, out.rotation, child.quaternion);
+    transformScale(out.scale, child.quaternion, out.scale[0], out.scale[1], out.scale[2]);
 
     const childShapeDef = shapeDefs[child.shape.type];
     childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
 }
+
+/** the scale a child is dispatched with, see transformScale */
+const _childScale = /* @__PURE__ */ vec3.create();
 
 /* cast ray */
 
@@ -350,13 +365,14 @@ const _castRayVsStaticCompound_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsStaticCompound_localRayOrigin = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_localRayDir = /* @__PURE__ */ vec3.create();
 
-const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castRayVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
+const _castRayVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 
 const _castRayVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
-const _castRayVsStaticCompound_nodeBounds = /* @__PURE__ */ box3.create();
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castRayVsStaticCompound_stackTop = 0;
 
 function castRay(
     collector: CastRayCollector,
@@ -413,31 +429,36 @@ function castRay(
         _castRayVsStaticCompound_invQuat,
     );
 
-    // store transformed ray components for bvh traversal
-    const localOriginX = _castRayVsStaticCompound_localRayOrigin[0];
-    const localOriginY = _castRayVsStaticCompound_localRayOrigin[1];
-    const localOriginZ = _castRayVsStaticCompound_localRayOrigin[2];
-    const localDirX = _castRayVsStaticCompound_localRayDir[0];
-    const localDirY = _castRayVsStaticCompound_localRayDir[1];
-    const localDirZ = _castRayVsStaticCompound_localRayDir[2];
+    // walk the bvh in the compound's unscaled local space; the entry fractions are unchanged by it
+    const localOriginX = _castRayVsStaticCompound_localRayOrigin[0] / scaleX;
+    const localOriginY = _castRayVsStaticCompound_localRayOrigin[1] / scaleY;
+    const localOriginZ = _castRayVsStaticCompound_localRayOrigin[2] / scaleZ;
+    const localDirX = _castRayVsStaticCompound_localRayDir[0] / scaleX;
+    const localDirY = _castRayVsStaticCompound_localRayDir[1] / scaleY;
+    const localDirZ = _castRayVsStaticCompound_localRayDir[2] / scaleZ;
 
-    let stackSize = 0;
+    // reciprocals of the local displacement, once per query, for the fraction-space slab tests
+    const invDispX = safeReciprocal(localDirX * length);
+    const invDispY = safeReciprocal(localDirY * length);
+    const invDispZ = safeReciprocal(localDirZ * length);
+
+    // the collector's early-out fraction, held in a local and refreshed after each child cast
+    let earlyOut = collector.earlyOutFraction;
+
+    const stackBase = _castRayVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _castRayVsStaticCompound_stackNodes[stackSize] = 0;
     _castRayVsStaticCompound_stackDist[stackSize] = -Infinity; // root always visited
     stackSize++;
 
-    while (stackSize > 0) {
-        // early out: very close hit
-        if (collector.earlyOutFraction <= 0) {
-            break;
-        }
-
+    while (stackSize > stackBase) {
         stackSize--;
         const nodeOffset = _castRayVsStaticCompound_stackNodes[stackSize];
         const nodeDistance = _castRayVsStaticCompound_stackDist[stackSize];
 
-        // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        // early out: if fraction to this node >= closest hit, skip it. a node is only ever pushed
+        // with a finite entry fraction, so no re-test of its bounds is needed here
+        if (nodeDistance >= earlyOut) {
             continue;
         }
 
@@ -451,7 +472,11 @@ function castRay(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castRayVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
+                // an any-hit collector drops its early-out to zero: nothing further can qualify
+                if (earlyOut <= 0) break;
+
                 const childIndex = childStart + i;
                 const child = shape.children[childIndex];
 
@@ -464,9 +489,18 @@ function castRay(
                     shape.children.length,
                 );
 
+                // the children are placed in world space, so they get the world ray
+                vec3.set(_castRayVsStaticCompound_pos, posX, posY, posZ);
+                quat.set(_castRayVsStaticCompound_quat, quatX, quatY, quatZ, quatW);
+                vec3.set(
+                    _castRayVsStaticCompound_transformedTranslation,
+                    child.position[0] * scaleX,
+                    child.position[1] * scaleY,
+                    child.position[2] * scaleZ,
+                );
                 vec3.transformQuat(
                     _castRayVsStaticCompound_transformedTranslation,
-                    child.position,
+                    _castRayVsStaticCompound_transformedTranslation,
                     _castRayVsStaticCompound_quat,
                 );
                 vec3.add(
@@ -475,17 +509,18 @@ function castRay(
                     _castRayVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_castRayVsStaticCompound_worldRot, _castRayVsStaticCompound_quat, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleX, scaleY, scaleZ);
 
                 const childShapeDef = shapeDefs[child.shape.type];
                 childShapeDef.castRay(
                     collector,
                     settings,
-                    localOriginX,
-                    localOriginY,
-                    localOriginZ,
-                    localDirX,
-                    localDirY,
-                    localDirZ,
+                    originX,
+                    originY,
+                    originZ,
+                    directionX,
+                    directionY,
+                    directionZ,
                     length,
                     child.shape,
                     _castRayVsStaticCompound_subShapeIdBuilder.value,
@@ -497,72 +532,70 @@ function castRay(
                     _castRayVsStaticCompound_worldRot[1],
                     _castRayVsStaticCompound_worldRot[2],
                     _castRayVsStaticCompound_worldRot[3],
-                    scaleX,
-                    scaleY,
-                    scaleZ,
+                    childScale[0],
+                    childScale[1],
+                    childScale[2],
                 );
+
+                earlyOut = collector.earlyOutFraction;
             }
+            _castRayVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: compute distances to both children and sort by distance
             // push farther child first so closer is popped first
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, leftOffset);
-            const leftDist = rayDistanceToBox3(
+            const leftDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsStaticCompound_nodeBounds[0],
-                _castRayVsStaticCompound_nodeBounds[1],
-                _castRayVsStaticCompound_nodeBounds[2],
-                _castRayVsStaticCompound_nodeBounds[3],
-                _castRayVsStaticCompound_nodeBounds[4],
-                _castRayVsStaticCompound_nodeBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[leftOffset + bvh.NODE_MIN_X],
+                buffer[leftOffset + bvh.NODE_MIN_Y],
+                buffer[leftOffset + bvh.NODE_MIN_Z],
+                buffer[leftOffset + bvh.NODE_MAX_X],
+                buffer[leftOffset + bvh.NODE_MAX_Y],
+                buffer[leftOffset + bvh.NODE_MAX_Z],
             );
-
-            bvh.nodeGetBounds(_castRayVsStaticCompound_nodeBounds, buffer, rightOffset);
-            const rightDist = rayDistanceToBox3(
+            const rightDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsStaticCompound_nodeBounds[0],
-                _castRayVsStaticCompound_nodeBounds[1],
-                _castRayVsStaticCompound_nodeBounds[2],
-                _castRayVsStaticCompound_nodeBounds[3],
-                _castRayVsStaticCompound_nodeBounds[4],
-                _castRayVsStaticCompound_nodeBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[rightOffset + bvh.NODE_MIN_X],
+                buffer[rightOffset + bvh.NODE_MIN_Y],
+                buffer[rightOffset + bvh.NODE_MIN_Z],
+                buffer[rightOffset + bvh.NODE_MAX_X],
+                buffer[rightOffset + bvh.NODE_MAX_Y],
+                buffer[rightOffset + bvh.NODE_MAX_Z],
             );
 
             // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castRayVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;
@@ -589,6 +622,9 @@ const _collidePointVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _collidePointVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 
 const _collidePointVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collidePointVsStaticCompound_stackTop = 0;
 
 function collidePoint(
     collector: CollidePointCollector,
@@ -625,14 +661,16 @@ function collidePoint(
         _collidePointVsStaticCompound_localPoint,
         _collidePointVsStaticCompound_invQuatB,
     );
-    const localPointX = _collidePointVsStaticCompound_localPoint[0];
-    const localPointY = _collidePointVsStaticCompound_localPoint[1];
-    const localPointZ = _collidePointVsStaticCompound_localPoint[2];
+    // the bvh is in the compound's unscaled local space
+    const localPointX = _collidePointVsStaticCompound_localPoint[0] / scaleBX;
+    const localPointY = _collidePointVsStaticCompound_localPoint[1] / scaleBY;
+    const localPointZ = _collidePointVsStaticCompound_localPoint[2] / scaleBZ;
 
-    let stackSize = 0;
+    const stackBase = _collidePointVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _collidePointVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collidePointVsStaticCompound_stackNodes[--stackSize];
@@ -657,6 +695,7 @@ function collidePoint(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collidePointVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -674,9 +713,15 @@ function collidePoint(
 
                 vec3.set(_collidePointVsStaticCompound_posB, posBX, posBY, posBZ);
                 quat.set(_collidePointVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
+                vec3.set(
+                    _collidePointVsStaticCompound_transformedTranslation,
+                    child.position[0] * scaleBX,
+                    child.position[1] * scaleBY,
+                    child.position[2] * scaleBZ,
+                );
                 vec3.transformQuat(
                     _collidePointVsStaticCompound_transformedTranslation,
-                    child.position,
+                    _collidePointVsStaticCompound_transformedTranslation,
                     _collidePointVsStaticCompound_quatB,
                 );
                 vec3.add(
@@ -685,6 +730,7 @@ function collidePoint(
                     _collidePointVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_collidePointVsStaticCompound_worldRot, _collidePointVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const childShapeDef = shapeDefs[child.shape.type];
                 childShapeDef.collidePoint(
@@ -703,11 +749,12 @@ function collidePoint(
                     _collidePointVsStaticCompound_worldRot[1],
                     _collidePointVsStaticCompound_worldRot[2],
                     _collidePointVsStaticCompound_worldRot[3],
-                    scaleBX,
-                    scaleBY,
-                    scaleBZ,
+                    childScale[0],
+                    childScale[1],
+                    childScale[2],
                 );
             }
+            _collidePointVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: push both children
             const leftOffset = bvh.nodeLeft(nodeOffset);
@@ -719,6 +766,28 @@ function collidePoint(
 }
 
 /* collide shape */
+
+/**
+ * bring a box from the compound's scaled local space into the unscaled space its bvh is built in.
+ * a negative scale component swaps that axis' min and max, so they are re-ordered.
+ */
+function divideBoxByScale(box: Box3, scaleX: number, scaleY: number, scaleZ: number): void {
+    // compound vs compound nests these walks per child, so the unscaled case is worth skipping
+    if (scaleX === 1 && scaleY === 1 && scaleZ === 1) return;
+
+    const x0 = box[0] / scaleX;
+    const x1 = box[3] / scaleX;
+    box[0] = x0 < x1 ? x0 : x1;
+    box[3] = x0 < x1 ? x1 : x0;
+    const y0 = box[1] / scaleY;
+    const y1 = box[4] / scaleY;
+    box[1] = y0 < y1 ? y0 : y1;
+    box[4] = y0 < y1 ? y1 : y0;
+    const z0 = box[2] / scaleZ;
+    const z1 = box[5] / scaleZ;
+    box[2] = z0 < z1 ? z0 : z1;
+    box[5] = z0 < z1 ? z1 : z0;
+}
 
 // flat SMI stack of node offsets for this overlap traversal — carries no distances. grow-once
 // with a size counter (no pop()/length churn, stays packed).
@@ -738,6 +807,10 @@ const _collideStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create(
 
 const _collideStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _collideStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
+const _collideStaticCompoundVsShape_scaleB = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collideStaticCompoundVsShape_stackTop = 0;
 
 function collideStaticCompoundVsShape(
     collector: CollideShapeCollector,
@@ -795,12 +868,15 @@ function collideStaticCompoundVsShape(
         _collideStaticCompoundVsShape_localQuatB,
     );
 
-    // transform shapeB's local AABB to compound A's local space
+    vec3.set(_collideStaticCompoundVsShape_scaleB, scaleBX, scaleBY, scaleBZ);
+
+    // transform shapeB's local AABB (scaled by b's scale) to compound A's local space
     const queryBounds = _collideStaticCompoundVsShape_queryBounds;
-    mat4.fromRotationTranslation(
+    mat4.fromRotationTranslationScale(
         _collideStaticCompoundVsShape_aabbTransform,
         _collideStaticCompoundVsShape_localQuatB,
         _collideStaticCompoundVsShape_localPosB,
+        _collideStaticCompoundVsShape_scaleB,
     );
     box3.transformMat4(queryBounds, shapeB.aabb, _collideStaticCompoundVsShape_aabbTransform);
 
@@ -811,11 +887,21 @@ function collideStaticCompoundVsShape(
     queryBounds[3] += settings.maxSeparationDistance;
     queryBounds[4] += settings.maxSeparationDistance;
     queryBounds[5] += settings.maxSeparationDistance;
+    divideBoxByScale(queryBounds, scaleAX, scaleAY, scaleAZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _collideStaticCompoundVsShape_stackTop;
+    let stackSize = stackBase;
     _collideStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collideStaticCompoundVsShape_stackNodes[--stackSize];
@@ -825,12 +911,12 @@ function collideStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -840,6 +926,7 @@ function collideStaticCompoundVsShape(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collideStaticCompoundVsShape_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -857,9 +944,15 @@ function collideStaticCompoundVsShape(
 
                 vec3.set(_collideStaticCompoundVsShape_posA, posAX, posAY, posAZ);
                 quat.set(_collideStaticCompoundVsShape_quatA, quatAX, quatAY, quatAZ, quatAW);
+                vec3.set(
+                    _collideStaticCompoundVsShape_transformedTranslation,
+                    child.position[0] * scaleAX,
+                    child.position[1] * scaleAY,
+                    child.position[2] * scaleAZ,
+                );
                 vec3.transformQuat(
                     _collideStaticCompoundVsShape_transformedTranslation,
-                    child.position,
+                    _collideStaticCompoundVsShape_transformedTranslation,
                     _collideStaticCompoundVsShape_quatA,
                 );
                 vec3.add(
@@ -868,6 +961,7 @@ function collideStaticCompoundVsShape(
                     _collideStaticCompoundVsShape_transformedTranslation,
                 );
                 quat.multiply(_collideStaticCompoundVsShape_worldRot, _collideStaticCompoundVsShape_quatA, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
                 const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
                 if (fn) {
@@ -884,9 +978,9 @@ function collideStaticCompoundVsShape(
                         _collideStaticCompoundVsShape_worldRot[1],
                         _collideStaticCompoundVsShape_worldRot[2],
                         _collideStaticCompoundVsShape_worldRot[3],
-                        scaleAX,
-                        scaleAY,
-                        scaleAZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                         shapeB,
                         subShapeIdB,
                         subShapeIdBitsB,
@@ -903,6 +997,7 @@ function collideStaticCompoundVsShape(
                     );
                 }
             }
+            _collideStaticCompoundVsShape_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -927,6 +1022,9 @@ const _collideShapeVsStaticCompound_localPosA = /* @__PURE__ */ vec3.create();
 const _collideShapeVsStaticCompound_localQuatA = /* @__PURE__ */ quat.create();
 const _collideShapeVsStaticCompound_aabbTransform = /* @__PURE__ */ mat4.create();
 const _collideShapeVsStaticCompound_scaleA = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _collideShapeVsStaticCompound_stackTop = 0;
 
 function collideShapeVsStaticCompound(
     collector: CollideShapeCollector,
@@ -1004,11 +1102,21 @@ function collideShapeVsStaticCompound(
     queryBounds[3] += settings.maxSeparationDistance;
     queryBounds[4] += settings.maxSeparationDistance;
     queryBounds[5] += settings.maxSeparationDistance;
+    divideBoxByScale(queryBounds, scaleBX, scaleBY, scaleBZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _collideShapeVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _collideShapeVsStaticCompound_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.shouldEarlyOut()) break;
 
         const nodeOffset = _collideShapeVsStaticCompound_stackNodes[--stackSize];
@@ -1017,12 +1125,12 @@ function collideShapeVsStaticCompound(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -1032,6 +1140,7 @@ function collideShapeVsStaticCompound(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _collideShapeVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.shouldEarlyOut()) break;
 
@@ -1049,9 +1158,15 @@ function collideShapeVsStaticCompound(
 
                 vec3.set(_collideShapeVsStaticCompound_posB, posBX, posBY, posBZ);
                 quat.set(_collideShapeVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
+                vec3.set(
+                    _collideShapeVsStaticCompound_transformedTranslation,
+                    child.position[0] * scaleBX,
+                    child.position[1] * scaleBY,
+                    child.position[2] * scaleBZ,
+                );
                 vec3.transformQuat(
                     _collideShapeVsStaticCompound_transformedTranslation,
-                    child.position,
+                    _collideShapeVsStaticCompound_transformedTranslation,
                     _collideShapeVsStaticCompound_quatB,
                 );
                 vec3.add(
@@ -1060,6 +1175,7 @@ function collideShapeVsStaticCompound(
                     _collideShapeVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_collideShapeVsStaticCompound_worldRot, _collideShapeVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
                 if (fn) {
@@ -1089,12 +1205,13 @@ function collideShapeVsStaticCompound(
                         _collideShapeVsStaticCompound_worldRot[1],
                         _collideShapeVsStaticCompound_worldRot[2],
                         _collideShapeVsStaticCompound_worldRot[3],
-                        scaleBX,
-                        scaleBY,
-                        scaleBZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                     );
                 }
             }
+            _collideShapeVsStaticCompound_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -1127,6 +1244,10 @@ const _castStaticCompoundVsShape_aabbTransform = /* @__PURE__ */ mat4.create();
 const _castStaticCompoundVsShape_localPosB = /* @__PURE__ */ vec3.create();
 const _castStaticCompoundVsShape_localQuatB = /* @__PURE__ */ quat.create();
 const _castStaticCompoundVsShape_localDispA = /* @__PURE__ */ vec3.create();
+const _castStaticCompoundVsShape_scaleB = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castStaticCompoundVsShape_stackTop = 0;
 
 function castStaticCompoundVsShape(
     collector: CastShapeCollector,
@@ -1198,16 +1319,19 @@ function castStaticCompoundVsShape(
         _castStaticCompoundVsShape_invQuatA,
     );
 
+    vec3.set(_castStaticCompoundVsShape_scaleB, scaleBX, scaleBY, scaleBZ);
+
     // compute swept bounds of shapeB in compound A's local space:
-    // transform shapeB AABB by localQuatB+localPosB to get start bounds,
+    // transform shapeB AABB by its scale, localQuatB and localPosB to get start bounds,
     // then translate by localDispA to get end bounds, and union them.
     const queryBounds = _castStaticCompoundVsShape_queryBounds;
     const endBounds = _castStaticCompoundVsShape_endBounds;
     const localDisp = _castStaticCompoundVsShape_localDispA;
-    mat4.fromRotationTranslation(
+    mat4.fromRotationTranslationScale(
         _castStaticCompoundVsShape_aabbTransform,
         _castStaticCompoundVsShape_localQuatB,
         _castStaticCompoundVsShape_localPosB,
+        _castStaticCompoundVsShape_scaleB,
     );
     box3.transformMat4(queryBounds, shapeB.aabb, _castStaticCompoundVsShape_aabbTransform);
     // end bounds = start bounds translated by displacement
@@ -1218,11 +1342,21 @@ function castStaticCompoundVsShape(
     endBounds[4] = queryBounds[4] + localDisp[1];
     endBounds[5] = queryBounds[5] + localDisp[2];
     box3.union(queryBounds, queryBounds, endBounds);
+    divideBoxByScale(queryBounds, scaleAX, scaleAY, scaleAZ);
 
-    let stackSize = 0;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+
+    const stackBase = _castStaticCompoundVsShape_stackTop;
+    let stackSize = stackBase;
     _castStaticCompoundVsShape_stackNodes[stackSize++] = 0;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         if (collector.earlyOutFraction <= -Infinity) break;
 
         const nodeOffset = _castStaticCompoundVsShape_stackNodes[--stackSize];
@@ -1232,12 +1366,12 @@ function castStaticCompoundVsShape(
             !bvh.nodeIntersectsBox(
                 buffer,
                 nodeOffset,
-                queryBounds[0],
-                queryBounds[1],
-                queryBounds[2],
-                queryBounds[3],
-                queryBounds[4],
-                queryBounds[5],
+                queryMinX,
+                queryMinY,
+                queryMinZ,
+                queryMaxX,
+                queryMaxY,
+                queryMaxZ,
             )
         ) {
             continue;
@@ -1247,6 +1381,7 @@ function castStaticCompoundVsShape(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castStaticCompoundVsShape_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 if (collector.earlyOutFraction <= -Infinity) break;
 
@@ -1264,9 +1399,15 @@ function castStaticCompoundVsShape(
 
                 vec3.set(_castStaticCompoundVsShape_posA, posAX, posAY, posAZ);
                 quat.set(_castStaticCompoundVsShape_quatA, quatAX, quatAY, quatAZ, quatAW);
+                vec3.set(
+                    _castStaticCompoundVsShape_transformedTranslation,
+                    child.position[0] * scaleAX,
+                    child.position[1] * scaleAY,
+                    child.position[2] * scaleAZ,
+                );
                 vec3.transformQuat(
                     _castStaticCompoundVsShape_transformedTranslation,
-                    child.position,
+                    _castStaticCompoundVsShape_transformedTranslation,
                     _castStaticCompoundVsShape_quatA,
                 );
                 vec3.add(
@@ -1275,6 +1416,7 @@ function castStaticCompoundVsShape(
                     _castStaticCompoundVsShape_transformedTranslation,
                 );
                 quat.multiply(_castStaticCompoundVsShape_worldRot, _castStaticCompoundVsShape_quatA, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
                 vec3.set(_castStaticCompoundVsShape_displacementA, dispAX, dispAY, dispAZ);
 
@@ -1293,9 +1435,9 @@ function castStaticCompoundVsShape(
                         _castStaticCompoundVsShape_worldRot[1],
                         _castStaticCompoundVsShape_worldRot[2],
                         _castStaticCompoundVsShape_worldRot[3],
-                        scaleAX,
-                        scaleAY,
-                        scaleAZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                         dispAX,
                         dispAY,
                         dispAZ,
@@ -1315,6 +1457,7 @@ function castStaticCompoundVsShape(
                     );
                 }
             }
+            _castStaticCompoundVsShape_stackTop = stackBase;
         } else {
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
@@ -1351,7 +1494,6 @@ const _castShapeVsStaticCompound_quatAInB = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_displacementInB = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_mat4 = /* @__PURE__ */ mat4.create();
 const _castShapeVsStaticCompound_sweptAABB = /* @__PURE__ */ box3.create();
-const _castShapeVsStaticCompound_halfExtents = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_expandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_childExpandedBounds = /* @__PURE__ */ box3.create();
 const _castShapeVsStaticCompound_stackNodes: number[] = [];
@@ -1360,6 +1502,9 @@ const _castShapeVsStaticCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.bu
 const _castShapeVsStaticCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castShapeVsStaticCompound_worldRot = /* @__PURE__ */ quat.create();
 const _castShapeVsStaticCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
+
+// the walk's stack top: a static compound nested in this one walks the same stack above it
+let _castShapeVsStaticCompound_stackTop = 0;
 
 function castShapeVsStaticCompound(
     collector: CastShapeCollector,
@@ -1431,6 +1576,12 @@ function castShapeVsStaticCompound(
         _castShapeVsStaticCompound_displacementA,
         _castShapeVsStaticCompound_inverseQuaternionB,
     );
+    // the bvh is in the compound's unscaled local space
+    if (scaleBX !== 1 || scaleBY !== 1 || scaleBZ !== 1) {
+        _castShapeVsStaticCompound_displacementInB[0] /= scaleBX;
+        _castShapeVsStaticCompound_displacementInB[1] /= scaleBY;
+        _castShapeVsStaticCompound_displacementInB[2] /= scaleBZ;
+    }
 
     // compute base AABB of shape A at t=0 in compound local space
     const aabbMatrix = mat4.fromRotationTranslationScale(
@@ -1440,6 +1591,7 @@ function castShapeVsStaticCompound(
         _castShapeVsStaticCompound_scaleA,
     );
     box3.transformMat4(_castShapeVsStaticCompound_sweptAABB, shapeA.aabb, aabbMatrix);
+    divideBoxByScale(_castShapeVsStaticCompound_sweptAABB, scaleBX, scaleBY, scaleBZ);
 
     // cast ray: swept AABB center along the normalized displacement
     const rayOriginX = (_castShapeVsStaticCompound_sweptAABB[0] + _castShapeVsStaticCompound_sweptAABB[3]) * 0.5;
@@ -1453,25 +1605,26 @@ function castShapeVsStaticCompound(
     const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
 
     // compute half-extents of the base AABB
-    const halfExtents = _castShapeVsStaticCompound_halfExtents;
-    halfExtents[0] = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
-    halfExtents[1] = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
-    halfExtents[2] = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
+    // held in locals: a static compound nested in this one rewrites the scratch during the walk
+    const halfExtentX = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
+    const halfExtentY = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
+    const halfExtentZ = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
 
-    let stackSize = 0;
+    const stackBase = _castShapeVsStaticCompound_stackTop;
+    let stackSize = stackBase;
     _castShapeVsStaticCompound_stackNodes[stackSize] = 0;
     _castShapeVsStaticCompound_stackDist[stackSize] = 0; // root always visited
     stackSize++;
 
     const expandedBounds = _castShapeVsStaticCompound_expandedBounds;
 
-    while (stackSize > 0) {
+    while (stackSize > stackBase) {
         stackSize--;
         const nodeOffset = _castShapeVsStaticCompound_stackNodes[stackSize];
         const nodeDistance = _castShapeVsStaticCompound_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -1485,6 +1638,7 @@ function castShapeVsStaticCompound(
             const childStart = staticCompoundBvh.nodeChildStart(buffer, nodeOffset);
             const childCount = staticCompoundBvh.nodeChildCount(buffer, nodeOffset);
 
+            _castShapeVsStaticCompound_stackTop = stackSize;
             for (let i = 0; i < childCount; i++) {
                 const childIndex = childStart + i;
 
@@ -1494,12 +1648,12 @@ function castShapeVsStaticCompound(
                 box3.copy(childBounds, _computeChildAABB_result);
 
                 // expand by half-extents
-                childBounds[0] -= halfExtents[0];
-                childBounds[1] -= halfExtents[1];
-                childBounds[2] -= halfExtents[2];
-                childBounds[3] += halfExtents[0];
-                childBounds[4] += halfExtents[1];
-                childBounds[5] += halfExtents[2];
+                childBounds[0] -= halfExtentX;
+                childBounds[1] -= halfExtentY;
+                childBounds[2] -= halfExtentZ;
+                childBounds[3] += halfExtentX;
+                childBounds[4] += halfExtentY;
+                childBounds[5] += halfExtentZ;
 
                 // early out: ray x child expanded bounds
                 if (
@@ -1522,8 +1676,9 @@ function castShapeVsStaticCompound(
                     continue;
                 }
 
-                // early out if we've found a very close hit
-                if (collector.earlyOutFraction <= 0) {
+                // stop once the collector wants no more hits
+                if (collector.earlyOutFraction <= -Infinity) {
+                    _castShapeVsStaticCompound_stackTop = stackBase;
                     return;
                 }
 
@@ -1538,9 +1693,17 @@ function castShapeVsStaticCompound(
                     compound.children.length,
                 );
 
+                vec3.set(_castShapeVsStaticCompound_posB, posBX, posBY, posBZ);
+                quat.set(_castShapeVsStaticCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
+                vec3.set(
+                    _castShapeVsStaticCompound_transformedTranslation,
+                    child.position[0] * scaleBX,
+                    child.position[1] * scaleBY,
+                    child.position[2] * scaleBZ,
+                );
                 vec3.transformQuat(
                     _castShapeVsStaticCompound_transformedTranslation,
-                    child.position,
+                    _castShapeVsStaticCompound_transformedTranslation,
                     _castShapeVsStaticCompound_quatB,
                 );
                 vec3.add(
@@ -1549,6 +1712,7 @@ function castShapeVsStaticCompound(
                     _castShapeVsStaticCompound_transformedTranslation,
                 );
                 quat.multiply(_castShapeVsStaticCompound_worldRot, _castShapeVsStaticCompound_quatB, child.quaternion);
+                const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
                 const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
 
@@ -1582,12 +1746,13 @@ function castShapeVsStaticCompound(
                         _castShapeVsStaticCompound_worldRot[1],
                         _castShapeVsStaticCompound_worldRot[2],
                         _castShapeVsStaticCompound_worldRot[3],
-                        scaleBX,
-                        scaleBY,
-                        scaleBZ,
+                        childScale[0],
+                        childScale[1],
+                        childScale[2],
                     );
                 }
             }
+            _castShapeVsStaticCompound_stackTop = stackBase;
         } else {
             // internal node: compute distances to both children and sort by distance
             // ray from swept AABB center along displacement
@@ -1595,12 +1760,12 @@ function castShapeVsStaticCompound(
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
             // expand bounds by half-extents (same as child test)
-            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - halfExtentX;
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - halfExtentY;
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - halfExtentZ;
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + halfExtentX;
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + halfExtentY;
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + halfExtentZ;
             const leftDist = rayDistanceToBox3(
                 rayOriginX,
                 rayOriginY,
@@ -1617,12 +1782,12 @@ function castShapeVsStaticCompound(
                 expandedBounds[5],
             );
 
-            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtents[0];
-            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtents[1];
-            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtents[2];
-            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtents[0];
-            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtents[1];
-            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtents[2];
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - halfExtentX;
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - halfExtentY;
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - halfExtentZ;
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + halfExtentX;
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + halfExtentY;
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + halfExtentZ;
             const rightDist = rayDistanceToBox3(
                 rayOriginX,
                 rayOriginY,
@@ -1639,27 +1804,30 @@ function castShapeVsStaticCompound(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = leftOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castShapeVsStaticCompound_stackNodes[stackSize] = rightOffset;
                     _castShapeVsStaticCompound_stackDist[stackSize] = rightDist;
                     stackSize++;

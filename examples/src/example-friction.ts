@@ -13,8 +13,8 @@ import {
     sphere,
     updateWorld,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
-import { euler, quat, vec3 } from 'mathcat';
+import * as debugRenderer from './debug/debug-renderer';
+import { euler, quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';

@@ -1,5 +1,7 @@
-import type { Mat4, Vec3 } from 'mathcat';
-import { box3, mat4, quat, vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
+import { box3 } from 'math/shapes';
+import { EMPTY_SUB_SHAPE_ID, type SubShapeId } from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import { CastRayStatus, createCastRayHit } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
@@ -24,8 +26,15 @@ import {
 } from '../collision/penetration';
 import * as simplex from '../collision/simplex';
 import { createSupport, SupportFunctionMode, setPointSupport } from '../collision/support';
+import { assert } from '../utils/assert';
 import type { ConvexShape, Shape } from './shapes';
 import { getShapeSupportingFace, setShapeSupport } from './shapes';
+
+/** a convex shape is a single leaf with a single material */
+export function getConvexMaterial(shape: ConvexShape, subShapeId: SubShapeId): number {
+    assert(subShapeId === EMPTY_SUB_SHAPE_ID, 'invalid sub shape id for a convex shape');
+    return shape.materialId;
+}
 
 /* cast ray */
 
@@ -36,6 +45,8 @@ const _castRayVsConvex_quat = /* @__PURE__ */ quat.create();
 const _castRayVsConvex_scale = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_rayDirectionLocal = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_invertedRayOrigin = /* @__PURE__ */ vec3.create();
+const _castRayVsConvex_invertedRayDirection = /* @__PURE__ */ vec3.create();
 const _castRayVsConvex_invQuat = /* @__PURE__ */ quat.create();
 const _castRayVsConvex_gjkResult = /* @__PURE__ */ createGjkCastRayResult();
 
@@ -98,22 +109,63 @@ export function castRayVsConvex(
         collector.earlyOutFraction,
     );
 
-    if (_castRayVsConvex_gjkResult.isHitFound) {
-        const fraction = _castRayVsConvex_gjkResult.lambda;
+    if (!_castRayVsConvex_gjkResult.isHitFound) {
+        collector.addMiss();
+        return;
+    }
 
-        // if treatConvexAsSolid OR fraction > 0 when treatConvexAsSolid=false and fraction=0,
-        // ray starts inside but we don't report it
-        if (settings.treatConvexAsSolid || fraction > 0.0) {
-            _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
-            _castRayVsConvex_hit.fraction = Math.max(0.0, fraction);
-            _castRayVsConvex_hit.subShapeId = subShapeId;
-            _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
-            _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
-            collector.addHit(_castRayVsConvex_hit);
-        } else {
-            collector.addMiss();
+    const fraction = _castRayVsConvex_gjkResult.lambda;
+    let hitAdded = false;
+
+    // if treatConvexAsSolid OR fraction > 0 when treatConvexAsSolid=false and fraction=0,
+    // ray starts inside but we don't report it
+    if (settings.treatConvexAsSolid || fraction > 0.0) {
+        _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
+        _castRayVsConvex_hit.fraction = Math.max(0.0, fraction);
+        _castRayVsConvex_hit.subShapeId = subShapeId;
+        _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
+        _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
+        collector.addHit(_castRayVsConvex_hit);
+        hitAdded = true;
+    }
+
+    // back face hit: cast the inverted ray from the early out fraction back to the forward hit to find the exit point
+    if (settings.collideWithBackfacesConvex && !collector.shouldEarlyOut()) {
+        const startFraction = Math.min(1.0, collector.earlyOutFraction);
+        const deltaFraction = fraction - startFraction;
+        if (deltaFraction < 0.0) {
+            vec3.scaleAndAdd(
+                _castRayVsConvex_invertedRayOrigin,
+                _castRayVsConvex_rayOriginLocal,
+                _castRayVsConvex_rayDirectionLocal,
+                startFraction,
+            );
+            vec3.scale(_castRayVsConvex_invertedRayDirection, _castRayVsConvex_rayDirectionLocal, deltaFraction);
+
+            gjkCastRay(
+                _castRayVsConvex_gjkResult,
+                _castRayVsConvex_invertedRayOrigin,
+                _castRayVsConvex_invertedRayDirection,
+                1e-3,
+                _castRayVsConvex_support,
+                1.0,
+            );
+
+            // a fraction of 0 means the ray ends inside the shape, which is not a back face hit
+            if (_castRayVsConvex_gjkResult.isHitFound && _castRayVsConvex_gjkResult.lambda > 0.0) {
+                // invert the fraction and rescale it to the original ray
+                _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
+                _castRayVsConvex_hit.fraction = fraction + (_castRayVsConvex_gjkResult.lambda - 1.0) * deltaFraction;
+                _castRayVsConvex_hit.subShapeId = subShapeId;
+                _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
+                _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
+                collector.addHit(_castRayVsConvex_hit);
+                hitAdded = true;
+            }
         }
-    } else {
+    }
+
+    if (!hitAdded) {
         collector.addMiss();
     }
 }
@@ -496,6 +548,9 @@ export function collideConvexVsConvexLocal(
             _collideConvex_BtoWorld,
             scaleB,
         );
+    } else {
+        _collideConvex_hit.faceA.numVertices = 0;
+        _collideConvex_hit.faceB.numVertices = 0;
     }
 
     // notify the collector
@@ -651,24 +706,25 @@ export function castConvexVsConvexLocal(
         return;
     }
 
-    // back-face culling: reject if shapes are separating (moving apart)
-    if (!settings.collideWithBackfaces) {
+    // back-face culling: reject if shapes are separating (moving apart); a normal perpendicular to the cast is not a back face
+    if (!settings.collideWithBackfacesConvex) {
         const dotProduct = vec3.dot(_castConvex_gjkResult.separatingAxis, displacementInB);
-        if (dotProduct <= 0) {
+        if (dotProduct < 0) {
             collector.addMiss();
             return;
         }
     }
 
-    // early-out check: reject if this hit is further than already found
-    if (_castConvex_gjkResult.lambda >= collector.earlyOutFraction) {
-        collector.addMiss();
-        return;
-    }
-
     // transform contact points from B's local space to world space using targetTransform
     vec3.transformMat4(_castConvex_castShapeHit.pointA, _castConvex_gjkResult.pointA, targetTransform);
     vec3.transformMat4(_castConvex_castShapeHit.pointB, _castConvex_gjkResult.pointB, targetTransform);
+    const penetrationDepth = vec3.distance(_castConvex_castShapeHit.pointA, _castConvex_castShapeHit.pointB);
+
+    // reject a starting overlap no deeper than the collector's bound; hits at fraction > 0 past it were already rejected by the gjk cast
+    if (_castConvex_gjkResult.lambda === 0 && -penetrationDepth >= collector.earlyOutFraction) {
+        collector.addMiss();
+        return;
+    }
 
     // transform penetrationAxis from B's local space to world space (keep unnormalized)
     mat4.multiply3x3Vec(_castConvex_castShapeHit.penetrationAxis, targetTransform, _castConvex_gjkResult.separatingAxis);
@@ -680,6 +736,7 @@ export function castConvexVsConvexLocal(
     // update result object
     _castConvex_castShapeHit.status = CastShapeStatus.COLLIDING;
     _castConvex_castShapeHit.fraction = _castConvex_gjkResult.lambda;
+    _castConvex_castShapeHit.penetrationDepth = penetrationDepth;
     _castConvex_castShapeHit.subShapeIdA = subShapeIdA;
     _castConvex_castShapeHit.subShapeIdB = subShapeIdB;
     _castConvex_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;

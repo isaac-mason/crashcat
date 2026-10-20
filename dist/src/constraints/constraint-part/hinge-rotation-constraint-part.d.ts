@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * Constrains rotation around 2 axes so that it only allows rotation around 1 axis (the hinge axis).
@@ -53,7 +53,7 @@ export declare function isActive(part: HingeRotationConstraintPart): boolean;
  * @param worldSpaceHingeAxis1 hinge axis for body A in world space (normalized)
  * @param worldSpaceHingeAxis2 hinge axis for body B in world space (normalized)
  */
-export declare function calculateConstraintProperties(part: HingeRotationConstraintPart, bodyA: RigidBody, bodyB: RigidBody, worldSpaceHingeAxis1: Vec3, worldSpaceHingeAxis2: Vec3): void;
+export declare function calculateConstraintProperties(part: HingeRotationConstraintPart, bodyA: RigidBody, bodyB: RigidBody, worldSpaceHingeAxis1: Vec3, worldSpaceHingeAxis2: Vec3, stepStamp: number): void;
 /** Apply warm start impulse from previous frame */
 export declare function warmStart(part: HingeRotationConstraintPart, bodyA: RigidBody, bodyB: RigidBody, warmStartImpulseRatio: number): void;
 /**

@@ -1,4 +1,4 @@
-import { mat4, type Quat, quat, type Vec3, type Vec4, vec3, vec4 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, type Vec4, vec3, vec4 } from 'math';
 import type { BodyId } from '../body/body-id';
 import { INVALID_BODY_ID } from '../body/body-id';
 import * as motionProperties from '../body/motion-properties';
@@ -21,7 +21,7 @@ import { createSupport, type Support, SupportFunctionMode, setPolygonSupport } f
 import type { Filter } from '../filter';
 import * as query from '../query';
 import type { Shape } from '../shapes/shapes';
-import { getShapeSupportingFace, ShapeType, setShapeSupport } from '../shapes/shapes';
+import { getShapeSupportingFace, ShapeType, setShapeSupport, shapeDefs, transformScale } from '../shapes/shapes';
 import { createFace } from '../utils/face';
 import type { World } from '../world';
 
@@ -632,7 +632,12 @@ const _contactsPool: CharacterContact[] = [];
 
 /** acquires a contact from the free list or creates a new one */
 function acquireContact(contacts: CharacterContact[]): CharacterContact {
-    const contact = _contactsPool.pop() ?? createCharacterContact();
+    let contact = _contactsPool.pop();
+    if (contact) {
+        resetContact(contact);
+    } else {
+        contact = createCharacterContact();
+    }
     contacts.push(contact);
     return contact;
 }
@@ -886,8 +891,7 @@ const _paddingCorrection_negativeNormal = /* @__PURE__ */ vec3.create();
 const _paddingCorrection_scale = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
 const _paddingCorrection_mat4_transform = /* @__PURE__ */ mat4.create();
 const _paddingCorrection_fractionWrapper = { value: 0 };
-const _correctFraction_tempPos = /* @__PURE__ */ vec3.create();
-const _correctFraction_tempQuat = /* @__PURE__ */ quat.create();
+const _paddingCorrection_inverseRotation = /* @__PURE__ */ quat.create();
 
 const _contactVelocity_r = /* @__PURE__ */ vec3.create();
 const _contactVelocity_angularComponent = /* @__PURE__ */ vec3.create();
@@ -897,6 +901,7 @@ const _contactVelocity_staticLinear = /* @__PURE__ */ vec3.create();
 const _contactVelocity_staticAngular = /* @__PURE__ */ vec3.create();
 
 const _surfaceNormal_temp = /* @__PURE__ */ vec3.create();
+const _castCollector_contact = /* @__PURE__ */ createCharacterContact();
 
 /** character collide shape collector - collects hits into contacts array */
 const characterCollideCollector = {
@@ -904,7 +909,6 @@ const characterCollideCollector = {
     earlyOutFraction: Number.MAX_VALUE,
     contacts: null! as CharacterContact[],
     maxHits: 256,
-    hitCount: 0,
     world: null! as World,
     listener: undefined as CharacterListener | undefined,
     character: null! as KCC,
@@ -912,56 +916,48 @@ const characterCollideCollector = {
     hitReductionCosMaxAngle: -1,
 
     addHit(hit: CollideShapeHit): void {
+        const contacts = this.contacts;
+
         // if we've reached max hits, try to merge similar contacts before giving up
-        if (this.hitCount >= this.maxHits) {
+        if (contacts.length >= this.maxHits) {
             this.maxHitsExceeded = true;
 
-            // try to merge similar contacts if enabled
             if (this.hitReductionCosMaxAngle > -1) {
-                const contacts = this.contacts;
-
-                // loop backwards through contacts to find similar ones
+                // one full pass over every pair: contacts on the same body with very similar normals keep only the deepest
                 for (let i = contacts.length - 1; i >= 0; i--) {
-                    const contactI = contacts[i];
-
                     for (let j = i - 1; j >= 0; j--) {
+                        const contactI = contacts[i];
                         const contactJ = contacts[j];
-                        // check if same body (including subShapeId) and normals are similar
                         if (
                             contactI.bodyId === contactJ.bodyId &&
-                            contactI.subShapeId === contactJ.subShapeId &&
                             vec3.dot(contactI.contactNormal, contactJ.contactNormal) > this.hitReductionCosMaxAngle
                         ) {
-                            // remove the contact with bigger distance (less penetrating)
+                            const iIsLast = i === contacts.length - 1;
                             if (contactI.distance > contactJ.distance) {
+                                // i moves out, the last contact (already visited) takes its place
                                 releaseContact(contacts, i);
-                                this.hitCount--;
-
-                                // break - can't continue with i since we just removed it
                                 break;
-                            } else {
-                                releaseContact(contacts, j);
-                                this.hitCount--;
-
-                                // continue checking other contacts against i
                             }
-                        }
-                    }
 
-                    // if we freed up space, we can add the new contact
-                    if (this.hitCount < this.maxHits) {
-                        break;
+                            // the last contact moves into j; when that was i, i is seen again at j later
+                            releaseContact(contacts, j);
+                            if (iIsLast) break;
+                        }
                     }
                 }
             }
 
-            // if still at max hits after reduction, give up
-            if (this.hitCount >= this.maxHits) {
+            // still too many hits, stop the query
+            if (contacts.length >= this.maxHits) {
+                this.earlyOutFraction = -Infinity;
                 return;
             }
         }
 
-        const contact = acquireContact(this.contacts);
+        const body = rigidBody.get(this.world, hit.bodyIdB);
+        if (!body) return;
+
+        const contact = acquireContact(contacts);
 
         // position is the contact point on shape B (the world body)
         vec3.copy(contact.position, hit.pointB);
@@ -978,13 +974,6 @@ const characterCollideCollector = {
 
         // get actual geometric surface normal
         // this is more stable than contact normal from gjk / epa
-        const body = rigidBody.get(this.world, hit.bodyIdB);
-
-        if (!body) {
-            // body not found - shouldn't happen, skip this contact
-            return;
-        }
-
         rigidBody.getSurfaceNormal(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
         vec3.copy(contact.surfaceNormal, _surfaceNormal_temp);
 
@@ -1010,53 +999,45 @@ const characterCollideCollector = {
         contact.materialId = hit.materialIdB;
 
         // store motion type, velocity, and sensor flag
-        if (body) {
-            contact.motionType = body.motionType;
-            contact.isSensor = body.sensor;
+        contact.motionType = body.motionType;
+        contact.isSensor = body.sensor;
 
-            // get body velocity (zero for static, real velocity for dynamic/kinematic)
-            let linearVelocity: Vec3;
-            let angularVelocity: Vec3;
-            if (body.motionType === MotionType.DYNAMIC || body.motionType === MotionType.KINEMATIC) {
-                linearVelocity = body.motionProperties.linearVelocity;
-                angularVelocity = body.motionProperties.angularVelocity;
-            } else {
-                // static body - start with zero velocity
-                vec3.zero(_contactVelocity_staticLinear);
-                vec3.zero(_contactVelocity_staticAngular);
-                linearVelocity = _contactVelocity_staticLinear;
-                angularVelocity = _contactVelocity_staticAngular;
-            }
-
-            // allow listener to adjust the body's velocity (e.g., for conveyor belts on static bodies)
-            if (this.listener?.onAdjustBodyVelocity) {
-                vec3.copy(_contactVelocity_adjustedLinear, linearVelocity);
-                vec3.copy(_contactVelocity_adjustedAngular, angularVelocity);
-                this.listener.onAdjustBodyVelocity(
-                    this.character,
-                    body,
-                    _contactVelocity_adjustedLinear,
-                    _contactVelocity_adjustedAngular,
-                );
-                linearVelocity = _contactVelocity_adjustedLinear;
-                angularVelocity = _contactVelocity_adjustedAngular;
-            }
-
-            // calculate point velocity: v_point = v_linear + ω × (position - centerOfMass)
-            vec3.sub(_contactVelocity_r, contact.position, body.centerOfMassPosition);
-            vec3.cross(_contactVelocity_angularComponent, angularVelocity, _contactVelocity_r);
-            vec3.add(contact.linearVelocity, linearVelocity, _contactVelocity_angularComponent);
+        // get body velocity (zero for static, real velocity for dynamic/kinematic)
+        let linearVelocity: Vec3;
+        let angularVelocity: Vec3;
+        if (body.motionType === MotionType.DYNAMIC || body.motionType === MotionType.KINEMATIC) {
+            linearVelocity = body.motionProperties.linearVelocity;
+            angularVelocity = body.motionProperties.angularVelocity;
         } else {
-            contact.motionType = MotionType.STATIC;
-            contact.isSensor = false;
-            vec3.zero(contact.linearVelocity);
+            // static body - start with zero velocity
+            vec3.zero(_contactVelocity_staticLinear);
+            vec3.zero(_contactVelocity_staticAngular);
+            linearVelocity = _contactVelocity_staticLinear;
+            angularVelocity = _contactVelocity_staticAngular;
         }
+
+        // allow listener to adjust the body's velocity (e.g., for conveyor belts on static bodies)
+        if (this.listener?.onAdjustBodyVelocity) {
+            vec3.copy(_contactVelocity_adjustedLinear, linearVelocity);
+            vec3.copy(_contactVelocity_adjustedAngular, angularVelocity);
+            this.listener.onAdjustBodyVelocity(
+                this.character,
+                body,
+                _contactVelocity_adjustedLinear,
+                _contactVelocity_adjustedAngular,
+            );
+            linearVelocity = _contactVelocity_adjustedLinear;
+            angularVelocity = _contactVelocity_adjustedAngular;
+        }
+
+        // calculate point velocity: v_point = v_linear + ω × (position - centerOfMass)
+        vec3.sub(_contactVelocity_r, contact.position, body.centerOfMassPosition);
+        vec3.cross(_contactVelocity_angularComponent, angularVelocity, _contactVelocity_r);
+        vec3.add(contact.linearVelocity, linearVelocity, _contactVelocity_angularComponent);
 
         contact.hadCollision = false;
         contact.wasDiscarded = false;
         contact.canPushCharacter = true;
-
-        this.hitCount++;
     },
 
     addMiss(): void {
@@ -1064,15 +1045,15 @@ const characterCollideCollector = {
     },
 
     shouldEarlyOut(): boolean {
-        return this.hitCount >= this.maxHits;
+        return this.earlyOutFraction === -Infinity;
     },
 
     reset(): void {
         this.bodyIdB = -1;
+        this.earlyOutFraction = Number.MAX_VALUE;
         this.contacts = null!;
         this.maxHitsExceeded = false;
         this.maxHits = 256;
-        this.hitCount = 0;
         this.world = null!;
         this.listener = undefined;
         this.character = null!;
@@ -1113,7 +1094,17 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
             }
         }
 
-        const contact = this.outContact;
+        const body = rigidBody.get(this.world, hit.bodyIdB);
+        if (!body) return;
+
+        // sensors don't affect character movement, only detection
+        if (body.sensor) {
+            return;
+        }
+
+        // fill a scratch contact, the out contact only takes it once accepted
+        const contact = _castCollector_contact;
+        resetContact(contact);
 
         // position is the contact point on shape B
         vec3.copy(contact.position, hit.pointB);
@@ -1123,18 +1114,6 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 
         // get actual geometric surface normal
         // this is more stable than contact normal from GJK/EPA
-        const body = rigidBody.get(this.world, hit.bodyIdB);
-
-        if (!body) {
-            // body not found - shouldn't happen, skip this contact
-            return;
-        }
-
-        // sensors don't affect character movement, only detection
-        if (body.sensor) {
-            return;
-        }
-
         rigidBody.getSurfaceNormal(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
         vec3.copy(contact.surfaceNormal, _surfaceNormal_temp);
 
@@ -1208,7 +1187,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
             predictedPenetration < -this.character.collisionTolerance &&
             validateContact(this.world, this.character, contact, this.listener)
         ) {
-            // Contact will cause significant penetration and listener approved it
+            copyCharacterContact(this.outContact, contact);
             this.hasHit = true;
             this.earlyOutFraction = hit.fraction;
         }
@@ -1220,8 +1199,8 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
     },
 
     shouldEarlyOut(): boolean {
-        // early out if we found a hit at fraction 0 (already penetrating)
-        return this.hasHit && this.earlyOutFraction <= 0;
+        // fraction 0 hits are rejected and the bound only ever drops to a positive fraction, so the cast runs to the end
+        return this.earlyOutFraction <= -Infinity;
     },
 
     reset(): void {
@@ -1289,6 +1268,8 @@ function getContactsAtPosition(
     vec3.scale(_getContacts_paddingOffset, character.up, character.characterPadding);
     vec3.add(_getContacts_shapePos, _getContacts_shapePos, _getContacts_paddingOffset);
 
+    _characterCollideSettings.collideWithBackfaces = character.backFaceMode === BackFaceMode.COLLIDE;
+
     // set max separation distance for predictive contacts
     _characterCollideSettings.maxSeparationDistance = character.predictiveContactDistance + character.characterPadding;
 
@@ -1302,7 +1283,7 @@ function getContactsAtPosition(
     characterCollideCollector.contacts = contacts;
     characterCollideCollector.world = world;
     characterCollideCollector.maxHits = character.maxNumHits;
-    characterCollideCollector.hitCount = 0;
+    characterCollideCollector.earlyOutFraction = Number.MAX_VALUE;
     characterCollideCollector.listener = listener;
     characterCollideCollector.character = character;
     characterCollideCollector.hitReductionCosMaxAngle = character.hitReductionCosMaxAngle;
@@ -1357,69 +1338,125 @@ function getContactsAtPosition(
     }
 }
 
+/** jolt's default collision tolerance, which its padding correction casts with */
+const PADDING_CORRECTION_TOLERANCE = 1e-4;
+
+type CorrectFractionFrame = { position: Vec3; quaternion: Quat; scale: Vec3 };
+
+/** one transform per recursion depth, so compound children do not overwrite their parent's */
+const _correctFraction_frames: CorrectFractionFrame[] = [];
+
+function getCorrectFractionFrame(depth: number): CorrectFractionFrame {
+    while (_correctFraction_frames.length <= depth) {
+        _correctFraction_frames.push({ position: vec3.create(), quaternion: quat.create(), scale: vec3.create() });
+    }
+    return _correctFraction_frames[depth];
+}
+
+/** places a child (of a transformed or compound shape) under its parent's transform, scaling it as collision does */
+function setChildCorrectFractionFrame(
+    out: CorrectFractionFrame,
+    parentPosition: Vec3,
+    parentQuaternion: Quat,
+    parentScale: Vec3,
+    childPosition: Vec3,
+    childQuaternion: Quat,
+): void {
+    vec3.multiply(out.position, childPosition, parentScale);
+    vec3.transformQuat(out.position, out.position, parentQuaternion);
+    vec3.add(out.position, parentPosition, out.position);
+    quat.multiply(out.quaternion, parentQuaternion, childQuaternion);
+    transformScale(out.scale, childQuaternion, parentScale[0], parentScale[1], parentScale[2]);
+}
+
 /**
- * Recursively corrects the fraction for character padding by unwrapping decorator shapes.
- * Accumulates transformations through decorator shape hierarchy before performing GJK cast.
- * @param characterSupport reusable Support struct, filled with the character shape at the convex leaf
- * @param shape the character shape to cast (may be decorator)
- * @param position start position (accumulated through recursion)
- * @param quaternion start rotation (accumulated through recursion)
- * @param displacement movement vector
- * @param scale accumulated scale
- * @param polygon the inflated polygon to cast against
- * @param inOutFraction object containing the fraction to correct (modified in place)
- * @param collisionTolerance tolerance for GJK
- * @returns true if correction was successful
+ * casts the character's convex leaves (through transformed, scaled, compound and static compound shapes) against the
+ * inflated polygon, lowering the fraction to the earliest hit. true if any leaf hit
  */
 function correctFractionForCharacterPadding(
-    characterSupport: Support,
     shape: Shape,
     position: Vec3,
     quaternion: Quat,
-    displacement: Vec3,
     scale: Vec3,
+    displacement: Vec3,
     polygon: Support,
     inOutFraction: { value: number },
-    collisionTolerance: number,
+    depth: number,
 ): boolean {
-    // handle transformed decorator shape
-    if (shape.type === ShapeType.TRANSFORMED) {
-        // accumulate the transformation
-        vec3.transformQuat(_correctFraction_tempPos, shape.position, quaternion);
-        vec3.add(_correctFraction_tempPos, position, _correctFraction_tempPos);
-
-        quat.multiply(_correctFraction_tempQuat, quaternion, shape.quaternion);
-
-        // recurse with accumulated transform
-        return correctFractionForCharacterPadding(
-            characterSupport,
-            shape.shape,
-            _correctFraction_tempPos,
-            _correctFraction_tempQuat,
-            displacement,
-            scale,
-            polygon,
-            inOutFraction,
-            collisionTolerance,
-        );
+    switch (shape.type) {
+        case ShapeType.TRANSFORMED: {
+            const frame = getCorrectFractionFrame(depth);
+            setChildCorrectFractionFrame(frame, position, quaternion, scale, shape.position, shape.quaternion);
+            return correctFractionForCharacterPadding(
+                shape.shape,
+                frame.position,
+                frame.quaternion,
+                frame.scale,
+                displacement,
+                polygon,
+                inOutFraction,
+                depth + 1,
+            );
+        }
+        case ShapeType.SCALED: {
+            const frame = getCorrectFractionFrame(depth);
+            vec3.copy(frame.position, position);
+            quat.copy(frame.quaternion, quaternion);
+            vec3.multiply(frame.scale, scale, shape.scale);
+            return correctFractionForCharacterPadding(
+                shape.shape,
+                frame.position,
+                frame.quaternion,
+                frame.scale,
+                displacement,
+                polygon,
+                inOutFraction,
+                depth + 1,
+            );
+        }
+        case ShapeType.COMPOUND:
+        case ShapeType.STATIC_COMPOUND: {
+            const frame = getCorrectFractionFrame(depth);
+            let corrected = false;
+            for (let i = 0; i < shape.children.length; i++) {
+                const child = shape.children[i];
+                setChildCorrectFractionFrame(frame, position, quaternion, scale, child.position, child.quaternion);
+                if (
+                    correctFractionForCharacterPadding(
+                        child.shape,
+                        frame.position,
+                        frame.quaternion,
+                        frame.scale,
+                        displacement,
+                        polygon,
+                        inOutFraction,
+                        depth + 1,
+                    )
+                ) {
+                    corrected = true;
+                }
+            }
+            return corrected;
+        }
     }
 
-    // at the convex level, perform the GJK cast
-    setShapeSupport(characterSupport, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
+    if (!shapeDefs[shape.type].convex) return false;
 
-    // build transform matrix from position and quaternion
+    // the character's support includes its convex radius and the polygon's support adds the padding, so the cast
+    // keeps no radius of its own
+    setShapeSupport(_paddingCorrection_characterSupport, shape, SupportFunctionMode.INCLUDE_CONVEX_RADIUS, scale);
+
     const transform = mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position);
 
-    // cast the shape against the polygon
     gjkCastShape(
         _paddingCorrection_gjkResult,
         transform,
-        characterSupport,
+        _paddingCorrection_characterSupport,
         polygon,
         displacement,
-        collisionTolerance,
-        characterSupport.convexRadius + characterSupport.addRadius,
-        polygon.convexRadius + polygon.addRadius,
+        PADDING_CORRECTION_TOLERANCE,
+        0,
+        0,
         inOutFraction.value,
     );
 
@@ -1473,7 +1510,8 @@ function getFirstContactForSweep(
 
     // setup cast settings
     _characterCastSettings.collisionTolerance = character.collisionTolerance;
-    _characterCastSettings.collideWithBackfaces = character.backFaceMode === BackFaceMode.COLLIDE;
+    _characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === BackFaceMode.COLLIDE;
+    _characterCastSettings.collideWithBackfacesConvex = false;
     _characterCastSettings.collideOnlyWithActiveEdges = true;
     _characterCastSettings.useShrunkenShapeAndConvexRadius = true;
     _characterCastSettings.returnDeepestPoint = false;
@@ -1528,9 +1566,14 @@ function getFirstContactForSweep(
 
     let corrected = false;
     if (hitBody) {
-        // compute supporting face on the hit body
-        // direction: negative contact normal (pointing into the body)
+        // the supporting face against the contact normal, the direction in the hit body's space
         vec3.negate(_paddingCorrection_negativeNormal, out.contactNormal);
+        quat.conjugate(_paddingCorrection_inverseRotation, hitBody.quaternion);
+        vec3.transformQuat(
+            _paddingCorrection_negativeNormal,
+            _paddingCorrection_negativeNormal,
+            _paddingCorrection_inverseRotation,
+        );
 
         // build mat4 for hit body's world transform
         mat4.fromRotationTranslation(_paddingCorrection_mat4_transform, hitBody.quaternion, hitBody.position);
@@ -1557,15 +1600,14 @@ function getFirstContactForSweep(
             // use recursive function to handle decorator shapes and perform GJK cast
             _paddingCorrection_fractionWrapper.value = out.fraction + characterPaddingFraction;
             corrected = correctFractionForCharacterPadding(
-                _paddingCorrection_characterSupport,
                 character.shape,
                 _getContacts_shapePos,
                 character.quaternion,
-                displacement,
                 _paddingCorrection_scale,
+                displacement,
                 _paddingCorrection_polygonSupport,
                 _paddingCorrection_fractionWrapper,
-                character.collisionTolerance,
+                0,
             );
 
             if (corrected) {
@@ -3446,18 +3488,8 @@ function moveToContact(
     // if contact not found in new position, add it manually
     if (!foundContact) {
         const newContact = acquireContact(character.contacts);
-        vec3.copy(newContact.position, contact.position);
-        vec3.copy(newContact.linearVelocity, contact.linearVelocity);
-        vec3.copy(newContact.contactNormal, contact.contactNormal);
-        vec3.copy(newContact.surfaceNormal, contact.surfaceNormal);
-        newContact.distance = contact.distance;
-        newContact.fraction = contact.fraction;
-        newContact.bodyId = contact.bodyId;
-        newContact.subShapeId = contact.subShapeId;
-        newContact.motionType = contact.motionType;
+        copyCharacterContact(newContact, contact);
         newContact.hadCollision = true;
-        newContact.wasDiscarded = false;
-        newContact.canPushCharacter = contact.canPushCharacter;
     }
 
     // store active contacts

@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { Face } from '../utils/face.js';
 /** Maximum number of contact points in a manifold after reduction */
 export declare const MAX_CONTACT_POINTS = 4;
@@ -62,8 +62,8 @@ export declare function getWorldSpaceContactPointOnB(out: Vec3, manifold: Contac
  *    - Point 3 & 4: On opposite sides of P1-P2 edge (maximize area)
  * 4. Output in winding order: [P1, P3, P2, P4] to form a proper quad
  *
- * In-place reduction: selected points are moved to indices 0-3,
- * manifold.numContactPoints is updated to final count (1-4).
+ * The selected points are gathered in scratch, then copied back to indices 0-3,
+ * manifold.numContactPoints is updated to final count (2-4).
  *
  * @param manifold contactManifold with contact points to prune (modifies in-place)
  * @param penetrationAxis normalized penetration direction (from shape 1 to shape 2)
@@ -73,8 +73,9 @@ export declare function pruneContactPoints(manifold: ContactManifold, penetratio
  * Generates contact manifold from two supporting faces using polygon clipping.
  *
  * Algorithm:
- * 1. Clip face 2 (incident) against face 1 (reference)
- * 2. Project clipped points onto face 1's plane
+ * 1. Clip the face with 3+ vertices (incident) against the other face (reference), swapping the faces and
+ *    negating the penetration axis when face 2 is the one with fewer than 3 vertices
+ * 2. Project clipped points onto the reference face's plane
  * 3. Filter by max contact distance
  * 4. Fallback to original contact points if clipping produces nothing
  *
@@ -84,8 +85,8 @@ export declare function pruneContactPoints(manifold: ContactManifold, penetratio
  * @param inContactPoint1 initial contact point on shape 1 (world space)
  * @param inContactPoint2 initial contact point on shape 2 (world space)
  * @param inPenetrationAxis penetration direction (unnormalized, from shape 1 to 2, world space)
- * @param inMaxContactDistance max distance for contact filtering
- * @param inShape1Face supporting face on shape 1 (reference face, world space)
- * @param inShape2Face supporting face on shape 2 (incident face, world space)
+ * @param inMaxContactDistance max distance for contact filtering, > 0
+ * @param inShape1Face supporting face on shape 1 (world space)
+ * @param inShape2Face supporting face on shape 2 (world space)
  */
 export declare function manifoldBetweenTwoFaces(out: ContactManifold, inContactPoint1: Vec3, inContactPoint2: Vec3, inPenetrationAxis: Vec3, inMaxContactDistance: number, inShape1Face: Face, inShape2Face: Face): void;

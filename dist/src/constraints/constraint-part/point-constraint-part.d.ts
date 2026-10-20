@@ -1,4 +1,4 @@
-import type { Mat4, Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
 import type { RigidBody } from '../../body/rigid-body.js';
 /**
  * PointConstraintPart removes 3 translational degrees of freedom.
@@ -38,7 +38,7 @@ export declare function isActive(part: PointConstraintPart): boolean;
  *
  * We then invert K^-1 to get the effective mass K.
  */
-export declare function calculateConstraintProperties(part: PointConstraintPart, bodyA: RigidBody, rotationA: Mat4, r1Local: Vec3, bodyB: RigidBody, rotationB: Mat4, r2Local: Vec3): void;
+export declare function calculateConstraintProperties(part: PointConstraintPart, bodyA: RigidBody, rotationA: Mat4, r1Local: Vec3, bodyB: RigidBody, rotationB: Mat4, r2Local: Vec3, stepStamp: number): void;
 /**
  * Warm start the velocity constraint by applying cached impulses.
  * Scales the previous frame's impulses by the warm start ratio.

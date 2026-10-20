@@ -1,7 +1,8 @@
-import type { Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -201,6 +202,7 @@ function setupVelocity(constraint: PointConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _setupPointConstraintVelocity_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 }
 
@@ -239,6 +241,7 @@ function solvePosition(constraint: PointConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _solvePointConstraintPosition_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     return pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarte);

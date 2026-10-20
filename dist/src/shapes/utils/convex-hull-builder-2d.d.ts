@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 export declare enum EResult {
     Success = 0,
     MaxVerticesReached = 1

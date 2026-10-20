@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -42,7 +42,11 @@ function getTriangleIndexFromSubShapeId(subShapeId: number, nTriangles: number):
     return result.value;
 }
 
-const defaultSettings: CastRaySettings = { collideWithBackfaces: false, treatConvexAsSolid: true };
+const defaultSettings: CastRaySettings = {
+    collideWithBackfacesTriangles: false,
+    collideWithBackfacesConvex: false,
+    treatConvexAsSolid: true,
+};
 // todo: coverage for future shapes
 // const backfaceSettings: CastRaySettings = { collideWithBackfaces: true };
 
@@ -1976,5 +1980,64 @@ describe('castRay - Plane', () => {
         expect(hits.length).toBe(1);
         expect(hits[0].status).toBe(CastRayStatus.COLLIDING);
         // plane scaling affects the distance
+    });
+});
+
+describe('castRayVsShape - initial early out fraction', () => {
+    // a unit-length ray along +x against a box whose near face sits at x = faceX, so the hit fraction is faceX
+    const castAtFaceX = (faceX: number) => {
+        const collector = createAllCastRayCollector();
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            defaultSettings,
+            0, 0, 0,
+            1, 0, 0,
+            1,
+            box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
+            EMPTY_SUB_SHAPE_ID, 0,
+            faceX + 1, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    test('a hit just past the ray end, within the f32 epsilon, is kept', () => {
+        const hits = castAtFaceX(1 + 5e-8);
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBeCloseTo(1 + 5e-8, 12);
+    });
+
+    test('a hit past 1 + f32 epsilon is rejected', () => {
+        expect(castAtFaceX(1 + 5e-5).length).toBe(0);
+    });
+});
+
+describe('AllCastRayCollector.sort', () => {
+    test('orders hits closest first', () => {
+        const target = sphere.create({ radius: 0.5 });
+        const ray = createRayParams([0, 0, 0], [1, 0, 0], 100);
+        const collector = createAllCastRayCollector();
+
+        // cast against spheres far, near, middle so the hits arrive out of order
+        for (const centerX of [9, 3, 6]) {
+            // biome-ignore format: pretty
+            castRayVsShape(
+                collector, defaultSettings,
+                ray.originX, ray.originY, ray.originZ,
+                ray.directionX, ray.directionY, ray.directionZ, ray.length,
+                target, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(3);
+        collector.sort();
+        expect(collector.hits[0].fraction).toBeCloseTo(2.5 / 100, 6);
+        expect(collector.hits[1].fraction).toBeCloseTo(5.5 / 100, 6);
+        expect(collector.hits[2].fraction).toBeCloseTo(8.5 / 100, 6);
     });
 });

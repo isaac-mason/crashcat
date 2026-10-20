@@ -11,5 +11,10 @@ export type Bodies = {
     activeBodyIndices: number[];
     /** current count of active bodies */
     activeBodyCount: number;
+    /**
+     * incremented once at the start of every world step. keys the per-step memos on bodies
+     * (motionProperties.worldInverseInertiaStamp); never equals STEP_STAMP_NONE.
+     */
+    stepStamp: number;
 };
 export declare function init(): Bodies;

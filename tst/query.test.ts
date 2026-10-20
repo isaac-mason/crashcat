@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -10,6 +10,7 @@ import {
     createAllCastShapeCollector,
     createAllCollidePointCollector,
     createAllCollideShapeCollector,
+    createClosestCastShapeCollector,
     createDefaultCastRaySettings,
     createDefaultCastShapeSettings,
     createDefaultCollidePointSettings,
@@ -135,6 +136,48 @@ describe('Query API - castShape', () => {
 
         expect(collector.hits.length).toBe(0);
     });
+
+    // two slab bodies side by side: the left one's top at y = 0 over x in [-2, 0], the right one's at y = 0.3 over
+    // x in [0, 2]. a radius 0.5 sphere centred at (0, 0.4) starts 0.1 into the left body and 0.4 into the right one.
+    for (const order of ['left first', 'right first']) {
+        test(`closest collector reports the deeper of two bodies the cast starts inside (${order})`, () => {
+            const { world, layers } = createTestWorld();
+            const queryFilter = filter.create(world.settings.layers);
+
+            const slabs = [vec3.fromValues(-1, -0.5, 0), vec3.fromValues(1, -0.2, 0)];
+            if (order === 'right first') slabs.reverse();
+            for (const position of slabs) {
+                rigidBody.create(world, {
+                    shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+                    objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+                    motionType: MotionType.STATIC,
+                    position,
+                    quaternion: quat.create(),
+                });
+            }
+
+            const collector = createClosestCastShapeCollector();
+            const settings = createDefaultCastShapeSettings();
+            settings.returnDeepestPoint = true;
+            const sweepShape = sphere.create({ radius: 0.5 });
+
+            castShape(
+                world,
+                collector,
+                settings,
+                sweepShape,
+                vec3.fromValues(0, 0.4, 0),
+                quat.create(),
+                vec3.fromValues(1, 1, 1),
+                vec3.fromValues(0, -1, 0),
+                queryFilter,
+            );
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+    }
 });
 
 describe('Query API - collidePoint', () => {

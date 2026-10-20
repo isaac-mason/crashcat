@@ -1,12 +1,13 @@
-import type { Box3, Mat4 } from 'mathcat';
-import { mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import type { Mat4 } from 'math';
+import { mat4, type Quat, type Vec3, vec3 } from 'math';
+import type { Box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import type { SubShapeId } from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
-import type { Support, SupportFunctionMode } from '../collision/support';
+import type { Support, SupportFunction, SupportFunctionMode } from '../collision/support';
 import type { Face } from '../utils/face';
 import type { BoxShape } from './box';
 import type { CapsuleShape } from './capsule';
@@ -65,19 +66,6 @@ export enum ShapeType {
 }
 
 /** shape categories enum */
-export enum ShapeCategory {
-    /** Convex shapes (Sphere, Box, Capsule, ConvexHull) */
-    CONVEX = 0,
-    /** Mesh shapes (TriangleMesh) */
-    MESH = 1,
-    /** Decorator shapes that transform other shapes (Transformed, Scaled) */
-    DECORATOR = 2,
-    /** Composite shapes that contain other shapes (Compound) */
-    COMPOSITE = 3,
-    /** Shapes that don't fit into the above categories */
-    OTHER = 4,
-}
-
 /**
  * Shape type registry for discriminated unions (extensible).
  * Custom shapes can extend this via declaration merging:
@@ -126,7 +114,6 @@ export const DEFAULT_SHAPE_DENSITY = 1000; // kg/m³
 export type SurfaceNormalResult = {
     normal: Vec3;
     position: Vec3;
-    quaternion: Quat;
     scale: Vec3;
 };
 
@@ -277,12 +264,7 @@ export type CastShapeVsShapeFn = (
     scaleBZ: number,
 ) => void;
 
-type OptionalShapeDef =
-    | 'computeMassProperties'
-    | 'getInnerRadius'
-    | 'setSupport'
-    | 'getLeafShape'
-    | 'getSubShapeTransformedShape';
+type OptionalShapeDef = 'computeMassProperties' | 'convex' | 'getInnerRadius' | 'getLeafShape' | 'getSubShapeTransformedShape';
 
 export type ShapeDefOptions<S extends ShapeBase> = Omit<ShapeDef<S>, OptionalShapeDef> &
     Partial<Pick<ShapeDef<S>, OptionalShapeDef>>;
@@ -320,26 +302,18 @@ export function defineShape<S extends ShapeBase>(shapeDef: ShapeDefOptions<S>): 
 
     return {
         type: shapeDef.type,
-        category: shapeDef.category,
+        convex: shapeDef.convex,
         computeMassProperties,
         getSurfaceNormal: shapeDef.getSurfaceNormal,
         getSupportingFace: shapeDef.getSupportingFace,
+        getMaterial: shapeDef.getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
         castRay: shapeDef.castRay,
         collidePoint: shapeDef.collidePoint,
-        setSupport: shapeDef.setSupport,
         register: shapeDef.register,
     };
-}
-
-/**
- * Fill a monomorphic {@link Support} struct for `shape` (+ mode + scale).
- * Dispatches to the shape's `setSupport` hook — only convex shapes register one.
- */
-export function setShapeSupport(out: Support, shape: Shape, mode: SupportFunctionMode, scale: Vec3): void {
-    shapeDefs[shape.type].setSupport!(out, shape, mode, scale);
 }
 
 export type ComputeMassPropertiesImpl<S extends ShapeBase> = (out: MassProperties, shape: S) => void;
@@ -353,6 +327,8 @@ export type GetSupportingFaceImpl<S extends ShapeBase> = (
     subShapeId: number,
 ) => void;
 
+export type GetMaterialImpl<S extends ShapeBase> = (shape: S, subShapeId: SubShapeId) => number;
+
 export type GetInnerRadiusImpl<S extends ShapeBase> = (shape: S) => number;
 
 export type GetLeafShapeImpl<S extends ShapeBase> = (outResult: GetLeafShapeResult, shape: S, subShapeId: SubShapeId) => void;
@@ -363,13 +339,27 @@ export type GetSubShapeTransformedShapeImpl<S extends ShapeBase> = (
     subShapeId: SubShapeId,
 ) => void;
 
-export type SetSupportImpl<S extends ShapeBase> = (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
+/**
+ * What the convex narrowphase needs from a shape: the handoff that turns it into a {@link Support}.
+ *
+ * This is the only place a `Shape` crosses into the support world — gjk and epa work in terms of
+ * the evaluators in support.ts ({@link SupportFunction}), which is a different and smaller taxonomy
+ * than {@link ShapeType} (a triangle and a polygon have supports but no shape; hull, polygon and
+ * point all share one evaluator). A shape's fill installs one of those existing evaluators; it does
+ * not introduce new ones.
+ *
+ * Present iff the shape is convex — this is the marker, there is no separate flag.
+ */
+export type ConvexShapeDef<S extends ShapeBase> = {
+    /** fill a {@link Support} for this shape (+ mode + scale) */
+    setSupport: (out: Support, shape: S, mode: SupportFunctionMode, scale: Vec3) => void;
+};
 
 export type ShapeDef<S extends ShapeBase> = {
     type: ShapeType;
 
-    /** Shape category used for collision dispatch registration */
-    category: ShapeCategory;
+    /** the convex narrowphase's view of this shape; present iff the type is convex */
+    convex?: ConvexShapeDef<S>;
 
     /** get mass properties for the shape */
     computeMassProperties: ComputeMassPropertiesImpl<S>;
@@ -379,6 +369,9 @@ export type ShapeDef<S extends ShapeBase> = {
 
     /** get supporting face */
     getSupportingFace: GetSupportingFaceImpl<S>;
+
+    /** get the material id of the leaf a sub shape id names, -1 for none */
+    getMaterial: GetMaterialImpl<S>;
 
     /** get inner radius - radius of the biggest sphere that fits entirely in the shape */
     getInnerRadius: GetInnerRadiusImpl<S>;
@@ -395,21 +388,20 @@ export type ShapeDef<S extends ShapeBase> = {
     /** test if a point collides with the shape */
     collidePoint: CollidePointVsShapeFn<S>;
 
-    /**
-     * Fill a monomorphic {@link Support} struct for this shape (+ mode + scale).
-     * Only convex shapes define this; undefined for non-convex shapes.
-     * @param out the Support struct to fill
-     * @param shape the shape instance
-     * @param mode support function mode (INCLUDE/EXCLUDE_CONVEX_RADIUS)
-     * @param scale scale to apply to the shape
-     */
-    setSupport?: SetSupportImpl<S>;
-
     /** Register collision and cast handlers for this shape type */
     register(): void;
 };
 
 export const shapeDefs = {} as Record<ShapeType, ShapeDef<Shape>>;
+
+/**
+ * Fill a monomorphic {@link Support} for `shape` (+ mode + scale).
+ *
+ * Only reached through a dispatch entry that exists for convex types, so the handoff is present.
+ */
+export function setShapeSupport(out: Support, shape: Shape, mode: SupportFunctionMode, scale: Vec3): void {
+    shapeDefs[shape.type].convex!.setSupport(out, shape, mode, scale);
+}
 
 export type CollisionDispatch = {
     collideFns: Map<ShapeType, Map<ShapeType, CollideShapeVsShapeFn>>;
@@ -452,14 +444,12 @@ export function setCastShapeFn(typeA: ShapeType, typeB: ShapeType, fn: CastShape
 const _surfaceNormalResult: SurfaceNormalResult = {
     normal: vec3.create(),
     position: vec3.create(),
-    quaternion: quat.create(),
     scale: vec3.fromValues(1, 1, 1),
 };
 
 export function getShapeSurfaceNormal(out: Vec3, shape: Shape, position: Vec3, subShapeId: number): Vec3 {
     // set up result with initial transforms
     vec3.copy(_surfaceNormalResult.position, position);
-    quat.identity(_surfaceNormalResult.quaternion);
     vec3.set(_surfaceNormalResult.scale, 1, 1, 1);
 
     // compute surface normal with accumulated transforms
@@ -520,4 +510,54 @@ export function getShapeSupportingFace(
 export function getShapeInnerRadius(shape: Shape): number {
     const shapeDef = shapeDefs[shape.type];
     return shapeDef.getInnerRadius(shape);
+}
+
+/**
+ * the scale a rotated child sees: a scale in its parent's space carried into the child's space, the diagonal of
+ * rotation^T * scale * rotation. a uniform scale or an identity rotation passes through unchanged. only exact where
+ * the rotation keeps the scale's axes aligned (multiples of 90 degrees), otherwise the child would need a shear
+ * (jolt: ScaleHelpers::RotateScale behind the child's TransformScale)
+ */
+export function transformScale(out: Vec3, rotation: Quat, scaleX: number, scaleY: number, scaleZ: number): Vec3 {
+    const x = rotation[0];
+    const y = rotation[1];
+    const z = rotation[2];
+    const w = rotation[3];
+
+    // identity rotation (q or -q), within jolt's quat closeness tolerance
+    const identityDistanceSq = Math.min(x * x + y * y + z * z + (w - 1) * (w - 1), x * x + y * y + z * z + (w + 1) * (w + 1));
+
+    // uniform scale, within jolt's scale tolerance
+    const dxy = scaleY - scaleX;
+    const dyz = scaleZ - scaleY;
+    const dzx = scaleX - scaleZ;
+    const uniform = dxy * dxy + dyz * dyz + dzx * dzx <= 1.0e-8;
+
+    if (identityDistanceSq <= 1.0e-12 || uniform) {
+        out[0] = scaleX;
+        out[1] = scaleY;
+        out[2] = scaleZ;
+        return out;
+    }
+
+    // rotation matrix entries r<row><column>
+    const r00 = 1 - 2 * (y * y + z * z);
+    const r01 = 2 * (x * y - w * z);
+    const r02 = 2 * (x * z + w * y);
+    const r10 = 2 * (x * y + w * z);
+    const r11 = 1 - 2 * (x * x + z * z);
+    const r12 = 2 * (y * z - w * x);
+    const r20 = 2 * (x * z - w * y);
+    const r21 = 2 * (y * z + w * x);
+    const r22 = 1 - 2 * (x * x + y * y);
+
+    out[0] = scaleX * r00 * r00 + scaleY * r10 * r10 + scaleZ * r20 * r20;
+    out[1] = scaleX * r01 * r01 + scaleY * r11 * r11 + scaleZ * r21 * r21;
+    out[2] = scaleX * r02 * r02 + scaleY * r12 * r12 + scaleZ * r22 * r22;
+    return out;
+}
+
+/** the material id of the leaf a sub shape id names, -1 for none */
+export function getShapeMaterial(shape: Shape, subShapeId: SubShapeId): number {
+    return shapeDefs[shape.type].getMaterial(shape, subShapeId);
 }

@@ -1,6 +1,6 @@
 import { GUI } from 'lil-gui';
 import { dbvt as dbvtNs, type World } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug-renderer';
 import { createStats } from './stats';
 
 export type DebugStats = {

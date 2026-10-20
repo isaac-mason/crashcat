@@ -1,4 +1,5 @@
-import { type Box3, type Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import type { RigidBody } from '../body/rigid-body.js';
 import type { Filter } from '../filter.js';
 import type { Layers } from '../layers.js';
@@ -27,6 +28,11 @@ export declare function removeBody(broadphase: Broadphase, body: RigidBody): voi
 export declare function optimize(broadphase: Broadphase): void;
 /** updates a body's AABB in the broadphase; returns true iff the body escaped its fat leaf AABB */
 export declare function updateBody(broadphase: Broadphase, body: RigidBody): boolean;
+/**
+ * publish a body's current world aabb to its broadphase leaf, so queries and pair discovery see it.
+ * the step calls this once per body per step, from the island pass.
+ */
+export declare function notifyBodyBoundsChanged(world: World, body: RigidBody): void;
 /** removes and re-adds a body in the broadphase when its layer changes */
 export declare function reinsertBody(broadphase: Broadphase, body: RigidBody, layers: Layers): void;
 /** finds bodies with AABBs that intersect the given ray */

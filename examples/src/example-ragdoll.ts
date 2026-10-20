@@ -1,5 +1,5 @@
-import type { Vec3, Mat3 } from 'mathcat';
-import { quat, vec3, mat3, mat4 } from 'mathcat';
+import type { Vec3, Mat3 } from 'math';
+import { quat, vec3, mat3, mat4 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { RigidBody, Listener } from 'crashcat';
@@ -25,7 +25,7 @@ import {
     motionProperties,
     registerAll,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* ragdoll configuration */

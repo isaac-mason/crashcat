@@ -1,4 +1,4 @@
-import { mat4, quat, vec3 } from 'mathcat';
+import { mat4, quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { DOF_ALL } from '../../src/body/dof';
 import * as motionProperties from '../../src/body/motion-properties';
@@ -224,5 +224,23 @@ describe('getInverseInertiaForRotation', () => {
         expect(out[10]).toBeCloseTo(expected22, 10);
         expect(out[2]).toBeCloseTo(expected02, 10);
         expect(out[8]).toBeCloseTo(expected02, 10); // symmetric
+    });
+});
+
+describe('moveKinematic', () => {
+    it('should rotate the short way round for either sign of the delta quaternion', () => {
+        const deltaTime = 1 / 60;
+        const angle = (170 * Math.PI) / 180;
+        const target = quat.setAxisAngle(quat.create(), vec3.fromValues(0, 1, 0), angle);
+        const negatedTarget = quat.fromValues(-target[0], -target[1], -target[2], -target[3]);
+
+        for (const deltaRotation of [target, negatedTarget]) {
+            const mp = motionProperties.create();
+            motionProperties.moveKinematic(mp, vec3.create(), deltaRotation, deltaTime);
+
+            expect(mp.angularVelocity[0]).toBeCloseTo(0, 4);
+            expect(Math.abs(mp.angularVelocity[1] - angle / deltaTime)).toBeLessThan(1e-4);
+            expect(mp.angularVelocity[2]).toBeCloseTo(0, 4);
+        }
     });
 });

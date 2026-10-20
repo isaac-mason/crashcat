@@ -1,4 +1,5 @@
-import { type Box3, box3, type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { computeShrunkHullPoints, DEFAULT_CONVEX_RADIUS, setHullSupport } from '../collision/support';
@@ -9,7 +10,6 @@ import * as convex from './convex';
 import {
     DEFAULT_SHAPE_DENSITY,
     defineShape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -142,6 +142,17 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
         initResult.result !== convexHullBuilder.Result.MaxVerticesReached
     ) {
         throw new Error(`Convex hull build failed: ${initResult.error}`);
+    }
+
+    // check the consistency of the resulting hull if we fully built it
+    if (initResult.result === convexHullBuilder.Result.Success) {
+        const { maxError, maxErrorPositionIdx, coplanarDistance } = convexHullBuilder.determineMaxError(builder);
+        // coplanar distance could be bigger than the allowed tolerance if the points are far apart
+        if (maxError > 4 * Math.max(coplanarDistance, hullTolerance)) {
+            throw new Error(
+                `Hull building failed, point ${maxErrorPositionIdx} had an error of ${maxError} (relative to tolerance: ${maxError / hullTolerance})`,
+            );
+        }
     }
 
     // get center of mass and volume
@@ -433,16 +444,16 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
             );
 
             const detN = mat4.determinant(n);
-            if (Math.abs(detN) < 1e-12) {
-                // planes are coplanar/degenerate, can't offset safely
+            if (detN === 0) {
+                // n is not invertible: no way to move the vertex back, so no convex radius
                 finalConvexRadius = 0;
                 break;
             }
 
             // calculate shift direction: adjoint(n) × offsetMask / det(n)
+            // the adjoint's w row is (0, 0, 0, det(n)), so transformMat4's divide by w is the divide by det(n)
             mat4.adjoint(_normalMatrixAdjoint, n);
             vec3.transformMat4(_vertexShiftDirection, offsetMask, _normalMatrixAdjoint);
-            vec3.scale(_vertexShiftDirection, _vertexShiftDirection, 1 / detN);
             const offset = vec3.length(_vertexShiftDirection);
 
             // max radius: error = r × (offset - 1)  =>  r = error / (offset - 1)
@@ -527,19 +538,21 @@ export function create(o: ConvexHullShapeSettings): ConvexHullShape {
 export const def = /* @__PURE__ */ (() =>
     defineShape<ConvexHullShape>({
         type: ShapeType.CONVEX_HULL,
-        category: ShapeCategory.CONVEX,
+        convex: { setSupport: setHullSupport },
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial: convex.getConvexMaterial,
         getInnerRadius,
         castRay: convex.castRayVsConvex,
         collidePoint: convex.collidePointVsConvex,
-        setSupport: setHullSupport,
         register: () => {
+            // convex hull vs all convex shapes
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.collideConvexVsConvex);
                     setCollideShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.collideConvexVsConvex);
+
                     setCastShapeFn(ShapeType.CONVEX_HULL, shapeDef.type, convex.castConvexVsConvex);
                     setCastShapeFn(shapeDef.type, ShapeType.CONVEX_HULL, convex.castConvexVsConvex);
                 }
@@ -665,11 +678,12 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 }
 
 function getInnerRadius(shape: ConvexHullShape): number {
-    // calculate the inner radius by getting the minimum distance from the shape origin to the planes of the hull
+    // calculate the inner radius by getting the minimum distance from the center of mass to the planes of the hull
+    // (the planes are in input space, not relative to the center of mass)
+    const centerOfMass = shape.centerOfMass;
     let innerRadius = Number.MAX_VALUE;
     for (const plane of shape.planes) {
-        // distance from shape origin (0,0,0) to plane
-        innerRadius = Math.min(innerRadius, -plane.constant);
+        innerRadius = Math.min(innerRadius, -(vec3.dot(plane.normal, centerOfMass) + plane.constant));
     }
     // clamp against zero for numerical stability (flat convex hulls may have round-off issues)
     return Math.max(0.0, innerRadius);

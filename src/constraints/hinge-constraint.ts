@@ -1,8 +1,10 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { RigidBody } from '../body/rigid-body';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -150,9 +152,9 @@ export type HingeConstraintSettings = {
     space?: ConstraintSpace;
 
     // limits
-    /** minimum angle limit in radians (default: -PI) */
+    /** minimum angle limit in radians, in [-PI, 0] (default: -PI) */
     limitsMin?: number;
-    /** maximum angle limit in radians (default: PI) */
+    /** maximum angle limit in radians, in [0, PI] (default: PI) */
     limitsMax?: number;
     /** spring settings for soft limits */
     limitsSpringSettings?: SpringSettings;
@@ -173,16 +175,8 @@ export type HingeConstraintSettings = {
 /** Calculate the inverse initial orientation for angle tracking */
 function getInvInitialOrientationXZ(normalAxis1: Vec3, hingeAxis1: Vec3, normalAxis2: Vec3, hingeAxis2: Vec3): Quat {
     // if axes are identical, return identity
-    const eps = 1e-6;
-    if (
-        Math.abs(normalAxis1[0] - normalAxis2[0]) < eps &&
-        Math.abs(normalAxis1[1] - normalAxis2[1]) < eps &&
-        Math.abs(normalAxis1[2] - normalAxis2[2]) < eps &&
-        Math.abs(hingeAxis1[0] - hingeAxis2[0]) < eps &&
-        Math.abs(hingeAxis1[1] - hingeAxis2[1]) < eps &&
-        Math.abs(hingeAxis1[2] - hingeAxis2[2]) < eps
-    ) {
-        return quat.create(); // identity
+    if (vec3.exactEquals(normalAxis1, normalAxis2) && vec3.exactEquals(hingeAxis1, hingeAxis2)) {
+        return quat.create();
     }
 
     // build 3x3 rotation matrices from axes
@@ -192,7 +186,7 @@ function getInvInitialOrientationXZ(normalAxis1: Vec3, hingeAxis1: Vec3, normalA
     const y2 = vec3.create();
     vec3.cross(y2, hingeAxis2, normalAxis2);
 
-    // create rotation matrices (column-major in mathcat)
+    // create rotation matrices (column-major in math)
     const mat1 = mat3.fromValues(
         normalAxis1[0],
         normalAxis1[1],
@@ -294,6 +288,9 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
     vec3.normalize(normalAxis1, settings.normalAxisA);
     vec3.normalize(normalAxis2, settings.normalAxisB);
 
+    // inverse of the initial rotation from body 1 to body 2 in body 1 space, from the axes as given
+    const r0 = getInvInitialOrientationXZ(normalAxis1, hingeAxis1, normalAxis2, hingeAxis2);
+
     // convert to local space if needed
     const space = settings.space ?? ConstraintSpace.WORLD;
 
@@ -317,9 +314,6 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
             vec3.transformQuat(constraint.localSpaceNormalAxis1, normalAxis1, invQuatA);
             vec3.transformQuat(constraint.localSpaceNormalAxis2, normalAxis2, invQuatB);
 
-            // calculate inverse initial orientation from world space axes
-            const r0 = getInvInitialOrientationXZ(normalAxis1, hingeAxis1, normalAxis2, hingeAxis2);
-
             // transform to body-relative space: q20^-1 * r0 * q10
             // this is needed because at runtime we compute: diff = q2 * invInitialOrientation * q1^-1
             // with body-relative invInitialOrientation, when bodies are at their initial orientations (q1=q10, q2=q20):
@@ -336,37 +330,23 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
         vec3.copy(constraint.localSpaceNormalAxis1, normalAxis1);
         vec3.copy(constraint.localSpaceNormalAxis2, normalAxis2);
 
-        // need to compute world space axes for invInitialOrientation
-        if (bodyA && !bodyA._pooled && bodyB && !bodyB._pooled) {
-            const worldNormal1 = vec3.create();
-            const worldHinge1 = vec3.create();
-            const worldNormal2 = vec3.create();
-            const worldHinge2 = vec3.create();
-            vec3.transformQuat(worldNormal1, normalAxis1, bodyA.quaternion);
-            vec3.transformQuat(worldHinge1, hingeAxis1, bodyA.quaternion);
-            vec3.transformQuat(worldNormal2, normalAxis2, bodyB.quaternion);
-            vec3.transformQuat(worldHinge2, hingeAxis2, bodyB.quaternion);
-
-            constraint.invInitialOrientation = getInvInitialOrientationXZ(worldNormal1, worldHinge1, worldNormal2, worldHinge2);
-        }
+        // the axes are already relative to the bodies
+        quat.copy(constraint.invInitialOrientation, r0);
     }
 
     // set limits
     const limitsMin = settings.limitsMin ?? -Math.PI;
     const limitsMax = settings.limitsMax ?? Math.PI;
-
-    if (limitsMin <= -Math.PI && limitsMax >= Math.PI) {
-        constraint.hasLimits = false;
-        constraint.limitsMin = -Math.PI;
-        constraint.limitsMax = Math.PI;
-    } else {
-        constraint.hasLimits = true;
-        constraint.limitsMin = Math.max(limitsMin, -Math.PI);
-        constraint.limitsMax = Math.min(limitsMax, Math.PI);
-    }
+    assert(
+        limitsMin !== limitsMax || (settings.limitsSpringSettings?.frequencyOrStiffness ?? 0) > 0,
+        'equal hinge limits without a spring, use a fixed constraint',
+    );
+    setLimits(constraint, limitsMin, limitsMax);
 
     if (settings.limitsSpringSettings) {
         springSettings.copy(constraint.limitsSpringSettings, settings.limitsSpringSettings);
+    } else {
+        springSettings.reset(constraint.limitsSpringSettings);
     }
 
     // set motor defaults
@@ -430,22 +410,20 @@ export function get(world: World, id: ConstraintId): HingeConstraint | undefined
 /**
  * Set hinge constraint limits.
  * @param constraint the constraint to modify
- * @param min minimum angle in radians
- * @param max maximum angle in radians
+ * @param min minimum angle in radians, in [-PI, 0]
+ * @param max maximum angle in radians, in [0, PI]
  */
 export function setLimits(constraint: HingeConstraint, min: number, max: number): void {
-    constraint.limitsMin = Math.max(min, -Math.PI);
-    constraint.limitsMax = Math.min(max, Math.PI);
-    constraint.hasLimits = constraint.limitsMin > -Math.PI || constraint.limitsMax < Math.PI;
-
-    // clamp target angle to new limits
-    if (constraint.hasLimits) {
-        constraint.targetAngle = Math.max(constraint.limitsMin, Math.min(constraint.limitsMax, constraint.targetAngle));
-    }
+    assert(min <= 0 && min >= -Math.PI, 'hinge min limit must be in [-pi, 0]');
+    assert(max >= 0 && max <= Math.PI, 'hinge max limit must be in [0, pi]');
+    constraint.limitsMin = min;
+    constraint.limitsMax = max;
+    constraint.hasLimits = min > -Math.PI || max < Math.PI;
 }
 
 /** Set motor state for hinge constraint. */
 export function setMotorState(constraint: HingeConstraint, state: MotorState): void {
+    assert(state === MotorState.OFF || motorSettings.isValid(constraint.motorSettings), 'invalid motor settings');
     constraint.motorState = state;
 }
 
@@ -593,16 +571,32 @@ function calculateMotorConstraintProperties(
             break;
 
         case MotorState.POSITION:
-            if (constraint.motorSettings.springSettings.frequencyOrStiffness > 0) {
-                const error = centerAngleAroundZero(constraint.theta - constraint.targetAngle);
-                angleConstraintPart.calculateConstraintPropertiesWithSettings(
+            if (springSettings.hasStiffness(constraint.motorSettings.springSettings)) {
+                angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                     constraint.motorConstraintPart,
                     deltaTime,
                     bodyA,
                     bodyB,
                     constraint.worldSpaceHingeAxis1,
                     0,
-                    error,
+                    centerAngleAroundZero(constraint.theta - constraint.targetAngle),
+                    constraint.motorSettings.springSettings,
+                );
+            } else {
+                angleConstraintPart.deactivate(constraint.motorConstraintPart);
+            }
+            break;
+
+        case MotorState.POSITION_AND_VELOCITY:
+            if (springSettings.hasStiffnessOrDamping(constraint.motorSettings.springSettings)) {
+                angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                    constraint.motorConstraintPart,
+                    deltaTime,
+                    bodyA,
+                    bodyB,
+                    constraint.worldSpaceHingeAxis1,
+                    -constraint.targetAngularVelocity,
+                    centerAngleAroundZero(constraint.theta - constraint.targetAngle),
                     constraint.motorSettings.springSettings,
                 );
             } else {
@@ -635,6 +629,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // setup rotation constraint (keeps hinge axes aligned)
@@ -644,6 +639,7 @@ function setupVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        bodies.stepStamp,
     );
 
     // calculate current angle
@@ -696,7 +692,8 @@ function solveVelocity(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
                 break;
             }
             case MotorState.VELOCITY:
-            case MotorState.POSITION: {
+            case MotorState.POSITION:
+            case MotorState.POSITION_AND_VELOCITY: {
                 motor = angleConstraintPart.solveVelocityConstraint(
                     constraint.motorConstraintPart,
                     bodyA,
@@ -765,6 +762,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
@@ -782,6 +780,7 @@ function solvePosition(constraint: HingeConstraint, bodies: Bodies, deltaTime: n
         bodyB,
         _hingeConstraint_worldHingeAxis1,
         _hingeConstraint_worldHingeAxis2,
+        STEP_STAMP_NONE,
     );
 
     const rot = hingeRotationConstraintPart.solvePositionConstraint(

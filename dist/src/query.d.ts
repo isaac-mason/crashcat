@@ -1,4 +1,4 @@
-import { type Quat, type Vec3 } from 'mathcat';
+import { type Quat, type Vec3 } from 'math';
 import type { CastRayCollector, CastRaySettings, CollidePointCollector, CollidePointSettings } from './collision/narrowphase.js';
 import { type CastShapeCollector, type CastShapeSettings, type CollideShapeCollector, type CollideShapeSettings } from './collision/narrowphase.js';
 import type { Filter } from './filter.js';

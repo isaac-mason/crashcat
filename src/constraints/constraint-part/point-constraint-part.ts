@@ -1,5 +1,5 @@
-import type { Mat4, Vec3 } from 'mathcat';
-import { mat4, vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
+import { mat4, vec3 } from 'math';
 import * as motionProperties from '../../body/motion-properties';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
@@ -82,6 +82,7 @@ export function calculateConstraintProperties(
     bodyB: RigidBody,
     rotationB: Mat4,
     r2Local: Vec3,
+    stepStamp: number,
 ): void {
     // transform local space moment arms to world space
     mat4.multiply3x3Vec(part.r1, rotationA, r1Local);
@@ -99,8 +100,7 @@ export function calculateConstraintProperties(
         summedInvMass += mp1.invMass;
 
         // get inverse inertia in world space
-        const invInertia1 = _calc_invInertia1;
-        motionProperties.getInverseInertiaForRotation(invInertia1, mp1, rotationA);
+        const invInertia1 = motionProperties.getWorldInverseInertia(_calc_invInertia1, mp1, bodyA.quaternion, stepStamp);
 
         // create [r1]× cross product matrix
         const r1Cross = _calc_r1Cross;
@@ -130,8 +130,7 @@ export function calculateConstraintProperties(
         summedInvMass += mp2.invMass;
 
         // get inverse inertia in world space
-        const invInertia2 = _calc_invInertia2;
-        motionProperties.getInverseInertiaForRotation(invInertia2, mp2, rotationB);
+        const invInertia2 = motionProperties.getWorldInverseInertia(_calc_invInertia2, mp2, bodyB.quaternion, stepStamp);
 
         // create [r2]× cross product matrix
         const r2Cross = _calc_r2Cross;
@@ -243,8 +242,8 @@ export function solveVelocityConstraint(part: PointConstraintPart, bodyA: RigidB
 }
 
 // temp variables for apply velocity step
-const _applyVel_angularImpulseA = /* @__PURE__ */ vec3.create();
-const _applyVel_angularImpulseB = /* @__PURE__ */ vec3.create();
+const _applyVel_linearStep = /* @__PURE__ */ vec3.create();
+const _applyVel_angularStep = /* @__PURE__ */ vec3.create();
 
 /**
  * Apply an impulse to both bodies.
@@ -262,26 +261,26 @@ function applyVelocityStep(part: PointConstraintPart, bodyA: RigidBody, bodyB: R
     if (bodyA.motionType === MotionType.DYNAMIC) {
         const mp1 = bodyA.motionProperties;
 
-        // linear: v -= λ * invMass
-        vec3.scaleAndAdd(mp1.linearVelocity, mp1.linearVelocity, lambda, -mp1.invMass);
+        // linear: v -= λ * invMass (locked translation axes stay zero)
+        vec3.scale(_applyVel_linearStep, lambda, mp1.invMass);
+        motionProperties.subLinearVelocityStep(mp1, _applyVel_linearStep);
 
         // angular: w -= I^-1 * [r1]× * λ (3x3 only)
-        const angularImpulse = _applyVel_angularImpulseA;
-        mat4.multiply3x3Vec(angularImpulse, part.invI1_r1X, lambda);
-        vec3.subtract(mp1.angularVelocity, mp1.angularVelocity, angularImpulse);
+        mat4.multiply3x3Vec(_applyVel_angularStep, part.invI1_r1X, lambda);
+        motionProperties.subAngularVelocityStep(mp1, _applyVel_angularStep);
     }
 
     // body B: add impulse
     if (bodyB.motionType === MotionType.DYNAMIC) {
         const mp2 = bodyB.motionProperties;
 
-        // linear: v += λ * invMass
-        vec3.scaleAndAdd(mp2.linearVelocity, mp2.linearVelocity, lambda, mp2.invMass);
+        // linear: v += λ * invMass (locked translation axes stay zero)
+        vec3.scale(_applyVel_linearStep, lambda, mp2.invMass);
+        motionProperties.addLinearVelocityStep(mp2, _applyVel_linearStep);
 
         // angular: w += I^-1 * [r2]× * λ (3x3 only)
-        const angularImpulse = _applyVel_angularImpulseB;
-        mat4.multiply3x3Vec(angularImpulse, part.invI2_r2X, lambda);
-        vec3.add(mp2.angularVelocity, mp2.angularVelocity, angularImpulse);
+        mat4.multiply3x3Vec(_applyVel_angularStep, part.invI2_r2X, lambda);
+        motionProperties.addAngularVelocityStep(mp2, _applyVel_angularStep);
     }
 
     return true;

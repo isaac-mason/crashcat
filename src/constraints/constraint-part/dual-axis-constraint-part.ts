@@ -1,9 +1,9 @@
-import type { Mat2, Mat4, Vec2, Vec3 } from 'mathcat';
-import { mat2, mat4, vec2, vec3 } from 'mathcat';
+import type { Mat2, Vec2, Vec3 } from 'math';
+import { mat2, mat4, vec2, vec3 } from 'math';
 import {
     addAngularVelocityStep,
     addLinearVelocityStep,
-    getInverseInertiaForRotation,
+    getWorldInverseInertia,
     subAngularVelocityStep,
     subLinearVelocityStep,
 } from '../../body/motion-properties';
@@ -96,8 +96,6 @@ export function isActive(part: DualAxisConstraintPart): boolean {
 
 const _calc_invEffectiveMass = /* @__PURE__ */ mat2.create();
 const _calc_invI = /* @__PURE__ */ mat4.create();
-const _calc_crossN1 = /* @__PURE__ */ vec3.create();
-const _calc_crossN2 = /* @__PURE__ */ vec3.create();
 const _calc_invI_crossN1 = /* @__PURE__ */ vec3.create();
 const _calc_invI_crossN2 = /* @__PURE__ */ vec3.create();
 
@@ -118,14 +116,20 @@ const _calc_invI_crossN2 = /* @__PURE__ */ vec3.create();
 export function calculateConstraintProperties(
     part: DualAxisConstraintPart,
     bodyA: RigidBody,
-    rotationA: Mat4,
     r1PlusU: Vec3,
     bodyB: RigidBody,
-    rotationB: Mat4,
     r2: Vec3,
     n1: Vec3,
     n2: Vec3,
+    stepStamp: number,
 ): void {
+    // the cross products are needed for kinematic bodies too (their angular velocity enters the jacobian),
+    // the inverse inertia terms only for dynamic ones
+    vec3.cross(part.r1PlusUxN1, r1PlusU, n1);
+    vec3.cross(part.r1PlusUxN2, r1PlusU, n2);
+    vec3.cross(part.r2xN1, r2, n1);
+    vec3.cross(part.r2xN2, r2, n2);
+
     // initialize inverse effective mass to zero
     mat2.set(_calc_invEffectiveMass, 0, 0, 0, 0);
 
@@ -133,18 +137,12 @@ export function calculateConstraintProperties(
     if (bodyA.motionType === MotionType.DYNAMIC) {
         const mpA = bodyA.motionProperties;
 
-        // calculate cross products: (r1 + u) × n
-        vec3.cross(_calc_crossN1, r1PlusU, n1);
-        vec3.cross(_calc_crossN2, r1PlusU, n2);
-        vec3.copy(part.r1PlusUxN1, _calc_crossN1);
-        vec3.copy(part.r1PlusUxN2, _calc_crossN2);
-
         // get inverse inertia in world space
-        getInverseInertiaForRotation(_calc_invI, mpA, rotationA);
+        const invIA = getWorldInverseInertia(_calc_invI, mpA, bodyA.quaternion, stepStamp);
 
         // calculate I^-1 × (r × n) (3x3 only)
-        mat4.multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-        mat4.multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+        mat4.multiply3x3Vec(_calc_invI_crossN1, invIA, part.r1PlusUxN1);
+        mat4.multiply3x3Vec(_calc_invI_crossN2, invIA, part.r1PlusUxN2);
         vec3.copy(part.invI1_r1PlusUxN1, _calc_invI_crossN1);
         vec3.copy(part.invI1_r1PlusUxN2, _calc_invI_crossN2);
 
@@ -154,36 +152,30 @@ export function calculateConstraintProperties(
         // inv_effective_mass(1,0) += (r1+u)×n2 · I1^-1 × (r1+u)×n1
         // inv_effective_mass(0,1) += (r1+u)×n1 · I1^-1 × (r1+u)×n2
         // inv_effective_mass(1,1) += invMass + (r1+u)×n2 · I1^-1 × (r1+u)×n2
-        _calc_invEffectiveMass[0] += mpA.invMass + vec3.dot(_calc_crossN1, _calc_invI_crossN1); // m00
-        _calc_invEffectiveMass[1] += vec3.dot(_calc_crossN2, _calc_invI_crossN1); // m10
-        _calc_invEffectiveMass[2] += vec3.dot(_calc_crossN1, _calc_invI_crossN2); // m01
-        _calc_invEffectiveMass[3] += mpA.invMass + vec3.dot(_calc_crossN2, _calc_invI_crossN2); // m11
+        _calc_invEffectiveMass[0] += mpA.invMass + vec3.dot(part.r1PlusUxN1, _calc_invI_crossN1); // m00
+        _calc_invEffectiveMass[1] += vec3.dot(part.r1PlusUxN2, _calc_invI_crossN1); // m10
+        _calc_invEffectiveMass[2] += vec3.dot(part.r1PlusUxN1, _calc_invI_crossN2); // m01
+        _calc_invEffectiveMass[3] += mpA.invMass + vec3.dot(part.r1PlusUxN2, _calc_invI_crossN2); // m11
     }
 
     // calculate contributions from body b
     if (bodyB.motionType === MotionType.DYNAMIC) {
         const mpB = bodyB.motionProperties;
 
-        // calculate cross products: r2 × n
-        vec3.cross(_calc_crossN1, r2, n1);
-        vec3.cross(_calc_crossN2, r2, n2);
-        vec3.copy(part.r2xN1, _calc_crossN1);
-        vec3.copy(part.r2xN2, _calc_crossN2);
-
         // get inverse inertia in world space
-        getInverseInertiaForRotation(_calc_invI, mpB, rotationB);
+        const invIB = getWorldInverseInertia(_calc_invI, mpB, bodyB.quaternion, stepStamp);
 
         // calculate I^-1 × (r × n) (3x3 only)
-        mat4.multiply3x3Vec(_calc_invI_crossN1, _calc_invI, _calc_crossN1);
-        mat4.multiply3x3Vec(_calc_invI_crossN2, _calc_invI, _calc_crossN2);
+        mat4.multiply3x3Vec(_calc_invI_crossN1, invIB, part.r2xN1);
+        mat4.multiply3x3Vec(_calc_invI_crossN2, invIB, part.r2xN2);
         vec3.copy(part.invI2_r2xN1, _calc_invI_crossN1);
         vec3.copy(part.invI2_r2xN2, _calc_invI_crossN2);
 
         // add to inverse effective mass (column-major order: [m00, m10, m01, m11])
-        _calc_invEffectiveMass[0] += mpB.invMass + vec3.dot(_calc_crossN1, _calc_invI_crossN1); // m00
-        _calc_invEffectiveMass[1] += vec3.dot(_calc_crossN2, _calc_invI_crossN1); // m10
-        _calc_invEffectiveMass[2] += vec3.dot(_calc_crossN1, _calc_invI_crossN2); // m01
-        _calc_invEffectiveMass[3] += mpB.invMass + vec3.dot(_calc_crossN2, _calc_invI_crossN2); // m11
+        _calc_invEffectiveMass[0] += mpB.invMass + vec3.dot(part.r2xN1, _calc_invI_crossN1); // m00
+        _calc_invEffectiveMass[1] += vec3.dot(part.r2xN2, _calc_invI_crossN1); // m10
+        _calc_invEffectiveMass[2] += vec3.dot(part.r2xN1, _calc_invI_crossN2); // m01
+        _calc_invEffectiveMass[3] += mpB.invMass + vec3.dot(part.r2xN2, _calc_invI_crossN2); // m11
     }
 
     // invert to get effective mass

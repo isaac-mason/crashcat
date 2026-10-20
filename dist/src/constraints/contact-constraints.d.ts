@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { Bodies } from '../body/bodies.js';
 import * as body from '../body/rigid-body.js';
 import * as contacts from '../contacts.js';
@@ -79,8 +79,10 @@ export type ContactConstraint = {
     invInertiaScaleB: number;
     /** index of the contact in the global contact array, used to look up contact for writing back solved impulses */
     contactIndex: number;
-    /** sort key for deterministic ordering */
-    sortKey: number;
+    /** high 32 bits of the 64 bit sort key for deterministic ordering, see {@link computeContactSortKey} */
+    sortKeyHigh: number;
+    /** low 32 bits of the 64 bit sort key */
+    sortKeyLow: number;
 };
 /**
  * A single contact point with non-penetration constraint data.
@@ -156,36 +158,47 @@ export declare function createContactSettings(): ContactSettings;
 /** copy contact settings properties from a source object */
 export declare function copyContactSettings(out: ContactSettings, source: ContactSettings): ContactSettings;
 /**
- * add a contact constraint from a new manifold
+ * add a contact constraint from a new manifold.
+ * stepStamp keys the per-step world inverse inertia memo (bodies.stepStamp).
  */
-export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, pairs: Pairs, pairRecordIndex: number, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number): boolean;
+export declare function addContactConstraint(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, pairs: Pairs, pairRecordIndex: number, bodyA: body.RigidBody, bodyB: body.RigidBody, contactManifold: ContactManifold, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number, stepStamp: number): boolean;
+/**
+ * add a contact constraint for a contact whose body pair hit the body-pair cache: the previous
+ * step's cached manifold is carried forward verbatim and its body-local points and lambdas feed
+ * constraint setup directly. no narrowphase, no world-to-local round trip, no point matching. a
+ * ContactManifold is only reconstructed when a listener wants onContactPersisted.
+ * jolt: ContactConstraintManager::GetContactsFromCache.
+ *
+ * bodyA / bodyB must be in the contact's stored (id-sorted) order.
+ */
+export declare function addContactConstraintFromCache(contactConstraints: ContactConstraints, contactsState: contacts.Contacts, bodyA: body.RigidBody, bodyB: body.RigidBody, contact: contacts.Contact, settings: WorldSettings, contactListener: Listener | undefined, deltaTime: number, stepStamp: number): boolean;
 /**
  * apply warm start impulses from previous frame to give solver a good initial guess.
  * significantly improves convergence speed (~3x faster).
  *
- * uses cached velocity locals to avoid repeated body property access.
- * velocities are loaded once per constraint, all contact point warm starts operate on locals,
- * then velocities are written back with DOF masking applied once.
+ * velocities are loaded once per constraint into twelve LOCALS, every warm start accumulates into
+ * those, then they are written back with DOF masking applied once. Locals rather than shared `Vec3`
+ * scratch because a buffer the whole module can see cannot live in registers — that is worth ~1.75x
+ * here, and it is why each part hands back its impulse (`warmStartLambda`) instead of mutating four
+ * buffers for us.
  *
  * @param contactConstraints contact constraint state
  * @param warmStartRatio scale factor for warm start impulses (usually 1.0)
- *
- * @optimize
  */
 export declare function warmStartVelocityConstraints(contactConstraints: ContactConstraints, bodies: Bodies, warmStartRatio: number): void;
 /**
  * solve velocity constraints for a specific island. only processes constraints at the given indices.
  *
- * uses cached velocity locals to avoid repeated body property access during the solve loop.
- * for each constraint: velocities are loaded once, all contact point solves operate on locals,
- * then velocities are written back with DOF masking applied once.
+ * for each constraint: velocities are loaded once into twelve LOCALS, every part solve reads and
+ * accumulates into those, then they are written back with DOF masking applied once. The parts hand
+ * back numbers — `totalLambdaFor` turns a jacobian-velocity product into an impulse, `deltaLambdaFor`
+ * commits it — and this loop owns the velocity arithmetic, so nothing has to mutate a shared buffer.
+ * A buffer the whole module can see cannot live in registers; that is worth ~1.75x on this loop.
  *
  * @param contactConstraints contact constraint state
  * @param bodies body array
  * @param constraintIndices indices of constraints to solve (from island)
  * @returns true if any impulse was applied (not yet converged)
- *
- * @optimize
  */
 export declare function solveVelocityConstraintsForIsland(contactConstraints: ContactConstraints, bodies: Bodies, constraintIndices: number[]): boolean;
 /**
@@ -206,9 +219,14 @@ export declare function storeAppliedImpulses(contactConstraints: ContactConstrai
  * @param maxPenetrationDistance maximum distance to correct in a single iteration
  * @returns true if any impulses were applied
  *
- * @optimize
  */
 export declare function solvePositionConstraintsForIsland(contactConstraints: ContactConstraints, bodies: Bodies, constraintIndices: number[], penetrationSlop: number, baumgarteFactor: number, maxPenetrationDistance: number): boolean;
+/**
+ * the contact's sort key: the 64 bit fnv-1a hash of body id a, sub shape id a, body id b, sub shape id b, each id
+ * as its little endian bytes (a body id as 8: index then sequence), stored as two u32 halves
+ * (jolt: SubShapeIDPair::GetHash, over 4 byte body ids)
+ */
+export declare function computeContactSortKey(out: Pick<ContactConstraint, 'sortKeyHigh' | 'sortKeyLow'>, bodyIdA: number, subShapeIdA: number, bodyIdB: number, subShapeIdB: number): void;
 /**
  * Sort contact constraint indices for deterministic solving.
  * Sorts by:

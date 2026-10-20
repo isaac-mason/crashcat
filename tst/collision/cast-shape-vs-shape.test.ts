@@ -1,19 +1,27 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { quat, vec3 } from 'math';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+    AnyCastShapeCollector,
     box,
+    type CastShapeCollector,
+    type CastShapeHit,
     type CastShapeSettings,
     CastShapeStatus,
     capsule,
+    castConvexVsConvex,
     castShapeVsShape,
     compound,
     createAllCastShapeCollector,
     createClosestCastShapeCollector,
     createDefaultCastShapeSettings,
+    cylinder,
     EMPTY_SUB_SHAPE_ID,
     plane,
+    reversedCastShapeVsShape,
+    type Shape,
     sphere,
+    staticCompound,
     triangleMesh,
 } from '../../src';
 
@@ -1061,7 +1069,7 @@ describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => 
 
         // Test hitting from backface side with backface culling enabled
         const settingsIgnoreBackfaces = createDefaultCastShapeSettings();
-        settingsIgnoreBackfaces.collideWithBackfaces = false;
+        settingsIgnoreBackfaces.collideWithBackfacesTriangles = false;
         const collectorIgnore = createAllCastShapeCollector();
 
         // biome-ignore format: pretty
@@ -1085,7 +1093,7 @@ describe('castShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () => 
 
         // Test with backface collision enabled
         const settingsCollideBackfaces = createDefaultCastShapeSettings();
-        settingsCollideBackfaces.collideWithBackfaces = true;
+        settingsCollideBackfaces.collideWithBackfacesTriangles = true;
         const collectorCollide = createAllCastShapeCollector();
 
         // biome-ignore format: pretty
@@ -1686,7 +1694,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
     const sphereA = sphere.create({ radius: 0.5 });
 
     describe('Backface Culling', () => {
-        it('should NOT collide with back-facing triangle when collideWithBackfaces is false', () => {
+        it('should NOT collide with back-facing triangle when collideWithBackfacesTriangles is false', () => {
             const collector = createAllCastShapeCollector();
 
             // Create a single triangle in XY plane at z=0, facing +Z direction
@@ -1733,7 +1741,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
             expect(hits.length).toBe(0); // Should NOT collide (backface ignored)
         });
 
-        it('should collide with front-facing triangle when collideWithBackfaces is false', () => {
+        it('should collide with front-facing triangle when collideWithBackfacesTriangles is false', () => {
             const collector = createAllCastShapeCollector();
 
             // Same triangle
@@ -1771,7 +1779,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
             expect(hits[0].status).toBe(CastShapeStatus.COLLIDING);
         });
 
-        it('should collide with back-facing triangle when collideWithBackfaces is true', () => {
+        it('should collide with back-facing triangle when collideWithBackfacesTriangles is true', () => {
             const collector = createAllCastShapeCollector();
 
             const meshB = triangleMesh.create({
@@ -1781,7 +1789,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIncludeBackfaces: CastShapeSettings = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: true, // Allow backface collisions
+                collideWithBackfacesTriangles: true,
                 // collectFaces: false,
                 // collisionTolerance: 1e-4,
                 // penetrationTolerance: 1e-4,
@@ -1836,7 +1844,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIgnoreBackfaces = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: false,
+                collideWithBackfacesTriangles: false,
                 // collectFaces: false,
                 // collisionTolerance: 1e-4,
                 // penetrationTolerance: 1e-4,
@@ -2085,7 +2093,7 @@ describe('castShapeVsShape - Phase 1 Triangle Mesh Features', () => {
 
             const settingsIgnoreBackfaces: CastShapeSettings = {
                 ...createDefaultCastShapeSettings(),
-                collideWithBackfaces: false,
+                collideWithBackfacesTriangles: false,
             };
 
             // Sphere approaching from above (+Z), moving down
@@ -2224,5 +2232,375 @@ describe('castShapeVsShape - Sphere vs Plane', () => {
         expect(hits[0].fraction).toBeLessThan(1);
         // fraction should be approximately (3-1)/5 = 0.4
         expect(hits[0].fraction).toBeCloseTo(0.4, 2);
+    });
+});
+
+describe('castShapeVsShape - GJK restart', () => {
+    const collector = createAllCastShapeCollector();
+
+    beforeEach(() => {
+        collector.reset();
+    });
+
+    it('reconstructs touching contact points when the cast gives up without restarting', () => {
+        // this configuration takes the branch where gjk fails to find a closer simplex and
+        // has already used its one restart. the contact points must come out of the previous
+        // valid simplex, not the rejected support point.
+        const cylinderA = cylinder.create({ halfHeight: 0.3, radius: 0.4975 });
+        const capsuleB = capsule.create({ halfHeightOfCylinder: 2.03114343, radius: 7.19732189 });
+
+        const settings = createDefaultCastShapeSettings();
+        settings.useShrunkenShapeAndConvexRadius = true;
+
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            settings,
+            cylinderA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -0.951660156, -2.09155273, -7.63574218, // posA
+            0, 0, 0, 1, // quatA
+            1, 1, 1, // scaleA
+            0.00244140625, -0.0068359375, 0.0029296875, // dispA
+            capsuleB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0, // posB
+            0, 0, 0, 1, // quatB
+            1, 1, 1, // scaleB
+        );
+
+        const hits = collector.hits;
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBe(0);
+        expect(vec3.distance(hits[0].pointA, hits[0].pointB)).toBeLessThan(1.0e-4);
+    });
+});
+
+describe('castShapeVsShape - any collector early out', () => {
+    class CountingAnyCastShapeCollector extends AnyCastShapeCollector {
+        hitCount = 0;
+
+        addHit(hit: CastShapeHit): void {
+            this.hitCount++;
+            super.addHit(hit);
+        }
+    }
+
+    const sphereA = sphere.create({ radius: 1 });
+    const planeB = plane.create({ plane: { normal: [0, 1, 0], constant: 0 } });
+
+    // a sphere starting at height y with radius 1 penetrates the plane by 1 - y, and moves down into it
+    const castSphereAtHeight = (collector: CastShapeCollector, y: number) => {
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            defaultSettings,
+            sphereA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, y, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, -1, 0,
+            planeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    it('after the first hit, a deeper start in collision never reaches the collector', () => {
+        const collector = new CountingAnyCastShapeCollector();
+
+        castSphereAtHeight(collector, 0.9);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit.fraction).toBe(0);
+        expect(collector.hit.penetrationDepth).toBeCloseTo(0.1, 6);
+        expect(collector.shouldEarlyOut()).toBe(true);
+
+        castSphereAtHeight(collector, 0.5);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit.penetrationDepth).toBeCloseTo(0.1, 6);
+    });
+});
+
+describe('castShapeVsShape - closest collector orders starting overlaps by depth', () => {
+    const deepestSettings: CastShapeSettings = { ...createDefaultCastShapeSettings(), returnDeepestPoint: true };
+
+    // casts shapeA from (x, y, 0) straight down by 1 against shapeB centred at (0, targetY, 0)
+    const castDown = (collector: CastShapeCollector, shapeA: Shape, x: number, y: number, shapeB: Shape, targetY: number) => {
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            deepestSettings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            x, y, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, -1, 0,
+            shapeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, targetY, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    const sphereA = sphere.create({ radius: 0.5 });
+
+    // each target's top face is at y = 0, so a radius 0.5 sphere at height y starts 0.5 - y deep
+    const targets: [string, Shape, number][] = [
+        ['plane', plane.create({ plane: { normal: [0, 1, 0], constant: 0 } }), 0],
+        ['box', box.create({ halfExtents: [2, 1, 2] }), -1],
+    ];
+
+    for (const [name, target, targetY] of targets) {
+        for (const heights of [
+            [0.4, 0.2],
+            [0.2, 0.4],
+        ]) {
+            it(`${name}: starts at heights ${heights.join(' then ')} keep the 0.3 deep overlap`, () => {
+                const collector = createClosestCastShapeCollector();
+                for (const y of heights) {
+                    castDown(collector, sphereA, 0, y, target, targetY);
+                }
+
+                expect(collector.hit.status).toBe(CastShapeStatus.COLLIDING);
+                expect(collector.hit.fraction).toBe(0);
+                expect(collector.hit.penetrationDepth).toBeCloseTo(0.3, 4);
+                expect(collector.earlyOutFraction).toBeCloseTo(-0.3, 4);
+                expect(collector.shouldEarlyOut()).toBe(false);
+            });
+        }
+    }
+
+    // two slabs side by side: the left one's top at y = 0 over x in [-2, 0], the right one's at y = 0.3 over x in [0, 2].
+    // a radius 0.5 sphere centred at (0, 0.4) starts 0.1 into the left slab and 0.4 into the right one.
+    const leftSlab = {
+        shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+        position: [-1, -0.5, 0] as Vec3,
+        quaternion: identityQuat(),
+    };
+    const rightSlab = {
+        shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+        position: [1, -0.2, 0] as Vec3,
+        quaternion: identityQuat(),
+    };
+
+    const compounds: [string, (children: (typeof leftSlab)[]) => Shape][] = [
+        ['compound', (children) => compound.create({ children })],
+        ['static compound', (children) => staticCompound.create({ children })],
+    ];
+
+    for (const [name, create] of compounds) {
+        for (const [order, children] of [
+            ['left first', [leftSlab, rightSlab]],
+            ['right first', [rightSlab, leftSlab]],
+        ] as const) {
+            it(`${name} (${order}): a cast starting inside both children reports the deeper`, () => {
+                const collector = createClosestCastShapeCollector();
+                castDown(collector, sphereA, 0, 0.4, create([...children]), 0);
+
+                expect(collector.hit.fraction).toBe(0);
+                expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+                expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+            });
+        }
+    }
+
+    // the same layout as two upward facing quads (ccw seen from +y)
+    const quad = (x0: number, x1: number, y: number) => [x0, y, -1, x0, y, 1, x1, y, 1, x1, y, -1];
+    const meshes: [string, Shape][] = [
+        [
+            'left first',
+            triangleMesh.create({
+                positions: [...quad(-2, 0, 0), ...quad(0, 2, 0.3)],
+                indices: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+            }),
+        ],
+        [
+            'right first',
+            triangleMesh.create({
+                positions: [...quad(0, 2, 0.3), ...quad(-2, 0, 0)],
+                indices: [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7],
+            }),
+        ],
+    ];
+
+    for (const [order, mesh] of meshes) {
+        it(`mesh (${order}): a sphere cast starting over both quads reports the deeper`, () => {
+            const collector = createClosestCastShapeCollector();
+            castDown(collector, sphereA, 0, 0.4, mesh, 0);
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+
+        it(`mesh (${order}): a box cast starting over both quads reports the deeper`, () => {
+            // spans x in [-0.25, 0.25] and y in [-0.1, 0.9]: 0.1 into the left quad (out upwards), 0.25 into the right
+            // quad (out sideways past its x = 0 edge)
+            const collector = createClosestCastShapeCollector();
+            castDown(collector, box.create({ halfExtents: [0.25, 0.5, 0.25], convexRadius: 0 }), 0, 0.4, mesh, 0);
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.25, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+    }
+});
+
+describe('reversedCastShapeVsShape', () => {
+    const sphereShape = sphere.create({ radius: 0.5, materialId: 3 });
+    const boxShape = box.create({ halfExtents: [1, 1, 1], materialId: 7 });
+    const settings = { ...createDefaultCastShapeSettings(), collectFaces: true };
+    const reversedCast = reversedCastShapeVsShape(castConvexVsConvex);
+
+    it('mirrors the forward cast with points on the right bodies at the hit', () => {
+        // sphere at (-3, 0.3, 0) sweeping +6 in x hits the box at origin at fraction (3 - 1.5) / 6 = 0.25
+        const forward = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        castConvexVsConvex(
+            forward,
+            settings,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -3, 0.3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            6, 0, 0,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        // the same relative motion seen from the box: the box sweeps -6 in x into the resting sphere
+        const reversed = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        reversedCast(
+            reversed,
+            settings,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            -6, 0, 0,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            -3, 0.3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        const f = forward.hit;
+        const r = reversed.hit;
+        expect(f.status).toBe(CastShapeStatus.COLLIDING);
+        expect(r.status).toBe(CastShapeStatus.COLLIDING);
+        expect(f.fraction).toBeCloseTo(0.25, 3);
+        expect(r.fraction).toBe(f.fraction);
+        expect(r.penetrationDepth).toBe(f.penetrationDepth);
+
+        // axis flips, normal stays -normalize(axis), so it mirrors the forward normal
+        expect(r.penetrationAxis).toEqual([-f.penetrationAxis[0], -f.penetrationAxis[1], -f.penetrationAxis[2]]);
+        const axisLength = vec3.length(r.penetrationAxis);
+        for (let i = 0; i < 3; i++) {
+            expect(r.normal[i]).toBeCloseTo(-r.penetrationAxis[i] / axisLength, 6);
+            expect(r.normal[i]).toBeCloseTo(-f.normal[i], 6);
+        }
+        expect(r.normal[0]).toBeCloseTo(1, 3);
+
+        expect(r.materialIdA).toBe(7);
+        expect(r.materialIdB).toBe(3);
+
+        // shape a (the box) is reported in its swept frame: centre at x = -1.5, face at x = -2.5
+        expect(r.pointA[0]).toBeCloseTo(-2.5, 3);
+        expect(r.pointA[1]).toBeCloseTo(0.3, 3);
+        // shape b (the sphere) at rest: on its surface, radius from (-3, 0.3, 0)
+        expect(r.pointB[0]).toBeCloseTo(-2.5, 3);
+        expect(vec3.distance(r.pointB, [-3, 0.3, 0])).toBeCloseTo(0.5, 3);
+
+        // the box's supporting face is its -x face at the hit
+        expect(r.faceA.numVertices).toBe(4);
+        for (let i = 0; i < r.faceA.numVertices; i++) {
+            expect(r.faceA.vertices[i * 3]).toBeCloseTo(-2.5, 3);
+        }
+        expect(r.faceB.numVertices).toBe(f.faceA.numVertices);
+        for (let i = 0; i < f.faceA.numVertices * 3; i++) {
+            const delta = i % 3 === 0 ? f.fraction * 6 : 0;
+            expect(r.faceB.vertices[i]).toBeCloseTo(f.faceA.vertices[i] - delta, 5);
+        }
+    });
+
+    it('a plane cast into a sphere reports the plane at the hit and the sphere at rest', () => {
+        // plane surface at y = 0 sweeps +5 in y; it meets the bottom of the sphere at (0, 3, 0) (y = 2.5) at fraction 0.5
+        const planeShape = plane.create({ plane: { normal: [0, 1, 0], constant: 0 }, materialId: 5 });
+        const collector = createClosestCastShapeCollector();
+        // biome-ignore format: pretty
+        castShapeVsShape(
+            collector,
+            defaultSettings,
+            planeShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            0, 5, 0,
+            sphereShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 3, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        const hit = collector.hit;
+        expect(hit.status).toBe(CastShapeStatus.COLLIDING);
+        expect(hit.fraction).toBeCloseTo(0.5, 5);
+        expect(hit.pointA[1]).toBeCloseTo(2.5, 5);
+        expect(hit.pointB[1]).toBeCloseTo(2.5, 5);
+        // normal points from b (sphere) towards a (plane)
+        expect(hit.normal[1]).toBeCloseTo(-1, 5);
+        expect(hit.penetrationAxis[1]).toBeGreaterThan(0);
+        expect(hit.materialIdA).toBe(5);
+        expect(hit.materialIdB).toBe(3);
+    });
+});
+
+describe('AllCastShapeCollector.sort', () => {
+    it('orders hits by fraction, deepest first among hits that start overlapping', () => {
+        const unitSphere = sphere.create({ radius: 1 });
+        const collector = createAllCastShapeCollector();
+        const settings = createDefaultCastShapeSettings();
+
+        // a sweep along +x by 10: b at 8 is hit at fraction 0.6, b at 5 at 0.3, b at 1.5 and 1.0
+        // overlap at the start by 0.5 and 1.0
+        for (const centerX of [8, 1.5, 5, 1.0]) {
+            // biome-ignore format: pretty
+            castShapeVsShape(
+                collector, settings,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                0, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+                10, 0, 0,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(4);
+        collector.sort();
+        const hits = collector.hits;
+        expect(hits[0].fraction).toBe(0);
+        expect(hits[0].penetrationDepth).toBeCloseTo(1.0, 4);
+        expect(hits[1].fraction).toBe(0);
+        expect(hits[1].penetrationDepth).toBeCloseTo(0.5, 4);
+        expect(hits[2].fraction).toBeCloseTo(0.3, 4);
+        expect(hits[3].fraction).toBeCloseTo(0.6, 4);
     });
 });

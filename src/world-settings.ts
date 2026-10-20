@@ -1,4 +1,5 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ } from './collision/collide-shape-vs-shape';
 import * as layers from './layers';
 
 export type WorldSettings = {
@@ -78,7 +79,8 @@ export type WorldSettings = {
         manifoldTolerance: number;
 
         /**
-         * Collide with backfaces during raycasts/shapecasts.
+         * Collide with back facing triangles when finding contacts and in ccd casts.
+         * convex back faces are always ignored there.
          * @default false
          */
         collideWithBackfaces: boolean;
@@ -128,6 +130,15 @@ export type WorldSettings = {
          * @default cos(1°) ≈ 0.99985
          */
         bodyPairCacheCosMaxDeltaRotationDiv2: number;
+
+        /**
+         * Max squared distance to consider a vertex to be the same as another vertex, used by
+         * the internal edge removal algorithm (enhancedInternalEdgeRemoval) to determine if two
+         * edges are shared.
+         * Unit: meters²
+         * @default 1e-8
+         */
+        internalEdgeRemovalVertexToleranceSq: number;
     };
 
     /** Solver options */
@@ -270,6 +281,7 @@ export const createWorldSettings = (): WorldSettings => {
             useBodyPairContactCache: true,
             bodyPairCacheMaxDeltaPositionSq: 1e-6,
             bodyPairCacheCosMaxDeltaRotationDiv2: Math.cos((1 * Math.PI) / 180),
+            internalEdgeRemovalVertexToleranceSq: DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ,
         },
         solver: {
             minVelocityForRestitution: 1,

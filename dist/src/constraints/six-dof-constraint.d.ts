@@ -1,9 +1,10 @@
-import type { Quat, Vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
 import { type BodyId } from '../body/body-id.js';
 import type { World } from '../world.js';
 import { type ConstraintId } from './constraint-id.js';
 import type { AngleConstraintPart } from './constraint-part/angle-constraint-part.js';
 import type { AxisConstraintPart } from './constraint-part/axis-constraint-part.js';
+import type { MotorSettings } from './constraint-part/motor-settings.js';
 import { MotorState } from './constraint-part/motor-settings.js';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part.js';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part.js';
@@ -40,9 +41,8 @@ export type SixDOFConstraint = ConstraintBase & {
     /** max friction per axis (0 = no friction) */
     maxFriction: [number, number, number, number, number, number];
     motorState: MotorState[];
-    motorSpringSettings: SpringSettings[];
-    motorMinForceLimit: [number, number, number, number, number, number];
-    motorMaxForceLimit: [number, number, number, number, number, number];
+    /** per axis motor settings: translation motors use the force limits, rotation motors the torque limits */
+    motorSettings: MotorSettings[];
     targetVelocity: Vec3;
     targetAngularVelocity: Vec3;
     targetPosition: Vec3;
@@ -84,12 +84,8 @@ export type SixDOFConstraintSettings = {
     maxFriction?: number[];
     /** translation limit spring settings */
     limitsSpringSettings?: SpringSettings[];
-    /** per-axis motor spring settings */
-    motorSpringSettings?: SpringSettings[];
-    /** per-axis motor min force limits */
-    motorMinForceLimit?: number[];
-    /** per-axis motor max force limits */
-    motorMaxForceLimit?: number[];
+    /** per-axis motor settings (default: 2 Hz critically damped spring, no force or torque limits) */
+    motorSettings?: MotorSettings[];
     /** constraint priority (higher = solved first) @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
@@ -123,7 +119,7 @@ export declare function setMaxFriction(constraint: SixDOFConstraint, axis: numbe
 export declare function makeFreeAxis(constraint: SixDOFConstraint, axis: number): void;
 /** Make an axis fixed (locked at 0) */
 export declare function makeFixedAxis(constraint: SixDOFConstraint, axis: number): void;
-/** Set limits for an axis */
+/** Set limits for an axis (if max < min, the axis becomes fixed at 0) */
 export declare function setLimitedAxis(constraint: SixDOFConstraint, axis: number, min: number, max: number): void;
 /** the constraint definition for six-dof constraint */
 export declare const def: import("./constraints").ConstraintDef<SixDOFConstraint>;

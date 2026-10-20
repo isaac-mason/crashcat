@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -17,6 +17,7 @@ import {
     rigidBody,
     ShapeType,
     sphere,
+    transformed,
     updateWorld,
 } from '../../src';
 import { createTestWorld } from '../helpers';
@@ -506,5 +507,30 @@ describe('OffsetCenterOfMassShape - Impulse Tests', () => {
         expect(body.motionProperties.angularVelocity[0]).toBeCloseTo(0, 5);
         expect(body.motionProperties.angularVelocity[1]).toBeCloseTo(deltaV, 3);
         expect(body.motionProperties.angularVelocity[2]).toBeCloseTo(0, 5);
+    });
+});
+
+describe('OffsetCenterOfMassShape - sub shape navigation', () => {
+    test('leaf and transformed sub shape pass through to the inner shape', () => {
+        const leaf = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+        const inner = transformed.create({ shape: leaf, position: vec3.fromValues(2, 0, 0), quaternion: quat.create() });
+        const shape = offsetCenterOfMass.create({ shape: inner, offset: vec3.fromValues(0, -1, 0) });
+
+        const leafResult = rigidBody.createGetLeafShapeResult();
+        rigidBody.getLeafShape(leafResult, shape, EMPTY_SUB_SHAPE_ID);
+        expect(leafResult.shape).toBe(leaf);
+
+        const transformedResult = rigidBody.createGetSubShapeTransformedShapeResult();
+        rigidBody.getSubShapeTransformedShape(
+            transformedResult,
+            shape,
+            EMPTY_SUB_SHAPE_ID,
+            vec3.fromValues(0, 0, 0),
+            quat.create(),
+            vec3.fromValues(1, 1, 1),
+        );
+        expect(transformedResult.shape).toBe(leaf);
+        expect(transformedResult.position[0]).toBe(2);
+        expect(transformedResult.position[1]).toBe(0);
     });
 });

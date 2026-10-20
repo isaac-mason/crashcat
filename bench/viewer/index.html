@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>crashcat bench viewer</title>
+        <style>
+            :root {
+                color-scheme: dark;
+            }
+            html,
+            body {
+                margin: 0;
+                height: 100%;
+                overflow: hidden;
+                background: #1a1a1a;
+                color: #ddd;
+                font: 12px ui-monospace, monospace;
+            }
+            #ui {
+                position: fixed;
+                top: 12px;
+                left: 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                padding: 12px;
+                background: #222;
+                border: 1px solid #333;
+            }
+            #ui select,
+            #ui button {
+                font: inherit;
+                background: #2c2c2c;
+                color: #ddd;
+                border: 1px solid #3a3a3a;
+                padding: 4px 6px;
+            }
+            #description {
+                max-width: 420px;
+                color: #999;
+                line-height: 1.5;
+            }
+            #readout {
+                color: #7fd4a0;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="ui">
+            <select id="scenario"></select>
+            <div>
+                <button id="restart">restart</button>
+                <button id="pause">pause</button>
+                <button id="step">step</button>
+            </div>
+            <div id="readout"></div>
+            <div id="description"></div>
+        </div>
+        <script type="module" src="./main.ts"></script>
+    </body>
+</html>

@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 /**
  * Determine if an edge between two triangles should be treated as collidable.
  *

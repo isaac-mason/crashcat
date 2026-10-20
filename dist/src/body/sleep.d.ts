@@ -1,4 +1,4 @@
-import { type Vec3 } from 'mathcat';
+import { type Vec3 } from 'math';
 import type { World } from '../world.js';
 import type { MotionProperties } from './motion-properties.js';
 import type { RigidBody } from './rigid-body.js';
@@ -9,8 +9,6 @@ export declare const INACTIVE_BODY_INDEX: number;
  * - center of mass
  * - center of mass + largest bounding box axis
  * - center of mass + second largest bounding box axis
- *
- * @optimize
  */
 export declare function getSleepTestPoints(body: RigidBody, outPoints: [Vec3, Vec3, Vec3]): void;
 /** reset the sleep test spheres to center around the given points with radius 0 */

@@ -1,6 +1,6 @@
-import { type Mat4, type Vec3 } from 'mathcat';
+import { type Mat4, type Vec3 } from 'math';
 import { type Simplex } from './simplex.js';
-import { type Support } from './support.js';
+import type { Support } from './support.js';
 export type GjkCastRayResult = {
     isHitFound: boolean;
     lambda: number;
@@ -17,7 +17,6 @@ export declare function createGjkCastRayResult(): GjkCastRayResult;
  * @param support support function for the shape
  * @param maxLambda maximum lambda to check (default 1.0). Result lambda will not exceed this.
  *
- * @optimize
  */
 export declare function gjkCastRay(out: GjkCastRayResult, rayOrigin: Vec3, rayDirection: Vec3, tolerance: number, support: Support, maxLambda?: number): void;
 export type GjkCastShapeResult = {
@@ -44,7 +43,6 @@ export declare function createGjkCastShapeResult(): GjkCastShapeResult;
  * @param convexRadiusB convex radius of shape B
  * @param maxLambda the max fraction along the sweep
  *
- * @optimize
  */
 export declare function gjkCastShape(out: GjkCastShapeResult, transformAtoB: Mat4, shapeASupport: Support, shapeBSupport: Support, displacement: Vec3, tolerance: number, convexRadiusA: number, convexRadiusB: number, maxLambda: number): void;
 export type GjkClosestPoints = {
@@ -70,6 +68,5 @@ export declare function createGjkClosestPoints(): GjkClosestPoints;
  * @param maxDistanceSquared maximum squared distance between A and B before objects are considered infinitely far away.
  *                           If exceeded, out.squaredDistance will be set to Number.MAX_VALUE
  *
- * @optimize
  */
 export declare function gjkClosestPoints(out: GjkClosestPoints, supportA: Support, supportB: Support, tolerance: number, direction: Vec3, maxDistanceSquared: number): void;

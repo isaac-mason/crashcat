@@ -1,4 +1,5 @@
-import { type Box3, type Quat, type Vec3 } from 'mathcat';
+import { type Quat, type Vec3 } from 'math';
+import { type Box3 } from 'math/shapes';
 import { type Shape, ShapeType } from './shapes.js';
 export type CompoundShapeChild = {
     position: Vec3;
@@ -8,6 +9,8 @@ export type CompoundShapeChild = {
 export type CompoundShape = {
     type: ShapeType.COMPOUND;
     children: CompoundShapeChild[];
+    /** each child's bounds in the compound's unscaled space, 6 per child (min xyz, max xyz), for culling children against a query */
+    childBounds: number[];
     aabb: Box3;
     centerOfMass: Vec3;
     volume: number;

@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 export type BarycentricCoordinatesResult = {
     u: number;
@@ -83,8 +83,10 @@ export function computeBarycentricCoordinates3d(
         // d01 = dot(ab, ac)
         const d01 = abx * acx + aby * acy + abz * acz;
 
+        // |v0|^2 |v1|^2 - (v0 . v1)^2 = |v0|^2 |v1|^2 (1 - cos(angle)^2): below 1e-6 of |v0|^2 |v1|^2 the angle is about
+        // 0.06 degrees, so the triangle is degenerate and we fall back to the closest point on the longest edge
         const denominator = d00 * d11 - d01 * d01;
-        if (Math.abs(denominator) < 1.0e-12) {
+        if (denominator <= 1.0e-6 * d00 * d11) {
             // degenerate triangle, return coordinates along longest edge
             if (d00 > d11) {
                 computeBarycentricCoordinates2d(_otherBarycentric, a, b, squaredTolerance);
@@ -115,7 +117,7 @@ export function computeBarycentricCoordinates3d(
         const d12 = acx * bcx + acy * bcy + acz * bcz;
 
         const denominator = d11 * d22 - d12 * d12;
-        if (Math.abs(denominator) < 1.0e-12) {
+        if (denominator <= 1.0e-6 * d11 * d22) {
             // degenerate triangle, return coordinates along longest edge
             if (d11 > d22) {
                 computeBarycentricCoordinates2d(_otherBarycentric, a, c, squaredTolerance);

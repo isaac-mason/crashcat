@@ -1,7 +1,9 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat3, mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat3, mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -16,9 +18,10 @@ import type { AngleConstraintPart } from './constraint-part/angle-constraint-par
 import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { MotorSettings } from './constraint-part/motor-settings';
 import * as motorSettings from './constraint-part/motor-settings';
-import { MotorState } from './constraint-part/motor-settings';
+import { isPositionMotor, MotorState } from './constraint-part/motor-settings';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
+import * as springSettings from './constraint-part/spring-settings';
 import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-constraint-part';
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { clampSwingTwist, getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
@@ -413,6 +416,7 @@ export function setMaxFrictionTorque(constraint: SwingTwistConstraint, torque: n
 
 /** Set swing motor state */
 export function setSwingMotorState(constraint: SwingTwistConstraint, state: MotorState): void {
+    assert(state === MotorState.OFF || motorSettings.isValid(constraint.swingMotorSettings), 'invalid motor settings');
     if (constraint.swingMotorState !== state) {
         constraint.swingMotorState = state;
         // reset motor parts to avoid warm start issues
@@ -424,6 +428,7 @@ export function setSwingMotorState(constraint: SwingTwistConstraint, state: Moto
 
 /** Set twist motor state */
 export function setTwistMotorState(constraint: SwingTwistConstraint, state: MotorState): void {
+    assert(state === MotorState.OFF || motorSettings.isValid(constraint.twistMotorSettings), 'invalid motor settings');
     if (constraint.twistMotorState !== state) {
         constraint.twistMotorState = state;
         // reset motor part to avoid warm start issues
@@ -487,6 +492,9 @@ const _setup_constraintBody1ToWorld = /* @__PURE__ */ quat.create();
 const _setup_constraintBody2ToWorld = /* @__PURE__ */ quat.create();
 const _setup_q = /* @__PURE__ */ quat.create();
 const _setup_c1Conj = /* @__PURE__ */ quat.create();
+const _setup_targetOrientation = /* @__PURE__ */ quat.create();
+const _setup_qConj = /* @__PURE__ */ quat.create();
+const _setup_diff = /* @__PURE__ */ quat.create();
 
 function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTime: number): void {
     const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -507,6 +515,7 @@ function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTi
         bodyB,
         _setup_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // calculate constraint rotation: q = (q1 * c1)^-1 * (q2 * c2)
@@ -543,21 +552,19 @@ function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTi
         }
 
         // calculate rotation error for position motors
-        if (constraint.swingMotorState === MotorState.POSITION || constraint.twistMotorState === MotorState.POSITION) {
+        if (isPositionMotor(constraint.swingMotorState) || isPositionMotor(constraint.twistMotorState)) {
             // get target orientation along shortest path from q
-            const targetOrientation = quat.clone(constraint.targetOrientation);
-            if (quat.dot(_setup_q, targetOrientation) < 0) {
-                quat.scale(targetOrientation, targetOrientation, -1);
+            quat.copy(_setup_targetOrientation, constraint.targetOrientation);
+            if (quat.dot(_setup_q, _setup_targetOrientation) < 0) {
+                quat.scale(_setup_targetOrientation, _setup_targetOrientation, -1);
             }
 
             // diff = q^-1 * targetOrientation
-            const qConj = quat.create();
-            quat.conjugate(qConj, _setup_q);
-            const diff = quat.create();
-            quat.multiply(diff, qConj, targetOrientation);
+            quat.conjugate(_setup_qConj, _setup_q);
+            quat.multiply(_setup_diff, _setup_qConj, _setup_targetOrientation);
 
             // approximate error angles (small angle approximation)
-            vec3.set(_setup_rotationError, -2 * diff[0], -2 * diff[1], -2 * diff[2]);
+            vec3.set(_setup_rotationError, -2 * _setup_diff[0], -2 * _setup_diff[1], -2 * _setup_diff[2]);
         }
 
         // swing motor
@@ -595,15 +602,36 @@ function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTi
                 break;
 
             case MotorState.POSITION:
-                if (constraint.swingMotorSettings.springSettings.frequencyOrStiffness > 0) {
+                if (springSettings.hasStiffness(constraint.swingMotorSettings.springSettings)) {
                     for (let i = 1; i < 3; i++) {
-                        angleConstraintPart.calculateConstraintPropertiesWithSettings(
+                        angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                             constraint.motorConstraintParts[i],
                             deltaTime,
                             bodyA,
                             bodyB,
                             constraint.worldSpaceMotorAxis[i],
                             0,
+                            _setup_rotationError[i],
+                            constraint.swingMotorSettings.springSettings,
+                        );
+                    }
+                } else {
+                    for (let i = 1; i < 3; i++) {
+                        angleConstraintPart.deactivate(constraint.motorConstraintParts[i]);
+                    }
+                }
+                break;
+
+            case MotorState.POSITION_AND_VELOCITY:
+                if (springSettings.hasStiffnessOrDamping(constraint.swingMotorSettings.springSettings)) {
+                    for (let i = 1; i < 3; i++) {
+                        angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                            constraint.motorConstraintParts[i],
+                            deltaTime,
+                            bodyA,
+                            bodyB,
+                            constraint.worldSpaceMotorAxis[i],
+                            -constraint.targetAngularVelocity[i],
                             _setup_rotationError[i],
                             constraint.swingMotorSettings.springSettings,
                         );
@@ -643,14 +671,31 @@ function setupVelocity(constraint: SwingTwistConstraint, bodies: Bodies, deltaTi
                 break;
 
             case MotorState.POSITION:
-                if (constraint.twistMotorSettings.springSettings.frequencyOrStiffness > 0) {
-                    angleConstraintPart.calculateConstraintPropertiesWithSettings(
+                if (springSettings.hasStiffness(constraint.twistMotorSettings.springSettings)) {
+                    angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
                         constraint.motorConstraintParts[0],
                         deltaTime,
                         bodyA,
                         bodyB,
                         constraint.worldSpaceMotorAxis[0],
                         0,
+                        _setup_rotationError[0],
+                        constraint.twistMotorSettings.springSettings,
+                    );
+                } else {
+                    angleConstraintPart.deactivate(constraint.motorConstraintParts[0]);
+                }
+                break;
+
+            case MotorState.POSITION_AND_VELOCITY:
+                if (springSettings.hasStiffnessOrDamping(constraint.twistMotorSettings.springSettings)) {
+                    angleConstraintPart.calculateConstraintPropertiesWithSettingsForMotor(
+                        constraint.motorConstraintParts[0],
+                        deltaTime,
+                        bodyA,
+                        bodyB,
+                        constraint.worldSpaceMotorAxis[0],
+                        -constraint.targetAngularVelocity[0],
                         _setup_rotationError[0],
                         constraint.twistMotorSettings.springSettings,
                     );
@@ -788,6 +833,7 @@ function solvePosition(constraint: SwingTwistConstraint, bodies: Bodies, _deltaT
         bodyB,
         _solvePosition_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
 
     impulse =
