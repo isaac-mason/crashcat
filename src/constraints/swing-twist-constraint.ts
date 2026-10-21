@@ -191,7 +191,7 @@ const _create_c_to_b2 = /* @__PURE__ */ mat3.create();
 
 /** Create a swing-twist constraint */
 export function create(world: World, settings: SwingTwistConstraintSettings): SwingTwistConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<SwingTwistConstraint>(world.constraints, ConstraintType.SWING_TWIST);
     const bodies = world.bodies;
 

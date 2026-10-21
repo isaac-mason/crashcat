@@ -128,7 +128,7 @@ export type ConeConstraintSettings = {
 
 /** Create a cone constraint */
 export function create(world: World, settings: ConeConstraintSettings): ConeConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<ConeConstraint>(world.constraints, ConstraintType.CONE);
     const bodies = world.bodies;
 

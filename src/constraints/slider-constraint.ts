@@ -214,7 +214,7 @@ const _create_anchor = /* @__PURE__ */ vec3.create();
 
 /** Create a slider constraint */
 export function create(world: World, settings: SliderConstraintSettings): SliderConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<SliderConstraint>(world.constraints, ConstraintType.SLIDER);
     const bodies = world.bodies;
 

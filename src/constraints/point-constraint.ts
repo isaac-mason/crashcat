@@ -76,7 +76,7 @@ export type PointConstraintSettings = {
 
 /** create a point constraint */
 export function create(world: World, settings: PointConstraintSettings): PointConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<PointConstraint>(world.constraints, ConstraintType.POINT);
     const bodies = world.bodies;
 

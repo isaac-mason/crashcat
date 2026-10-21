@@ -242,7 +242,7 @@ function resetConstraint(constraint: HingeConstraint): void {
 
 /** create a hinge constraint */
 export function create(world: World, settings: HingeConstraintSettings): HingeConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<HingeConstraint>(world.constraints, ConstraintType.HINGE);
     const bodies = world.bodies;
 
