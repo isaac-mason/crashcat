@@ -140,18 +140,17 @@ export function linkBodies(state: Islands, bodies: Bodies, bodyIndexA: number, b
     }
 }
 
+/** the body a constraint or contact goes into the island of: the first dynamic one, as only a dynamic body's velocity it changes */
+function firstDynamic(bodyA: RigidBody, bodyB: RigidBody): RigidBody {
+    return bodyA.motionType === MotionType.DYNAMIC ? bodyA : bodyB;
+}
+
 /**
- * Link bodies connected by a contact. Stores the minimum active body index - does NOT call LinkBodies.
+ * Link a contact to the island of its dynamic body - does NOT call LinkBodies.
  * The union-find happens only through explicit body links (constraints, etc).
- *
- * INACTIVE_BODY_INDEX is 0xffffffff, so min() will pick the active body when one is inactive, or INACTIVE_BODY_INDEX when both are inactive.
  */
 export function linkContact(state: Islands, contactIndex: number, bodyA: RigidBody, bodyB: RigidBody): void {
-    // store minimum of the two activeIndex values
-    // - both active: stores the smaller active index
-    // - one active, one inactive: stores the active index (INACTIVE_BODY_INDEX is max value)
-    // - both inactive: stores INACTIVE_BODY_INDEX
-    state.contactLinks[contactIndex] = Math.min(bodyA.activeIndex, bodyB.activeIndex);
+    state.contactLinks[contactIndex] = firstDynamic(bodyA, bodyB).activeIndex;
 }
 
 /**
@@ -168,14 +167,15 @@ export function linkConstraint(
     bodyA: RigidBody,
     bodyB: RigidBody,
 ): void {
-    // link bodies together in union-find (if both active)
-    if (bodyA.activeIndex !== INACTIVE_BODY_INDEX && bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
+    // the bodies go into one island only when both are dynamic: a constraint cannot change a kinematic body's velocity, so
+    // one needs no island with what it is jointed to
+    if (bodyA.motionType === MotionType.DYNAMIC && bodyB.motionType === MotionType.DYNAMIC) {
         linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
     }
 
-    // store the constraint ID and minimum active body index (both arrays grow together)
+    // store the constraint ID and its dynamic body's active index (both arrays grow together)
     state.constraintIds.push(constraintId);
-    state.constraintLinks.push(Math.min(bodyA.activeIndex, bodyB.activeIndex));
+    state.constraintLinks.push(firstDynamic(bodyA, bodyB).activeIndex);
 }
 
 /**
@@ -194,8 +194,9 @@ export function linkContactConstraints(
         const bodyA = bodies.pool[contact.bodyIndexA];
         const bodyB = bodies.pool[contact.bodyIndexB];
 
-        // link bodies in union-find if both are active (dynamic/kinematic)
-        if (bodyA.activeIndex !== INACTIVE_BODY_INDEX && bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
+        // the bodies go into one island only when both are dynamic: a contact cannot change a kinematic body's velocity,
+        // so one needs no island with what it touches
+        if (bodyA.motionType === MotionType.DYNAMIC && bodyB.motionType === MotionType.DYNAMIC) {
             linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
         }
 
@@ -216,10 +217,10 @@ export function linkUserConstraints(state: Islands, constraintsState: Constraint
                 const bodyA = bodies.pool[constraint.bodyIndexA];
                 const bodyB = bodies.pool[constraint.bodyIndexB];
 
-                // only link if at least one body is active
-                if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) {
-                    linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
-                }
+                // only a constraint with a body active and a body dynamic, as jolt's IsActive; its dynamic bodies were woken
+                const hasActiveBody = bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX;
+                const hasDynamicBody = bodyA.motionType === MotionType.DYNAMIC || bodyB.motionType === MotionType.DYNAMIC;
+                if (hasActiveBody && hasDynamicBody) linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
             }
         }
     }

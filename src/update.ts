@@ -48,6 +48,13 @@ import type { World } from './world';
  * @param timeStep the time step to advance the world by, in seconds
  */
 export function updateWorld(world: World, listener: Listener | undefined, timeStep: number): void {
+    /* a step of no time only brings the broadphase up to date, as jolt's: no collision, no events, the contacts and the
+       queued removals kept for the next step and the forces added for it left to it */
+    if (timeStep <= 0) {
+        broadphase.optimize(world.broadphase);
+        return;
+    }
+
     /* fire deferred contact-removed events (queued by body removal since the last update) */
     contacts.flushPendingContactRemoved(world.contacts, listener);
 
@@ -152,158 +159,150 @@ export function updateWorld(world: World, listener: Listener | undefined, timeSt
         }
     }
 
-    /* only solve if time step is positive */
-    if (timeStep > 0) {
-        /* wake sleeping bodies connected to active user constraints */
-        wakeBodiesInUserConstraints(world);
+    /* wake sleeping bodies connected to active user constraints */
+    wakeBodiesInUserConstraints(world);
 
-        /* build islands */
-        islands.prepare(world.islands, world.bodies, world.contactConstraints.count);
-        islands.linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
-        islands.linkUserConstraints(world.islands, world.constraints, world.bodies);
-        islands.finalize(world.islands, world.bodies, world.constraints, world.settings);
+    /* build islands */
+    islands.prepare(world.islands, world.bodies, world.contactConstraints.count);
+    islands.linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
+    islands.linkUserConstraints(world.islands, world.constraints, world.bodies);
+    islands.finalize(world.islands, world.bodies, world.constraints, world.settings);
 
-        /* mark constraints as sleeping if all bodies are sleeping */
-        constraints.updateSleeping(world.constraints, world.bodies);
+    /* mark constraints as sleeping if all bodies are sleeping */
+    constraints.updateSleeping(world.constraints, world.bodies);
 
-        /* setup velocity constraints for user constraints */
-        constraints.setupVelocityConstraints(world.constraints, world.bodies, timeStep);
+    /* setup velocity constraints for user constraints */
+    constraints.setupVelocityConstraints(world.constraints, world.bodies, timeStep);
 
-        /* warm start impulse ratio for variable frame rates */
-        // scale cached impulses based on the ratio of current to previous delta time.
-        // this prevents impulse overshoot/undershoot when frame rate varies.
-        // if previous delta time is 0 (first frame), ratio is 0 (no warm start).
-        // the ratio is clamped: a body that just landed carries the large impulse that stopped it, far more than resting
-        // needs, and scaled up by a much longer step it would gain a velocity the solver can no longer take back (a stack
-        // in equilibrium is a little less stable across a big jump in step length)
-        const warmStartImpulseRatio =
-            world.settings.solver.warmStarting && world.previousTimeStep > 0
-                ? Math.min(timeStep / world.previousTimeStep, 4)
-                : 0.0;
+    /* warm start impulse ratio for variable frame rates */
+    // scale cached impulses based on the ratio of current to previous delta time.
+    // this prevents impulse overshoot/undershoot when frame rate varies.
+    // if previous delta time is 0 (first frame), ratio is 0 (no warm start).
+    // the ratio is clamped: a body that just landed carries the large impulse that stopped it, far more than resting
+    // needs, and scaled up by a much longer step it would gain a velocity the solver can no longer take back (a stack
+    // in equilibrium is a little less stable across a big jump in step length)
+    const warmStartImpulseRatio =
+        world.settings.solver.warmStarting && world.previousTimeStep > 0 ? Math.min(timeStep / world.previousTimeStep, 4) : 0.0;
 
-        /* store current delta time for next frame's warm start calculation */
-        world.previousTimeStep = timeStep;
+    /* store current delta time for next frame's warm start calculation */
+    world.previousTimeStep = timeStep;
 
-        /* solve velocity constraints, per island */
-        for (const island of world.islands.islands) {
-            // skip empty islands (no contacts AND no constraints)
-            if (island.contactIndices.length === 0 && island.constraintIds.length === 0) {
-                continue;
-            }
+    /* solve velocity constraints, per island */
+    for (const island of world.islands.islands) {
+        // skip empty islands (no contacts AND no constraints)
+        if (island.contactIndices.length === 0 && island.constraintIds.length === 0) {
+            continue;
+        }
 
-            /* sort for deterministic simulation, order will remain stable for position solving later */
-            constraints.sortConstraintIds(world.constraints, island.constraintIds);
-            contactConstraints.sortContactIndices(world.contactConstraints, world.bodies, island.contactIndices);
+        /* sort for deterministic simulation, order will remain stable for position solving later */
+        constraints.sortConstraintIds(world.constraints, island.constraintIds);
+        contactConstraints.sortContactIndices(world.contactConstraints, world.bodies, island.contactIndices);
 
-            /* warm start in the sorted order, so the result does not depend on the order contacts were found */
-            if (world.settings.solver.warmStarting) {
-                constraints.warmStartVelocityConstraints(
-                    world.constraints,
-                    world.bodies,
-                    island.constraintIds,
-                    warmStartImpulseRatio,
-                );
-                contactConstraints.warmStartVelocityConstraints(
+        /* warm start in the sorted order, so the result does not depend on the order contacts were found */
+        if (world.settings.solver.warmStarting) {
+            constraints.warmStartVelocityConstraints(
+                world.constraints,
+                world.bodies,
+                island.constraintIds,
+                warmStartImpulseRatio,
+            );
+            contactConstraints.warmStartVelocityConstraints(
+                world.contactConstraints,
+                world.bodies,
+                island.contactIndices,
+                warmStartImpulseRatio,
+            );
+        }
+
+        /* solve velocity constraints for this island */
+        for (let i = 0; i < island.numVelocitySteps; i++) {
+            let appliedImpulse = false;
+
+            if (island.contactIndices.length > 0) {
+                appliedImpulse = contactConstraints.solveVelocityConstraintsForIsland(
                     world.contactConstraints,
                     world.bodies,
                     island.contactIndices,
-                    warmStartImpulseRatio,
                 );
             }
 
-            /* solve velocity constraints for this island */
-            for (let i = 0; i < island.numVelocitySteps; i++) {
-                let appliedImpulse = false;
-
-                if (island.contactIndices.length > 0) {
-                    appliedImpulse = contactConstraints.solveVelocityConstraintsForIsland(
-                        world.contactConstraints,
+            if (island.constraintIds.length > 0) {
+                appliedImpulse =
+                    constraints.solveVelocityConstraintsForIsland(
+                        world.constraints,
                         world.bodies,
-                        island.contactIndices,
-                    );
-                }
+                        island.constraintIds,
+                        timeStep,
+                    ) || appliedImpulse;
+            }
 
-                if (island.constraintIds.length > 0) {
-                    appliedImpulse =
-                        constraints.solveVelocityConstraintsForIsland(
-                            world.constraints,
-                            world.bodies,
-                            island.constraintIds,
-                            timeStep,
-                        ) || appliedImpulse;
-                }
-
-                // early termination: island converged if no impulses applied
-                if (!appliedImpulse) {
-                    break;
-                }
+            // early termination: island converged if no impulses applied
+            if (!appliedImpulse) {
+                break;
             }
         }
+    }
 
-        /* store applied impulses for warm starting next frame */
-        contactConstraints.storeAppliedImpulses(world.contactConstraints, world.contacts);
+    /* store applied impulses for warm starting next frame */
+    contactConstraints.storeAppliedImpulses(world.contactConstraints, world.contacts);
 
-        /* integrate velocities into positions */
-        // for MotionQuality.DISCRETE, we integrate angular velocity and linear velocity
-        // for MotionQuality.LINEAR_CAST meeting conditions for CCD, we only integrate angular velocity into the quaternion,
-        // and the CCD pipeline handles position integration.
-        velocityIntegrationUpdate(world, timeStep);
+    /* integrate velocities into positions */
+    // for MotionQuality.DISCRETE, we integrate angular velocity and linear velocity
+    // for MotionQuality.LINEAR_CAST meeting conditions for CCD, we only integrate angular velocity into the quaternion,
+    // and the CCD pipeline handles position integration.
+    velocityIntegrationUpdate(world, timeStep);
 
-        /* find CCD contacts for bodies with LINEAR_CAST motion quality */
-        findCCDContacts(world, timeStep, listener);
+    /* find CCD contacts for bodies with LINEAR_CAST motion quality */
+    findCCDContacts(world, timeStep, listener);
 
-        /* sort CCD bodies by time of impact */
-        sortCCDBodies(world.ccd);
+    /* sort CCD bodies by time of impact */
+    sortCCDBodies(world.ccd);
 
-        /* resolve CCD contacts (move bodies to collision points) */
-        resolveCCDContacts(world);
+    /* resolve CCD contacts (move bodies to collision points) */
+    resolveCCDContacts(world);
 
-        /* solve position constraints, per island */
-        for (const island of world.islands.islands) {
-            // skip empty islands (no contacts AND no constraints)
-            if (island.contactIndices.length === 0 && island.constraintIds.length === 0) {
-                continue;
+    /* solve position constraints, per island */
+    for (const island of world.islands.islands) {
+        // skip empty islands (no contacts AND no constraints)
+        if (island.contactIndices.length === 0 && island.constraintIds.length === 0) {
+            continue;
+        }
+
+        for (let i = 0; i < island.numPositionSteps; i++) {
+            let appliedImpulse = false;
+
+            if (island.contactIndices.length > 0) {
+                appliedImpulse = contactConstraints.solvePositionConstraintsForIsland(
+                    world.contactConstraints,
+                    world.bodies,
+                    island.contactIndices,
+                    world.settings.solver.penetrationSlop,
+                    world.settings.solver.baumgarteFactor,
+                    world.settings.solver.maxPenetrationDistance,
+                );
             }
 
-            for (let i = 0; i < island.numPositionSteps; i++) {
-                let appliedImpulse = false;
-
-                if (island.contactIndices.length > 0) {
-                    appliedImpulse = contactConstraints.solvePositionConstraintsForIsland(
-                        world.contactConstraints,
+            if (island.constraintIds.length > 0) {
+                appliedImpulse =
+                    constraints.solvePositionConstraintsForIsland(
+                        world.constraints,
                         world.bodies,
-                        island.contactIndices,
-                        world.settings.solver.penetrationSlop,
+                        island.constraintIds,
                         world.settings.solver.baumgarteFactor,
-                        world.settings.solver.maxPenetrationDistance,
-                    );
-                }
+                        timeStep,
+                    ) || appliedImpulse;
+            }
 
-                if (island.constraintIds.length > 0) {
-                    appliedImpulse =
-                        constraints.solvePositionConstraintsForIsland(
-                            world.constraints,
-                            world.bodies,
-                            island.constraintIds,
-                            world.settings.solver.baumgarteFactor,
-                            timeStep,
-                        ) || appliedImpulse;
-                }
-
-                // early termination: island converged if no impulses applied
-                if (!appliedImpulse) {
-                    break;
-                }
+            // early termination: island converged if no impulses applied
+            if (!appliedImpulse) {
+                break;
             }
         }
+    }
 
-        /* finish the step per island: derive positions and bounds, clear forces, sleep test */
-        for (const island of world.islands.islands) {
-            islands.finishIslandStep(island, world, timeStep);
-        }
-    } else {
-        /* nothing moved, but the forces applied for this step are still consumed */
-        resetForces(world);
+    /* finish the step per island: derive positions and bounds, clear forces, sleep test */
+    for (const island of world.islands.islands) {
+        islands.finishIslandStep(island, world, timeStep);
     }
 
     /* flip cached manifold buffers: this step's writes become next step's reads */
@@ -1887,16 +1886,5 @@ function resolveCCDContacts(world: World): void {
         vec3.scale(_resolveCCDContacts_movement, ccdBody.deltaPosition, ccdBody.fractionPlusSlop);
         vec3.add(bodyA.position, bodyA.position, _resolveCCDContacts_movement);
         rigidBody.setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
-    }
-}
-
-function resetForces(world: World): void {
-    const pool = world.bodies.pool;
-    const activeIndices = world.bodies.activeBodyIndices;
-    const activeCount = world.bodies.activeBodyCount;
-    for (let i = 0; i < activeCount; i++) {
-        const body = pool[activeIndices[i]];
-        if (body.sleeping) continue;
-        rigidBody.clearForces(body);
     }
 }

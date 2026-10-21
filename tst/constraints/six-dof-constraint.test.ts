@@ -2,6 +2,7 @@ import type { Quat, Vec3 } from 'math';
 import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
+    dof,
     MotionType,
     MotorState,
     motorSettings,
@@ -12,6 +13,7 @@ import {
     SwingType,
     sixDOFConstraint,
     sphere,
+    updateWorld,
 } from '../../src';
 import type { World } from '../../src/world';
 import { createTestWorld } from '../helpers';
@@ -68,6 +70,45 @@ function ballPoint(ball: RigidBody, constraint: sixDOFConstraint.SixDOFConstrain
     const out = vec3.transformQuat(vec3.create(), constraint.localSpacePosition2, ball.quaternion);
     return vec3.add(out, out, ball.centerOfMassPosition);
 }
+
+describe('sixDOFConstraint with locked rotation axes', () => {
+    // the rotation sum has zero columns for the locked axes, which jolt makes identity, so the constraint still holds y
+    // rather than switching off
+    test('every axis fixed holds the free axis of a body that turns only about y', () => {
+        const { world, layers } = createTestWorld();
+        const base = rigidBody.create(world, {
+            shape: sphere.create({ radius: 0.5 }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: [0, 0, 0],
+        });
+        const ball = rigidBody.create(world, {
+            shape: sphere.create({ radius: 0.5 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: [0, 0, 0],
+            allowedDegreesOfFreedom: dof(true, true, true, false, true, false),
+            linearDamping: 0,
+            angularDamping: 0,
+        });
+        sixDOFConstraint.create(world, {
+            bodyIdA: base.id,
+            bodyIdB: ball.id,
+            position1: [0, 0, 0],
+            position2: [0, 0, 0],
+            axisX1: [1, 0, 0],
+            axisY1: [0, 1, 0],
+            axisX2: [1, 0, 0],
+            axisY2: [0, 1, 0],
+            limitMin: FIXED,
+            limitMax: FIXED,
+        });
+        vec3.set(ball.motionProperties.angularVelocity, 0, 5, 0);
+        for (let i = 0; i < 30; i++) updateWorld(world, undefined, DT);
+        expect(Math.abs(ball.motionProperties.angularVelocity[1])).toBeLessThan(1e-3);
+        expect(2 * Math.acos(Math.min(1, Math.abs(ball.quaternion[3])))).toBeLessThan(0.01);
+    });
+});
 
 describe('sixDOFConstraint velocity solve', () => {
     test('reports whether any part applied an impulse', () => {

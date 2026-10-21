@@ -775,8 +775,6 @@ export function scaleToMass(motionProperties: MotionProperties, newMass: number)
     motionProperties.invMass = newInvMass;
 }
 
-const _moveKinematic_axis = /* @__PURE__ */ vec3.create();
-
 /**
  * Set velocity of body such that it will be rotate/translate by inDeltaPosition/Rotation in inDeltaTime seconds.
  *
@@ -802,8 +800,7 @@ export function moveKinematic(
     applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
 
     // calculate required angular velocity
-    const angle = getAxisAngleFromQuat(_moveKinematic_axis, deltaRotation);
-    vec3.scale(motionProperties.angularVelocity, _moveKinematic_axis, angle / deltaTime);
+    getAngularVelocityFromQuat(motionProperties.angularVelocity, deltaRotation, deltaTime);
     applyRotationDOFConstraint(motionProperties.angularVelocity, motionProperties.allowedDegreesOfFreedom);
 }
 
@@ -829,26 +826,25 @@ export function applyRotationDOFConstraint(angularVelocity: Vec3, allowedDOFs: n
     if (!(allowedRotation & 0b100)) angularVelocity[2] = 0; // z rotation locked
 }
 
-/** helper to extract axis and angle from a quaternion, angle in [0, pi] */
-function getAxisAngleFromQuat(outAxis: Vec3, q: Quat): number {
-    // For a unit quaternion q = [x, y, z, w], the axis is [x, y, z] / sin(θ/2)
-    // where θ is the rotation angle
-    // q and -q are the same rotation, use the w >= 0 twin so the angle takes the short way round
+/**
+ * the angular velocity that turns identity into the unit rotation q over deltaTime, its angle in [0, pi]. for a small
+ * angle sin(x) = x, at most sin(0.02) - 0.02 = 7e-5 out: the angle from w is inaccurate when w is near 1, so the cut
+ * between them is not made smaller
+ */
+function getAngularVelocityFromQuat(out: Vec3, q: Quat, deltaTime: number): Vec3 {
+    // q and -q are the same rotation, the w >= 0 twin takes the short way round
     const sign = q[3] < 0 ? -1 : 1;
-    const angle = 2 * Math.acos(Math.min(1, sign * q[3]));
-    const sinHalfAngleSq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
-    if (sinHalfAngleSq > 1e-10) {
-        const sinHalfAngle = sign * Math.sqrt(sinHalfAngleSq);
-        outAxis[0] = q[0] / sinHalfAngle;
-        outAxis[1] = q[1] / sinHalfAngle;
-        outAxis[2] = q[2] / sinHalfAngle;
-    } else {
-        // quaternion is near identity, axis is arbitrary
-        outAxis[0] = 1;
-        outAxis[1] = 0;
-        outAxis[2] = 0;
+    const x = sign * q[0];
+    const y = sign * q[1];
+    const z = sign * q[2];
+    const imaginaryLengthSq = x * x + y * y + z * z;
+    if (imaginaryLengthSq < 4.0e-4) {
+        const scale = 2 / deltaTime;
+        return vec3.set(out, x * scale, y * scale, z * scale);
     }
-    return angle;
+    const angle = 2 * Math.acos(sign * q[3]);
+    const scale = angle / (Math.sqrt(imaginaryLengthSq) * deltaTime);
+    return vec3.set(out, x * scale, y * scale, z * scale);
 }
 
 const _multiplyWorldSpaceInverseInertiaByVector_combinedQuat = /* @__PURE__ */ quat.create();

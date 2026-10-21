@@ -1,6 +1,6 @@
 import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
+import { box, INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { createTestWorld } from './helpers';
 
 describe('Islands', () => {
@@ -173,4 +173,42 @@ describe('Islands', () => {
         for (const body of pair) expect(body.islandIndex).toBe(1);
         for (const body of chain) expect(body.islandIndex).toBe(0);
     });
+
+    // two dynamic bodies share an island, a kinematic one, or a dynamic one touching only kinematic or static ones, has
+    // an island of its own, a static one none, as jolt's TestContactsVsSimulationIslands
+    const motionTypes = [MotionType.STATIC, MotionType.KINEMATIC, MotionType.DYNAMIC];
+    test.each(motionTypes.flatMap((m1) => motionTypes.flatMap((m2) => motionTypes.map((m3) => [m1, m2, m3]))))(
+        'three touching boxes of motion types %i, %i, %i join only dynamic bodies',
+        (m1, m2, m3) => {
+            const { world, layers } = createTestWorld();
+            vec3.set(world.settings.gravity, 0, 0, 0);
+            const create = (motionType: MotionType, x: number) =>
+                rigidBody.create(world, {
+                    shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
+                    objectLayer: motionType === MotionType.STATIC ? layers.OBJECT_LAYER_NOT_MOVING : layers.OBJECT_LAYER_MOVING,
+                    motionType,
+                    position: vec3.fromValues(x, 0, 0),
+                });
+            const b1 = create(m1, 0);
+            const b2 = create(m2, 1.99);
+            const b3 = create(m3, 3.98);
+            updateWorld(world, undefined, 1 / 60);
+
+            for (const [outer, other] of [
+                [b1, b3],
+                [b3, b1],
+            ]) {
+                if (outer.motionType === MotionType.DYNAMIC && b2.motionType === MotionType.DYNAMIC) {
+                    expect(outer.islandIndex).toBeGreaterThanOrEqual(0);
+                    expect(outer.islandIndex).toBe(b2.islandIndex);
+                } else if (outer.motionType !== MotionType.STATIC) {
+                    expect(outer.islandIndex).toBeGreaterThanOrEqual(0);
+                    expect(outer.islandIndex).not.toBe(b2.islandIndex);
+                    expect(outer.islandIndex).not.toBe(other.islandIndex);
+                } else {
+                    expect(outer.islandIndex).toBe(-1);
+                }
+            }
+        },
+    );
 });

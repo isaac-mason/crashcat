@@ -180,10 +180,22 @@ export function calculateConstraintProperties(
     mat4.add(invEffectiveMass, part.invI1, part.invI2);
 
     // calculate effective mass: K^-1 = (J M^-1 J^T)^-1
-    if (!mat4.invert3x3(part.effectiveMass, invEffectiveMass)) {
-        // singular matrix - both bodies are static/kinematic
-        deactivate(part);
+    if (mat4.invert3x3(part.effectiveMass, invEffectiveMass)) return;
+
+    // a zero column is an axis locked on both bodies: identity there, which changes nothing, as every impulse goes through
+    // invI1 or invI2 and so comes to zero on that axis
+    for (let axis = 0; axis < 3; axis++) {
+        const column = axis * 4;
+        if (
+            invEffectiveMass[column] === 0 &&
+            invEffectiveMass[column + 1] === 0 &&
+            invEffectiveMass[column + 2] === 0 &&
+            invEffectiveMass[column + 3] === 0
+        ) {
+            invEffectiveMass[column + axis] = 1;
+        }
     }
+    if (!mat4.invert3x3(part.effectiveMass, invEffectiveMass)) deactivate(part);
 }
 
 /**

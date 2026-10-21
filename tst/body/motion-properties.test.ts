@@ -243,4 +243,16 @@ describe('moveKinematic', () => {
             expect(mp.angularVelocity[2]).toBeCloseTo(0, 4);
         }
     });
+
+    it('should find a turn too small for its w to tell from 1', () => {
+        const deltaTime = 1 / 60;
+        const deltaRotation = quat.setAxisAngle(quat.create(), vec3.fromValues(0, 1, 0), 1e-9);
+        expect(deltaRotation[3]).toBe(1);
+
+        const mp = motionProperties.create();
+        motionProperties.moveKinematic(mp, vec3.create(), deltaRotation, deltaTime);
+        expect(mp.angularVelocity[0]).toBe(0);
+        expect(mp.angularVelocity[1]).toBeCloseTo(1e-9 / deltaTime, 15);
+        expect(mp.angularVelocity[2]).toBe(0);
+    });
 });
