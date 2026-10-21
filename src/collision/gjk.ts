@@ -57,16 +57,18 @@ function computeClosestPointOnTriangle(
     mustIncludeC: boolean,
     squaredTolerance: number,
 ): void {
-    // the most accurate normal is calculated by using the two shortest edges
-    const acx = inC[0] - inA[0];
-    const acy = inC[1] - inA[1];
-    const acz = inC[2] - inA[2];
+    // the most accurate normal is calculated by using the two shortest edges. the normals differ most when one edge is
+    // much shorter than the others (which are then about as long as each other), so the shorter of the two edges at b
+    // will do with the third: a and c are swapped so that ab is the shorter one
+    const bax = inA[0] - inB[0];
+    const bay = inA[1] - inB[1];
+    const baz = inA[2] - inB[2];
 
     const bcx = inC[0] - inB[0];
     const bcy = inC[1] - inB[1];
     const bcz = inC[2] - inB[2];
 
-    const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
+    const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < bax * bax + bay * bay + baz * baz;
 
     // choose a and c based on swap
     const ax = swapAC ? inC[0] : inA[0];
