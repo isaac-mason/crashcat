@@ -33,6 +33,7 @@ import {
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
     removeFromList,
@@ -166,7 +167,7 @@ export type HingeConstraintSettings = {
     maxFrictionTorque?: number;
     /** motor settings (spring + torque limits) */
     motorSettings?: MotorSettings;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -241,6 +242,7 @@ function resetConstraint(constraint: HingeConstraint): void {
 
 /** create a hinge constraint */
 export function create(world: World, settings: HingeConstraintSettings): HingeConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
     const pool = ensurePool<HingeConstraint>(world.constraints, ConstraintType.HINGE);
     const bodies = world.bodies;
 

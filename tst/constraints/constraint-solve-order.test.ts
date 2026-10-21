@@ -69,4 +69,17 @@ describe('constraint solve order', () => {
         rigidBody.remove(world, a);
         expect(world.constraints.list).toEqual([]);
     });
+
+    // jolt's priority is a uint32, which a negative or fractional one would not be
+    test('a priority is an integer in [0, 2^32)', () => {
+        const { world, bodies } = createBodies(2);
+        const [a, b] = bodies;
+        const settings = { bodyIdA: a.id, bodyIdB: b.id, pointA: vec3.fromValues(0.5, 0, 0), pointB: vec3.fromValues(0.5, 0, 0) };
+        expect(() => pointConstraint.create(world, { ...settings, constraintPriority: -1 })).toThrow();
+        expect(() => distanceConstraint.create(world, { ...settings, constraintPriority: 1.5 })).toThrow();
+        expect(() => pointConstraint.create(world, { ...settings, constraintPriority: 2 ** 32 })).toThrow();
+        expect(pointConstraint.create(world, { ...settings, constraintPriority: 0xffffffff }).constraintPriority).toBe(
+            0xffffffff,
+        );
+    });
 });

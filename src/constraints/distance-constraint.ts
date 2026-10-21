@@ -27,6 +27,7 @@ import {
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
     removeFromList,
@@ -86,7 +87,7 @@ export type DistanceConstraintSettings = {
     springSettings?: SpringSettings;
     /** constraint space@default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -104,6 +105,7 @@ function resetConstraint(constraint: DistanceConstraint): void {
 
 /** create a distance constraint */
 export function create(world: World, settings: DistanceConstraintSettings): DistanceConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
     const pool = ensurePool<DistanceConstraint>(world.constraints, ConstraintType.DISTANCE);
     const bodies = world.bodies;
 

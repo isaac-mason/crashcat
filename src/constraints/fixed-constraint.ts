@@ -4,6 +4,7 @@ import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -25,6 +26,7 @@ import {
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
     removeFromList,
@@ -102,7 +104,7 @@ export type FixedConstraintSettings = {
      * @default false
      */
     autoDetectPoint?: boolean;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -112,6 +114,7 @@ export type FixedConstraintSettings = {
 
 /** create a fixed constraint */
 export function create(world: World, settings: FixedConstraintSettings): FixedConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
     const pool = ensurePool<FixedConstraint>(world.constraints, ConstraintType.FIXED);
     const bodies = world.bodies;
 

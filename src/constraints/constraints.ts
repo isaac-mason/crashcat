@@ -66,6 +66,11 @@ export function init(): Constraints {
     };
 }
 
+/** whether a priority fits jolt's uint32 */
+export function isValidConstraintPriority(priority: number): boolean {
+    return Number.isInteger(priority) && priority >= 0 && priority <= 0xffffffff;
+}
+
 /** appends the constraint to the list */
 export function addToList(constraints: Constraints, constraint: ConstraintBase): void {
     constraint.listIndex = constraints.list.length;
@@ -410,7 +415,7 @@ export type ConstraintBase = {
     /** whether constraint is enabled */
     enabled: boolean;
 
-    /** constraint priority (higher = solved first) */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold */
     constraintPriority: number;
 
     /** velocity iteration override (0 = use default) */

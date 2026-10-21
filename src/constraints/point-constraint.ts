@@ -3,6 +3,7 @@ import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
 import { STEP_STAMP_NONE } from '../body/motion-properties';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -22,6 +23,7 @@ import {
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
     removeFromList,
@@ -64,7 +66,7 @@ export type PointConstraintSettings = {
     pointB: Vec3;
     /** constraint space @default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -74,6 +76,7 @@ export type PointConstraintSettings = {
 
 /** create a point constraint */
 export function create(world: World, settings: PointConstraintSettings): PointConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
     const pool = ensurePool<PointConstraint>(world.constraints, ConstraintType.POINT);
     const bodies = world.bodies;
 
