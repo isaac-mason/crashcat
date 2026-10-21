@@ -263,3 +263,31 @@ describe('contact constraints: friction lever arms', () => {
         expect(vec3.length(constraint.frictionConstraint2.r1PlusUxAxis)).toBeCloseTo(radius, 6);
     });
 });
+
+describe('contact constraints: a shape change', () => {
+    test("a new shape is not given the old shape's cached contacts", () => {
+        const { world, layers } = createTestWorld();
+        world.settings.sleeping.allowSleeping = false;
+        rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(10, 0.5, 10) }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: vec3.fromValues(0, -0.5, 0),
+        });
+        const crate = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5) }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, 0.5, 0),
+        });
+        for (let i = 0; i < 60; i++) updateWorld(world, undefined, 1 / 60);
+        expect(crate.position[1]).toBeCloseTo(0.5, 2);
+
+        // twice as tall, its bottom a half metre into the floor: the pair barely moved, but its cached contacts are the
+        // old shape's, so it runs the narrowphase and is pushed out
+        crate.shape = box.create({ halfExtents: vec3.fromValues(0.5, 1, 0.5) });
+        rigidBody.updateShape(world, crate);
+        for (let i = 0; i < 120; i++) updateWorld(world, undefined, 1 / 60);
+        expect(Math.abs(crate.position[1] - 1)).toBeLessThan(0.03);
+    });
+});

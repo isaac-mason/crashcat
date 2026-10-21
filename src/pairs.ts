@@ -396,6 +396,16 @@ export function findPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: RigidBody)
  * the listener is unavailable at body-removal time). does not depend on the body's dbvt leaf, so it
  * is safe to call before or independently of tree-leaf removal.
  */
+/** every pair of the body runs the narrowphase next update instead of reusing its cached manifolds: its shape changed */
+export function invalidateBodyCache(pairs: Pairs, body: RigidBody): void {
+    let edgeKey = body.headPairKey;
+    while (edgeKey !== INVALID_PAIR_KEY) {
+        const rec = getPairEdgeRecord(edgeKey);
+        pairs.poseCache[rec * CACHE_STRIDE + CACHE_VALID] = 0;
+        edgeKey = pairs.records[edgePrevSlot(rec, getPairEdgeSide(edgeKey)) + 1];
+    }
+}
+
 export function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: RigidBody[], body: RigidBody): void {
     let edgeKey = body.headPairKey;
     while (edgeKey !== INVALID_PAIR_KEY) {

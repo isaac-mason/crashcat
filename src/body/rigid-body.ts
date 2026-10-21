@@ -684,6 +684,9 @@ export function updateShape(world: World, body: RigidBody) {
         );
     }
 
+    // the pair cache would rebuild last update's contacts, made with the old shape
+    pairs.invalidateBodyCache(world.pairs, body);
+
     // recompute world-space center of mass after shape changes
     updateCenterOfMassPosition(body);
 
