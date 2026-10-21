@@ -1831,36 +1831,37 @@ console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
 
 ### Broadphase Queries
 
-For advanced scenarios, you can query the broadphase spatial acceleration structure directly. This is faster than narrowphase queries but less precise - it only tests axis-aligned bounding boxes (AABBs), not exact shapes.
+`broadphaseQuery` finds bodies by their bounds alone, without testing their shapes, as Jolt's `BroadPhaseQuery`: a box, a sphere, a point or an oriented box for the bodies it overlaps, through a body collector (all or any), and a ray or a moving box for the bodies it enters and where, through a body cast collector (all, any or closest). It is faster than the narrowphase queries but less precise, as bounds are not shapes. For traversal of your own, `broadphase` takes a visitor instead.
 
 ```ts
-// for advanced scenarios: query the broadphase spatial acceleration structure directly
-// useful when you need custom traversal logic or want to avoid narrowphase overhead
+// the bodies whose bounds a box overlaps, their shapes not tested
+const nearby = broadphaseQuery.createAllBodyCollector();
+broadphaseQuery.collideAABB(world, nearby, [-5, -5, -5, 5, 5, 5], queryFilter);
+console.log('bodies with bounds in the box:', nearby.hits);
 
-// intersectAABB: find all bodies whose AABBs overlap a box
-const queryAABB: Box3 = [-5, -5, -5, 5, 5, 5];
+// a sphere, a point and a turned box, likewise
+nearby.reset();
+broadphaseQuery.collideSphere(world, nearby, vec3.fromValues(0, 5, 0), 2, queryFilter);
+broadphaseQuery.collidePoint(world, nearby, vec3.fromValues(0, 5, 0), queryFilter);
+const turned = {
+    orientation: mat4.fromRotationTranslation(mat4.create(), quat.setAxisAngle(quat.create(), [0, 1, 0], 0.7), [0, 1, 0]),
+    halfExtents: vec3.fromValues(1, 0.5, 1),
+};
+broadphaseQuery.collideOrientedBox(world, nearby, turned, queryFilter);
 
-const aabbVisitor: BodyVisitor = {
+// a box swept down: the first body whose bounds it enters, and where
+const first = broadphaseQuery.createClosestBodyCastCollector();
+broadphaseQuery.castAABB(world, first, [-0.5, 9.5, -0.5, 0.5, 10.5, 0.5], vec3.fromValues(0, -20, 0), queryFilter);
+if (first.hit.bodyId !== -1) console.log('bounds entered at fraction', first.hit.fraction);
+
+// for traversal of your own, the broadphase takes a visitor, which a cast also tells where it entered each body
+const visitor: BodyVisitor = {
     shouldExit: false,
-    visit(body: RigidBody) {
-        console.log('body AABB overlaps query AABB:', body.id);
-        // set shouldExit = true to stop traversal early
+    visit(body: RigidBody, fraction?: number) {
+        console.log('ray enters the bounds of', body.id, 'at', fraction);
     },
 };
-
-broadphase.intersectAABB(world, queryAABB, queryFilter, aabbVisitor);
-
-// intersectPoint: find all bodies whose AABBs contain a point
-const queryPoint = vec3.fromValues(0, 5, 0);
-
-const pointVisitor: BodyVisitor = {
-    shouldExit: false,
-    visit(body: RigidBody) {
-        console.log('body AABB contains point:', body.id);
-    },
-};
-
-broadphase.intersectPoint(world, queryPoint, queryFilter, pointVisitor);
+broadphase.castRay(world, vec3.fromValues(0, 10, 0), vec3.fromValues(0, -1, 0), 20, queryFilter, visitor);
 ```
 
 ### Shape vs Shape

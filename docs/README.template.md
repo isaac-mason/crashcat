@@ -454,7 +454,7 @@ Test if a shape overlaps any bodies. Perfect for area triggers, placement valida
 
 ### Broadphase Queries
 
-For advanced scenarios, you can query the broadphase spatial acceleration structure directly. This is faster than narrowphase queries but less precise - it only tests axis-aligned bounding boxes (AABBs), not exact shapes.
+`broadphaseQuery` finds bodies by their bounds alone, without testing their shapes, as Jolt's `BroadPhaseQuery`: a box, a sphere, a point or an oriented box for the bodies it overlaps, through a body collector (all or any), and a ray or a moving box for the bodies it enters and where, through a body cast collector (all, any or closest). It is faster than the narrowphase queries but less precise, as bounds are not shapes. For traversal of your own, `broadphase` takes a visitor instead.
 
 <Snippet source="./queries.ts" select="broadphase-query" />
 

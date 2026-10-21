@@ -10,6 +10,6 @@ export type BodyVisitor = {
      * omit it, and castRay then falls back to no distance pruning.
      */
     earlyOutFraction?: number;
-    /** called when visiting a body */
-    visit(body: RigidBody): void;
+    /** called when visiting a body; a cast also gives the fraction of the cast where it entered the body's bounds */
+    visit(body: RigidBody, fraction?: number): void;
 };

@@ -13,11 +13,12 @@
 import { type Vec3, vec3 } from 'math';
 import { type Box3, box3 } from 'math/shapes';
 import type { RigidBody } from '../body/rigid-body';
-import { rayDistanceToBox3, rayFractionToBox3, rayHitsBox3, safeReciprocal } from '../collision/cast-utils';
+import { rayDistanceToBox3, rayFractionToBox3, safeReciprocal } from '../collision/cast-utils';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
+import type { OrientedBox } from './broadphase';
 
 const STRIDE_BOUNDS = 6;
 const STRIDE_TOPO = 5;
@@ -825,6 +826,269 @@ export function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilte
     }
 }
 
+/** within radius_sq of the centre, faces included: jolt's AABox4VsSphere, for one box */
+function sphereOverlapsBox(
+    centerX: number,
+    centerY: number,
+    centerZ: number,
+    radiusSq: number,
+    minX: number,
+    minY: number,
+    minZ: number,
+    maxX: number,
+    maxY: number,
+    maxZ: number,
+): boolean {
+    const dx = Math.min(Math.max(centerX, minX), maxX) - centerX;
+    const dy = Math.min(Math.max(centerY, minY), maxY) - centerY;
+    const dz = Math.min(Math.max(centerZ, minZ), maxZ) - centerZ;
+    return dx * dx + dy * dy + dz * dz <= radiusSq;
+}
+
+export function intersectSphere(
+    world: World,
+    dbvt: DBVT,
+    center: Vec3,
+    radius: number,
+    queryFilter: Filter,
+    visitor: BodyVisitor,
+): void {
+    if (dbvt.root === -1) return;
+
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
+    const cx = center[0];
+    const cy = center[1];
+    const cz = center[2];
+    const radiusSq = radius * radius;
+
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
+
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
+        const nb = nodeIndex * STRIDE_BOUNDS;
+
+        if (
+            !sphereOverlapsBox(
+                cx,
+                cy,
+                cz,
+                radiusSq,
+                bounds[nb],
+                bounds[nb + 1],
+                bounds[nb + 2],
+                bounds[nb + 3],
+                bounds[nb + 4],
+                bounds[nb + 5],
+            )
+        ) {
+            continue;
+        }
+
+        // if internal node, push children
+        if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
+            continue;
+        }
+
+        // leaf node - check body
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
+
+        if (
+            !filter.shouldPairCollide(
+                queryFilter.collisionGroups,
+                queryFilter.collisionMask,
+                body.collisionGroups,
+                body.collisionMask,
+            )
+        ) {
+            continue;
+        }
+        if (!filter.filterObjectLayer(queryFilter, body.objectLayer)) continue;
+        if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
+
+        // the fat leaf was near enough: the body's own box must be too
+        const box = body.aabb;
+        if (!sphereOverlapsBox(cx, cy, cz, radiusSq, box[0], box[1], box[2], box[3], box[4], box[5])) continue;
+
+        visitor.visit(body);
+
+        if (visitor.shouldExit) {
+            return;
+        }
+    }
+}
+
+/** an oriented box's terms for the separating axis test, worked out once a query */
+const _obb_rotation: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+const _obb_absRotation: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+const _obb_translation: number[] = [0, 0, 0];
+const _obb_halfExtents: number[] = [0, 0, 0];
+
+/** jolt's epsilon for AABox4VsBox, so parallel edges' near null cross products don't separate */
+const OBB_EPSILON = 1.0e-6;
+
+function prepareOrientedBox(box: OrientedBox): void {
+    const m = box.orientation;
+    for (let k = 0; k < 3; k++) {
+        for (let i = 0; i < 3; i++) {
+            // orientation(row i, column k) of the column major matrix
+            const value = m[k * 4 + i];
+            _obb_rotation[i * 3 + k] = value;
+            _obb_absRotation[k * 3 + i] = Math.abs(value) + OBB_EPSILON;
+        }
+    }
+    _obb_translation[0] = m[12];
+    _obb_translation[1] = m[13];
+    _obb_translation[2] = m[14];
+    _obb_halfExtents[0] = box.halfExtents[0];
+    _obb_halfExtents[1] = box.halfExtents[1];
+    _obb_halfExtents[2] = box.halfExtents[2];
+}
+
+/**
+ * the prepared oriented box overlaps the aligned box: jolt's AABox4VsBox, from real time collision detection 4.4.1, with
+ * a the aligned box and b the oriented one so its orientation needs no inverse
+ */
+function orientedBoxOverlapsBox(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): boolean {
+    const r = _obb_rotation;
+    const ar = _obb_absRotation;
+    const e0 = _obb_halfExtents[0];
+    const e1 = _obb_halfExtents[1];
+    const e2 = _obb_halfExtents[2];
+    // b's centre in the space of a, and a's half extents
+    const t0 = _obb_translation[0] - 0.5 * (minX + maxX);
+    const t1 = _obb_translation[1] - 0.5 * (minY + maxY);
+    const t2 = _obb_translation[2] - 0.5 * (minZ + maxZ);
+    const a0 = 0.5 * (maxX - minX);
+    const a1 = 0.5 * (maxY - minY);
+    const a2 = 0.5 * (maxZ - minZ);
+
+    // axes a0, a1, a2
+    if (Math.abs(t0) > a0 + (e0 * ar[0 * 3 + 0] + e1 * ar[1 * 3 + 0] + e2 * ar[2 * 3 + 0])) return false;
+    if (Math.abs(t1) > a1 + (e0 * ar[0 * 3 + 1] + e1 * ar[1 * 3 + 1] + e2 * ar[2 * 3 + 1])) return false;
+    if (Math.abs(t2) > a2 + (e0 * ar[0 * 3 + 2] + e1 * ar[1 * 3 + 2] + e2 * ar[2 * 3 + 2])) return false;
+
+    // axes b0, b1, b2
+    for (let i = 0; i < 3; i++) {
+        const ra = a0 * ar[i * 3 + 0] + a1 * ar[i * 3 + 1] + a2 * ar[i * 3 + 2];
+        const distance = t0 * r[0 * 3 + i] + t1 * r[1 * 3 + i] + t2 * r[2 * 3 + i];
+        if (Math.abs(distance) > ra + _obb_halfExtents[i]) return false;
+    }
+
+    // a0 x b0, a0 x b1, a0 x b2
+    if (
+        Math.abs(t2 * r[1 * 3 + 0] - t1 * r[2 * 3 + 0]) >
+        a1 * ar[0 * 3 + 2] + a2 * ar[0 * 3 + 1] + (e1 * ar[2 * 3 + 0] + e2 * ar[1 * 3 + 0])
+    )
+        return false;
+    if (
+        Math.abs(t2 * r[1 * 3 + 1] - t1 * r[2 * 3 + 1]) >
+        a1 * ar[1 * 3 + 2] + a2 * ar[1 * 3 + 1] + (e0 * ar[2 * 3 + 0] + e2 * ar[0 * 3 + 0])
+    )
+        return false;
+    if (
+        Math.abs(t2 * r[1 * 3 + 2] - t1 * r[2 * 3 + 2]) >
+        a1 * ar[2 * 3 + 2] + a2 * ar[2 * 3 + 1] + (e0 * ar[1 * 3 + 0] + e1 * ar[0 * 3 + 0])
+    )
+        return false;
+
+    // a1 x b0, a1 x b1, a1 x b2
+    if (
+        Math.abs(t0 * r[2 * 3 + 0] - t2 * r[0 * 3 + 0]) >
+        a0 * ar[0 * 3 + 2] + a2 * ar[0 * 3 + 0] + (e1 * ar[2 * 3 + 1] + e2 * ar[1 * 3 + 1])
+    )
+        return false;
+    if (
+        Math.abs(t0 * r[2 * 3 + 1] - t2 * r[0 * 3 + 1]) >
+        a0 * ar[1 * 3 + 2] + a2 * ar[1 * 3 + 0] + (e0 * ar[2 * 3 + 1] + e2 * ar[0 * 3 + 1])
+    )
+        return false;
+    if (
+        Math.abs(t0 * r[2 * 3 + 2] - t2 * r[0 * 3 + 2]) >
+        a0 * ar[2 * 3 + 2] + a2 * ar[2 * 3 + 0] + (e0 * ar[1 * 3 + 1] + e1 * ar[0 * 3 + 1])
+    )
+        return false;
+
+    // a2 x b0, a2 x b1, a2 x b2
+    if (
+        Math.abs(t1 * r[0 * 3 + 0] - t0 * r[1 * 3 + 0]) >
+        a0 * ar[0 * 3 + 1] + a1 * ar[0 * 3 + 0] + (e1 * ar[2 * 3 + 2] + e2 * ar[1 * 3 + 2])
+    )
+        return false;
+    if (
+        Math.abs(t1 * r[0 * 3 + 1] - t0 * r[1 * 3 + 1]) >
+        a0 * ar[1 * 3 + 1] + a1 * ar[1 * 3 + 0] + (e0 * ar[2 * 3 + 2] + e2 * ar[0 * 3 + 2])
+    )
+        return false;
+    if (
+        Math.abs(t1 * r[0 * 3 + 2] - t0 * r[1 * 3 + 2]) >
+        a0 * ar[2 * 3 + 1] + a1 * ar[2 * 3 + 0] + (e0 * ar[1 * 3 + 2] + e1 * ar[0 * 3 + 2])
+    )
+        return false;
+
+    return true;
+}
+
+export function intersectOrientedBox(
+    world: World,
+    dbvt: DBVT,
+    box: OrientedBox,
+    queryFilter: Filter,
+    visitor: BodyVisitor,
+): void {
+    if (dbvt.root === -1) return;
+
+    const topo = dbvt.topo;
+    const bounds = dbvt.bounds;
+    prepareOrientedBox(box);
+
+    let stackSize = 0;
+    _flatStack[stackSize++] = dbvt.root;
+
+    while (stackSize > 0) {
+        const nodeIndex = _flatStack[--stackSize];
+        const nb = nodeIndex * STRIDE_BOUNDS;
+
+        if (!orientedBoxOverlapsBox(bounds[nb], bounds[nb + 1], bounds[nb + 2], bounds[nb + 3], bounds[nb + 4], bounds[nb + 5]))
+            continue;
+
+        // if internal node, push children
+        if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+            _flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
+            continue;
+        }
+
+        // leaf node - check body
+        const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
+
+        if (
+            !filter.shouldPairCollide(
+                queryFilter.collisionGroups,
+                queryFilter.collisionMask,
+                body.collisionGroups,
+                body.collisionMask,
+            )
+        ) {
+            continue;
+        }
+        if (!filter.filterObjectLayer(queryFilter, body.objectLayer)) continue;
+        if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
+
+        const own = body.aabb;
+        if (!orientedBoxOverlapsBox(own[0], own[1], own[2], own[3], own[4], own[5])) continue;
+
+        visitor.visit(body);
+
+        if (visitor.shouldExit) {
+            return;
+        }
+    }
+}
+
 /** visit every body in the tree — no filtering, no aabb tests */
 export function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void {
     if (dbvt.root === -1) return;
@@ -1001,28 +1265,25 @@ export function castRay(
             continue;
         }
 
-        // early out: ray-aabb test on body bounds (a finite entry fraction means a hit)
-        if (
-            rayFractionToBox3(
-                originX,
-                originY,
-                originZ,
-                invDispX,
-                invDispY,
-                invDispZ,
-                body.aabb[0],
-                body.aabb[1],
-                body.aabb[2],
-                body.aabb[3],
-                body.aabb[4],
-                body.aabb[5],
-            ) === Infinity
-        ) {
-            continue;
-        }
+        // ray-aabb test on body bounds: a finite entry fraction is a hit, and goes to the visitor
+        const entry = rayFractionToBox3(
+            originX,
+            originY,
+            originZ,
+            invDispX,
+            invDispY,
+            invDispZ,
+            body.aabb[0],
+            body.aabb[1],
+            body.aabb[2],
+            body.aabb[3],
+            body.aabb[4],
+            body.aabb[5],
+        );
+        if (entry === Infinity) continue;
 
         // visit
-        visitor.visit(body);
+        visitor.visit(body, entry);
 
         if (visitor.shouldExit) {
             return;
@@ -1058,6 +1319,11 @@ export function castAABB(
     const halfX = (castBounds[3] - castBounds[0]) * 0.5;
     const halfY = (castBounds[4] - castBounds[1]) * 0.5;
     const halfZ = (castBounds[5] - castBounds[2]) * 0.5;
+
+    // reciprocals of the displacement, once per query, for the leaf's fraction-space slab test
+    const invDispX = safeReciprocal(displacement[0]);
+    const invDispY = safeReciprocal(displacement[1]);
+    const invDispZ = safeReciprocal(displacement[2]);
 
     const castLen = vec3.length(displacement);
     const dirX = castLen > 0 ? displacement[0] / castLen : 0;
@@ -1192,28 +1458,25 @@ export function castAABB(
             continue;
         }
 
-        // ray-slab test against body aabb expanded by the shape's half extents (minkowski sum)
-        if (
-            !rayHitsBox3(
-                originX,
-                originY,
-                originZ,
-                dirX,
-                dirY,
-                dirZ,
-                castLen,
-                body.aabb[0] - halfX,
-                body.aabb[1] - halfY,
-                body.aabb[2] - halfZ,
-                body.aabb[3] + halfX,
-                body.aabb[4] + halfY,
-                body.aabb[5] + halfZ,
-            )
-        ) {
-            continue;
-        }
+        // ray-slab test against body aabb expanded by the shape's half extents (minkowski sum): a finite entry fraction is
+        // a hit, and goes to the visitor
+        const entry = rayFractionToBox3(
+            originX,
+            originY,
+            originZ,
+            invDispX,
+            invDispY,
+            invDispZ,
+            body.aabb[0] - halfX,
+            body.aabb[1] - halfY,
+            body.aabb[2] - halfZ,
+            body.aabb[3] + halfX,
+            body.aabb[4] + halfY,
+            body.aabb[5] + halfZ,
+        );
+        if (entry === Infinity) continue;
 
-        visitor.visit(body);
+        visitor.visit(body, entry);
 
         if (visitor.shouldExit) {
             return;
