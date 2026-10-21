@@ -55,6 +55,7 @@ export type {
     ContactSettings,
     WorldContactPoint,
 } from './constraints/contact-constraints';
+export { createContactSettings } from './constraints/contact-constraints';
 export type { DistanceConstraint, DistanceConstraintSettings } from './constraints/distance-constraint';
 export * as distanceConstraint from './constraints/distance-constraint';
 export type { FixedConstraint, FixedConstraintSettings } from './constraints/fixed-constraint';

@@ -897,14 +897,7 @@ const listener: Listener = {
         if (other.motionType === MotionType.STATIC) return;
 
         // estimate impact intensity using collision response solver
-        estimateCollisionResponse(
-            collisionEstimationResult,
-            bodyA,
-            bodyB,
-            manifold,
-            settings.combinedFriction,
-            settings.combinedRestitution,
-        );
+        estimateCollisionResponse(collisionEstimationResult, bodyA, bodyB, manifold, settings);
 
         // sum up total normal impulse from all contact points
         let totalNormalImpulse = 0;
