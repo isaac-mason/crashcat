@@ -827,7 +827,7 @@ export function castConvexVsPlane(
     const supportPoint = vec3.transformMat4(_castConvexVsPlane_supportPoint, _castConvexVsPlane_supportPointLocal, AtoB);
 
     const signedDistance = plane3.distanceToPoint(plane, supportPoint);
-    const convexRadius = _castConvexVsPlane_support.convexRadius;
+    const convexRadius = _castConvexVsPlane_support.convexRadius + settings.extraConvexRadius;
     const penetrationDepth = -signedDistance + convexRadius;
     const dot = vec3.dot(_castConvexVsPlane_directionInB, normal);
 

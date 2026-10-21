@@ -851,10 +851,15 @@ function castConvexVsTriangleMesh(
     const rayDirZ = _castConvexVsTriangleMesh_walkDisplacement[2] * invRayLength;
 
     // compute half-extents of the base AABB
+    // grown by the extra convex radius, in the unscaled space
     const halfExtents = _castConvexVsTriangleMesh_halfExtents;
-    halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * 0.5;
-    halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5;
-    halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5;
+    const extra = settings.extraConvexRadius;
+    halfExtents[0] =
+        (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * 0.5 + extra / Math.abs(scaleBX);
+    halfExtents[1] =
+        (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5 + extra / Math.abs(scaleBY);
+    halfExtents[2] =
+        (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5 + extra / Math.abs(scaleBZ);
 
     let stackSize = 0;
     _castConvexVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -979,7 +984,7 @@ function castConvexVsTriangleMesh(
                     _castConvexVsTriangleMesh_displacementInB,
                     settings.collisionTolerance,
                     settings.penetrationTolerance,
-                    supportA.convexRadius,
+                    supportA.convexRadius + settings.extraConvexRadius,
                     0, // triangle has no convex radius
                     collector.earlyOutFraction,
                     settings.returnDeepestPoint,
@@ -2378,7 +2383,7 @@ function castSphereVsTriangleMesh(
     }
 
     // calculate scaled sphere radius (assuming uniform scale)
-    const sphereRadius = Math.abs(scaleAX) * sphereShape.radius;
+    const sphereRadius = Math.abs(scaleAX) * sphereShape.radius + settings.extraConvexRadius;
 
     // setup sphere sweep in mesh local space
     const posB = vec3.set(_castSphereVsTriangleMesh_posB, posBX, posBY, posBZ);

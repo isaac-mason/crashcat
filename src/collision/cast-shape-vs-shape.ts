@@ -121,6 +121,8 @@ export type CastShapeSettings = {
     collideOnlyWithActiveEdges: boolean;
     /** when collideOnlyWithActiveEdges is true a movement direction can be provided. When hitting an inactive edge, the system will select the triangle normal as penetration depth only if it impedes the movement less than with the calculated penetration depth */
     activeEdgeMovementDirection: Vec3;
+    /** when above 0, the cast shape is inflated by this much on every side, as an extra convex radius (unit: meter) */
+    extraConvexRadius: number;
 };
 
 export function createDefaultCastShapeSettings(): CastShapeSettings {
@@ -134,6 +136,7 @@ export function createDefaultCastShapeSettings(): CastShapeSettings {
         useShrunkenShapeAndConvexRadius: false,
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: [0, 0, 0],
+        extraConvexRadius: 0,
     };
 }
 

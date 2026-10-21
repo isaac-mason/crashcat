@@ -1071,6 +1071,8 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
     listener: undefined as CharacterListener | undefined,
     character: null! as KCC,
     displacement: vec3.create() as Vec3, // Store displacement for validation checks
+    /** hits at fraction 0, the contacts the character already penetrates, are left to the collide collector */
+    ignoreInitialOverlap: true,
 
     addHit(hit: CastShapeHit): void {
         if (hit.status !== CastShapeStatus.COLLIDING) return;
@@ -1078,9 +1080,8 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
         // only accept hits earlier than current best
         if (hit.fraction >= this.earlyOutFraction) return;
 
-        // ignore collisions at fraction = 0
-        // these are already-penetrating contacts handled by collide collector
-        if (hit.fraction <= 0) return;
+        // ignore collisions at fraction = 0 when asked: the already-penetrating contacts the collide collector handles
+        if (this.ignoreInitialOverlap && hit.fraction <= 0) return;
 
         // ignore penetrations we're moving away from
         if (vec3.dot(hit.normal, this.displacement) >= 0) return;
@@ -1210,6 +1211,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
         this.hasHit = false;
         this.world = null!;
         this.ignoredContacts = undefined;
+        this.ignoreInitialOverlap = true;
         this.listener = undefined!;
         this.character = null!;
         vec3.zero(this.displacement);
@@ -1469,7 +1471,8 @@ function correctFractionForCharacterPadding(
 }
 
 /**
- * Sweep test to verify movement path. Returns earliest hit along displacement.
+ * Sweep along the displacement to see how far the character can move: the shape cast without its padding, the fraction
+ * then corrected so the padding touches what it hits; initial overlaps are ignored. Returns earliest hit along displacement.
  * @param out output contact (only valid if function returns true)
  * @param world the physics world
  * @param character the character controller
@@ -1479,7 +1482,7 @@ function correctFractionForCharacterPadding(
  * @param ignoredContacts optional array of contacts to ignore
  * @returns true if contact found, false if path is clear
  */
-function getFirstContactForSweep(
+function validateMovement(
     out: CharacterContact,
     world: World,
     character: KCC,
@@ -1509,7 +1512,7 @@ function getFirstContactForSweep(
     const characterPaddingFraction = character.characterPadding / displacementLen;
 
     // setup cast settings
-    _characterCastSettings.collisionTolerance = character.collisionTolerance;
+    _characterCastSettings.extraConvexRadius = 0;
     _characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === BackFaceMode.COLLIDE;
     _characterCastSettings.collideWithBackfacesConvex = false;
     _characterCastSettings.collideOnlyWithActiveEdges = true;
@@ -1626,6 +1629,78 @@ function getFirstContactForSweep(
 
     return true;
 }
+
+/**
+ * The first contact along the displacement, the shape cast inflated by its padding so what it hits is what the padding
+ * touches; initial overlaps count.
+ * @returns true if contact found, false if path is clear
+ */
+function getFirstContactForSweep(
+    out: CharacterContact,
+    world: World,
+    character: KCC,
+    position: Vec3,
+    displacement: Vec3,
+    filter: Filter,
+    listener: CharacterListener | undefined,
+    ignoredContacts: CharacterContact[] | undefined,
+): boolean {
+    resetContact(out);
+
+    // calculate shape world position (position + rotated shapeOffset + characterPadding * up)
+    vec3.transformQuat(_getContacts_shapePos, character.shapeOffset, character.quaternion);
+    vec3.add(_getContacts_shapePos, _getContacts_shapePos, position);
+    vec3.scale(_getContacts_paddingOffset, character.up, character.characterPadding);
+    vec3.add(_getContacts_shapePos, _getContacts_shapePos, _getContacts_paddingOffset);
+
+    // setup cast settings: the shape inflated by its padding
+    _characterCastSettings.extraConvexRadius = character.characterPadding;
+    _characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === BackFaceMode.COLLIDE;
+    _characterCastSettings.collideWithBackfacesConvex = false;
+    _characterCastSettings.collideOnlyWithActiveEdges = true;
+    _characterCastSettings.useShrunkenShapeAndConvexRadius = true;
+    _characterCastSettings.returnDeepestPoint = false;
+
+    // setup collector: initial overlaps count, and a hit must come before the end of the sweep
+    characterCastCollector.outContact = out;
+    characterCastCollector.hasHit = false;
+    characterCastCollector.earlyOutFraction = 1.0;
+    characterCastCollector.ignoreInitialOverlap = false;
+    characterCastCollector.world = world;
+    characterCastCollector.ignoredContacts = ignoredContacts;
+    characterCastCollector.listener = listener;
+    characterCastCollector.character = character;
+    vec3.copy(characterCastCollector.displacement, displacement);
+
+    // setup chained filter to ignore character's inner body
+    const originalBodyFilter = filter.bodyFilter;
+    ignoreSingleBodyChainedBodyFilterState.bodyId = character.innerRigidBodyId;
+    ignoreSingleBodyChainedBodyFilterState.innerBodyFilter = originalBodyFilter;
+    filter.bodyFilter = ignoreSingleBodyChainedBodyFilter;
+
+    query.castShape(
+        world,
+        characterCastCollector,
+        _characterCastSettings,
+        character.shape,
+        _getContacts_shapePos,
+        character.quaternion,
+        _sweep_unitScale,
+        displacement,
+        filter,
+    );
+
+    // restore original filter
+    filter.bodyFilter = originalBodyFilter;
+    ignoreSingleBodyChainedBodyFilterState.bodyId = INVALID_BODY_ID;
+    ignoreSingleBodyChainedBodyFilterState.innerBodyFilter = undefined;
+
+    const hasHit = characterCastCollector.hasHit;
+    characterCastCollector.reset();
+    return hasHit;
+}
+
+const _sweep_unitScale = /* @__PURE__ */ vec3.fromValues(1, 1, 1);
 
 /**
  * Removes contacts with opposing penetration normals.
@@ -2668,8 +2743,8 @@ function hasSteepSlopesToWalk(character: KCC, linearVelocity: Vec3): boolean {
     const dotUp = vec3.dot(linearVelocity, character.up);
     vec3.scaleAndAdd(_hasSteepSlopes_horizontal, linearVelocity, character.up, -dotUp);
 
-    // Need enough horizontal velocity
-    if (vec3.squaredLength(_hasSteepSlopes_horizontal) < 1e-12) {
+    // Need enough horizontal velocity: over 1 mm/s
+    if (vec3.squaredLength(_hasSteepSlopes_horizontal) <= 1e-6) {
         return false;
     }
 
@@ -2786,7 +2861,7 @@ function moveShape(
         // do a sweep to test if the path is really unobstructed
         // note: getFirstContactForSweep already checks for small displacement internally
         if (
-            getFirstContactForSweep(
+            validateMovement(
                 _moveShape_sweepContact,
                 world,
                 character,
@@ -3560,7 +3635,10 @@ const _walkStairs_newPosition = /* @__PURE__ */ vec3.create();
 const _walkStairs_testPosition = /* @__PURE__ */ vec3.create();
 const _walkStairs_horizontalMovement = /* @__PURE__ */ vec3.create();
 const _walkStairs_characterVelocity = /* @__PURE__ */ vec3.create();
-const _walkStairs_horizontalVelocity = /* @__PURE__ */ vec3.create();
+const _walkStairs_finalPosition = /* @__PURE__ */ vec3.create();
+const _walkStairs_surfaceNormal = /* @__PURE__ */ vec3.create();
+const _walkStairs_direction = /* @__PURE__ */ vec3.create();
+const _walkStairs_stepForwardNormalized = /* @__PURE__ */ vec3.create();
 const _walkStairs_steepSlopeNormalsPool: Vec3[] = [];
 for (let i = 0; i < 16; i++) {
     _walkStairs_steepSlopeNormalsPool.push(vec3.create());
@@ -3602,16 +3680,7 @@ export function walkStairs(
     /* step 1: move up */
     vec3.copy(_walkStairs_up, stepUp);
     if (
-        getFirstContactForSweep(
-            _walkStairs_contact,
-            world,
-            character,
-            character.position,
-            _walkStairs_up,
-            filter,
-            listener,
-            undefined,
-        )
+        validateMovement(_walkStairs_contact, world, character, character.position, _walkStairs_up, filter, listener, undefined)
     ) {
         if (_walkStairs_contact.fraction < 1e-6) {
             // no movement possible, cancel
@@ -3626,10 +3695,6 @@ export function walkStairs(
     // calculate character velocity from step forward
     vec3.scale(_walkStairs_characterVelocity, stepForward, 1 / deltaTime);
 
-    // get horizontal velocity
-    const dotUp = vec3.dot(_walkStairs_characterVelocity, character.up);
-    vec3.scaleAndAdd(_walkStairs_horizontalVelocity, _walkStairs_characterVelocity, character.up, -dotUp);
-
     // collect steep slopes we're pushing against
     _walkStairs_steepSlopeNormalsCount = 0;
     const contacts = character.contacts;
@@ -3640,9 +3705,9 @@ export function walkStairs(
 
         // check if pushing into contact
         const relVelDotNormal =
-            c.surfaceNormal[0] * (_walkStairs_horizontalVelocity[0] - c.linearVelocity[0]) +
-            c.surfaceNormal[1] * (_walkStairs_horizontalVelocity[1] - c.linearVelocity[1]) +
-            c.surfaceNormal[2] * (_walkStairs_horizontalVelocity[2] - c.linearVelocity[2]);
+            c.surfaceNormal[0] * (_walkStairs_characterVelocity[0] - c.linearVelocity[0]) +
+            c.surfaceNormal[1] * (_walkStairs_characterVelocity[1] - c.linearVelocity[1]) +
+            c.surfaceNormal[2] * (_walkStairs_characterVelocity[2] - c.linearVelocity[2]);
 
         if (relVelDotNormal < 0) {
             // copy normal to pre-allocated pool (read again in step 4 after the probe)
@@ -3683,15 +3748,26 @@ export function walkStairs(
     }
 
     /* step 4: check if we made progress toward any steep slope */
-    // we need to have moved at least 5% of step forward against a steep slope
+    // into the slope within 45 degrees of the step forward, and at least 5% of it; otherwise we just slid along it and
+    // the stair walk would move us faster than we should after the normal movement
     const stepForwardLen = vec3.len(stepForward);
-    const maxDot = -0.05 * stepForwardLen;
+    const stepForwardNormalized = vec3.scale(_walkStairs_stepForwardNormalized, stepForward, 1 / stepForwardLen);
     let madeProgress = false;
     for (let i = 0; i < _walkStairs_steepSlopeNormalsCount; i++) {
-        const dot = vec3.dot(_walkStairs_steepSlopeNormalsPool[i], _walkStairs_horizontalMovement);
-        if (dot < maxDot) {
-            madeProgress = true;
-            break;
+        const normal = _walkStairs_steepSlopeNormalsPool[i];
+        const direction = vec3.scale(_walkStairs_direction, character.up, vec3.dot(normal, character.up));
+        vec3.sub(direction, direction, normal);
+        const directionLen = vec3.len(direction);
+        if (directionLen > 1e-6) {
+            vec3.scale(direction, direction, 1 / directionLen);
+            if (
+                // biome-ignore lint/suspicious/noApproximativeNumericConstant: jolt's constant
+                vec3.dot(direction, stepForwardNormalized) > 0.707107 &&
+                vec3.dot(direction, _walkStairs_horizontalMovement) > 0.05 * stepForwardLen
+            ) {
+                madeProgress = true;
+                break;
+            }
         }
     }
     if (!madeProgress) {
@@ -3719,9 +3795,11 @@ export function walkStairs(
         // no floor found, we're in mid air, cancel
         return false;
     }
+    vec3.scaleAndAdd(_walkStairs_finalPosition, _walkStairs_newPosition, _walkStairs_down, _walkStairs_contact.fraction);
 
     /* step 6: validate floor is walkable */
-    if (isSlopeTooSteep(character, _walkStairs_contact.surfaceNormal)) {
+    const surfaceNormal = vec3.copy(_walkStairs_surfaceNormal, _walkStairs_contact.surfaceNormal);
+    if (isSlopeTooSteep(character, surfaceNormal)) {
         // floor is too steep - try forward test
         if (vec3.squaredLength(stepForwardTest) < 1e-12) {
             // no test position provided, cancel
@@ -3770,15 +3848,19 @@ export function walkStairs(
         }
 
         // check if test floor is walkable
-        if (isSlopeTooSteep(character, _walkStairs_testContact.surfaceNormal)) {
+        vec3.copy(surfaceNormal, _walkStairs_testContact.surfaceNormal);
+        if (isSlopeTooSteep(character, surfaceNormal)) {
             // test floor also too steep, cancel
             return false;
         }
     }
 
-    /* step 7: calculate final position and move there */
-    vec3.scaleAndAdd(_walkStairs_newPosition, _walkStairs_newPosition, _walkStairs_down, _walkStairs_contact.fraction);
-    moveToContact(world, character, _walkStairs_newPosition, _walkStairs_contact, filter, listener);
+    // no height gained over where we were, along the floor's normal: the stair walk is pointless
+    vec3.sub(_walkStairs_direction, _walkStairs_finalPosition, character.position);
+    if (vec3.dot(_walkStairs_direction, surfaceNormal) < 1e-4) return false;
+
+    /* step 7: move to the final position */
+    moveToContact(world, character, _walkStairs_finalPosition, _walkStairs_contact, filter, listener);
 
     /* step 8: override ground state to ON_GROUND */
     // it's possible the contact normal was too steep, but the forward test found a valid floor
@@ -3795,6 +3877,7 @@ const _update_achievedHorizontalStep = /* @__PURE__ */ vec3.create();
 const _update_stepForward = /* @__PURE__ */ vec3.create();
 const _update_stepForwardNormalized = /* @__PURE__ */ vec3.create();
 const _update_stepForwardTest = /* @__PURE__ */ vec3.create();
+const _update_walkStairsDirection = /* @__PURE__ */ vec3.create();
 const _update_groundHorizontal = /* @__PURE__ */ vec3.create();
 
 /**
@@ -3881,36 +3964,39 @@ export function update(
                 achievedHorizontalStepLen + 1e-4 < desiredHorizontalStepLen &&
                 hasSteepSlopesToWalk(character, _update_desiredVelocity)
             ) {
-                // calculate step forward (clamped to minimum)
+                // the steep contact most opposing the movement: the stair walk goes that way instead of the
+                // movement's, to step up stairs approached at a big angle. contacts at too big an angle are left out
+                const walkStairsDirection = vec3.copy(_update_walkStairsDirection, _update_stepForwardNormalized);
+                let maxDot = settings.walkStairsCosAngleForwardContact;
+                const contacts = character.contacts;
+                for (let i = 0; i < contacts.length; i++) {
+                    const c = contacts[i];
+                    if (!c.hadCollision || c.wasDiscarded) continue;
+                    vec3.sub(_update_groundHorizontal, _update_desiredVelocity, c.linearVelocity);
+                    if (vec3.dot(c.surfaceNormal, _update_groundHorizontal) >= 0) continue;
+                    if (!isSlopeTooSteep(character, c.surfaceNormal)) continue;
+
+                    // the surface normal without its vertical part, negated to point along the movement
+                    const test = vec3.scale(_update_groundHorizontal, character.up, vec3.dot(c.surfaceNormal, character.up));
+                    vec3.sub(test, test, c.surfaceNormal);
+                    const testLen = vec3.len(test);
+                    if (testLen > 1e-6) {
+                        vec3.scale(test, test, 1 / testLen);
+                        const dot = vec3.dot(test, _update_stepForwardNormalized);
+                        if (dot > maxDot) {
+                            vec3.copy(walkStairsDirection, test);
+                            maxDot = dot;
+                        }
+                    }
+                }
+
+                // calculate step forward (clamped to minimum) and the test distance, along the walk direction
                 const stepForwardLen = Math.max(
                     settings.walkStairsMinStepForward,
                     desiredHorizontalStepLen - achievedHorizontalStepLen,
                 );
-                vec3.scale(_update_stepForward, _update_stepForwardNormalized, stepForwardLen);
-
-                // calculate step forward test direction
-                // start with ground normal projected to horizontal
-                vec3.copy(_update_groundHorizontal, character.ground.normal);
-                vec3.negate(_update_groundHorizontal, _update_groundHorizontal);
-                const groundDotUp = vec3.dot(_update_groundHorizontal, character.up);
-                vec3.scaleAndAdd(_update_groundHorizontal, _update_groundHorizontal, character.up, -groundDotUp);
-
-                const groundHorizontalLenSq = vec3.squaredLength(_update_groundHorizontal);
-                if (groundHorizontalLenSq > 1e-12) {
-                    vec3.scale(_update_stepForwardTest, _update_groundHorizontal, 1 / Math.sqrt(groundHorizontalLenSq));
-                } else {
-                    vec3.copy(_update_stepForwardTest, _update_stepForwardNormalized);
-                }
-
-                // if ground normal direction differs too much from movement, use movement direction
-                if (
-                    vec3.dot(_update_stepForwardTest, _update_stepForwardNormalized) < settings.walkStairsCosAngleForwardContact
-                ) {
-                    vec3.copy(_update_stepForwardTest, _update_stepForwardNormalized);
-                }
-
-                // scale to test distance
-                vec3.scale(_update_stepForwardTest, _update_stepForwardTest, settings.walkStairsStepForwardTest);
+                vec3.scale(_update_stepForward, walkStairsDirection, stepForwardLen);
+                vec3.scale(_update_stepForwardTest, walkStairsDirection, settings.walkStairsStepForwardTest);
 
                 // try walking stairs
                 walkStairs(

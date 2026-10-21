@@ -670,15 +670,16 @@ export function castConvexVsConvexLocal(
     scaleB: Vec3,
     targetTransform: Mat4,
 ): void {
-    // get support functions for both shapes WITHOUT convex radius
-    // (radius will be added in EPA if needed)
+    // the actual shapes, or the shapes shrunk by their convex radius with the radius added back by the cast
+    const supportMode = settings.useShrunkenShapeAndConvexRadius
+        ? SupportFunctionMode.EXCLUDE_CONVEX_RADIUS
+        : SupportFunctionMode.DEFAULT;
     const supportA = castConvex_supportA;
     const supportB = castConvex_supportB;
-    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleA);
-    setShapeSupport(supportB, shapeB, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, scaleB);
+    setShapeSupport(supportA, shapeA, supportMode, scaleA);
+    setShapeSupport(supportB, shapeB, supportMode, scaleB);
 
     // run GJK casting with EPA fallback for deep penetration in B's local space
-    const tolerance = 1e-4;
     _castConvex_gjkResult.lambda = collector.earlyOutFraction;
     penetrationCastShape(
         _castConvex_gjkResult,
@@ -686,9 +687,9 @@ export function castConvexVsConvexLocal(
         supportA,
         supportB,
         displacementInB,
-        tolerance,
+        settings.collisionTolerance,
         settings.penetrationTolerance,
-        supportA.convexRadius,
+        supportA.convexRadius + settings.extraConvexRadius,
         supportB.convexRadius,
         collector.earlyOutFraction,
         settings.returnDeepestPoint,

@@ -1604,11 +1604,15 @@ function castShapeVsStaticCompound(
     const rayDirY = _castShapeVsStaticCompound_displacementInB[1] * invRayLength;
     const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
 
-    // compute half-extents of the base AABB
+    // compute half-extents of the base AABB, grown by the extra convex radius in the unscaled space
     // held in locals: a static compound nested in this one rewrites the scratch during the walk
-    const halfExtentX = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5;
-    const halfExtentY = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5;
-    const halfExtentZ = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5;
+    const extra = settings.extraConvexRadius;
+    const halfExtentX =
+        (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * 0.5 + extra / Math.abs(scaleBX);
+    const halfExtentY =
+        (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * 0.5 + extra / Math.abs(scaleBY);
+    const halfExtentZ =
+        (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * 0.5 + extra / Math.abs(scaleBZ);
 
     const stackBase = _castShapeVsStaticCompound_stackTop;
     let stackSize = stackBase;

@@ -1083,9 +1083,11 @@ function castShapeVsCompound(
     const centerX = (queryBounds[0] + queryBounds[3]) * 0.5;
     const centerY = (queryBounds[1] + queryBounds[4]) * 0.5;
     const centerZ = (queryBounds[2] + queryBounds[5]) * 0.5;
-    const extentX = (queryBounds[3] - queryBounds[0]) * 0.5;
-    const extentY = (queryBounds[4] - queryBounds[1]) * 0.5;
-    const extentZ = (queryBounds[5] - queryBounds[2]) * 0.5;
+    // grown by the extra convex radius, in the unscaled space
+    const extra = settings.extraConvexRadius;
+    const extentX = (queryBounds[3] - queryBounds[0]) * 0.5 + extra / Math.abs(scaleBX);
+    const extentY = (queryBounds[4] - queryBounds[1]) * 0.5 + extra / Math.abs(scaleBY);
+    const extentZ = (queryBounds[5] - queryBounds[2]) * 0.5 + extra / Math.abs(scaleBZ);
     const invQuatB = quat.set(_castShapeVsCompound_invQuatB, -quatBX, -quatBY, -quatBZ, quatBW);
     const localDisplacement = vec3.set(_castShapeVsCompound_localDisplacement, dispAX, dispAY, dispAZ);
     vec3.transformQuat(localDisplacement, localDisplacement, invQuatB);

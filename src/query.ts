@@ -208,6 +208,8 @@ export function castShape(
     const aabb = box3.copy(_castShape_aabb, shape.aabb);
     const mat = mat4.fromRotationTranslationScale(_castShape_mat4, quaternion, position, scale);
     box3.transformMat4(aabb, aabb, mat);
+    // grown by the extra convex radius the shape is cast with
+    box3.expandByMargin(aabb, aabb, settings.extraConvexRadius);
 
     CastShapeBodyVisitor.set(collector, settings, shape, position, quaternion, scale, displacement);
 
