@@ -26,6 +26,7 @@ import type { SwingTwistConstraintPart } from './constraint-part/swing-twist-con
 import * as swingTwistConstraintPart from './constraint-part/swing-twist-constraint-part';
 import { clampSwingTwist, getSwingTwist, SwingType } from './constraint-part/swing-twist-constraint-part';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
@@ -33,6 +34,7 @@ import {
     ensurePool,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /**
@@ -333,6 +335,7 @@ export function create(world: World, settings: SwingTwistConstraintSettings): Sw
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -370,6 +373,7 @@ export function remove(world: World, constraint: SwingTwistConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -896,6 +900,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();

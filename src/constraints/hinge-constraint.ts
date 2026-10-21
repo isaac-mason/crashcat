@@ -27,6 +27,7 @@ import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
@@ -34,6 +35,7 @@ import {
     ensurePool,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /**
@@ -368,6 +370,7 @@ export function create(world: World, settings: HingeConstraintSettings): HingeCo
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -392,6 +395,7 @@ export function remove(world: World, constraint: HingeConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -832,6 +836,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();

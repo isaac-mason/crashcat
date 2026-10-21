@@ -54,13 +54,37 @@ export type ConstraintPool<C extends ConstraintBase = ConstraintBase> = {
 /** the constraint pools container - keyed by type for monomorphic iteration */
 export type Constraints = {
     pools: Partial<Record<ConstraintType, ConstraintPool>>;
+    /** every live constraint, in creation order but for removal moving the last into the gap, as jolt's constraint manager */
+    list: ConstraintId[];
 };
 
 /** initialize empty constraints */
 export function init(): Constraints {
     return {
         pools: {},
+        list: [],
     };
+}
+
+/** appends the constraint to the list */
+export function addToList(constraints: Constraints, constraint: ConstraintBase): void {
+    constraint.listIndex = constraints.list.length;
+    constraints.list.push(constraint.id);
+}
+
+/** takes the constraint out of the list, the last one moving into its place */
+export function removeFromList(constraints: Constraints, constraint: ConstraintBase): void {
+    const listIndex = constraint.listIndex;
+    if (listIndex === -1) return;
+    const lastIndex = constraints.list.length - 1;
+    if (listIndex !== lastIndex) {
+        const lastId = constraints.list[lastIndex];
+        constraints.list[listIndex] = lastId;
+        const pool = constraints.pools[getConstraintIdType(lastId)]!;
+        pool.constraints[getConstraintIdIndex(lastId)].listIndex = listIndex;
+    }
+    constraints.list.length = lastIndex;
+    constraint.listIndex = -1;
 }
 
 /** result type for constraint iteration overrides */
@@ -186,6 +210,8 @@ export function removeConstraintById(world: World, constraintId: ConstraintId): 
         if (constraint.bodyIndexA !== constraint.bodyIndexB && bodyB && !bodyB._pooled) {
             removeConstraintIdFromBody(bodyB, constraint.id);
         }
+
+        removeFromList(world.constraints, constraint);
 
         // return to pool
         pool.freeIndices.push(index);
@@ -378,6 +404,9 @@ export type ConstraintBase = {
     /** sequence number from constraint ID */
     sequence: number;
 
+    /** the place in Constraints.list, which orders the solve at equal priority, as jolt's constraint index; -1 when not in it */
+    listIndex: number;
+
     /** whether constraint is enabled */
     enabled: boolean;
 
@@ -420,6 +449,7 @@ export function makeConstraintBase(): ConstraintBase {
         id: INVALID_CONSTRAINT_ID,
         index: -1,
         sequence: -1,
+        listIndex: -1,
         enabled: true,
         constraintPriority: 0,
         numVelocityStepsOverride: 0,

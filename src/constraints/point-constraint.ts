@@ -16,6 +16,7 @@ import {
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
@@ -23,6 +24,7 @@ import {
     ensurePool,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /** point constraint removes 3 translational DOF */
@@ -141,6 +143,7 @@ export function create(world: World, settings: PointConstraintSettings): PointCo
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -166,6 +169,7 @@ export function remove(world: World, constraint: PointConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -274,6 +278,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();
