@@ -114,7 +114,7 @@ export type FixedConstraintSettings = {
 
 /** create a fixed constraint */
 export function create(world: World, settings: FixedConstraintSettings): FixedConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
     const pool = ensurePool<FixedConstraint>(world.constraints, ConstraintType.FIXED);
     const bodies = world.bodies;
 

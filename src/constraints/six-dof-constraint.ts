@@ -352,7 +352,7 @@ const _create_invQuatB = /* @__PURE__ */ quat.create();
 
 /** Create a SixDOF constraint */
 export function create(world: World, settings: SixDOFConstraintSettings): SixDOFConstraint {
-    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer in [0, 2^32)');
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be an integer from 0 to 2^32 - 1');
     const pool = ensurePool<SixDOFConstraint>(world.constraints, ConstraintType.SIX_DOF);
     const bodies = world.bodies;
 
