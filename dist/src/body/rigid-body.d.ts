@@ -377,6 +377,8 @@ export declare function clearForces(body: RigidBody): void;
  * @param deltaTime time step over which to move the body
  */
 export declare function moveKinematic(body: RigidBody, targetPosition: Vec3, targetQuaternion: Quat, deltaTime: number): void;
+/** the material id of the part of the body's shape a hit's or a contact's sub shape id names; -1 for none */
+export declare function getMaterial(body: RigidBody, subShapeId: number): number;
 /**
  * Gets the surface normal at a world-space position on the body's shape.
  * The query is performed relative to the shape's local coordinate system (shape origin, not center of mass).

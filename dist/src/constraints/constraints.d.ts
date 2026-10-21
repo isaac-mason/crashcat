@@ -43,9 +43,17 @@ export type ConstraintPool<C extends ConstraintBase = ConstraintBase> = {
 /** the constraint pools container - keyed by type for monomorphic iteration */
 export type Constraints = {
     pools: Partial<Record<ConstraintType, ConstraintPool>>;
+    /** every live constraint, in creation order but for removal moving the last into the gap, as jolt's constraint manager */
+    list: ConstraintId[];
 };
 /** initialize empty constraints */
 export declare function init(): Constraints;
+/** whether a priority fits jolt's uint32 */
+export declare function isValidConstraintPriority(priority: number): boolean;
+/** appends the constraint to the list */
+export declare function addToList(constraints: Constraints, constraint: ConstraintBase): void;
+/** takes the constraint out of the list, the last one moving into its place */
+export declare function removeFromList(constraints: Constraints, constraint: ConstraintBase): void;
 /** result type for constraint iteration overrides */
 export type ConstraintIterationOverrides = {
     velocity: number;
@@ -121,8 +129,8 @@ export declare function sortConstraintIds(constraints: Constraints, constraintId
 export declare function updateSleeping(constraintsState: Constraints, bodies: Bodies): void;
 /** setup velocity constraints for all active user constraints, called before warm starting and solving */
 export declare function setupVelocityConstraints(constraintsState: Constraints, bodies: Bodies, deltaTime: number): void;
-/** warm start velocity constraints for all active user constraints */
-export declare function warmStartVelocityConstraints(constraintsState: Constraints, bodies: Bodies, warmStartImpulseRatio: number): void;
+/** warm start velocity constraints for an island's user constraints, in their solve order */
+export declare function warmStartVelocityConstraints(constraints: Constraints, bodies: Bodies, constraintIds: ConstraintId[], warmStartImpulseRatio: number): void;
 /** solve velocity constraints for an island, called once per velocity iteration, returns true if any constraint applied an impulse */
 export declare function solveVelocityConstraintsForIsland(constraints: Constraints, bodies: Bodies, constraintIds: ConstraintId[], deltaTime: number): boolean;
 /** solve position constraints for an island, called once per position iteration, returns true if any constraint applied an impulse */
@@ -145,9 +153,11 @@ export type ConstraintBase = {
     index: number;
     /** sequence number from constraint ID */
     sequence: number;
+    /** the place in Constraints.list, which orders the solve at equal priority, as jolt's constraint index; -1 when not in it */
+    listIndex: number;
     /** whether constraint is enabled */
     enabled: boolean;
-    /** constraint priority (higher = solved first) */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold */
     constraintPriority: number;
     /** velocity iteration override (0 = use default) */
     numVelocityStepsOverride: number;

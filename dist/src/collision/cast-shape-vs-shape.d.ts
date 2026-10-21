@@ -33,10 +33,6 @@ export type CastShapeHit = {
     subShapeIdA: number;
     /** sub-shape ID on shape B */
     subShapeIdB: number;
-    /** material ID of sub-shape A */
-    materialIdA: number;
-    /** material ID of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */
@@ -70,6 +66,8 @@ export type CastShapeSettings = {
     collideOnlyWithActiveEdges: boolean;
     /** when collideOnlyWithActiveEdges is true a movement direction can be provided. When hitting an inactive edge, the system will select the triangle normal as penetration depth only if it impedes the movement less than with the calculated penetration depth */
     activeEdgeMovementDirection: Vec3;
+    /** when above 0, the cast shape is inflated by this much on every side, as an extra convex radius (unit: meter) */
+    extraConvexRadius: number;
 };
 export declare function createDefaultCastShapeSettings(): CastShapeSettings;
 export type CastShapeCollector = {

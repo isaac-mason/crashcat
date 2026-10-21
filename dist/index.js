@@ -2200,7 +2200,7 @@ function multiplyScalar(out, a, b) {
 var mass_properties_exports = /* @__PURE__ */ __exportAll({
 	copy: () => copy$4,
 	create: () => create$40,
-	reset: () => reset$2,
+	reset: () => reset$3,
 	rotate: () => rotate,
 	scale: () => scale$1,
 	scaleToMass: () => scaleToMass$1,
@@ -2215,7 +2215,7 @@ function create$40() {
 	};
 }
 /** resets mass properties to default values */
-function reset$2(out) {
+function reset$3(out) {
 	out.mass = 0;
 	identity(out.inertia);
 	return out;
@@ -2878,7 +2878,6 @@ function scaleToMass(motionProperties, newMass) {
 	scale$4(motionProperties.invInertiaDiagonal, motionProperties.invInertiaDiagonal, newInvMass / motionProperties.invMass);
 	motionProperties.invMass = newInvMass;
 }
-const _moveKinematic_axis = /* @__PURE__ */ create$47();
 /**
 * Set velocity of body such that it will be rotate/translate by inDeltaPosition/Rotation in inDeltaTime seconds.
 *
@@ -2891,8 +2890,7 @@ function moveKinematic$1(motionProperties, deltaPosition, deltaRotation, deltaTi
 	if (deltaTime <= 0) return;
 	scale$4(motionProperties.linearVelocity, deltaPosition, 1 / deltaTime);
 	applyTranslationDOFConstraint(motionProperties.linearVelocity, motionProperties.allowedDegreesOfFreedom);
-	const angle = getAxisAngleFromQuat(_moveKinematic_axis, deltaRotation);
-	scale$4(motionProperties.angularVelocity, _moveKinematic_axis, angle / deltaTime);
+	getAngularVelocityFromQuat(motionProperties.angularVelocity, deltaRotation, deltaTime);
 	applyRotationDOFConstraint(motionProperties.angularVelocity, motionProperties.allowedDegreesOfFreedom);
 }
 /**
@@ -2915,22 +2913,23 @@ function applyRotationDOFConstraint(angularVelocity, allowedDOFs) {
 	if (!(allowedRotation & 2)) angularVelocity[1] = 0;
 	if (!(allowedRotation & 4)) angularVelocity[2] = 0;
 }
-/** helper to extract axis and angle from a quaternion, angle in [0, pi] */
-function getAxisAngleFromQuat(outAxis, q) {
+/**
+* the angular velocity that turns identity into the unit rotation q over deltaTime, its angle in [0, pi]. for a small
+* angle sin(x) = x, at most sin(0.02) - 0.02 = 7e-5 out: the angle from w is inaccurate when w is near 1, so the cut
+* between them is not made smaller
+*/
+function getAngularVelocityFromQuat(out, q, deltaTime) {
 	const sign = q[3] < 0 ? -1 : 1;
-	const angle = 2 * Math.acos(Math.min(1, sign * q[3]));
-	const sinHalfAngleSq = q[0] * q[0] + q[1] * q[1] + q[2] * q[2];
-	if (sinHalfAngleSq > 1e-10) {
-		const sinHalfAngle = sign * Math.sqrt(sinHalfAngleSq);
-		outAxis[0] = q[0] / sinHalfAngle;
-		outAxis[1] = q[1] / sinHalfAngle;
-		outAxis[2] = q[2] / sinHalfAngle;
-	} else {
-		outAxis[0] = 1;
-		outAxis[1] = 0;
-		outAxis[2] = 0;
+	const x = sign * q[0];
+	const y = sign * q[1];
+	const z = sign * q[2];
+	const imaginaryLengthSq = x * x + y * y + z * z;
+	if (imaginaryLengthSq < 4e-4) {
+		const scale = 2 / deltaTime;
+		return set$7(out, x * scale, y * scale, z * scale);
 	}
-	return angle;
+	const scale = 2 * Math.acos(sign * q[3]) / (Math.sqrt(imaginaryLengthSq) * deltaTime);
+	return set$7(out, x * scale, y * scale, z * scale);
 }
 const _multiplyWorldSpaceInverseInertiaByVector_combinedQuat = /* @__PURE__ */ create$44();
 const _multiplyWorldSpaceInverseInertiaByVector_rotation = /* @__PURE__ */ create$45();
@@ -3480,14 +3479,15 @@ function getSleepTestPoints(body, outPoints) {
 	const qw = body.quaternion[3];
 	const p1 = outPoints[1];
 	const p2 = outPoints[2];
-	if (ex <= ey && ex <= ez) {
+	const lowest = ex < ey ? ez < ex ? 2 : 0 : ez < ey ? 2 : 1;
+	if (lowest === 0) {
 		p1[0] = com[0] + 2 * (qx * qy - qw * qz) * ey;
 		p1[1] = com[1] + (1 - 2 * (qx * qx + qz * qz)) * ey;
 		p1[2] = com[2] + 2 * (qy * qz + qw * qx) * ey;
 		p2[0] = com[0] + 2 * (qx * qz + qw * qy) * ez;
 		p2[1] = com[1] + 2 * (qy * qz - qw * qx) * ez;
 		p2[2] = com[2] + (1 - 2 * (qx * qx + qy * qy)) * ez;
-	} else if (ey <= ez) {
+	} else if (lowest === 1) {
 		p1[0] = com[0] + (1 - 2 * (qy * qy + qz * qz)) * ex;
 		p1[1] = com[1] + 2 * (qx * qy + qw * qz) * ex;
 		p1[2] = com[2] + 2 * (qx * qz - qw * qy) * ex;
@@ -3516,6 +3516,25 @@ const _updateSleepState_points = [
 	create$47(),
 	create$47()
 ];
+/**
+* grow the sphere just enough to hold the point: its diameter becomes the old radius plus the point's distance, and the
+* centre moves toward the point, so a body drifting one way is measured by half its travel
+*/
+function encapsulatePoint(sphere, point) {
+	const dx = point[0] - sphere.center[0];
+	const dy = point[1] - sphere.center[1];
+	const dz = point[2] - sphere.center[2];
+	const distanceSq = dx * dx + dy * dy + dz * dz;
+	if (distanceSq > sphere.radius * sphere.radius) {
+		const distance = Math.sqrt(distanceSq);
+		const radius = .5 * (sphere.radius + distance);
+		const shift = (radius - sphere.radius) / distance;
+		sphere.center[0] += dx * shift;
+		sphere.center[1] += dy * shift;
+		sphere.center[2] += dz * shift;
+		sphere.radius = radius;
+	}
+}
 /** update the sleep state of a body, returns true if the body can sleep, false if it cannot */
 function updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep) {
 	const mp = body.motionProperties;
@@ -3523,8 +3542,7 @@ function updateSleepState(body, deltaTime, maxMovement, timeBeforeSleep) {
 	getSleepTestPoints(body, _updateSleepState_points);
 	for (let i = 0; i < 3; i++) {
 		const sphere = mp.sleepTestSpheres[i];
-		const distanceToPoint = distance(sphere.center, _updateSleepState_points[i]);
-		sphere.radius = Math.max(sphere.radius, distanceToPoint);
+		encapsulatePoint(sphere, _updateSleepState_points[i]);
 		if (sphere.radius > maxMovement) {
 			resetSleepTestSpheres(mp, _updateSleepState_points);
 			return false;
@@ -3855,12 +3873,14 @@ function rayHitsBox3(originX, originY, originZ, dirX, dirY, dirZ, length, minX, 
 var dbvt_exports = /* @__PURE__ */ __exportAll({
 	add: () => add$1,
 	bounds: () => bounds$1,
-	castAABB: () => castAABB$1,
-	castRay: () => castRay$3,
+	castAABB: () => castAABB$2,
+	castRay: () => castRay$4,
 	create: () => create$35,
 	intersectAABB: () => intersectAABB$1,
 	intersectAABBFatLeaves: () => intersectAABBFatLeaves,
+	intersectOrientedBox: () => intersectOrientedBox$1,
 	intersectPoint: () => intersectPoint$1,
+	intersectSphere: () => intersectSphere$1,
 	nodeBodyIndex: () => nodeBodyIndex,
 	nodeChanged: () => nodeChanged,
 	nodeCount: () => nodeCount,
@@ -4352,6 +4372,152 @@ function intersectPoint$1(world, dbvt, point, queryFilter, visitor) {
 		if (visitor.shouldExit) return;
 	}
 }
+/** within radius_sq of the centre, faces included: jolt's AABox4VsSphere, for one box */
+function sphereOverlapsBox(centerX, centerY, centerZ, radiusSq, minX, minY, minZ, maxX, maxY, maxZ) {
+	const dx = Math.min(Math.max(centerX, minX), maxX) - centerX;
+	const dy = Math.min(Math.max(centerY, minY), maxY) - centerY;
+	const dz = Math.min(Math.max(centerZ, minZ), maxZ) - centerZ;
+	return dx * dx + dy * dy + dz * dz <= radiusSq;
+}
+function intersectSphere$1(world, dbvt, center, radius, queryFilter, visitor) {
+	if (dbvt.root === -1) return;
+	const topo = dbvt.topo;
+	const bounds = dbvt.bounds;
+	const cx = center[0];
+	const cy = center[1];
+	const cz = center[2];
+	const radiusSq = radius * radius;
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
+		const nb = nodeIndex * STRIDE_BOUNDS;
+		if (!sphereOverlapsBox(cx, cy, cz, radiusSq, bounds[nb], bounds[nb + 1], bounds[nb + 2], bounds[nb + 3], bounds[nb + 4], bounds[nb + 5])) continue;
+		if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+			_flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+			_flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
+			continue;
+		}
+		const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
+		if (!shouldPairCollide(queryFilter.collisionGroups, queryFilter.collisionMask, body.collisionGroups, body.collisionMask)) continue;
+		if (!filterObjectLayer(queryFilter, body.objectLayer)) continue;
+		if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
+		const box = body.aabb;
+		if (!sphereOverlapsBox(cx, cy, cz, radiusSq, box[0], box[1], box[2], box[3], box[4], box[5])) continue;
+		visitor.visit(body);
+		if (visitor.shouldExit) return;
+	}
+}
+/** an oriented box's terms for the separating axis test, worked out once a query */
+const _obb_rotation = [
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0
+];
+const _obb_absRotation = [
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0,
+	0
+];
+const _obb_translation = [
+	0,
+	0,
+	0
+];
+const _obb_halfExtents = [
+	0,
+	0,
+	0
+];
+/** jolt's epsilon for AABox4VsBox, so parallel edges' near null cross products don't separate */
+const OBB_EPSILON = 1e-6;
+function prepareOrientedBox(box) {
+	const m = box.orientation;
+	for (let k = 0; k < 3; k++) for (let i = 0; i < 3; i++) {
+		const value = m[k * 4 + i];
+		_obb_rotation[i * 3 + k] = value;
+		_obb_absRotation[k * 3 + i] = Math.abs(value) + OBB_EPSILON;
+	}
+	_obb_translation[0] = m[12];
+	_obb_translation[1] = m[13];
+	_obb_translation[2] = m[14];
+	_obb_halfExtents[0] = box.halfExtents[0];
+	_obb_halfExtents[1] = box.halfExtents[1];
+	_obb_halfExtents[2] = box.halfExtents[2];
+}
+/**
+* the prepared oriented box overlaps the aligned box: jolt's AABox4VsBox, from real time collision detection 4.4.1, with
+* a the aligned box and b the oriented one so its orientation needs no inverse
+*/
+function orientedBoxOverlapsBox(minX, minY, minZ, maxX, maxY, maxZ) {
+	const r = _obb_rotation;
+	const ar = _obb_absRotation;
+	const e0 = _obb_halfExtents[0];
+	const e1 = _obb_halfExtents[1];
+	const e2 = _obb_halfExtents[2];
+	const t0 = _obb_translation[0] - .5 * (minX + maxX);
+	const t1 = _obb_translation[1] - .5 * (minY + maxY);
+	const t2 = _obb_translation[2] - .5 * (minZ + maxZ);
+	const a0 = .5 * (maxX - minX);
+	const a1 = .5 * (maxY - minY);
+	const a2 = .5 * (maxZ - minZ);
+	if (Math.abs(t0) > a0 + (e0 * ar[0] + e1 * ar[3] + e2 * ar[6])) return false;
+	if (Math.abs(t1) > a1 + (e0 * ar[1] + e1 * ar[4] + e2 * ar[7])) return false;
+	if (Math.abs(t2) > a2 + (e0 * ar[2] + e1 * ar[5] + e2 * ar[8])) return false;
+	for (let i = 0; i < 3; i++) {
+		const ra = a0 * ar[i * 3 + 0] + a1 * ar[i * 3 + 1] + a2 * ar[i * 3 + 2];
+		const distance = t0 * r[0 + i] + t1 * r[3 + i] + t2 * r[6 + i];
+		if (Math.abs(distance) > ra + _obb_halfExtents[i]) return false;
+	}
+	if (Math.abs(t2 * r[3] - t1 * r[6]) > a1 * ar[2] + a2 * ar[1] + (e1 * ar[6] + e2 * ar[3])) return false;
+	if (Math.abs(t2 * r[4] - t1 * r[7]) > a1 * ar[5] + a2 * ar[4] + (e0 * ar[6] + e2 * ar[0])) return false;
+	if (Math.abs(t2 * r[5] - t1 * r[8]) > a1 * ar[8] + a2 * ar[7] + (e0 * ar[3] + e1 * ar[0])) return false;
+	if (Math.abs(t0 * r[6] - t2 * r[0]) > a0 * ar[2] + a2 * ar[0] + (e1 * ar[7] + e2 * ar[4])) return false;
+	if (Math.abs(t0 * r[7] - t2 * r[1]) > a0 * ar[5] + a2 * ar[3] + (e0 * ar[7] + e2 * ar[1])) return false;
+	if (Math.abs(t0 * r[8] - t2 * r[2]) > a0 * ar[8] + a2 * ar[6] + (e0 * ar[4] + e1 * ar[1])) return false;
+	if (Math.abs(t1 * r[0] - t0 * r[3]) > a0 * ar[1] + a1 * ar[0] + (e1 * ar[8] + e2 * ar[5])) return false;
+	if (Math.abs(t1 * r[1] - t0 * r[4]) > a0 * ar[4] + a1 * ar[3] + (e0 * ar[8] + e2 * ar[2])) return false;
+	if (Math.abs(t1 * r[2] - t0 * r[5]) > a0 * ar[7] + a1 * ar[6] + (e0 * ar[5] + e1 * ar[2])) return false;
+	return true;
+}
+function intersectOrientedBox$1(world, dbvt, box, queryFilter, visitor) {
+	if (dbvt.root === -1) return;
+	const topo = dbvt.topo;
+	const bounds = dbvt.bounds;
+	prepareOrientedBox(box);
+	let stackSize = 0;
+	_flatStack[stackSize++] = dbvt.root;
+	while (stackSize > 0) {
+		const nodeIndex = _flatStack[--stackSize];
+		const nb = nodeIndex * STRIDE_BOUNDS;
+		if (!orientedBoxOverlapsBox(bounds[nb], bounds[nb + 1], bounds[nb + 2], bounds[nb + 3], bounds[nb + 4], bounds[nb + 5])) continue;
+		if (topo[nodeIndex * STRIDE_TOPO + T_LEFT] !== -1) {
+			_flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_LEFT];
+			_flatStack[stackSize++] = topo[nodeIndex * STRIDE_TOPO + T_RIGHT];
+			continue;
+		}
+		const body = world.bodies.pool[topo[nodeIndex * STRIDE_TOPO + T_BODY]];
+		if (!shouldPairCollide(queryFilter.collisionGroups, queryFilter.collisionMask, body.collisionGroups, body.collisionMask)) continue;
+		if (!filterObjectLayer(queryFilter, body.objectLayer)) continue;
+		if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
+		const own = body.aabb;
+		if (!orientedBoxOverlapsBox(own[0], own[1], own[2], own[3], own[4], own[5])) continue;
+		visitor.visit(body);
+		if (visitor.shouldExit) return;
+	}
+}
 /** visit every body in the tree — no filtering, no aabb tests */
 function walk(world, dbvt, visitor) {
 	if (dbvt.root === -1) return;
@@ -4370,7 +4536,7 @@ function walk(world, dbvt, visitor) {
 		if (visitor.shouldExit) return;
 	}
 }
-function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor) {
+function castRay$4(world, dbvt, origin, direction, length, queryFilter, visitor) {
 	if (dbvt.root === -1) return;
 	const topo = dbvt.topo;
 	const bounds = dbvt.bounds;
@@ -4426,13 +4592,14 @@ function castRay$3(world, dbvt, origin, direction, length, queryFilter, visitor)
 		if (!shouldPairCollide(queryFilter.collisionGroups, queryFilter.collisionMask, body.collisionGroups, body.collisionMask)) continue;
 		if (!filterObjectLayer(queryFilter, body.objectLayer)) continue;
 		if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
-		if (rayFractionToBox3(originX, originY, originZ, invDispX, invDispY, invDispZ, body.aabb[0], body.aabb[1], body.aabb[2], body.aabb[3], body.aabb[4], body.aabb[5]) === Infinity) continue;
-		visitor.visit(body);
+		const entry = rayFractionToBox3(originX, originY, originZ, invDispX, invDispY, invDispZ, body.aabb[0], body.aabb[1], body.aabb[2], body.aabb[3], body.aabb[4], body.aabb[5]);
+		if (entry === Infinity) continue;
+		visitor.visit(body, entry);
 		if (visitor.shouldExit) return;
 		bestFraction = visitor.earlyOutFraction ?? Infinity;
 	}
 }
-function castAABB$1(world, dbvt, castBounds, displacement, queryFilter, visitor) {
+function castAABB$2(world, dbvt, castBounds, displacement, queryFilter, visitor) {
 	if (dbvt.root === -1) return;
 	const topo = dbvt.topo;
 	const bounds = dbvt.bounds;
@@ -4442,6 +4609,9 @@ function castAABB$1(world, dbvt, castBounds, displacement, queryFilter, visitor)
 	const halfX = (castBounds[3] - castBounds[0]) * .5;
 	const halfY = (castBounds[4] - castBounds[1]) * .5;
 	const halfZ = (castBounds[5] - castBounds[2]) * .5;
+	const invDispX = safeReciprocal(displacement[0]);
+	const invDispY = safeReciprocal(displacement[1]);
+	const invDispZ = safeReciprocal(displacement[2]);
 	const castLen = length(displacement);
 	const dirX = castLen > 0 ? displacement[0] / castLen : 0;
 	const dirY = castLen > 0 ? displacement[1] / castLen : 0;
@@ -4492,8 +4662,9 @@ function castAABB$1(world, dbvt, castBounds, displacement, queryFilter, visitor)
 		if (!shouldPairCollide(queryFilter.collisionGroups, queryFilter.collisionMask, body.collisionGroups, body.collisionMask)) continue;
 		if (!filterObjectLayer(queryFilter, body.objectLayer)) continue;
 		if (queryFilter.bodyFilter && !queryFilter.bodyFilter(body)) continue;
-		if (!rayHitsBox3(originX, originY, originZ, dirX, dirY, dirZ, castLen, body.aabb[0] - halfX, body.aabb[1] - halfY, body.aabb[2] - halfZ, body.aabb[3] + halfX, body.aabb[4] + halfY, body.aabb[5] + halfZ)) continue;
-		visitor.visit(body);
+		const entry = rayFractionToBox3(originX, originY, originZ, invDispX, invDispY, invDispZ, body.aabb[0] - halfX, body.aabb[1] - halfY, body.aabb[2] - halfZ, body.aabb[3] + halfX, body.aabb[4] + halfY, body.aabb[5] + halfZ);
+		if (entry === Infinity) continue;
+		visitor.visit(body, entry);
 		if (visitor.shouldExit) return;
 		bestFraction = visitor.earlyOutFraction ?? Infinity;
 	}
@@ -4950,11 +5121,13 @@ var pairs_exports = /* @__PURE__ */ __exportAll({
 	INVALID_PAIR_KEY: () => -1,
 	RECORD_STRIDE: () => 6,
 	addPairRecord: () => addPairRecord,
+	emitWokenBodyPairs: () => emitWokenBodyPairs,
 	findCollidingPairs: () => findCollidingPairs,
 	findPairRecord: () => findPairRecord,
 	getPairEdgeRecord: () => getPairEdgeRecord,
 	getPairEdgeSide: () => getPairEdgeSide,
 	init: () => init$7,
+	invalidateBodyCache: () => invalidateBodyCache,
 	markMoved: () => markMoved,
 	pairEdgeKey: () => pairEdgeKey,
 	purgeBodyPairs: () => purgeBodyPairs,
@@ -4970,7 +5143,8 @@ function init$7() {
 		collidingPairs: [],
 		firstContact: [],
 		collidingPairCount: 0,
-		moved: []
+		moved: [],
+		activeReadIndex: 0
 	};
 }
 /** add a body to the move set (deduped) so it runs pair discovery in the next findCollidingPairs */
@@ -5135,6 +5309,15 @@ function findPairRecord(pairs, bodyA, bodyB) {
 * the listener is unavailable at body-removal time). does not depend on the body's dbvt leaf, so it
 * is safe to call before or independently of tree-leaf removal.
 */
+/** every pair of the body runs the narrowphase next update instead of reusing its cached manifolds: its shape changed */
+function invalidateBodyCache(pairs, body) {
+	let edgeKey = body.headPairKey;
+	while (edgeKey !== -1) {
+		const rec = getPairEdgeRecord(edgeKey);
+		pairs.poseCache[rec * 8 + 0] = 0;
+		edgeKey = pairs.records[edgePrevSlot(rec, getPairEdgeSide(edgeKey)) + 1];
+	}
+}
 function purgeBodyPairs(pairs, contacts, pool, body) {
 	let edgeKey = body.headPairKey;
 	while (edgeKey !== -1) {
@@ -5211,6 +5394,36 @@ function findCollidingPairs(world, speculativeContactDistance, listener) {
 	for (let i = 0; i < discoveredCount; i++) pool[moved[i]].inMoveSet = false;
 	if (moved.length > discoveredCount) moved.copyWithin(0, discoveredCount);
 	moved.length -= discoveredCount;
+	pairs.activeReadIndex = world.bodies.activeBodyCount;
+}
+const _woken_fatReach = /* @__PURE__ */ create$38();
+const _woken_tightReach = /* @__PURE__ */ create$38();
+const _woken_fatOther = /* @__PURE__ */ create$38();
+/**
+* emit the pairs of a body woken after the sweep (a contact woke it in the narrowphase), so they run in the same step's
+* narrowphase: its records that pass the sweep's overlap tests and that it reports (the other body asleep, or woken after
+* it; a body active at the sweep already reported its pair). a record that no longer overlaps is left for the next sweep
+* to destroy.
+*/
+function emitWokenBodyPairs(world, body, speculativeContactDistance, listener) {
+	if (body.dbvtNode === -1) return;
+	const layers = world.settings.layers;
+	const broadphase = world.broadphase;
+	const pairs = world.pairs;
+	const pool = world.bodies.pool;
+	const records = pairs.records;
+	readNodeAabb(_woken_fatReach, broadphase.dbvts[body.broadphaseLayer], body.dbvtNode);
+	expandByMargin(_woken_fatReach, _woken_fatReach, speculativeContactDistance);
+	expandByMargin(_woken_tightReach, body.aabb, speculativeContactDistance);
+	let edgeKey = body.headPairKey;
+	while (edgeKey !== -1) {
+		const rec = getPairEdgeRecord(edgeKey);
+		const side = getPairEdgeSide(edgeKey);
+		edgeKey = records[edgePrevSlot(rec, side) + 1];
+		const other = pool[records[rec * 6 + (1 - side)]];
+		if (other.dbvtNode === -1 || !shouldReportPair(layers, body, other)) continue;
+		if (intersectsBox3(_woken_fatReach, readNodeAabb(_woken_fatOther, broadphase.dbvts[other.broadphaseLayer], other.dbvtNode)) && intersectsBox3(_woken_tightReach, other.aabb)) emitCollidingPair(pairs, body, other, rec, listener);
+	}
 }
 /**
 * Emit a colliding pair into this frame's output, after the optional user body pair filter.
@@ -5244,11 +5457,13 @@ function emitCollidingPair(pairs, moreActive, lessActive, recordIndex, listener)
 var broadphase_exports = /* @__PURE__ */ __exportAll({
 	addBody: () => addBody,
 	bounds: () => bounds,
-	castAABB: () => castAABB,
-	castRay: () => castRay$2,
+	castAABB: () => castAABB$1,
+	castRay: () => castRay$3,
 	init: () => init$6,
 	intersectAABB: () => intersectAABB,
+	intersectOrientedBox: () => intersectOrientedBox,
 	intersectPoint: () => intersectPoint,
+	intersectSphere: () => intersectSphere,
 	notifyBodyBoundsChanged: () => notifyBodyBoundsChanged,
 	optimize: () => optimize,
 	reinsertBody: () => reinsertBody,
@@ -5319,12 +5534,12 @@ function reinsertBody(broadphase, body, layers) {
 	removeBody(broadphase, body);
 	addBody(broadphase, body, layers);
 }
-/** finds bodies with AABBs that intersect the given ray */
-function castRay$2(world, origin, direction, length, queryFilter, visitor) {
+/** finds bodies with AABBs that intersect the given ray, the visitor given where the ray entered each */
+function castRay$3(world, origin, direction, length, queryFilter, visitor) {
 	for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
 		if (!filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
 		const tree = world.broadphase.dbvts[broadphaseLayer];
-		castRay$3(world, tree, origin, direction, length, queryFilter, visitor);
+		castRay$4(world, tree, origin, direction, length, queryFilter, visitor);
 		if (visitor.shouldExit) break;
 	}
 }
@@ -5346,12 +5561,30 @@ function intersectPoint(world, point, queryFilter, visitor) {
 		if (visitor.shouldExit) break;
 	}
 }
-/** finds bodies with AABBs that intersect the given swept AABB */
-function castAABB(world, bounds, displacement, queryFilter, visitor) {
+/** finds bodies with AABBs within radius of the centre */
+function intersectSphere(world, center, radius, queryFilter, visitor) {
 	for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
 		if (!filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
 		const tree = world.broadphase.dbvts[broadphaseLayer];
-		castAABB$1(world, tree, bounds, displacement, queryFilter, visitor);
+		intersectSphere$1(world, tree, center, radius, queryFilter, visitor);
+		if (visitor.shouldExit) break;
+	}
+}
+/** finds bodies with AABBs that overlap the oriented box */
+function intersectOrientedBox(world, box, queryFilter, visitor) {
+	for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
+		if (!filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
+		const tree = world.broadphase.dbvts[broadphaseLayer];
+		intersectOrientedBox$1(world, tree, box, queryFilter, visitor);
+		if (visitor.shouldExit) break;
+	}
+}
+/** finds bodies with AABBs that intersect the given swept AABB, the visitor given where the sweep entered each */
+function castAABB$1(world, bounds, displacement, queryFilter, visitor) {
+	for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
+		if (!filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
+		const tree = world.broadphase.dbvts[broadphaseLayer];
+		castAABB$2(world, tree, bounds, displacement, queryFilter, visitor);
 		if (visitor.shouldExit) break;
 	}
 }
@@ -5460,6 +5693,7 @@ const getConstraintIdSequence = (id) => {
 //#region src/constraints/constraints.ts
 var constraints_exports = /* @__PURE__ */ __exportAll({
 	ConstraintSpace: () => ConstraintSpace,
+	addToList: () => addToList,
 	constraintDefs: () => constraintDefs,
 	createConstraintIterationOverrides: () => createConstraintIterationOverrides,
 	createConstraintSortFields: () => createConstraintSortFields,
@@ -5469,10 +5703,12 @@ var constraints_exports = /* @__PURE__ */ __exportAll({
 	getConstraintIterationOverrides: () => getConstraintIterationOverrides,
 	getConstraintSortFields: () => getConstraintSortFields,
 	init: () => init$5,
+	isValidConstraintPriority: () => isValidConstraintPriority,
 	makeConstraintBase: () => makeConstraintBase,
 	registerConstraintDef: () => registerConstraintDef,
 	removeConstraintById: () => removeConstraintById,
 	removeConstraintIdFromBody: () => removeConstraintIdFromBody,
+	removeFromList: () => removeFromList,
 	setupVelocityConstraints: () => setupVelocityConstraints,
 	solvePositionConstraintsForIsland: () => solvePositionConstraintsForIsland$1,
 	solveVelocityConstraintsForIsland: () => solveVelocityConstraintsForIsland$1,
@@ -5482,7 +5718,33 @@ var constraints_exports = /* @__PURE__ */ __exportAll({
 });
 /** initialize empty constraints */
 function init$5() {
-	return { pools: {} };
+	return {
+		pools: {},
+		list: []
+	};
+}
+/** whether a priority fits jolt's uint32 */
+function isValidConstraintPriority(priority) {
+	return Number.isInteger(priority) && priority >= 0 && priority <= 4294967295;
+}
+/** appends the constraint to the list */
+function addToList(constraints, constraint) {
+	constraint.listIndex = constraints.list.length;
+	constraints.list.push(constraint.id);
+}
+/** takes the constraint out of the list, the last one moving into its place */
+function removeFromList(constraints, constraint) {
+	const listIndex = constraint.listIndex;
+	if (listIndex === -1) return;
+	const lastIndex = constraints.list.length - 1;
+	if (listIndex !== lastIndex) {
+		const lastId = constraints.list[lastIndex];
+		constraints.list[listIndex] = lastId;
+		const pool = constraints.pools[getConstraintIdType(lastId)];
+		pool.constraints[getConstraintIdIndex(lastId)].listIndex = listIndex;
+	}
+	constraints.list.length = lastIndex;
+	constraint.listIndex = -1;
 }
 /** define a user constraint def - ensures consistent shape */
 function defineConstraint(options) {
@@ -5546,6 +5808,7 @@ function removeConstraintById(world, constraintId) {
 		const bodyB = world.bodies.pool[constraint.bodyIndexB];
 		if (bodyA && !bodyA._pooled) removeConstraintIdFromBody(bodyA, constraint.id);
 		if (constraint.bodyIndexA !== constraint.bodyIndexB && bodyB && !bodyB._pooled) removeConstraintIdFromBody(bodyB, constraint.id);
+		removeFromList(world.constraints, constraint);
 		pool.freeIndices.push(index);
 		constraint._pooled = true;
 	}
@@ -5610,7 +5873,7 @@ function updateSleeping(constraintsState, bodies) {
 			if (constraint._pooled) continue;
 			const bodyA = bodies.pool[constraint.bodyIndexA];
 			const bodyB = bodies.pool[constraint.bodyIndexB];
-			constraint._sleeping = bodyA.sleeping && bodyB.sleeping;
+			constraint._sleeping = (bodyA.motionType === 0 || bodyA.sleeping) && (bodyB.motionType === 0 || bodyB.sleeping);
 		}
 	}
 }
@@ -5622,12 +5885,15 @@ function setupVelocityConstraints(constraintsState, bodies, deltaTime) {
 		for (const constraint of pool.constraints) if (!constraint._pooled && constraint.enabled && !constraint._sleeping) def.setupVelocity(constraint, bodies, deltaTime);
 	}
 }
-/** warm start velocity constraints for all active user constraints */
-function warmStartVelocityConstraints$1(constraintsState, bodies, warmStartImpulseRatio) {
-	for (const type in constraintsState.pools) {
-		const pool = constraintsState.pools[type];
-		const def = constraintDefs[pool.type];
-		for (const constraint of pool.constraints) if (!constraint._pooled && constraint.enabled && !constraint._sleeping) def.warmStartVelocity(constraint, bodies, warmStartImpulseRatio);
+/** warm start velocity constraints for an island's user constraints, in their solve order */
+function warmStartVelocityConstraints$1(constraints, bodies, constraintIds, warmStartImpulseRatio) {
+	for (const constraintId of constraintIds) {
+		const type = getConstraintIdType(constraintId);
+		const index = getConstraintIdIndex(constraintId);
+		const def = constraintDefs[type];
+		const pool = constraints.pools[type];
+		if (!pool || !def) continue;
+		def.warmStartVelocity(pool.constraints[index], bodies, warmStartImpulseRatio);
 	}
 }
 /** solve velocity constraints for an island, called once per velocity iteration, returns true if any constraint applied an impulse */
@@ -5683,6 +5949,7 @@ function makeConstraintBase() {
 		id: -1,
 		index: -1,
 		sequence: -1,
+		listIndex: -1,
 		enabled: true,
 		constraintPriority: 0,
 		numVelocityStepsOverride: 0,
@@ -5961,8 +6228,9 @@ var rigid_body_exports = /* @__PURE__ */ __exportAll({
 	createGetSubShapeTransformedShapeResult: () => createGetSubShapeTransformedShapeResult,
 	get: () => get$8,
 	getInverseInertia: () => getInverseInertia,
-	getLeafShape: () => getLeafShape$4,
-	getSubShapeTransformedShape: () => getSubShapeTransformedShape$4,
+	getLeafShape: () => getLeafShape$5,
+	getMaterial: () => getMaterial$7,
+	getSubShapeTransformedShape: () => getSubShapeTransformedShape$5,
 	getSurfaceNormal: () => getSurfaceNormal$12,
 	getVelocityAtPoint: () => getVelocityAtPoint,
 	getVelocityAtPointCOM: () => getVelocityAtPointCOM,
@@ -6073,7 +6341,7 @@ function setRigidBody(body, o) {
 		body.massProperties.mass = o.mass;
 		body.massPropertiesOverride = 1;
 	} else {
-		reset$2(body.massProperties);
+		reset$3(body.massProperties);
 		body.massPropertiesOverride = 0;
 	}
 	const mp = body.motionProperties;
@@ -6293,6 +6561,7 @@ function updateShape(world, body) {
 		scaleToMass$1(body.massProperties, overrideMass);
 	}
 	if (body.motionType !== 0) setMassProperties(body.motionProperties, body.motionProperties.allowedDegreesOfFreedom, body.massProperties);
+	invalidateBodyCache(world.pairs, body);
 	updateCenterOfMassPosition(body);
 	updateAABB(body);
 	notifyBodyBoundsChanged(world, body);
@@ -6528,6 +6797,10 @@ function moveKinematic(body, targetPosition, targetQuaternion, deltaTime) {
 const _getWorldSurfaceNormal_localPos = /* @__PURE__ */ create$47();
 const _getWorldSurfaceNormal_normal = /* @__PURE__ */ create$47();
 const _getWorldSurfaceNormal_invQuat = /* @__PURE__ */ create$44();
+/** the material id of the part of the body's shape a hit's or a contact's sub shape id names; -1 for none */
+function getMaterial$7(body, subShapeId) {
+	return getShapeMaterial(body.shape, subShapeId);
+}
 /**
 * Gets the surface normal at a world-space position on the body's shape.
 * The query is performed relative to the shape's local coordinate system (shape origin, not center of mass).
@@ -6553,7 +6826,7 @@ function createGetLeafShapeResult() {
 * @param rootShape Initial shape to start navigation from
 * @param subShapeId sub shape id path
 */
-function getLeafShape$4(out, rootShape, subShapeId) {
+function getLeafShape$5(out, rootShape, subShapeId) {
 	shapeDefs[rootShape.type].getLeafShape(out, rootShape, subShapeId);
 }
 /** create a GetSubShapeTransformedShapeResult object */
@@ -6575,7 +6848,7 @@ function createGetSubShapeTransformedShapeResult() {
 * @param rotation Initial rotation
 * @param scale Initial scale
 */
-function getSubShapeTransformedShape$4(out, rootShape, subShapeId, position, rotation, scale) {
+function getSubShapeTransformedShape$5(out, rootShape, subShapeId, position, rotation, scale) {
 	copy$9(out.position, position);
 	copy$6(out.rotation, rotation);
 	copy$9(out.scale, scale);
@@ -6665,6 +6938,242 @@ function wakeInAABB(world, aabb) {
 	wakeInAABBVisitor.reset();
 }
 //#endregion
+//#region src/utils/pool.ts
+function pool(create) {
+	const used = [];
+	const free = [];
+	return {
+		request: () => {
+			if (free.length > 0) {
+				const item = free.pop();
+				used.push(item);
+				return item;
+			} else {
+				const item = create();
+				used.push(item);
+				return item;
+			}
+		},
+		release: (item) => {
+			const index = used.indexOf(item);
+			if (index !== -1) {
+				used.splice(index, 1);
+				free.push(item);
+			}
+		},
+		reset: () => {
+			while (used.length > 0) {
+				const item = used.pop();
+				free.push(item);
+			}
+		}
+	};
+}
+//#endregion
+//#region src/broadphase-query.ts
+var broadphase_query_exports = /* @__PURE__ */ __exportAll({
+	AllBodyCastCollector: () => AllBodyCastCollector,
+	AllBodyCollector: () => AllBodyCollector,
+	AnyBodyCastCollector: () => AnyBodyCastCollector,
+	AnyBodyCollector: () => AnyBodyCollector,
+	ClosestBodyCastCollector: () => ClosestBodyCastCollector,
+	castAABB: () => castAABB,
+	castRay: () => castRay$2,
+	collideAABB: () => collideAABB,
+	collideOrientedBox: () => collideOrientedBox,
+	collidePoint: () => collidePoint$2,
+	collideSphere: () => collideSphere,
+	createAllBodyCastCollector: () => createAllBodyCastCollector,
+	createAllBodyCollector: () => createAllBodyCollector,
+	createAnyBodyCastCollector: () => createAnyBodyCastCollector,
+	createAnyBodyCollector: () => createAnyBodyCollector,
+	createBodyCastHit: () => createBodyCastHit,
+	createClosestBodyCastCollector: () => createClosestBodyCastCollector
+});
+var AllBodyCollector = class {
+	hits = [];
+	addHit(bodyId) {
+		this.hits.push(bodyId);
+	}
+	shouldEarlyOut() {
+		return false;
+	}
+	reset() {
+		this.hits.length = 0;
+	}
+};
+function createAllBodyCollector() {
+	return new AllBodyCollector();
+}
+var AnyBodyCollector = class {
+	hit = -1;
+	addHit(bodyId) {
+		this.hit = bodyId;
+	}
+	shouldEarlyOut() {
+		return this.hit !== -1;
+	}
+	reset() {
+		this.hit = -1;
+	}
+};
+function createAnyBodyCollector() {
+	return new AnyBodyCollector();
+}
+function createBodyCastHit() {
+	return {
+		bodyId: -1,
+		fraction: 1
+	};
+}
+function copyBodyCastHit(out, hit) {
+	out.bodyId = hit.bodyId;
+	out.fraction = hit.fraction;
+}
+function compareBodyCastHits(a, b) {
+	return a.fraction < b.fraction ? -1 : a.fraction > b.fraction ? 1 : 0;
+}
+var AllBodyCastCollector = class {
+	earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	hitPool = pool(createBodyCastHit);
+	hits = [];
+	addHit(hit) {
+		const newHit = this.hitPool.request();
+		copyBodyCastHit(newHit, hit);
+		this.hits.push(newHit);
+	}
+	shouldEarlyOut() {
+		return false;
+	}
+	reset() {
+		this.hitPool.reset();
+		this.hits.length = 0;
+		this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	}
+	/** orders hits nearest first */
+	sort() {
+		this.hits.sort(compareBodyCastHits);
+	}
+};
+function createAllBodyCastCollector() {
+	return new AllBodyCastCollector();
+}
+var AnyBodyCastCollector = class {
+	earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	hit = createBodyCastHit();
+	addHit(hit) {
+		copyBodyCastHit(this.hit, hit);
+		this.earlyOutFraction = 0;
+	}
+	shouldEarlyOut() {
+		return this.hit.bodyId !== -1;
+	}
+	reset() {
+		this.hit.bodyId = -1;
+		this.hit.fraction = 1;
+		this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	}
+};
+function createAnyBodyCastCollector() {
+	return new AnyBodyCastCollector();
+}
+var ClosestBodyCastCollector = class {
+	earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	hit = createBodyCastHit();
+	addHit(hit) {
+		if (hit.fraction >= this.earlyOutFraction) return;
+		copyBodyCastHit(this.hit, hit);
+		this.earlyOutFraction = hit.fraction;
+	}
+	shouldEarlyOut() {
+		return false;
+	}
+	reset() {
+		this.hit.bodyId = -1;
+		this.hit.fraction = 1;
+		this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
+	}
+};
+function createClosestBodyCastCollector() {
+	return new ClosestBodyCastCollector();
+}
+/** hands each body an overlap walk meets to the collector */
+const OverlapVisitor = {
+	shouldExit: false,
+	collector: null,
+	set(collector) {
+		this.shouldExit = collector.shouldEarlyOut();
+		this.collector = collector;
+	},
+	visit(body) {
+		this.collector.addHit(body.id);
+		this.shouldExit = this.collector.shouldEarlyOut();
+	},
+	reset() {
+		this.collector = null;
+	}
+};
+const _castVisitor_hit = /* @__PURE__ */ createBodyCastHit();
+/** hands each body a cast walk meets, and where, to the collector, and the collector's bound back to the walk */
+const CastVisitor = {
+	shouldExit: false,
+	earlyOutFraction: INITIAL_EARLY_OUT_FRACTION,
+	collector: null,
+	set(collector) {
+		this.shouldExit = collector.shouldEarlyOut();
+		this.earlyOutFraction = collector.earlyOutFraction;
+		this.collector = collector;
+	},
+	visit(body, fraction) {
+		const entry = fraction ?? 0;
+		if (entry >= this.collector.earlyOutFraction) return;
+		_castVisitor_hit.bodyId = body.id;
+		_castVisitor_hit.fraction = entry;
+		this.collector.addHit(_castVisitor_hit);
+		this.shouldExit = this.collector.shouldEarlyOut();
+		this.earlyOutFraction = this.collector.earlyOutFraction;
+	},
+	reset() {
+		this.collector = null;
+	}
+};
+/** the bodies whose bounds the ray's segment enters */
+function castRay$2(world, collector, origin, direction, length, filter) {
+	CastVisitor.set(collector);
+	if (!CastVisitor.shouldExit) castRay$3(world, origin, direction, length, filter, CastVisitor);
+	CastVisitor.reset();
+}
+/** the bodies whose bounds overlap the box, faces included */
+function collideAABB(world, collector, aabb, filter) {
+	OverlapVisitor.set(collector);
+	if (!OverlapVisitor.shouldExit) intersectAABB(world, aabb, filter, OverlapVisitor);
+	OverlapVisitor.reset();
+}
+/** the bodies whose bounds are within radius of the centre */
+function collideSphere(world, collector, center, radius, filter) {
+	OverlapVisitor.set(collector);
+	if (!OverlapVisitor.shouldExit) intersectSphere(world, center, radius, filter, OverlapVisitor);
+	OverlapVisitor.reset();
+}
+/** the bodies whose bounds hold the point, faces included */
+function collidePoint$2(world, collector, point, filter) {
+	OverlapVisitor.set(collector);
+	if (!OverlapVisitor.shouldExit) intersectPoint(world, point, filter, OverlapVisitor);
+	OverlapVisitor.reset();
+}
+/** the bodies whose bounds overlap the oriented box */
+function collideOrientedBox(world, collector, box, filter) {
+	OverlapVisitor.set(collector);
+	if (!OverlapVisitor.shouldExit) intersectOrientedBox(world, box, filter, OverlapVisitor);
+	OverlapVisitor.reset();
+}
+/** the bodies whose bounds the box meets as it moves by the displacement */
+function castAABB(world, collector, aabb, displacement, filter) {
+	CastVisitor.set(collector);
+	if (!CastVisitor.shouldExit) castAABB$1(world, aabb, displacement, filter, CastVisitor);
+	CastVisitor.reset();
+}
+//#endregion
 //#region src/utils/face.ts
 const FACE_MAX_VERTICES = 64;
 function createFace() {
@@ -6749,38 +7258,6 @@ function isScaleInsideOut(scale) {
 	return scale[0] * scale[1] * scale[2] < 0;
 }
 //#endregion
-//#region src/utils/pool.ts
-function pool(create) {
-	const used = [];
-	const free = [];
-	return {
-		request: () => {
-			if (free.length > 0) {
-				const item = free.pop();
-				used.push(item);
-				return item;
-			} else {
-				const item = create();
-				used.push(item);
-				return item;
-			}
-		},
-		release: (item) => {
-			const index = used.indexOf(item);
-			if (index !== -1) {
-				used.splice(index, 1);
-				free.push(item);
-			}
-		},
-		reset: () => {
-			while (used.length > 0) {
-				const item = used.pop();
-				free.push(item);
-			}
-		}
-	};
-}
-//#endregion
 //#region src/collision/cast-shape-vs-shape.ts
 let CastShapeStatus = /* @__PURE__ */ function(CastShapeStatus) {
 	CastShapeStatus[CastShapeStatus["NOT_COLLIDING"] = 0] = "NOT_COLLIDING";
@@ -6798,8 +7275,6 @@ function createCastShapeHit() {
 		normal: create$47(),
 		subShapeIdA: 0,
 		subShapeIdB: 0,
-		materialIdA: -1,
-		materialIdB: -1,
 		faceA: createFace(),
 		faceB: createFace(),
 		bodyIdB: -1
@@ -6822,8 +7297,6 @@ function copyCastShapeHit(out, hit) {
 	copy$9(out.normal, hit.normal);
 	out.subShapeIdA = hit.subShapeIdA;
 	out.subShapeIdB = hit.subShapeIdB;
-	out.materialIdA = hit.materialIdA;
-	out.materialIdB = hit.materialIdB;
 	out.faceA.numVertices = hit.faceA.numVertices;
 	for (let i = 0; i < hit.faceA.vertices.length; i++) out.faceA.vertices[i] = hit.faceA.vertices[i];
 	out.faceB.numVertices = hit.faceB.numVertices;
@@ -6844,7 +7317,8 @@ function createDefaultCastShapeSettings() {
 			0,
 			0,
 			0
-		]
+		],
+		extraConvexRadius: 0
 	};
 }
 function compareCastShapeHits(a, b) {
@@ -6957,9 +7431,6 @@ function createInvertedCollector$1() {
 			const tmpSubShapeId = hit.subShapeIdA;
 			hit.subShapeIdA = hit.subShapeIdB;
 			hit.subShapeIdB = tmpSubShapeId;
-			const tmpMaterialId = hit.materialIdA;
-			hit.materialIdA = hit.materialIdB;
-			hit.materialIdB = tmpMaterialId;
 			const tmpFace = hit.faceA;
 			hit.faceA = hit.faceB;
 			hit.faceB = tmpFace;
@@ -7003,8 +7474,6 @@ function createCollideShapeHit() {
 		penetration: 0,
 		subShapeIdA: EMPTY_SUB_SHAPE_ID,
 		subShapeIdB: EMPTY_SUB_SHAPE_ID,
-		materialIdA: -1,
-		materialIdB: -1,
 		faceA: createFace(),
 		faceB: createFace(),
 		bodyIdB: -1
@@ -7017,8 +7486,6 @@ function copyCollideShapeHit(out, source) {
 	out.penetration = source.penetration;
 	out.subShapeIdA = source.subShapeIdA;
 	out.subShapeIdB = source.subShapeIdB;
-	out.materialIdA = source.materialIdA;
-	out.materialIdB = source.materialIdB;
 	out.faceA.numVertices = source.faceA.numVertices;
 	for (let i = 0; i < source.faceA.numVertices * 3; i++) out.faceA.vertices[i] = source.faceA.vertices[i];
 	out.faceB.numVertices = source.faceB.numVertices;
@@ -7150,9 +7617,6 @@ function createInvertedCollector() {
 			const tmpSubShapeId = hit.subShapeIdA;
 			hit.subShapeIdA = hit.subShapeIdB;
 			hit.subShapeIdB = tmpSubShapeId;
-			const tmpMaterialId = hit.materialIdA;
-			hit.materialIdA = hit.materialIdB;
-			hit.materialIdB = tmpMaterialId;
 			const tmpFace = hit.faceA;
 			hit.faceA = hit.faceB;
 			hit.faceB = tmpFace;
@@ -7232,7 +7696,7 @@ function computeBarycentricCoordinates3d(out, a, b, c, squaredTolerance) {
 	if (d00 <= d22) {
 		const d01 = abx * acx + aby * acy + abz * acz;
 		const denominator = d00 * d11 - d01 * d01;
-		if (Math.abs(denominator) < 1e-12) {
+		if (denominator <= 1e-6 * d00 * d11) {
 			if (d00 > d11) {
 				computeBarycentricCoordinates2d(_otherBarycentric, a, b, squaredTolerance);
 				out.u = _otherBarycentric.u;
@@ -7256,7 +7720,7 @@ function computeBarycentricCoordinates3d(out, a, b, c, squaredTolerance) {
 	} else {
 		const d12 = acx * bcx + acy * bcy + acz * bcz;
 		const denominator = d11 * d22 - d12 * d12;
-		if (Math.abs(denominator) < 1e-12) {
+		if (denominator <= 1e-6 * d11 * d22) {
 			if (d11 > d22) {
 				computeBarycentricCoordinates2d(_otherBarycentric, a, c, squaredTolerance);
 				out.u = _otherBarycentric.u;
@@ -7370,13 +7834,13 @@ function computeClosestPointOnLine(out, a, b, squaredTolerance) {
 	}
 }
 function computeClosestPointOnTriangle(out, inA, inB, inC, mustIncludeC, squaredTolerance) {
-	const acx = inC[0] - inA[0];
-	const acy = inC[1] - inA[1];
-	const acz = inC[2] - inA[2];
+	const bax = inA[0] - inB[0];
+	const bay = inA[1] - inB[1];
+	const baz = inA[2] - inB[2];
 	const bcx = inC[0] - inB[0];
 	const bcy = inC[1] - inB[1];
 	const bcz = inC[2] - inB[2];
-	const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
+	const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < bax * bax + bay * bay + baz * baz;
 	const ax = swapAC ? inC[0] : inA[0];
 	const ay = swapAC ? inC[1] : inA[1];
 	const az = swapAC ? inC[2] : inA[2];
@@ -9277,8 +9741,7 @@ function createCastRayHit() {
 		status: 0,
 		fraction: 1,
 		subShapeId: EMPTY_SUB_SHAPE_ID,
-		bodyIdB: -1,
-		materialId: -1
+		bodyIdB: -1
 	};
 }
 function copyCastRayHit(out, src) {
@@ -9286,7 +9749,6 @@ function copyCastRayHit(out, src) {
 	out.fraction = src.fraction;
 	out.subShapeId = src.subShapeId;
 	out.bodyIdB = src.bodyIdB;
-	out.materialId = src.materialId;
 }
 function createDefaultCastRaySettings() {
 	return {
@@ -9379,14 +9841,12 @@ function createClosestCastRayCollector() {
 function createCollidePointHit() {
 	return {
 		subShapeIdB: EMPTY_SUB_SHAPE_ID,
-		bodyIdB: -1,
-		materialId: -1
+		bodyIdB: -1
 	};
 }
 function copyCollidePointHit(out, source) {
 	out.subShapeIdB = source.subShapeIdB;
 	out.bodyIdB = source.bodyIdB;
-	out.materialId = source.materialId;
 }
 function createDefaultCollidePointSettings() {
 	return { collisionTolerance: 1e-4 };
@@ -9524,7 +9984,7 @@ const CastRayBodyVisitor = {
 };
 function castRay(world, collector, settings, origin, direction, length, filter) {
 	CastRayBodyVisitor.set(collector, settings, origin, direction, length);
-	castRay$2(world, origin, direction, length, filter, CastRayBodyVisitor);
+	castRay$3(world, origin, direction, length, filter, CastRayBodyVisitor);
 	CastRayBodyVisitor.reset();
 }
 const _castShape_aabb = /* @__PURE__ */ create$38();
@@ -9576,8 +10036,9 @@ const CastShapeBodyVisitor = {
 function castShape(world, collector, settings, shape, position, quaternion, scale, displacement, filter) {
 	const aabb = copy$3(_castShape_aabb, shape.aabb);
 	transformMat4(aabb, aabb, fromRotationTranslationScale(_castShape_mat4, quaternion, position, scale));
+	expandByMargin(aabb, aabb, settings.extraConvexRadius);
 	CastShapeBodyVisitor.set(collector, settings, shape, position, quaternion, scale, displacement);
-	castAABB(world, aabb, displacement, filter, CastShapeBodyVisitor);
+	castAABB$1(world, aabb, displacement, filter, CastShapeBodyVisitor);
 	CastShapeBodyVisitor.reset();
 }
 const _collideShape_aabb = /* @__PURE__ */ create$38();
@@ -9960,7 +10421,9 @@ function createDefaultUpdateSettings() {
 const _contactsPool = [];
 /** acquires a contact from the free list or creates a new one */
 function acquireContact(contacts) {
-	const contact = _contactsPool.pop() ?? createCharacterContact();
+	let contact = _contactsPool.pop();
+	if (contact) resetContact(contact);
+	else contact = createCharacterContact();
 	contacts.push(contact);
 	return contact;
 }
@@ -10154,8 +10617,7 @@ const _paddingCorrection_negativeNormal = /* @__PURE__ */ create$47();
 const _paddingCorrection_scale = /* @__PURE__ */ fromValues$2(1, 1, 1);
 const _paddingCorrection_mat4_transform = /* @__PURE__ */ create$41();
 const _paddingCorrection_fractionWrapper = { value: 0 };
-const _correctFraction_tempPos = /* @__PURE__ */ create$47();
-const _correctFraction_tempQuat = /* @__PURE__ */ create$44();
+const _paddingCorrection_inverseRotation = /* @__PURE__ */ create$44();
 const _contactVelocity_r = /* @__PURE__ */ create$47();
 const _contactVelocity_angularComponent = /* @__PURE__ */ create$47();
 const _contactVelocity_adjustedLinear = /* @__PURE__ */ create$47();
@@ -10163,49 +10625,48 @@ const _contactVelocity_adjustedAngular = /* @__PURE__ */ create$47();
 const _contactVelocity_staticLinear = /* @__PURE__ */ create$47();
 const _contactVelocity_staticAngular = /* @__PURE__ */ create$47();
 const _surfaceNormal_temp = /* @__PURE__ */ create$47();
+const _castCollector_contact = /* @__PURE__ */ createCharacterContact();
 /** character collide shape collector - collects hits into contacts array */
 const characterCollideCollector = {
 	bodyIdB: -1,
 	earlyOutFraction: Number.MAX_VALUE,
 	contacts: null,
 	maxHits: 256,
-	hitCount: 0,
 	world: null,
 	listener: void 0,
 	character: null,
 	maxHitsExceeded: false,
 	hitReductionCosMaxAngle: -1,
 	addHit(hit) {
-		if (this.hitCount >= this.maxHits) {
+		const contacts = this.contacts;
+		if (contacts.length >= this.maxHits) {
 			this.maxHitsExceeded = true;
-			if (this.hitReductionCosMaxAngle > -1) {
-				const contacts = this.contacts;
-				for (let i = contacts.length - 1; i >= 0; i--) {
-					const contactI = contacts[i];
-					for (let j = i - 1; j >= 0; j--) {
-						const contactJ = contacts[j];
-						if (contactI.bodyId === contactJ.bodyId && contactI.subShapeId === contactJ.subShapeId && dot$2(contactI.contactNormal, contactJ.contactNormal) > this.hitReductionCosMaxAngle) if (contactI.distance > contactJ.distance) {
-							releaseContact(contacts, i);
-							this.hitCount--;
-							break;
-						} else {
-							releaseContact(contacts, j);
-							this.hitCount--;
-						}
+			if (this.hitReductionCosMaxAngle > -1) for (let i = contacts.length - 1; i >= 0; i--) for (let j = i - 1; j >= 0; j--) {
+				const contactI = contacts[i];
+				const contactJ = contacts[j];
+				if (contactI.bodyId === contactJ.bodyId && dot$2(contactI.contactNormal, contactJ.contactNormal) > this.hitReductionCosMaxAngle) {
+					const iIsLast = i === contacts.length - 1;
+					if (contactI.distance > contactJ.distance) {
+						releaseContact(contacts, i);
+						break;
 					}
-					if (this.hitCount < this.maxHits) break;
+					releaseContact(contacts, j);
+					if (iIsLast) break;
 				}
 			}
-			if (this.hitCount >= this.maxHits) return;
+			if (contacts.length >= this.maxHits) {
+				this.earlyOutFraction = -Infinity;
+				return;
+			}
 		}
-		const contact = acquireContact(this.contacts);
+		const body = get$8(this.world, hit.bodyIdB);
+		if (!body) return;
+		const contact = acquireContact(contacts);
 		copy$9(contact.position, hit.pointB);
 		if (squaredLength(hit.penetrationAxis) > 0) {
 			normalize$2(contact.contactNormal, hit.penetrationAxis);
 			negate(contact.contactNormal, contact.contactNormal);
 		} else set$7(contact.contactNormal, 0, 0, 0);
-		const body = get$8(this.world, hit.bodyIdB);
-		if (!body) return;
 		getSurfaceNormal$12(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
 		copy$9(contact.surfaceNormal, _surfaceNormal_temp);
 		if (dot$2(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) negate(contact.surfaceNormal, contact.surfaceNormal);
@@ -10214,51 +10675,44 @@ const characterCollideCollector = {
 		contact.fraction = 0;
 		contact.bodyId = hit.bodyIdB;
 		contact.subShapeId = hit.subShapeIdB;
-		contact.materialId = hit.materialIdB;
-		if (body) {
-			contact.motionType = body.motionType;
-			contact.isSensor = body.sensor;
-			let linearVelocity;
-			let angularVelocity;
-			if (body.motionType === 2 || body.motionType === 1) {
-				linearVelocity = body.motionProperties.linearVelocity;
-				angularVelocity = body.motionProperties.angularVelocity;
-			} else {
-				zero$1(_contactVelocity_staticLinear);
-				zero$1(_contactVelocity_staticAngular);
-				linearVelocity = _contactVelocity_staticLinear;
-				angularVelocity = _contactVelocity_staticAngular;
-			}
-			if (this.listener?.onAdjustBodyVelocity) {
-				copy$9(_contactVelocity_adjustedLinear, linearVelocity);
-				copy$9(_contactVelocity_adjustedAngular, angularVelocity);
-				this.listener.onAdjustBodyVelocity(this.character, body, _contactVelocity_adjustedLinear, _contactVelocity_adjustedAngular);
-				linearVelocity = _contactVelocity_adjustedLinear;
-				angularVelocity = _contactVelocity_adjustedAngular;
-			}
-			sub(_contactVelocity_r, contact.position, body.centerOfMassPosition);
-			cross(_contactVelocity_angularComponent, angularVelocity, _contactVelocity_r);
-			add$3(contact.linearVelocity, linearVelocity, _contactVelocity_angularComponent);
+		contact.materialId = getShapeMaterial(body.shape, hit.subShapeIdB);
+		contact.motionType = body.motionType;
+		contact.isSensor = body.sensor;
+		let linearVelocity;
+		let angularVelocity;
+		if (body.motionType === 2 || body.motionType === 1) {
+			linearVelocity = body.motionProperties.linearVelocity;
+			angularVelocity = body.motionProperties.angularVelocity;
 		} else {
-			contact.motionType = 0;
-			contact.isSensor = false;
-			zero$1(contact.linearVelocity);
+			zero$1(_contactVelocity_staticLinear);
+			zero$1(_contactVelocity_staticAngular);
+			linearVelocity = _contactVelocity_staticLinear;
+			angularVelocity = _contactVelocity_staticAngular;
 		}
+		if (this.listener?.onAdjustBodyVelocity) {
+			copy$9(_contactVelocity_adjustedLinear, linearVelocity);
+			copy$9(_contactVelocity_adjustedAngular, angularVelocity);
+			this.listener.onAdjustBodyVelocity(this.character, body, _contactVelocity_adjustedLinear, _contactVelocity_adjustedAngular);
+			linearVelocity = _contactVelocity_adjustedLinear;
+			angularVelocity = _contactVelocity_adjustedAngular;
+		}
+		sub(_contactVelocity_r, contact.position, body.centerOfMassPosition);
+		cross(_contactVelocity_angularComponent, angularVelocity, _contactVelocity_r);
+		add$3(contact.linearVelocity, linearVelocity, _contactVelocity_angularComponent);
 		contact.hadCollision = false;
 		contact.wasDiscarded = false;
 		contact.canPushCharacter = true;
-		this.hitCount++;
 	},
 	addMiss() {},
 	shouldEarlyOut() {
-		return this.hitCount >= this.maxHits;
+		return this.earlyOutFraction === -Infinity;
 	},
 	reset() {
 		this.bodyIdB = -1;
+		this.earlyOutFraction = Number.MAX_VALUE;
 		this.contacts = null;
 		this.maxHitsExceeded = false;
 		this.maxHits = 256;
-		this.hitCount = 0;
 		this.world = null;
 		this.listener = void 0;
 		this.character = null;
@@ -10275,20 +10729,23 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 	listener: void 0,
 	character: null,
 	displacement: create$47(),
+	/** hits at fraction 0, the contacts the character already penetrates, are left to the collide collector */
+	ignoreInitialOverlap: true,
 	addHit(hit) {
 		if (hit.status !== 1) return;
 		if (hit.fraction >= this.earlyOutFraction) return;
-		if (hit.fraction <= 0) return;
+		if (this.ignoreInitialOverlap && hit.fraction <= 0) return;
 		if (dot$2(hit.normal, this.displacement) >= 0) return;
 		if (this.ignoredContacts) {
 			for (const ignored of this.ignoredContacts) if (ignored.bodyId === hit.bodyIdB && ignored.subShapeId === hit.subShapeIdB) return;
 		}
-		const contact = this.outContact;
-		copy$9(contact.position, hit.pointB);
-		copy$9(contact.contactNormal, hit.normal);
 		const body = get$8(this.world, hit.bodyIdB);
 		if (!body) return;
 		if (body.sensor) return;
+		const contact = _castCollector_contact;
+		resetContact(contact);
+		copy$9(contact.position, hit.pointB);
+		copy$9(contact.contactNormal, hit.normal);
 		getSurfaceNormal$12(_surfaceNormal_temp, body, contact.position, hit.subShapeIdB);
 		copy$9(contact.surfaceNormal, _surfaceNormal_temp);
 		if (dot$2(contact.contactNormal, contact.surfaceNormal) < BACK_FACE_FLIP_THRESHOLD) negate(contact.surfaceNormal, contact.surfaceNormal);
@@ -10297,7 +10754,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 		contact.fraction = hit.fraction;
 		contact.bodyId = hit.bodyIdB;
 		contact.subShapeId = hit.subShapeIdB;
-		contact.materialId = hit.materialIdB;
+		contact.materialId = getShapeMaterial(body.shape, hit.subShapeIdB);
 		contact.motionType = body.motionType;
 		contact.isSensor = body.sensor;
 		let linearVelocity;
@@ -10325,6 +10782,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 		contact.wasDiscarded = false;
 		contact.canPushCharacter = true;
 		if (contact.distance + dot$2(contact.contactNormal, this.displacement) < -this.character.collisionTolerance && validateContact(this.world, this.character, contact, this.listener)) {
+			copyCharacterContact(this.outContact, contact);
 			this.hasHit = true;
 			this.earlyOutFraction = hit.fraction;
 		}
@@ -10340,6 +10798,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 		this.hasHit = false;
 		this.world = null;
 		this.ignoredContacts = void 0;
+		this.ignoreInitialOverlap = true;
 		this.listener = void 0;
 		this.character = null;
 		zero$1(this.displacement);
@@ -10385,7 +10844,7 @@ function getContactsAtPosition(world, character, position, movementDirection, fi
 	characterCollideCollector.contacts = contacts;
 	characterCollideCollector.world = world;
 	characterCollideCollector.maxHits = character.maxNumHits;
-	characterCollideCollector.hitCount = 0;
+	characterCollideCollector.earlyOutFraction = Number.MAX_VALUE;
 	characterCollideCollector.listener = listener;
 	characterCollideCollector.character = character;
 	characterCollideCollector.hitReductionCosMaxAngle = character.hitReductionCosMaxAngle;
@@ -10403,29 +10862,59 @@ function getContactsAtPosition(world, character, position, movementDirection, fi
 	sortContacts(contacts);
 	for (let i = 0; i < contacts.length; i++) contacts[i].distance -= character.characterPadding;
 }
+/** jolt's default collision tolerance, which its padding correction casts with */
+const PADDING_CORRECTION_TOLERANCE = 1e-4;
+/** one transform per recursion depth, so compound children do not overwrite their parent's */
+const _correctFraction_frames = [];
+function getCorrectFractionFrame(depth) {
+	while (_correctFraction_frames.length <= depth) _correctFraction_frames.push({
+		position: create$47(),
+		quaternion: create$44(),
+		scale: create$47()
+	});
+	return _correctFraction_frames[depth];
+}
+/** places a child (of a transformed or compound shape) under its parent's transform, scaling it as collision does */
+function setChildCorrectFractionFrame(out, parentPosition, parentQuaternion, parentScale, childPosition, childQuaternion) {
+	multiply$2(out.position, childPosition, parentScale);
+	transformQuat(out.position, out.position, parentQuaternion);
+	add$3(out.position, parentPosition, out.position);
+	multiply$1(out.quaternion, parentQuaternion, childQuaternion);
+	transformScale(out.scale, childQuaternion, parentScale[0], parentScale[1], parentScale[2]);
+}
 /**
-* Recursively corrects the fraction for character padding by unwrapping decorator shapes.
-* Accumulates transformations through decorator shape hierarchy before performing GJK cast.
-* @param characterSupport reusable Support struct, filled with the character shape at the convex leaf
-* @param shape the character shape to cast (may be decorator)
-* @param position start position (accumulated through recursion)
-* @param quaternion start rotation (accumulated through recursion)
-* @param displacement movement vector
-* @param scale accumulated scale
-* @param polygon the inflated polygon to cast against
-* @param inOutFraction object containing the fraction to correct (modified in place)
-* @param collisionTolerance tolerance for GJK
-* @returns true if correction was successful
+* casts the character's convex leaves (through transformed, scaled, compound and static compound shapes) against the
+* inflated polygon, lowering the fraction to the earliest hit. true if any leaf hit
 */
-function correctFractionForCharacterPadding(characterSupport, shape, position, quaternion, displacement, scale, polygon, inOutFraction, collisionTolerance) {
-	if (shape.type === 6) {
-		transformQuat(_correctFraction_tempPos, shape.position, quaternion);
-		add$3(_correctFraction_tempPos, position, _correctFraction_tempPos);
-		multiply$1(_correctFraction_tempQuat, quaternion, shape.quaternion);
-		return correctFractionForCharacterPadding(characterSupport, shape.shape, _correctFraction_tempPos, _correctFraction_tempQuat, displacement, scale, polygon, inOutFraction, collisionTolerance);
+function correctFractionForCharacterPadding(shape, position, quaternion, scale, displacement, polygon, inOutFraction, depth) {
+	switch (shape.type) {
+		case 6: {
+			const frame = getCorrectFractionFrame(depth);
+			setChildCorrectFractionFrame(frame, position, quaternion, scale, shape.position, shape.quaternion);
+			return correctFractionForCharacterPadding(shape.shape, frame.position, frame.quaternion, frame.scale, displacement, polygon, inOutFraction, depth + 1);
+		}
+		case 7: {
+			const frame = getCorrectFractionFrame(depth);
+			copy$9(frame.position, position);
+			copy$6(frame.quaternion, quaternion);
+			multiply$2(frame.scale, scale, shape.scale);
+			return correctFractionForCharacterPadding(shape.shape, frame.position, frame.quaternion, frame.scale, displacement, polygon, inOutFraction, depth + 1);
+		}
+		case 5:
+		case 12: {
+			const frame = getCorrectFractionFrame(depth);
+			let corrected = false;
+			for (let i = 0; i < shape.children.length; i++) {
+				const child = shape.children[i];
+				setChildCorrectFractionFrame(frame, position, quaternion, scale, child.position, child.quaternion);
+				if (correctFractionForCharacterPadding(child.shape, frame.position, frame.quaternion, frame.scale, displacement, polygon, inOutFraction, depth + 1)) corrected = true;
+			}
+			return corrected;
+		}
 	}
-	setShapeSupport(characterSupport, shape, 0, scale);
-	gjkCastShape(_paddingCorrection_gjkResult, fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position), characterSupport, polygon, displacement, collisionTolerance, characterSupport.convexRadius + characterSupport.addRadius, polygon.convexRadius + polygon.addRadius, inOutFraction.value);
+	if (!shapeDefs[shape.type].convex) return false;
+	setShapeSupport(_paddingCorrection_characterSupport, shape, 0, scale);
+	gjkCastShape(_paddingCorrection_gjkResult, fromRotationTranslation(_paddingCorrection_mat4_transform, quaternion, position), _paddingCorrection_characterSupport, polygon, displacement, PADDING_CORRECTION_TOLERANCE, 0, 0, inOutFraction.value);
 	if (_paddingCorrection_gjkResult.hit) {
 		inOutFraction.value = _paddingCorrection_gjkResult.lambda;
 		return true;
@@ -10433,7 +10922,8 @@ function correctFractionForCharacterPadding(characterSupport, shape, position, q
 	return false;
 }
 /**
-* Sweep test to verify movement path. Returns earliest hit along displacement.
+* Sweep along the displacement to see how far the character can move: the shape cast without its padding, the fraction
+* then corrected so the padding touches what it hits; initial overlaps are ignored. Returns earliest hit along displacement.
 * @param out output contact (only valid if function returns true)
 * @param world the physics world
 * @param character the character controller
@@ -10443,7 +10933,7 @@ function correctFractionForCharacterPadding(characterSupport, shape, position, q
 * @param ignoredContacts optional array of contacts to ignore
 * @returns true if contact found, false if path is clear
 */
-function getFirstContactForSweep(out, world, character, position, displacement, filter, listener, ignoredContacts) {
+function validateMovement(out, world, character, position, displacement, filter, listener, ignoredContacts) {
 	const displacementLenSq = squaredLength(displacement);
 	if (displacementLenSq < 1e-8) return false;
 	resetContact(out);
@@ -10453,7 +10943,7 @@ function getFirstContactForSweep(out, world, character, position, displacement, 
 	add$3(_getContacts_shapePos, _getContacts_shapePos, _getContacts_paddingOffset);
 	const displacementLen = Math.sqrt(displacementLenSq);
 	const characterPaddingFraction = character.characterPadding / displacementLen;
-	_characterCastSettings.collisionTolerance = character.collisionTolerance;
+	_characterCastSettings.extraConvexRadius = 0;
 	_characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === 1;
 	_characterCastSettings.collideWithBackfacesConvex = false;
 	_characterCastSettings.collideOnlyWithActiveEdges = true;
@@ -10483,13 +10973,15 @@ function getFirstContactForSweep(out, world, character, position, displacement, 
 	let corrected = false;
 	if (hitBody) {
 		negate(_paddingCorrection_negativeNormal, out.contactNormal);
+		conjugate(_paddingCorrection_inverseRotation, hitBody.quaternion);
+		transformQuat(_paddingCorrection_negativeNormal, _paddingCorrection_negativeNormal, _paddingCorrection_inverseRotation);
 		fromRotationTranslation(_paddingCorrection_mat4_transform, hitBody.quaternion, hitBody.position);
 		getShapeSupportingFace(_paddingCorrection_face, hitBody.shape, out.subShapeId, _paddingCorrection_negativeNormal, _paddingCorrection_mat4_transform, _paddingCorrection_scale);
 		if (_paddingCorrection_face.numVertices >= 2) {
 			setPolygonSupport(_paddingCorrection_polygonSupport, _paddingCorrection_face.vertices, _paddingCorrection_face.numVertices);
 			_paddingCorrection_polygonSupport.addRadius = character.characterPadding;
 			_paddingCorrection_fractionWrapper.value = out.fraction + characterPaddingFraction;
-			corrected = correctFractionForCharacterPadding(_paddingCorrection_characterSupport, character.shape, _getContacts_shapePos, character.quaternion, displacement, _paddingCorrection_scale, _paddingCorrection_polygonSupport, _paddingCorrection_fractionWrapper, character.collisionTolerance);
+			corrected = correctFractionForCharacterPadding(character.shape, _getContacts_shapePos, character.quaternion, _paddingCorrection_scale, displacement, _paddingCorrection_polygonSupport, _paddingCorrection_fractionWrapper, 0);
 			if (corrected) out.fraction = _paddingCorrection_fractionWrapper.value;
 		}
 	}
@@ -10497,6 +10989,45 @@ function getFirstContactForSweep(out, world, character, position, displacement, 
 	out.fraction = Math.min(out.fraction, 1);
 	return true;
 }
+/**
+* The first contact along the displacement, the shape cast inflated by its padding so what it hits is what the padding
+* touches; initial overlaps count.
+* @returns true if contact found, false if path is clear
+*/
+function getFirstContactForSweep(out, world, character, position, displacement, filter, listener, ignoredContacts) {
+	resetContact(out);
+	transformQuat(_getContacts_shapePos, character.shapeOffset, character.quaternion);
+	add$3(_getContacts_shapePos, _getContacts_shapePos, position);
+	scale$4(_getContacts_paddingOffset, character.up, character.characterPadding);
+	add$3(_getContacts_shapePos, _getContacts_shapePos, _getContacts_paddingOffset);
+	_characterCastSettings.extraConvexRadius = character.characterPadding;
+	_characterCastSettings.collideWithBackfacesTriangles = character.backFaceMode === 1;
+	_characterCastSettings.collideWithBackfacesConvex = false;
+	_characterCastSettings.collideOnlyWithActiveEdges = true;
+	_characterCastSettings.useShrunkenShapeAndConvexRadius = true;
+	_characterCastSettings.returnDeepestPoint = false;
+	characterCastCollector.outContact = out;
+	characterCastCollector.hasHit = false;
+	characterCastCollector.earlyOutFraction = 1;
+	characterCastCollector.ignoreInitialOverlap = false;
+	characterCastCollector.world = world;
+	characterCastCollector.ignoredContacts = ignoredContacts;
+	characterCastCollector.listener = listener;
+	characterCastCollector.character = character;
+	copy$9(characterCastCollector.displacement, displacement);
+	const originalBodyFilter = filter.bodyFilter;
+	ignoreSingleBodyChainedBodyFilterState.bodyId = character.innerRigidBodyId;
+	ignoreSingleBodyChainedBodyFilterState.innerBodyFilter = originalBodyFilter;
+	filter.bodyFilter = ignoreSingleBodyChainedBodyFilter;
+	castShape(world, characterCastCollector, _characterCastSettings, character.shape, _getContacts_shapePos, character.quaternion, _sweep_unitScale, displacement, filter);
+	filter.bodyFilter = originalBodyFilter;
+	ignoreSingleBodyChainedBodyFilterState.bodyId = -1;
+	ignoreSingleBodyChainedBodyFilterState.innerBodyFilter = void 0;
+	const hasHit = characterCastCollector.hasHit;
+	characterCastCollector.reset();
+	return hasHit;
+}
+const _sweep_unitScale = /* @__PURE__ */ fromValues$2(1, 1, 1);
 /**
 * Removes contacts with opposing penetration normals.
 * Prevents character from being stuck between two penetrating surfaces.
@@ -11014,7 +11545,7 @@ function hasSteepSlopesToWalk(character, linearVelocity) {
 	if (!isSupported(character)) return false;
 	const dotUp = dot$2(linearVelocity, character.up);
 	scaleAndAdd(_hasSteepSlopes_horizontal, linearVelocity, character.up, -dotUp);
-	if (squaredLength(_hasSteepSlopes_horizontal) < 1e-12) return false;
+	if (squaredLength(_hasSteepSlopes_horizontal) <= 1e-6) return false;
 	const contacts = character.contacts;
 	for (let i = 0; i < contacts.length; i++) {
 		const contact = contacts[i];
@@ -11064,7 +11595,7 @@ function moveShape(world, character, position, velocity, deltaTime, filter, list
 		removeConflictingContacts(contacts, character.characterPadding, _moveShape_ignoredContacts);
 		determineConstraints(character, contacts, deltaTime, _activeConstraints);
 		let timeSimulated = solveConstraints(world, character, _moveShape_velocity, deltaTime, timeRemaining, listener, _moveShape_displacement, _moveShape_ignoredContacts, _activeConstraints);
-		if (getFirstContactForSweep(_moveShape_sweepContact, world, character, position, _moveShape_displacement, filter, listener, _moveShape_ignoredContacts)) {
+		if (validateMovement(_moveShape_sweepContact, world, character, position, _moveShape_displacement, filter, listener, _moveShape_ignoredContacts)) {
 			const fraction = _moveShape_sweepContact.fraction;
 			scale$4(_moveShape_displacement, _moveShape_displacement, fraction);
 			timeSimulated *= fraction;
@@ -11465,18 +11996,8 @@ function moveToContact(world, character, position, contact, filter, listener) {
 	}
 	if (!foundContact) {
 		const newContact = acquireContact(character.contacts);
-		copy$9(newContact.position, contact.position);
-		copy$9(newContact.linearVelocity, contact.linearVelocity);
-		copy$9(newContact.contactNormal, contact.contactNormal);
-		copy$9(newContact.surfaceNormal, contact.surfaceNormal);
-		newContact.distance = contact.distance;
-		newContact.fraction = contact.fraction;
-		newContact.bodyId = contact.bodyId;
-		newContact.subShapeId = contact.subShapeId;
-		newContact.motionType = contact.motionType;
+		copyCharacterContact(newContact, contact);
 		newContact.hadCollision = true;
-		newContact.wasDiscarded = false;
-		newContact.canPushCharacter = contact.canPushCharacter;
 	}
 	updateSupportingContact(world, character, true, character.lastDeltaTime, listener);
 	updateInnerBodyTransform(world, character);
@@ -11514,7 +12035,10 @@ const _walkStairs_newPosition = /* @__PURE__ */ create$47();
 const _walkStairs_testPosition = /* @__PURE__ */ create$47();
 const _walkStairs_horizontalMovement = /* @__PURE__ */ create$47();
 const _walkStairs_characterVelocity = /* @__PURE__ */ create$47();
-const _walkStairs_horizontalVelocity = /* @__PURE__ */ create$47();
+const _walkStairs_finalPosition = /* @__PURE__ */ create$47();
+const _walkStairs_surfaceNormal = /* @__PURE__ */ create$47();
+const _walkStairs_direction = /* @__PURE__ */ create$47();
+const _walkStairs_stepForwardNormalized = /* @__PURE__ */ create$47();
 const _walkStairs_steepSlopeNormalsPool = [];
 for (let i = 0; i < 16; i++) _walkStairs_steepSlopeNormalsPool.push(create$47());
 let _walkStairs_steepSlopeNormalsCount = 0;
@@ -11541,21 +12065,19 @@ let _walkStairs_steepSlopeNormalsCount = 0;
 */
 function walkStairs(world, character, deltaTime, stepUp, stepForward, stepForwardTest, stepDownExtra, filter, listener) {
 	copy$9(_walkStairs_up, stepUp);
-	if (getFirstContactForSweep(_walkStairs_contact, world, character, character.position, _walkStairs_up, filter, listener, void 0)) {
+	if (validateMovement(_walkStairs_contact, world, character, character.position, _walkStairs_up, filter, listener, void 0)) {
 		if (_walkStairs_contact.fraction < 1e-6) return false;
 		scale$4(_walkStairs_up, _walkStairs_up, _walkStairs_contact.fraction);
 	}
 	add$3(_walkStairs_upPosition, character.position, _walkStairs_up);
 	scale$4(_walkStairs_characterVelocity, stepForward, 1 / deltaTime);
-	const dotUp = dot$2(_walkStairs_characterVelocity, character.up);
-	scaleAndAdd(_walkStairs_horizontalVelocity, _walkStairs_characterVelocity, character.up, -dotUp);
 	_walkStairs_steepSlopeNormalsCount = 0;
 	const contacts = character.contacts;
 	for (let i = 0; i < contacts.length; i++) {
 		const c = contacts[i];
 		if (!c.hadCollision || c.wasDiscarded) continue;
 		if (!isSlopeTooSteep(character, c.surfaceNormal)) continue;
-		if (c.surfaceNormal[0] * (_walkStairs_horizontalVelocity[0] - c.linearVelocity[0]) + c.surfaceNormal[1] * (_walkStairs_horizontalVelocity[1] - c.linearVelocity[1]) + c.surfaceNormal[2] * (_walkStairs_horizontalVelocity[2] - c.linearVelocity[2]) < 0) {
+		if (c.surfaceNormal[0] * (_walkStairs_characterVelocity[0] - c.linearVelocity[0]) + c.surfaceNormal[1] * (_walkStairs_characterVelocity[1] - c.linearVelocity[1]) + c.surfaceNormal[2] * (_walkStairs_characterVelocity[2] - c.linearVelocity[2]) < 0) {
 			if (_walkStairs_steepSlopeNormalsCount < _walkStairs_steepSlopeNormalsPool.length) {
 				copy$9(_walkStairs_steepSlopeNormalsPool[_walkStairs_steepSlopeNormalsCount], c.surfaceNormal);
 				_walkStairs_steepSlopeNormalsCount++;
@@ -11569,17 +12091,29 @@ function walkStairs(world, character, deltaTime, stepUp, stepForward, stepForwar
 	sub(_walkStairs_horizontalMovement, _walkStairs_newPosition, _walkStairs_upPosition);
 	const horizontalMovementSq = squaredLength(_walkStairs_horizontalMovement);
 	if (horizontalMovementSq < 1e-8) return false;
-	const maxDot = -.05 * len(stepForward);
+	const stepForwardLen = len(stepForward);
+	const stepForwardNormalized = scale$4(_walkStairs_stepForwardNormalized, stepForward, 1 / stepForwardLen);
 	let madeProgress = false;
-	for (let i = 0; i < _walkStairs_steepSlopeNormalsCount; i++) if (dot$2(_walkStairs_steepSlopeNormalsPool[i], _walkStairs_horizontalMovement) < maxDot) {
-		madeProgress = true;
-		break;
+	for (let i = 0; i < _walkStairs_steepSlopeNormalsCount; i++) {
+		const normal = _walkStairs_steepSlopeNormalsPool[i];
+		const direction = scale$4(_walkStairs_direction, character.up, dot$2(normal, character.up));
+		sub(direction, direction, normal);
+		const directionLen = len(direction);
+		if (directionLen > 1e-6) {
+			scale$4(direction, direction, 1 / directionLen);
+			if (dot$2(direction, stepForwardNormalized) > .707107 && dot$2(direction, _walkStairs_horizontalMovement) > .05 * stepForwardLen) {
+				madeProgress = true;
+				break;
+			}
+		}
 	}
 	if (!madeProgress) return false;
 	negate(_walkStairs_down, _walkStairs_up);
 	add$3(_walkStairs_down, _walkStairs_down, stepDownExtra);
 	if (!getFirstContactForSweep(_walkStairs_contact, world, character, _walkStairs_newPosition, _walkStairs_down, filter, listener, void 0)) return false;
-	if (isSlopeTooSteep(character, _walkStairs_contact.surfaceNormal)) {
+	scaleAndAdd(_walkStairs_finalPosition, _walkStairs_newPosition, _walkStairs_down, _walkStairs_contact.fraction);
+	const surfaceNormal = copy$9(_walkStairs_surfaceNormal, _walkStairs_contact.surfaceNormal);
+	if (isSlopeTooSteep(character, surfaceNormal)) {
 		if (squaredLength(stepForwardTest) < 1e-12) return false;
 		copy$9(_walkStairs_testPosition, _walkStairs_upPosition);
 		scale$4(_walkStairs_characterVelocity, stepForwardTest, 1 / deltaTime);
@@ -11588,10 +12122,12 @@ function walkStairs(world, character, deltaTime, stepUp, stepForward, stepForwar
 		sub(_walkStairs_horizontalMovement, _walkStairs_testPosition, _walkStairs_upPosition);
 		if (squaredLength(_walkStairs_horizontalMovement) <= horizontalMovementSq + 1e-8) return false;
 		if (!getFirstContactForSweep(_walkStairs_testContact, world, character, _walkStairs_testPosition, _walkStairs_down, filter, listener, void 0)) return false;
-		if (isSlopeTooSteep(character, _walkStairs_testContact.surfaceNormal)) return false;
+		copy$9(surfaceNormal, _walkStairs_testContact.surfaceNormal);
+		if (isSlopeTooSteep(character, surfaceNormal)) return false;
 	}
-	scaleAndAdd(_walkStairs_newPosition, _walkStairs_newPosition, _walkStairs_down, _walkStairs_contact.fraction);
-	moveToContact(world, character, _walkStairs_newPosition, _walkStairs_contact, filter, listener);
+	sub(_walkStairs_direction, _walkStairs_finalPosition, character.position);
+	if (dot$2(_walkStairs_direction, surfaceNormal) < 1e-4) return false;
+	moveToContact(world, character, _walkStairs_finalPosition, _walkStairs_contact, filter, listener);
 	character.ground.state = 0;
 	return true;
 }
@@ -11603,6 +12139,7 @@ const _update_achievedHorizontalStep = /* @__PURE__ */ create$47();
 const _update_stepForward = /* @__PURE__ */ create$47();
 const _update_stepForwardNormalized = /* @__PURE__ */ create$47();
 const _update_stepForwardTest = /* @__PURE__ */ create$47();
+const _update_walkStairsDirection = /* @__PURE__ */ create$47();
 const _update_groundHorizontal = /* @__PURE__ */ create$47();
 /**
 * Main update function - moves character with full collision handling.
@@ -11648,16 +12185,29 @@ function update$10(world, character, deltaTime, gravity, settings, listener, fil
 			scale$4(_update_achievedHorizontalStep, _update_stepForwardNormalized, Math.max(0, dot$2(_update_achievedHorizontalStep, _update_stepForwardNormalized)));
 			const achievedHorizontalStepLen = len(_update_achievedHorizontalStep);
 			if (achievedHorizontalStepLen + 1e-4 < desiredHorizontalStepLen && hasSteepSlopesToWalk(character, _update_desiredVelocity)) {
-				scale$4(_update_stepForward, _update_stepForwardNormalized, Math.max(settings.walkStairsMinStepForward, desiredHorizontalStepLen - achievedHorizontalStepLen));
-				copy$9(_update_groundHorizontal, character.ground.normal);
-				negate(_update_groundHorizontal, _update_groundHorizontal);
-				const groundDotUp = dot$2(_update_groundHorizontal, character.up);
-				scaleAndAdd(_update_groundHorizontal, _update_groundHorizontal, character.up, -groundDotUp);
-				const groundHorizontalLenSq = squaredLength(_update_groundHorizontal);
-				if (groundHorizontalLenSq > 1e-12) scale$4(_update_stepForwardTest, _update_groundHorizontal, 1 / Math.sqrt(groundHorizontalLenSq));
-				else copy$9(_update_stepForwardTest, _update_stepForwardNormalized);
-				if (dot$2(_update_stepForwardTest, _update_stepForwardNormalized) < settings.walkStairsCosAngleForwardContact) copy$9(_update_stepForwardTest, _update_stepForwardNormalized);
-				scale$4(_update_stepForwardTest, _update_stepForwardTest, settings.walkStairsStepForwardTest);
+				const walkStairsDirection = copy$9(_update_walkStairsDirection, _update_stepForwardNormalized);
+				let maxDot = settings.walkStairsCosAngleForwardContact;
+				const contacts = character.contacts;
+				for (let i = 0; i < contacts.length; i++) {
+					const c = contacts[i];
+					if (!c.hadCollision || c.wasDiscarded) continue;
+					sub(_update_groundHorizontal, _update_desiredVelocity, c.linearVelocity);
+					if (dot$2(c.surfaceNormal, _update_groundHorizontal) >= 0) continue;
+					if (!isSlopeTooSteep(character, c.surfaceNormal)) continue;
+					const test = scale$4(_update_groundHorizontal, character.up, dot$2(c.surfaceNormal, character.up));
+					sub(test, test, c.surfaceNormal);
+					const testLen = len(test);
+					if (testLen > 1e-6) {
+						scale$4(test, test, 1 / testLen);
+						const dot = dot$2(test, _update_stepForwardNormalized);
+						if (dot > maxDot) {
+							copy$9(walkStairsDirection, test);
+							maxDot = dot;
+						}
+					}
+				}
+				scale$4(_update_stepForward, walkStairsDirection, Math.max(settings.walkStairsMinStepForward, desiredHorizontalStepLen - achievedHorizontalStepLen));
+				scale$4(_update_stepForwardTest, walkStairsDirection, settings.walkStairsStepForwardTest);
 				walkStairs(world, character, deltaTime, settings.walkStairsStepUp, _update_stepForward, _update_stepForwardTest, settings.walkStairsStepDownExtra, filter, listener);
 			}
 		}
@@ -11750,6 +12300,924 @@ function fixNormal(v0, v1, v2, triangleNormal, activeEdges, point, normal, movem
 	return (activeEdges & collidingEdge) !== 0 ? normal : triangleNormal;
 }
 //#endregion
+//#region src/constraints/constraint-part/angular-friction-constraint-part.ts
+/** create a new AngularFrictionConstraintPart with zero-initialized values */
+function create$30() {
+	return {
+		invI1_Axis: create$47(),
+		invI2_Axis: create$47(),
+		effectiveMass: 0,
+		bias: 0,
+		totalLambda: 0
+	};
+}
+/** reset to zero values (does not clear totalLambda, used for re-init each frame) */
+function reset$2(part) {
+	set$7(part.invI1_Axis, 0, 0, 0);
+	set$7(part.invI2_Axis, 0, 0, 0);
+	part.effectiveMass = 0;
+	part.bias = 0;
+}
+/** deactivate this constraint part (zero out effective mass) */
+function deactivate$7(part) {
+	part.effectiveMass = 0;
+	part.totalLambda = 0;
+}
+/** check if constraint is active (has non-zero effective mass) */
+function isActive$5(part) {
+	return part.effectiveMass !== 0;
+}
+/**
+* Calculate constraint properties (effective mass and cached I^-1 × axis terms).
+*
+* @param part the constraint part to initialize
+* @param bodyA first body
+* @param bodyB second body
+* @param invInertiaA inverse inertia of body A (world space, mass-scaled)
+* @param invInertiaB inverse inertia of body B (world space, mass-scaled)
+* @param worldSpaceAxis axis around which friction torque acts (normalized — the contact normal)
+* @param bias velocity bias (e.g. relative angular surface velocity along the axis)
+*/
+function calculateConstraintProperties$7(part, bodyA, bodyB, invInertiaA, invInertiaB, worldSpaceAxis, bias) {
+	const ax = worldSpaceAxis[0];
+	const ay = worldSpaceAxis[1];
+	const az = worldSpaceAxis[2];
+	let invEffectiveMass = 0;
+	if (bodyA.motionType === 2) {
+		const i1x = invInertiaA[0] * ax + invInertiaA[4] * ay + invInertiaA[8] * az;
+		const i1y = invInertiaA[1] * ax + invInertiaA[5] * ay + invInertiaA[9] * az;
+		const i1z = invInertiaA[2] * ax + invInertiaA[6] * ay + invInertiaA[10] * az;
+		part.invI1_Axis[0] = i1x;
+		part.invI1_Axis[1] = i1y;
+		part.invI1_Axis[2] = i1z;
+		invEffectiveMass += ax * i1x + ay * i1y + az * i1z;
+	} else {
+		part.invI1_Axis[0] = 0;
+		part.invI1_Axis[1] = 0;
+		part.invI1_Axis[2] = 0;
+	}
+	if (bodyB.motionType === 2) {
+		const i2x = invInertiaB[0] * ax + invInertiaB[4] * ay + invInertiaB[8] * az;
+		const i2y = invInertiaB[1] * ax + invInertiaB[5] * ay + invInertiaB[9] * az;
+		const i2z = invInertiaB[2] * ax + invInertiaB[6] * ay + invInertiaB[10] * az;
+		part.invI2_Axis[0] = i2x;
+		part.invI2_Axis[1] = i2y;
+		part.invI2_Axis[2] = i2z;
+		invEffectiveMass += ax * i2x + ay * i2y + az * i2z;
+	} else {
+		part.invI2_Axis[0] = 0;
+		part.invI2_Axis[1] = 0;
+		part.invI2_Axis[2] = 0;
+	}
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
+	else {
+		part.effectiveMass = 1 / invEffectiveMass;
+		part.bias = bias;
+	}
+}
+/**
+* Turn a jacobian-velocity product into the part's new total lambda. The caller computes `jv` from
+* its own angular velocity locals; this owns the constraint math.
+*/
+function totalLambdaFor$1(part, jv) {
+	return part.totalLambda + part.effectiveMass * (jv - part.bias);
+}
+/**
+* Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
+* The caller applies the delta to its own velocity locals.
+*/
+function deltaLambdaFor$1(part, totalLambda) {
+	const deltaLambda = totalLambda - part.totalLambda;
+	part.totalLambda = totalLambda;
+	return deltaLambda;
+}
+/**
+* Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
+* apply. The caller applies it to its own angular velocity locals — see the note on
+* `contactConstraintPart.warmStartLambda` for why the split is worth having.
+*/
+function warmStartLambda$1(part, warmStartRatio) {
+	part.totalLambda *= warmStartRatio;
+	return part.totalLambda;
+}
+//#endregion
+//#region src/body/rigid-body-step.ts
+/**
+* Apply a position step (linear velocity * dt) to the body.
+* Used in position solver for Baumgarte stabilization.
+*
+* The translation dof mask applies to the step, not to the resulting position: a locked axis stops
+* the body moving along it, it does not snap the body to zero there.
+*
+* NOTE: This modifies centerOfMassPosition directly (the primary property for physics).
+* `rigidBody.derivePositionAndBounds` syncs the derived position and aabb from it.
+*
+* @param body - Body to update
+* @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
+*/
+function addPositionStep(body, linearVelocityTimesDeltaTime) {
+	const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 7;
+	if (allowedTranslation & 1) body.centerOfMassPosition[0] += linearVelocityTimesDeltaTime[0];
+	if (allowedTranslation & 2) body.centerOfMassPosition[1] += linearVelocityTimesDeltaTime[1];
+	if (allowedTranslation & 4) body.centerOfMassPosition[2] += linearVelocityTimesDeltaTime[2];
+}
+/**
+* Subtract a position step (linear velocity * dt) from the body.
+* Used in position solver for Baumgarte stabilization.
+*
+* See {@link addPositionStep} on why the dof mask applies to the step and not the position.
+*
+* @param body - Body to update
+* @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
+*/
+function subPositionStep(body, linearVelocityTimesDeltaTime) {
+	const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 7;
+	if (allowedTranslation & 1) body.centerOfMassPosition[0] -= linearVelocityTimesDeltaTime[0];
+	if (allowedTranslation & 2) body.centerOfMassPosition[1] -= linearVelocityTimesDeltaTime[1];
+	if (allowedTranslation & 4) body.centerOfMassPosition[2] -= linearVelocityTimesDeltaTime[2];
+}
+const _addRotationStep_axis = /* @__PURE__ */ create$47();
+const _addRotationStep_rotation = /* @__PURE__ */ create$44();
+/**
+* Update rotation using an Euler step (used during position solver).
+*
+* This uses a proper axis-angle quaternion construction instead of a first-order
+* approximation, which is more accurate for large rotations (important for kinematic bodies).
+*
+* @param body - Body to update
+* @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
+*/
+function addRotationStep(body, angularVelocityTimesDeltaTime) {
+	const len = length(angularVelocityTimesDeltaTime);
+	if (len > 1e-6) {
+		scale$4(_addRotationStep_axis, angularVelocityTimesDeltaTime, 1 / len);
+		setAxisAngle(_addRotationStep_rotation, _addRotationStep_axis, len);
+		multiply$1(body.quaternion, _addRotationStep_rotation, body.quaternion);
+		normalize(body.quaternion, body.quaternion);
+	}
+}
+/**
+* Update rotation using an Euler step in the opposite direction (used during position solver).
+*
+* @param body - Body to update
+* @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
+*/
+function subRotationStep(body, angularVelocityTimesDeltaTime) {
+	const len = length(angularVelocityTimesDeltaTime);
+	if (len > 1e-6) {
+		scale$4(_addRotationStep_axis, angularVelocityTimesDeltaTime, 1 / len);
+		setAxisAngle(_addRotationStep_rotation, _addRotationStep_axis, -len);
+		multiply$1(body.quaternion, _addRotationStep_rotation, body.quaternion);
+		normalize(body.quaternion, body.quaternion);
+	}
+}
+const _deriveTransform_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ create$47();
+/**
+* re-derive the cached world transform from the authoritative state the step helpers mutate:
+* `position` from `centerOfMassPosition` and `quaternion`, then the world `aabb` from that.
+* whatever moves the centre of mass owes a call to this before the next reader of either.
+*
+* does not publish to the broadphase - see `broadphase.notifyBodyBoundsChanged`.
+*/
+function deriveTransform(body) {
+	const shapeCenterOfMassInWorldSpace = _deriveTransform_shapeCenterOfMassInWorldSpace;
+	copy$9(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
+	transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
+	sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
+	updateAABB(body);
+}
+//#endregion
+//#region src/constraints/constraint-part/spring-settings.ts
+var spring_settings_exports = /* @__PURE__ */ __exportAll({
+	SpringMode: () => SpringMode,
+	copy: () => copy$1,
+	create: () => create$29,
+	hasStiffness: () => hasStiffness$1,
+	hasStiffnessOrDamping: () => hasStiffnessOrDamping,
+	reset: () => reset$1
+});
+/** spring mode enum - specifies how the spring is defined */
+let SpringMode = /* @__PURE__ */ function(SpringMode) {
+	/** frequency and damping are specified (oscillation frequency in Hz) */
+	SpringMode[SpringMode["FREQUENCY_AND_DAMPING"] = 0] = "FREQUENCY_AND_DAMPING";
+	/** stiffness and damping are specified (spring equation: F = -k * x - c * v) */
+	SpringMode[SpringMode["STIFFNESS_AND_DAMPING"] = 1] = "STIFFNESS_AND_DAMPING";
+	return SpringMode;
+}({});
+/** create default spring settings (hard constraint, no spring) */
+function create$29() {
+	return {
+		mode: 0,
+		frequencyOrStiffness: 0,
+		damping: 0
+	};
+}
+/** reset spring settings to the defaults (hard constraint, no spring) */
+function reset$1(out) {
+	out.mode = 0;
+	out.frequencyOrStiffness = 0;
+	out.damping = 0;
+	return out;
+}
+/** copy spring settings from source to out */
+function copy$1(out, source) {
+	out.mode = source.mode;
+	out.frequencyOrStiffness = source.frequencyOrStiffness;
+	out.damping = source.damping;
+}
+/** check if the spring has valid frequency/stiffness (soft constraint), if false, the spring will be hard */
+function hasStiffness$1(settings) {
+	return settings.frequencyOrStiffness > 0;
+}
+/** check if the spring has stiffness or damping, which makes it active. if false, the constraint will be hard */
+function hasStiffnessOrDamping(settings) {
+	return settings.frequencyOrStiffness > 0 || settings.mode !== 0 && settings.damping > 0;
+}
+//#endregion
+//#region src/constraints/constraint-part/spring-part.ts
+/** Create a new SpringPart with zero values (hard constraint) */
+function createSpringPart() {
+	return {
+		bias: 0,
+		softness: 0
+	};
+}
+/**
+* Helper function to calculate spring properties with stiffness and damping.
+*
+* Note: The calculation of beta and gamma below are based on the solution of an
+* implicit Euler integration scheme. This scheme is unconditionally stable but
+* has built-in damping, so even when you set the damping ratio to 0 there will
+* still be damping. See Erin Catto GDC 2011 slides page 16 and 32.
+*
+* @param part spring part to update
+* @param deltaTime time step
+* @param invEffectiveMass inverse effective mass K (before spring adjustment)
+* @param bias bias term (b) for the constraint impulse
+* @param C value of the constraint equation (C)
+* @param stiffness spring stiffness k
+* @param damping spring damping coefficient c
+* @returns updated effective mass K^-1 (after spring adjustment)
+*/
+function calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping) {
+	part.softness = 1 / (deltaTime * (damping + deltaTime * stiffness));
+	part.bias = bias + deltaTime * stiffness * part.softness * C;
+	return 1 / (invEffectiveMass + part.softness);
+}
+/**
+* Turn off the spring and set a bias only (hard constraint).
+*
+* @param part - Spring part to update
+* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
+*/
+function calculateSpringPropertiesWithBias(part, bias) {
+	part.softness = 0;
+	part.bias = bias;
+}
+/**
+* Calculate spring properties based on frequency and damping ratio.
+*
+* @param part - Spring part to update
+* @param deltaTime - Time step
+* @param invEffectiveMass - Inverse effective mass K
+* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
+* @param C - Value of the constraint equation (C). Set to zero if you don't want to drive the constraint to zero with a spring.
+* @param frequency - Oscillation frequency (Hz). Set to zero if you don't want to drive the constraint to zero with a spring.
+* @param damping - Damping factor (0 = no damping, 1 = critical damping). Set to zero if you don't want to drive the constraint to zero with a spring.
+* @returns Updated effective mass K^-1 (after spring adjustment)
+*/
+function calculateSpringPropertiesWithFrequencyAndDamping(part, deltaTime, invEffectiveMass, bias, C, frequency, damping) {
+	const effectiveMass = 1 / invEffectiveMass;
+	if (frequency > 0) {
+		const omega = 2 * Math.PI * frequency;
+		return calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, effectiveMass * omega * omega, 2 * effectiveMass * damping * omega);
+	} else {
+		calculateSpringPropertiesWithBias(part, bias);
+		return effectiveMass;
+	}
+}
+/**
+* Calculate spring properties with spring stiffness (k) and damping (c).
+* This is based on the spring equation: F = -k * x - c * v
+*
+* @param part - Spring part to update
+* @param deltaTime - Time step
+* @param invEffectiveMass - Inverse effective mass K
+* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
+* @param C - Value of the constraint equation (C). Set to zero if you don't want to drive the constraint to zero with a spring.
+* @param stiffness - Spring stiffness k.
+* @param damping - Spring damping coefficient c. With stiffness and damping both zero the constraint is hard.
+* @returns Updated effective mass K^-1 (after spring adjustment)
+*/
+function calculateSpringPropertiesWithStiffnessAndDamping(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping) {
+	if (stiffness > 0 || damping > 0) return calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping);
+	else {
+		const effectiveMass = 1 / invEffectiveMass;
+		calculateSpringPropertiesWithBias(part, bias);
+		return effectiveMass;
+	}
+}
+/**
+* Calculate spring properties using SpringSettings.
+* Selects the appropriate calculation method based on the spring mode.
+*
+* @param part - Spring part to update
+* @param deltaTime - Time step
+* @param invEffectiveMass - Inverse effective mass K
+* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
+* @param C - Value of the constraint equation (C)
+* @param settings - Spring settings (mode, frequency/stiffness, damping)
+* @returns Updated effective mass K^-1 (after spring adjustment)
+*/
+function calculateSpringPropertiesWithSettings(part, deltaTime, invEffectiveMass, bias, C, settings) {
+	if (settings.mode === 0) return calculateSpringPropertiesWithFrequencyAndDamping(part, deltaTime, invEffectiveMass, bias, C, settings.frequencyOrStiffness, settings.damping);
+	else return calculateSpringPropertiesWithStiffnessAndDamping(part, deltaTime, invEffectiveMass, bias, C, settings.frequencyOrStiffness, settings.damping);
+}
+/**
+* Returns if this spring is active (soft constraint).
+*/
+function isSpringActive(part) {
+	return part.softness !== 0;
+}
+/**
+* Get total bias b, including supplied bias and bias for spring: lambda = J v + b
+*
+* From Erin Catto: http://www.bulletphysics.org/Bullet/phpBB3/viewtopic.php?f=4&t=1354
+*
+* Each iteration we are not computing the whole impulse, we are computing an increment
+* to the impulse and we are updating the velocity. Also, as we solve each constraint we
+* get a perfect v2, but then some other constraint will come along and mess it up.
+* So we want to patch up the constraint while acknowledging the accumulated impulse and
+* the damaged velocity. To help with that we use P for the accumulated impulse and lambda
+* as the update. Mathematically we have:
+*
+* M * (v2new - v2damaged) = J^T * lambda
+* J * v2new + softness * (total_lambda + lambda) + b = 0
+*
+* If we solve this we get:
+*
+* v2new = v2damaged + M^-1 * J^T * lambda
+* J * (v2damaged + M^-1 * J^T * lambda) + softness * total_lambda + softness * lambda + b = 0
+*
+* (J * M^-1 * J^T + softness) * lambda = -(J * v2damaged + softness * total_lambda + b)
+*
+* So our lagrange multiplier becomes:
+*
+* lambda = -K^-1 (J v + softness * total_lambda + b)
+*
+* So we return the bias: softness * total_lambda + b
+*
+* @param part - Spring part
+* @param totalLambda - Total accumulated lambda from previous iterations
+* @returns Total bias for the constraint
+*/
+function getSpringBias(part, totalLambda) {
+	return part.softness * totalLambda + part.bias;
+}
+//#endregion
+//#region src/constraints/constraint-part/axis-constraint-part.ts
+/** create a new AxisConstraintPart with zero-initialized values */
+function create$28() {
+	return {
+		r1PlusUxAxis: create$47(),
+		r2xAxis: create$47(),
+		invI1_r1PlusUxAxis: create$47(),
+		invI2_r2xAxis: create$47(),
+		effectiveMass: 0,
+		totalLambda: 0,
+		springPart: createSpringPart()
+	};
+}
+/** reset an AxisConstraintPart to zero values */
+function resetAxisConstraintPart(part) {
+	set$7(part.r1PlusUxAxis, 0, 0, 0);
+	set$7(part.r2xAxis, 0, 0, 0);
+	set$7(part.invI1_r1PlusUxAxis, 0, 0, 0);
+	set$7(part.invI2_r2xAxis, 0, 0, 0);
+	part.effectiveMass = 0;
+	part.totalLambda = 0;
+	part.springPart.bias = 0;
+	part.springPart.softness = 0;
+}
+const _acp_scaledInvInertiaA = /* @__PURE__ */ create$41();
+const _acp_scaledInvInertiaB = /* @__PURE__ */ create$41();
+/** calculate inverse effective mass (cached jacobian terms) */
+function calculateInverseEffectiveMass$1(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis) {
+	let invEffectiveMass = 0;
+	if (bodyA.motionType !== 0) {
+		const r1x = r1PlusU[0];
+		const r1y = r1PlusU[1];
+		const r1z = r1PlusU[2];
+		const ax = axis[0];
+		const ay = axis[1];
+		const az = axis[2];
+		part.r1PlusUxAxis[0] = r1y * az - r1z * ay;
+		part.r1PlusUxAxis[1] = r1z * ax - r1x * az;
+		part.r1PlusUxAxis[2] = r1x * ay - r1y * ax;
+	}
+	if (bodyA.motionType === 2) {
+		const cx = part.r1PlusUxAxis[0];
+		const cy = part.r1PlusUxAxis[1];
+		const cz = part.r1PlusUxAxis[2];
+		part.invI1_r1PlusUxAxis[0] = invInertiaA[0] * cx + invInertiaA[4] * cy + invInertiaA[8] * cz;
+		part.invI1_r1PlusUxAxis[1] = invInertiaA[1] * cx + invInertiaA[5] * cy + invInertiaA[9] * cz;
+		part.invI1_r1PlusUxAxis[2] = invInertiaA[2] * cx + invInertiaA[6] * cy + invInertiaA[10] * cz;
+		invEffectiveMass += invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
+	}
+	if (bodyB.motionType !== 0) {
+		const r2x = r2[0];
+		const r2y = r2[1];
+		const r2z = r2[2];
+		const ax = axis[0];
+		const ay = axis[1];
+		const az = axis[2];
+		part.r2xAxis[0] = r2y * az - r2z * ay;
+		part.r2xAxis[1] = r2z * ax - r2x * az;
+		part.r2xAxis[2] = r2x * ay - r2y * ax;
+	}
+	if (bodyB.motionType === 2) {
+		const cx = part.r2xAxis[0];
+		const cy = part.r2xAxis[1];
+		const cz = part.r2xAxis[2];
+		part.invI2_r2xAxis[0] = invInertiaB[0] * cx + invInertiaB[4] * cy + invInertiaB[8] * cz;
+		part.invI2_r2xAxis[1] = invInertiaB[1] * cx + invInertiaB[5] * cy + invInertiaB[9] * cz;
+		part.invI2_r2xAxis[2] = invInertiaB[2] * cx + invInertiaB[6] * cy + invInertiaB[10] * cz;
+		invEffectiveMass += invMassB + (part.invI2_r2xAxis[0] * cx + part.invI2_r2xAxis[1] * cy + part.invI2_r2xAxis[2] * cz);
+	}
+	return invEffectiveMass;
+}
+/**
+* Calculate constraint properties (effective mass and cached jacobian terms).
+* Hard constraint version (no spring).
+* Call this during constraint initialization.
+*
+* @param part the constraint part to initialize
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass of body A (0 if static)
+* @param invMassB inverse mass of body B (0 if static)
+* @param invInertiaA inverse inertia of body A (world space)
+* @param invInertiaB inverse inertia of body B (world space)
+* @param r1PlusU moment arm for body A: (contactPoint - centerOfMassA)
+* @param r2 moment arm for body B: (contactPoint - centerOfMassB)
+* @param axis constraint axis (normalized, e.g., contact normal or friction tangent)
+* @param bias velocity bias (for restitution or speculative contacts)
+*/
+function calculateConstraintProperties$6(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
+	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$6(part);
+	else {
+		part.effectiveMass = 1 / invEffectiveMass;
+		calculateSpringPropertiesWithBias(part.springPart, bias);
+	}
+}
+/**
+* Calculate constraint properties with mass override (effective mass and cached jacobian terms).
+* Hard constraint version (no spring), allows custom inverse mass and inertia scaling.
+* Call this during constraint initialization when you need to override mass properties.
+*
+* @param part the constraint part to initialize
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass override for body A (only used when body A is dynamic)
+* @param invMassB inverse mass override for body B (only used when body B is dynamic)
+* @param invInertiaScaleA scale factor for the inverse inertia of body A
+* @param invInertiaScaleB scale factor for the inverse inertia of body B
+* @param invInertiaA inverse inertia of body A (world space)
+* @param invInertiaB inverse inertia of body B (world space)
+* @param r1PlusU moment arm for body A: (contactPoint - centerOfMassA)
+* @param r2 moment arm for body B: (contactPoint - centerOfMassB)
+* @param axis constraint axis (normalized, e.g., contact normal or friction tangent)
+* @param bias velocity bias (for restitution or speculative contacts)
+*/
+function calculateConstraintPropertiesWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, invInertiaScaleA, invInertiaScaleB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
+	let invIA = invInertiaA;
+	if (bodyA.motionType === 2 && invInertiaScaleA !== 1) {
+		multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
+		invIA = _acp_scaledInvInertiaA;
+	}
+	let invIB = invInertiaB;
+	if (bodyB.motionType === 2 && invInertiaScaleB !== 1) {
+		multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
+		invIB = _acp_scaledInvInertiaB;
+	}
+	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, invMassA, invMassB, invIA, invIB, r1PlusU, r2, axis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$6(part);
+	else {
+		part.effectiveMass = 1 / invEffectiveMass;
+		calculateSpringPropertiesWithBias(part.springPart, bias);
+	}
+}
+/**
+* Calculate constraint properties for a limit using SpringSettings.
+* Turns to a hard limit when the spring has no frequency or stiffness.
+* @param part the constraint part to initialize
+* @param deltaTime time step
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass of body A
+* @param invMassB inverse mass of body B
+* @param invInertiaA inverse inertia of body A (world space)
+* @param invInertiaB inverse inertia of body B (world space)
+* @param r1PlusU moment arm for body A
+* @param r2 moment arm for body B
+* @param axis constraint axis (normalized)
+* @param bias velocity bias
+* @param C value of the constraint equation (C)
+* @param settings spring settings (mode, frequency/stiffness, damping)
+*/
+function calculateConstraintPropertiesWithSettings$1(part, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias, C, settings) {
+	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$6(part);
+	else if (!hasStiffness$1(settings)) {
+		part.effectiveMass = 1 / invEffectiveMass;
+		calculateSpringPropertiesWithBias(part.springPart, bias);
+	} else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
+}
+/**
+* Calculate constraint properties for a motor using SpringSettings.
+* The spring must have stiffness or damping; damping alone drives the velocity only.
+* @param part the constraint part to initialize
+* @param deltaTime time step
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass of body A
+* @param invMassB inverse mass of body B
+* @param invInertiaA inverse inertia of body A (world space)
+* @param invInertiaB inverse inertia of body B (world space)
+* @param r1PlusU moment arm for body A
+* @param r2 moment arm for body B
+* @param axis constraint axis (normalized)
+* @param bias velocity bias
+* @param C value of the constraint equation (C)
+* @param settings spring settings (mode, frequency/stiffness, damping)
+*/
+function calculateConstraintPropertiesWithSettingsForMotor$1(part, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias, C, settings) {
+	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$6(part);
+	else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
+}
+/** Check if constraint is active (has non-zero effective mass) */
+function isActive$4(part) {
+	return part.effectiveMass !== 0;
+}
+/** Deactivate the constraint (zero out effective mass and lambda) */
+function deactivate$6(part) {
+	part.effectiveMass = 0;
+	part.totalLambda = 0;
+}
+/**
+* Get the current total lagrange multiplier.
+*
+* @param part the constraint part
+* @returns Current total lambda value
+*/
+function getTotalLambdaValue(part) {
+	return part.totalLambda;
+}
+/**
+* Turn a jacobian-velocity product into the part's new total lambda.
+*
+* NUMBERS IN, NUMBERS OUT. A solver that keeps a body pair's twelve velocity components in locals
+* computes `jv` itself — it already holds the operands — and this owns the constraint math. That
+* split is what lets those components stay in registers: a function which MUTATES a shared velocity
+* buffer forces that buffer to exist, while one which RETURNS a number costs nothing, because V8
+* inlines it. Worth ~1.75x on the contact solve loop.
+*/
+function totalLambdaFor(part, jv) {
+	return part.totalLambda + part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+}
+/**
+* Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
+* The caller applies the delta to its own velocity locals.
+*/
+function deltaLambdaFor(part, totalLambda) {
+	const deltaLambda = totalLambda - part.totalLambda;
+	part.totalLambda = totalLambda;
+	return deltaLambda;
+}
+/**
+* Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
+* apply. The caller applies it to its own velocity locals.
+*/
+function warmStartLambda(part, warmStartRatio) {
+	part.totalLambda *= warmStartRatio;
+	return part.totalLambda;
+}
+/**
+* Apply warm start impulse from previous frame.
+* Call this once before velocity iterations.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass of body A
+* @param invMassB inverse mass of body B
+* @param axis constraint axis (same as used in calculateConstraintProperties)
+* @param warmStartRatio scale factor for warm start (dt_new / dt_old)
+*/
+function warmStart$6(part, bodyA, bodyB, invMassA, invMassB, axis, warmStartRatio) {
+	part.totalLambda *= warmStartRatio;
+	if (part.totalLambda === 0) return;
+	const isDynamicA = bodyA.motionType === 2;
+	const isDynamicB = bodyB.motionType === 2;
+	const mpA = bodyA.motionProperties;
+	const mpB = bodyB.motionProperties;
+	if (isDynamicA) {
+		mpA.linearVelocity[0] -= invMassA * (part.totalLambda * axis[0]);
+		mpA.linearVelocity[1] -= invMassA * (part.totalLambda * axis[1]);
+		mpA.linearVelocity[2] -= invMassA * (part.totalLambda * axis[2]);
+		const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslationA & 1)) mpA.linearVelocity[0] = 0;
+		if (!(allowedTranslationA & 2)) mpA.linearVelocity[1] = 0;
+		if (!(allowedTranslationA & 4)) mpA.linearVelocity[2] = 0;
+		const angularImpulseA = part.invI1_r1PlusUxAxis;
+		mpA.angularVelocity[0] -= angularImpulseA[0] * part.totalLambda;
+		mpA.angularVelocity[1] -= angularImpulseA[1] * part.totalLambda;
+		mpA.angularVelocity[2] -= angularImpulseA[2] * part.totalLambda;
+	}
+	if (isDynamicB) {
+		mpB.linearVelocity[0] += invMassB * (part.totalLambda * axis[0]);
+		mpB.linearVelocity[1] += invMassB * (part.totalLambda * axis[1]);
+		mpB.linearVelocity[2] += invMassB * (part.totalLambda * axis[2]);
+		const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslationB & 1)) mpB.linearVelocity[0] = 0;
+		if (!(allowedTranslationB & 2)) mpB.linearVelocity[1] = 0;
+		if (!(allowedTranslationB & 4)) mpB.linearVelocity[2] = 0;
+		const angularImpulseB = part.invI2_r2xAxis;
+		mpB.angularVelocity[0] += angularImpulseB[0] * part.totalLambda;
+		mpB.angularVelocity[1] += angularImpulseB[1] * part.totalLambda;
+		mpB.angularVelocity[2] += angularImpulseB[2] * part.totalLambda;
+	}
+}
+/**
+* Solve velocity constraint (one iteration).
+* Standard version - uses body's actual inverse mass.
+* Call this during velocity solver iterations.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param axis constraint axis
+* @param minLambda minimum lambda (typically -Infinity for friction, 0 for normal)
+* @param maxLambda maximum lambda (typically +Infinity for normal, friction_coeff × normalLambda for friction)
+* @returns True if impulse was applied
+*/
+function solveVelocityConstraint$6(part, bodyA, bodyB, axis, minLambda, maxLambda) {
+	const movingA = bodyA.motionType !== 0;
+	const movingB = bodyB.motionType !== 0;
+	const mpA = bodyA.motionProperties;
+	const mpB = bodyB.motionProperties;
+	let x;
+	let y;
+	let z;
+	if (movingA) {
+		if (movingB) {
+			x = axis[0] * (mpA.linearVelocity[0] - mpB.linearVelocity[0]);
+			y = axis[1] * (mpA.linearVelocity[1] - mpB.linearVelocity[1]);
+			z = axis[2] * (mpA.linearVelocity[2] - mpB.linearVelocity[2]);
+			x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+			y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+			z -= part.r2xAxis[2] * mpB.angularVelocity[2];
+		} else {
+			x = axis[0] * mpA.linearVelocity[0];
+			y = axis[1] * mpA.linearVelocity[1];
+			z = axis[2] * mpA.linearVelocity[2];
+		}
+		x += part.r1PlusUxAxis[0] * mpA.angularVelocity[0];
+		y += part.r1PlusUxAxis[1] * mpA.angularVelocity[1];
+		z += part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
+	} else if (movingB) {
+		x = axis[0] * -mpB.linearVelocity[0];
+		y = axis[1] * -mpB.linearVelocity[1];
+		z = axis[2] * -mpB.linearVelocity[2];
+		x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+		y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+		z -= part.r2xAxis[2] * mpB.angularVelocity[2];
+	} else x = y = z = 0;
+	const jv = x + y + z;
+	const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+	const totalLambda = Math.min(Math.max(part.totalLambda + lambda, minLambda), maxLambda);
+	const deltaLambda = totalLambda - part.totalLambda;
+	part.totalLambda = totalLambda;
+	if (deltaLambda === 0) return false;
+	if (bodyA.motionType === 2) {
+		const invMassA = mpA.invMass;
+		mpA.linearVelocity[0] -= invMassA * (deltaLambda * axis[0]);
+		mpA.linearVelocity[1] -= invMassA * (deltaLambda * axis[1]);
+		mpA.linearVelocity[2] -= invMassA * (deltaLambda * axis[2]);
+		const allowedTranslation = mpA.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslation & 1)) mpA.linearVelocity[0] = 0;
+		if (!(allowedTranslation & 2)) mpA.linearVelocity[1] = 0;
+		if (!(allowedTranslation & 4)) mpA.linearVelocity[2] = 0;
+		mpA.angularVelocity[0] -= part.invI1_r1PlusUxAxis[0] * deltaLambda;
+		mpA.angularVelocity[1] -= part.invI1_r1PlusUxAxis[1] * deltaLambda;
+		mpA.angularVelocity[2] -= part.invI1_r1PlusUxAxis[2] * deltaLambda;
+	}
+	if (bodyB.motionType === 2) {
+		const invMassB = mpB.invMass;
+		mpB.linearVelocity[0] += invMassB * (deltaLambda * axis[0]);
+		mpB.linearVelocity[1] += invMassB * (deltaLambda * axis[1]);
+		mpB.linearVelocity[2] += invMassB * (deltaLambda * axis[2]);
+		const allowedTranslation = mpB.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslation & 1)) mpB.linearVelocity[0] = 0;
+		if (!(allowedTranslation & 2)) mpB.linearVelocity[1] = 0;
+		if (!(allowedTranslation & 4)) mpB.linearVelocity[2] = 0;
+		mpB.angularVelocity[0] += part.invI2_r2xAxis[0] * deltaLambda;
+		mpB.angularVelocity[1] += part.invI2_r2xAxis[1] * deltaLambda;
+		mpB.angularVelocity[2] += part.invI2_r2xAxis[2] * deltaLambda;
+	}
+	return true;
+}
+/**
+* Calculate what the total lambda would be (without applying impulse).
+* Part 1 of two-step solve process.
+*
+* note: caller must check isActive() before calling this function
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param axis constraint axis
+* @returns new total lambda (unclamped)
+*/
+function getTotalLambda$2(part, bodyA, bodyB, axis) {
+	const movingA = bodyA.motionType !== 0;
+	const movingB = bodyB.motionType !== 0;
+	const mpA = bodyA.motionProperties;
+	const mpB = bodyB.motionProperties;
+	let x;
+	let y;
+	let z;
+	if (movingA && movingB) {
+		x = axis[0] * (mpA.linearVelocity[0] - mpB.linearVelocity[0]);
+		y = axis[1] * (mpA.linearVelocity[1] - mpB.linearVelocity[1]);
+		z = axis[2] * (mpA.linearVelocity[2] - mpB.linearVelocity[2]);
+	} else if (movingA) {
+		x = axis[0] * mpA.linearVelocity[0];
+		y = axis[1] * mpA.linearVelocity[1];
+		z = axis[2] * mpA.linearVelocity[2];
+	} else if (movingB) {
+		x = axis[0] * -mpB.linearVelocity[0];
+		y = axis[1] * -mpB.linearVelocity[1];
+		z = axis[2] * -mpB.linearVelocity[2];
+	} else x = y = z = 0;
+	if (movingA) {
+		x += part.r1PlusUxAxis[0] * mpA.angularVelocity[0];
+		y += part.r1PlusUxAxis[1] * mpA.angularVelocity[1];
+		z += part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
+	}
+	if (movingB) {
+		x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+		y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+		z -= part.r2xAxis[2] * mpB.angularVelocity[2];
+	}
+	const jv = x + y + z;
+	const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+	return part.totalLambda + lambda;
+}
+/**
+* Apply a total lambda value (calculates delta and applies impulse).
+* Part 2 of two-step solve process.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass override for body A
+* @param invMassB inverse mass override for body B
+* @param axis constraint axis
+* @param totalLambda new total lambda to apply
+* @returns true if impulse was applied
+*/
+function applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, totalLambda) {
+	const deltaLambda = totalLambda - part.totalLambda;
+	part.totalLambda = totalLambda;
+	if (deltaLambda === 0) return false;
+	const isDynamicA = bodyA.motionType === 2;
+	const isDynamicB = bodyB.motionType === 2;
+	const mpA = bodyA.motionProperties;
+	const mpB = bodyB.motionProperties;
+	if (isDynamicA) {
+		const linearScale = deltaLambda * invMassA;
+		mpA.linearVelocity[0] -= axis[0] * linearScale;
+		mpA.linearVelocity[1] -= axis[1] * linearScale;
+		mpA.linearVelocity[2] -= axis[2] * linearScale;
+		const allowedTranslation = mpA.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslation & 1)) mpA.linearVelocity[0] = 0;
+		if (!(allowedTranslation & 2)) mpA.linearVelocity[1] = 0;
+		if (!(allowedTranslation & 4)) mpA.linearVelocity[2] = 0;
+		const angularImpulse = part.invI1_r1PlusUxAxis;
+		mpA.angularVelocity[0] -= angularImpulse[0] * deltaLambda;
+		mpA.angularVelocity[1] -= angularImpulse[1] * deltaLambda;
+		mpA.angularVelocity[2] -= angularImpulse[2] * deltaLambda;
+	}
+	if (isDynamicB) {
+		const linearScale = deltaLambda * invMassB;
+		mpB.linearVelocity[0] += axis[0] * linearScale;
+		mpB.linearVelocity[1] += axis[1] * linearScale;
+		mpB.linearVelocity[2] += axis[2] * linearScale;
+		const allowedTranslation = mpB.allowedDegreesOfFreedom & 7;
+		if (!(allowedTranslation & 1)) mpB.linearVelocity[0] = 0;
+		if (!(allowedTranslation & 2)) mpB.linearVelocity[1] = 0;
+		if (!(allowedTranslation & 4)) mpB.linearVelocity[2] = 0;
+		const angularImpulse = part.invI2_r2xAxis;
+		mpB.angularVelocity[0] += angularImpulse[0] * deltaLambda;
+		mpB.angularVelocity[1] += angularImpulse[1] * deltaLambda;
+		mpB.angularVelocity[2] += angularImpulse[2] * deltaLambda;
+	}
+	return true;
+}
+/**
+* Solve velocity constraint (one iteration) with mass override.
+* Combines getTotalLambda + clamp + applyLambda in one call.
+* Mass override version - allows custom inverse mass values (for soft contacts, etc.).
+* Call this during velocity solver iterations.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass override for body A (only used when body A is dynamic)
+* @param invMassB inverse mass override for body B (only used when body B is dynamic)
+* @param axis constraint axis
+* @param minLambda minimum lambda (typically -Infinity for friction, 0 for normal)
+* @param maxLambda maximum lambda (typically +Infinity for normal, friction_coeff × normalLambda for friction)
+* @returns true if impulse was applied
+*/
+function solveVelocityConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, minLambda, maxLambda) {
+	const totalLambda = getTotalLambda$2(part, bodyA, bodyB, axis);
+	return applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, Math.min(Math.max(totalLambda, minLambda), maxLambda));
+}
+const _acp_sp_impulse = /* @__PURE__ */ create$47();
+const _acp_sp_angularStep = /* @__PURE__ */ create$47();
+/**
+* Solve position constraint (Baumgarte stabilization).
+* Standard version - uses body's actual inverse mass.
+* Call this during position solver iterations.
+*
+* Note: Position constraints are only applied for hard constraints, not soft springs.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param axis constraint axis
+* @param C constraint error (penetration depth, or 0 if separated)
+* @param baumgarte baumgarte stabilization factor (typically 0.2)
+* @returns true if position correction was applied
+*/
+function solvePositionConstraint$6(part, bodyA, bodyB, axis, C, baumgarte) {
+	if (C === 0 || !isActive$4(part) || isSpringActive(part.springPart)) return false;
+	const lambda = -part.effectiveMass * baumgarte * C;
+	if (bodyA.motionType === 2) {
+		const invMassA = bodyA.motionProperties.invMass;
+		set$7(_acp_sp_impulse, invMassA * (lambda * axis[0]), invMassA * (lambda * axis[1]), invMassA * (lambda * axis[2]));
+		subPositionStep(bodyA, _acp_sp_impulse);
+		scale$4(_acp_sp_angularStep, part.invI1_r1PlusUxAxis, lambda);
+		subRotationStep(bodyA, _acp_sp_angularStep);
+	}
+	if (bodyB.motionType === 2) {
+		const invMassB = bodyB.motionProperties.invMass;
+		set$7(_acp_sp_impulse, invMassB * (lambda * axis[0]), invMassB * (lambda * axis[1]), invMassB * (lambda * axis[2]));
+		addPositionStep(bodyB, _acp_sp_impulse);
+		scale$4(_acp_sp_angularStep, part.invI2_r2xAxis, lambda);
+		addRotationStep(bodyB, _acp_sp_angularStep);
+	}
+	return true;
+}
+/**
+* Solve position constraint (Baumgarte stabilization) with mass override.
+* Mass override version - allows custom inverse mass values (for soft contacts, etc.).
+* Call this during position solver iterations.
+*
+* Note: Position constraints are only applied for hard constraints, not soft springs.
+*
+* @param part the constraint part
+* @param bodyA first body
+* @param bodyB second body
+* @param invMassA inverse mass override for body A (only used when body A is dynamic)
+* @param invMassB inverse mass override for body B (only used when body B is dynamic)
+* @param axis constraint axis
+* @param C constraint error (penetration depth, or 0 if separated)
+* @param baumgarte baumgarte stabilization factor (typically 0.2)
+* @returns true if position correction was applied
+*/
+function solvePositionConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, C, baumgarte) {
+	if (C === 0 || !isActive$4(part) || isSpringActive(part.springPart)) return false;
+	const lambda = -part.effectiveMass * baumgarte * C;
+	if (bodyA.motionType === 2) {
+		scale$4(_acp_sp_impulse, axis, lambda * invMassA);
+		subPositionStep(bodyA, _acp_sp_impulse);
+		scale$4(_acp_sp_angularStep, part.invI1_r1PlusUxAxis, lambda);
+		subRotationStep(bodyA, _acp_sp_angularStep);
+	}
+	if (bodyB.motionType === 2) {
+		scale$4(_acp_sp_impulse, axis, lambda * invMassB);
+		addPositionStep(bodyB, _acp_sp_impulse);
+		scale$4(_acp_sp_angularStep, part.invI2_r2xAxis, lambda);
+		addRotationStep(bodyB, _acp_sp_angularStep);
+	}
+	return true;
+}
+//#endregion
 //#region src/collision/estimate-collision-response.ts
 /** create a new collision estimation result */
 function createCollisionEstimationResult() {
@@ -11760,281 +13228,225 @@ function createCollisionEstimationResult() {
 		angularVelocity1: create$47(),
 		linearVelocity2: create$47(),
 		angularVelocity2: create$47(),
-		tangent1: create$47(),
-		tangent2: create$47(),
 		frictionPoint: create$47(),
 		contactImpulse,
-		frictionImpulse1: 0,
-		frictionImpulse2: 0,
+		frictionImpulse: create$47(),
 		angularFrictionImpulse: 0,
 		numImpulses: 0
 	};
 }
-function createMiniConstraint() {
-	return {
-		r1PlusUxAxis: create$47(),
-		r2xAxis: create$47(),
-		invI1_r1PlusUxAxis: create$47(),
-		invI2_r2xAxis: create$47(),
-		effectiveMass: 0,
-		bias: 0
-	};
-}
-function createMiniAngularConstraint() {
-	return {
-		invI1_Axis: create$47(),
-		invI2_Axis: create$47(),
-		effectiveMass: 0,
-		bias: 0
-	};
-}
-const _ecr_r1CrossAxis = /* @__PURE__ */ create$47();
-const _ecr_r2CrossAxis = /* @__PURE__ */ create$47();
-const _ecr_temp = /* @__PURE__ */ create$47();
-/** initialize a mini axis constraint */
-function initConstraint(constraint, invMass1, invMass2, invInertia1, invInertia2, r1, r2, axis) {
-	cross(_ecr_r1CrossAxis, r1, axis);
-	cross(_ecr_r2CrossAxis, r2, axis);
-	copy$9(constraint.r1PlusUxAxis, _ecr_r1CrossAxis);
-	copy$9(constraint.r2xAxis, _ecr_r2CrossAxis);
-	multiply3x3Vec(constraint.invI1_r1PlusUxAxis, invInertia1, _ecr_r1CrossAxis);
-	multiply3x3Vec(constraint.invI2_r2xAxis, invInertia2, _ecr_r2CrossAxis);
-	let invEffectiveMass = invMass1 + invMass2;
-	invEffectiveMass += dot$2(_ecr_r1CrossAxis, constraint.invI1_r1PlusUxAxis);
-	invEffectiveMass += dot$2(_ecr_r2CrossAxis, constraint.invI2_r2xAxis);
-	constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
-}
-/** initialize the mini angular friction constraint (axis is the contact normal) */
-function initAngularConstraint(constraint, invInertia1, invInertia2, axis) {
-	multiply3x3Vec(constraint.invI1_Axis, invInertia1, axis);
-	multiply3x3Vec(constraint.invI2_Axis, invInertia2, axis);
-	const invEffectiveMass = dot$2(axis, constraint.invI1_Axis) + dot$2(axis, constraint.invI2_Axis);
-	constraint.effectiveMass = invEffectiveMass > 0 ? 1 / invEffectiveMass : 0;
-}
-/** compute relative velocity along constraint axis */
-function getRelativeVelocity(constraint, linVel1, angVel1, linVel2, angVel2, axis) {
-	const linearComponent = dot$2(axis, sub(_ecr_temp, linVel1, linVel2));
-	const angularComponent1 = dot$2(constraint.r1PlusUxAxis, angVel1);
-	const angularComponent2 = dot$2(constraint.r2xAxis, angVel2);
-	return linearComponent + angularComponent1 - angularComponent2;
-}
-/** solve and get the unclamped lambda increment */
-function solveGetLambda(constraint, linVel1, angVel1, linVel2, angVel2, axis) {
-	const jv = getRelativeVelocity(constraint, linVel1, angVel1, linVel2, angVel2, axis);
-	return constraint.effectiveMass * (jv - constraint.bias);
-}
-/** apply a delta lambda to the velocities */
-function applyLambda$1(constraint, lambda, invMass1, invMass2, linVel1, angVel1, linVel2, angVel2, axis) {
-	scaleAndAdd(linVel1, linVel1, axis, -lambda * invMass1);
-	scaleAndAdd(angVel1, angVel1, constraint.invI1_r1PlusUxAxis, -lambda);
-	scaleAndAdd(linVel2, linVel2, axis, lambda * invMass2);
-	scaleAndAdd(angVel2, angVel2, constraint.invI2_r2xAxis, lambda);
-}
-/** solve normal constraint with clamping, returning the new total lambda */
-function solve(constraint, currentTotalLambda, minLambda, maxLambda, invMass1, invMass2, linVel1, angVel1, linVel2, angVel2, axis) {
-	const lambda = solveGetLambda(constraint, linVel1, angVel1, linVel2, angVel2, axis);
-	const newTotalLambda = Math.max(minLambda, Math.min(maxLambda, currentTotalLambda + lambda));
-	const deltaLambda = newTotalLambda - currentTotalLambda;
-	if (deltaLambda !== 0) applyLambda$1(constraint, deltaLambda, invMass1, invMass2, linVel1, angVel1, linVel2, angVel2, axis);
-	return newTotalLambda;
-}
-/** angular friction: get unclamped lambda increment (jv = axis · (ω1 - ω2)) */
-function solveGetAngularLambda(constraint, angVel1, angVel2, axis) {
-	const jv = dot$2(axis, angVel1) - dot$2(axis, angVel2);
-	return constraint.effectiveMass * (jv - constraint.bias);
-}
-/** angular friction: apply delta lambda (no linear terms) */
-function applyAngularLambda(constraint, lambda, angVel1, angVel2) {
-	scaleAndAdd(angVel1, angVel1, constraint.invI1_Axis, -lambda);
-	scaleAndAdd(angVel2, angVel2, constraint.invI2_Axis, lambda);
-}
 const _ecr_com1 = /* @__PURE__ */ create$47();
 const _ecr_com2 = /* @__PURE__ */ create$47();
-const _ecr_contactPoint = /* @__PURE__ */ create$47();
 const _ecr_r1 = /* @__PURE__ */ create$47();
 const _ecr_r2 = /* @__PURE__ */ create$47();
-const _ecr_relVel = /* @__PURE__ */ create$47();
 const _ecr_vel1AtPoint = /* @__PURE__ */ create$47();
 const _ecr_vel2AtPoint = /* @__PURE__ */ create$47();
+const _ecr_surfaceVelocity = /* @__PURE__ */ create$47();
+const _ecr_rotation = /* @__PURE__ */ create$41();
 const _ecr_invInertia1 = /* @__PURE__ */ create$41();
 const _ecr_invInertia2 = /* @__PURE__ */ create$41();
-const _ecr_rotation1 = /* @__PURE__ */ create$41();
-const _ecr_rotation2 = /* @__PURE__ */ create$41();
-const _ecr_normalConstraints = [];
+const _ecr_tangent1 = /* @__PURE__ */ create$47();
+const _ecr_tangent2 = /* @__PURE__ */ create$47();
+const _ecr_contactConstraints = [];
 const _ecr_distanceToFrictionCenter = [];
-const _ecr_midpoints = [];
 for (let i = 0; i < 64; i++) {
-	_ecr_normalConstraints.push(createMiniConstraint());
+	_ecr_contactConstraints.push(create$28());
 	_ecr_distanceToFrictionCenter.push(0);
-	_ecr_midpoints.push(create$47());
 }
-const _ecr_frictionConstraint1 = /* @__PURE__ */ createMiniConstraint();
-const _ecr_frictionConstraint2 = /* @__PURE__ */ createMiniConstraint();
-const _ecr_angularFrictionConstraint = /* @__PURE__ */ createMiniAngularConstraint();
+const _ecr_friction1 = /* @__PURE__ */ create$28();
+const _ecr_friction2 = /* @__PURE__ */ create$28();
+const _ecr_angularFriction = /* @__PURE__ */ create$30();
+/** the body's world inverse inertia, scaled; zero unless it is dynamic */
+function inverseInertiaOf(out, body, scale) {
+	if (body.motionType !== 2) return zero(out);
+	fromQuat(_ecr_rotation, body.quaternion);
+	getInverseInertiaForRotation(out, body.motionProperties, _ecr_rotation);
+	for (let i = 0; i < 16; i++) out[i] *= scale;
+	return out;
+}
+/** the part's jacobian times the estimate's velocities */
+function jacobianVelocity(part, axis, result) {
+	const v1 = result.linearVelocity1;
+	const w1 = result.angularVelocity1;
+	const v2 = result.linearVelocity2;
+	const w2 = result.angularVelocity2;
+	const r1 = part.r1PlusUxAxis;
+	const r2 = part.r2xAxis;
+	return axis[0] * (v1[0] - v2[0]) + axis[1] * (v1[1] - v2[1]) + axis[2] * (v1[2] - v2[2]) + r1[0] * w1[0] + r1[1] * w1[1] + r1[2] * w1[2] - r2[0] * w2[0] - r2[1] * w2[1] - r2[2] * w2[2];
+}
+/** commits a new total lambda to the part and applies the change to the estimate's velocities */
+function applyTotalLambda(part, totalLambda, invMass1, invMass2, axis, result) {
+	const delta = deltaLambdaFor(part, totalLambda);
+	if (delta === 0) return;
+	scaleAndAdd(result.linearVelocity1, result.linearVelocity1, axis, -delta * invMass1);
+	scaleAndAdd(result.angularVelocity1, result.angularVelocity1, part.invI1_r1PlusUxAxis, -delta);
+	scaleAndAdd(result.linearVelocity2, result.linearVelocity2, axis, delta * invMass2);
+	scaleAndAdd(result.angularVelocity2, result.angularVelocity2, part.invI2_r2xAxis, delta);
+}
 /**
-* estimate collision response between two bodies
-*
-* predicts post-collision velocities and impulses by running a mini PGS solver
-* on a local copy of the velocities. designed to be called from onContactAdded
-* to estimate impact strength before the actual solver runs.
+* Estimate the contact and friction impulses of a collision, and the body velocities they leave, before the solver
+* runs: for the strength of an impact in onContactAdded, to play a sound or spawn particles. Accurate when two bodies
+* collide, not when more collide at once, as it knows only this contact.
 *
 * @param result result object to write to
 * @param body1 first body
 * @param body2 second body
 * @param manifold contact manifold
-* @param combinedFriction combined friction coefficient
-* @param combinedRestitution combined restitution coefficient
+* @param settings the contact's settings: its materials, mass and inertia scales and surface velocities (a sensor has no response)
 * @param minVelocityForRestitution minimum relative velocity to apply restitution (default 1.0 m/s)
-* @param numIterations number of PGS iterations (default 10)
+* @param numIterations number of PGS iterations (default 10); with 1, no friction is calculated
 */
-function estimateCollisionResponse(result, body1, body2, manifold, combinedFriction, combinedRestitution, minVelocityForRestitution = 1, numIterations = 10) {
-	const numContactPoints = manifold.numContactPoints;
-	result.numImpulses = numContactPoints;
-	for (let i = 0; i < numContactPoints; i++) result.contactImpulse[i] = 0;
-	result.frictionImpulse1 = 0;
-	result.frictionImpulse2 = 0;
-	result.angularFrictionImpulse = 0;
+function estimateCollisionResponse(result, body1, body2, manifold, settings, minVelocityForRestitution = 1, numIterations = 10) {
+	const numPoints = manifold.numContactPoints;
 	const normal = manifold.worldSpaceNormal;
-	perpendicular(result.tangent1, normal);
-	normalize$2(result.tangent1, result.tangent1);
-	cross(result.tangent2, normal, result.tangent1);
-	const isStatic1 = body1.motionType === 0;
-	const isStatic2 = body2.motionType === 0;
-	if (!isStatic1 && body1.motionProperties) {
+	const tangent1 = _ecr_tangent1;
+	const tangent2 = _ecr_tangent2;
+	const nx = normal[0];
+	const ny = normal[1];
+	const nz = normal[2];
+	if (Math.abs(nx) > Math.abs(ny)) {
+		const length = Math.sqrt(nx * nx + nz * nz);
+		set$7(tangent1, nz / length, 0, -nx / length);
+	} else {
+		const length = Math.sqrt(ny * ny + nz * nz);
+		set$7(tangent1, 0, nz / length, -ny / length);
+	}
+	cross(tangent2, normal, tangent1);
+	if (body1.motionType !== 0) {
 		copy$9(result.linearVelocity1, body1.motionProperties.linearVelocity);
 		copy$9(result.angularVelocity1, body1.motionProperties.angularVelocity);
 	} else {
-		set$7(result.linearVelocity1, 0, 0, 0);
-		set$7(result.angularVelocity1, 0, 0, 0);
+		zero$1(result.linearVelocity1);
+		zero$1(result.angularVelocity1);
 	}
-	if (!isStatic2 && body2.motionProperties) {
+	if (body2.motionType !== 0) {
 		copy$9(result.linearVelocity2, body2.motionProperties.linearVelocity);
 		copy$9(result.angularVelocity2, body2.motionProperties.angularVelocity);
 	} else {
-		set$7(result.linearVelocity2, 0, 0, 0);
-		set$7(result.angularVelocity2, 0, 0, 0);
+		zero$1(result.linearVelocity2);
+		zero$1(result.angularVelocity2);
 	}
-	const isDynamic1 = body1.motionType === 2;
-	const isDynamic2 = body2.motionType === 2;
-	const invMass1 = isDynamic1 && body1.motionProperties ? body1.motionProperties.invMass : 0;
-	const invMass2 = isDynamic2 && body2.motionProperties ? body2.motionProperties.invMass : 0;
-	if (isDynamic1 && body1.motionProperties) {
-		fromQuat(_ecr_rotation1, body1.quaternion);
-		getInverseInertiaForRotation(_ecr_invInertia1, body1.motionProperties, _ecr_rotation1);
-	} else zero(_ecr_invInertia1);
-	if (isDynamic2 && body2.motionProperties) {
-		fromQuat(_ecr_rotation2, body2.quaternion);
-		getInverseInertiaForRotation(_ecr_invInertia2, body2.motionProperties, _ecr_rotation2);
-	} else zero(_ecr_invInertia2);
-	sub(_ecr_com1, body1.centerOfMassPosition, manifold.baseOffset);
-	sub(_ecr_com2, body2.centerOfMassPosition, manifold.baseOffset);
-	const relativePointsA = manifold.relativeContactPointsOnA;
-	const relativePointsB = manifold.relativeContactPointsOnB;
-	let fpx = 0;
-	let fpy = 0;
-	let fpz = 0;
-	for (let c = 0; c < numContactPoints; c++) {
+	result.numImpulses = numPoints;
+	for (let c = 0; c < numPoints; c++) result.contactImpulse[c] = 0;
+	zero$1(result.frictionPoint);
+	zero$1(result.frictionImpulse);
+	result.angularFrictionImpulse = 0;
+	if (settings.isSensor || numPoints === 0) return;
+	const invMass1 = body1.motionType === 2 ? settings.invMassScale1 * body1.motionProperties.invMass : 0;
+	const invMass2 = body2.motionType === 2 ? settings.invMassScale2 * body2.motionProperties.invMass : 0;
+	const invInertia1 = inverseInertiaOf(_ecr_invInertia1, body1, settings.invInertiaScale1);
+	const invInertia2 = inverseInertiaOf(_ecr_invInertia2, body2, settings.invInertiaScale2);
+	subtract$1(_ecr_com1, body1.centerOfMassPosition, manifold.baseOffset);
+	subtract$1(_ecr_com2, body2.centerOfMassPosition, manifold.baseOffset);
+	const pointsA = manifold.relativeContactPointsOnA;
+	const pointsB = manifold.relativeContactPointsOnB;
+	let fp1x = 0;
+	let fp1y = 0;
+	let fp1z = 0;
+	let fp2x = 0;
+	let fp2y = 0;
+	let fp2z = 0;
+	for (let c = 0; c < numPoints; c++) {
 		const i = c * 3;
-		const ax = relativePointsA[i];
-		const ay = relativePointsA[i + 1];
-		const az = relativePointsA[i + 2];
-		const bx = relativePointsB[i];
-		const by = relativePointsB[i + 1];
-		const bz = relativePointsB[i + 2];
-		const mx = (ax + bx) * .5;
-		const my = (ay + by) * .5;
-		const mz = (az + bz) * .5;
-		set$7(_ecr_midpoints[c], mx, my, mz);
-		fpx += mx;
-		fpy += my;
-		fpz += mz;
-		set$7(_ecr_contactPoint, mx, my, mz);
-		sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-		sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
-		const normalConstraint = _ecr_normalConstraints[c];
-		initConstraint(normalConstraint, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, normal);
-		normalConstraint.bias = 0;
-		if (combinedRestitution > 0) {
+		fp1x += pointsA[i];
+		fp1y += pointsA[i + 1];
+		fp1z += pointsA[i + 2];
+		fp2x += pointsB[i];
+		fp2y += pointsB[i + 1];
+		fp2z += pointsB[i + 2];
+		set$7(_ecr_r1, pointsA[i] - _ecr_com1[0], pointsA[i + 1] - _ecr_com1[1], pointsA[i + 2] - _ecr_com1[2]);
+		set$7(_ecr_r2, pointsB[i] - _ecr_com2[0], pointsB[i + 1] - _ecr_com2[1], pointsB[i + 2] - _ecr_com2[2]);
+		let bias = 0;
+		if (settings.combinedRestitution > 0) {
 			cross(_ecr_vel1AtPoint, result.angularVelocity1, _ecr_r1);
 			add$3(_ecr_vel1AtPoint, result.linearVelocity1, _ecr_vel1AtPoint);
 			cross(_ecr_vel2AtPoint, result.angularVelocity2, _ecr_r2);
 			add$3(_ecr_vel2AtPoint, result.linearVelocity2, _ecr_vel2AtPoint);
-			sub(_ecr_relVel, _ecr_vel2AtPoint, _ecr_vel1AtPoint);
-			const vn = dot$2(_ecr_relVel, normal);
-			if (vn < -minVelocityForRestitution) normalConstraint.bias = combinedRestitution * vn;
+			const normalVelocity = (_ecr_vel2AtPoint[0] - _ecr_vel1AtPoint[0]) * nx + (_ecr_vel2AtPoint[1] - _ecr_vel1AtPoint[1]) * ny + (_ecr_vel2AtPoint[2] - _ecr_vel1AtPoint[2]) * nz;
+			if (normalVelocity < -minVelocityForRestitution) bias = settings.combinedRestitution * normalVelocity;
 		}
+		const constraint = _ecr_contactConstraints[c];
+		resetAxisConstraintPart(constraint);
+		calculateConstraintProperties$6(constraint, body1, body2, invMass1, invMass2, invInertia1, invInertia2, _ecr_r1, _ecr_r2, normal, bias);
 	}
-	if (numContactPoints === 0) return;
-	const invN = 1 / numContactPoints;
-	fpx *= invN;
-	fpy *= invN;
-	fpz *= invN;
-	set$7(result.frictionPoint, fpx, fpy, fpz);
-	const nx = normal[0];
-	const ny = normal[1];
-	const nz = normal[2];
-	for (let c = 0; c < numContactPoints; c++) {
-		const m = _ecr_midpoints[c];
-		const dx = m[0] - fpx;
-		const dy = m[1] - fpy;
-		const dz = m[2] - fpz;
+	fp1x /= numPoints;
+	fp1y /= numPoints;
+	fp1z /= numPoints;
+	fp2x /= numPoints;
+	fp2y /= numPoints;
+	fp2z /= numPoints;
+	for (let c = 0; c < numPoints; c++) {
+		const i = c * 3;
+		const dx = pointsA[i] - fp1x;
+		const dy = pointsA[i + 1] - fp1y;
+		const dz = pointsA[i + 2] - fp1z;
 		const dotN = dx * nx + dy * ny + dz * nz;
 		const tx = dx - dotN * nx;
 		const ty = dy - dotN * ny;
 		const tz = dz - dotN * nz;
 		_ecr_distanceToFrictionCenter[c] = Math.sqrt(tx * tx + ty * ty + tz * tz);
 	}
-	if (combinedFriction > 0) {
-		set$7(_ecr_contactPoint, fpx, fpy, fpz);
-		sub(_ecr_r1, _ecr_contactPoint, _ecr_com1);
-		sub(_ecr_r2, _ecr_contactPoint, _ecr_com2);
-		initConstraint(_ecr_frictionConstraint1, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, result.tangent1);
-		_ecr_frictionConstraint1.bias = 0;
-		initConstraint(_ecr_frictionConstraint2, invMass1, invMass2, _ecr_invInertia1, _ecr_invInertia2, _ecr_r1, _ecr_r2, result.tangent2);
-		_ecr_frictionConstraint2.bias = 0;
-		if (numContactPoints > 1) {
-			initAngularConstraint(_ecr_angularFrictionConstraint, _ecr_invInertia1, _ecr_invInertia2, normal);
-			_ecr_angularFrictionConstraint.bias = 0;
-		} else _ecr_angularFrictionConstraint.effectiveMass = 0;
+	set$7(result.frictionPoint, .5 * (fp1x + fp2x), .5 * (fp1y + fp2y), .5 * (fp1z + fp2z));
+	const friction1 = _ecr_friction1;
+	const friction2 = _ecr_friction2;
+	const angularFriction = _ecr_angularFriction;
+	resetAxisConstraintPart(friction1);
+	resetAxisConstraintPart(friction2);
+	reset$2(angularFriction);
+	angularFriction.totalLambda = 0;
+	if (settings.combinedFriction > 0) {
+		set$7(_ecr_r1, fp1x - _ecr_com1[0], fp1y - _ecr_com1[1], fp1z - _ecr_com1[2]);
+		set$7(_ecr_r2, fp2x - _ecr_com2[0], fp2y - _ecr_com2[1], fp2z - _ecr_com2[2]);
+		const angularSurfaceVelocity = settings.relativeAngularSurfaceVelocity;
+		set$7(_ecr_surfaceVelocity, fp1x, fp1y, fp1z);
+		cross(_ecr_surfaceVelocity, angularSurfaceVelocity, _ecr_surfaceVelocity);
+		add$3(_ecr_surfaceVelocity, settings.relativeLinearSurfaceVelocity, _ecr_surfaceVelocity);
+		calculateConstraintProperties$6(friction1, body1, body2, invMass1, invMass2, invInertia1, invInertia2, _ecr_r1, _ecr_r2, tangent1, dot$2(tangent1, _ecr_surfaceVelocity));
+		calculateConstraintProperties$6(friction2, body1, body2, invMass1, invMass2, invInertia1, invInertia2, _ecr_r1, _ecr_r2, tangent2, dot$2(tangent2, _ecr_surfaceVelocity));
+		if (numPoints > 1) calculateConstraintProperties$7(angularFriction, body1, body2, invInertia1, invInertia2, normal, dot$2(angularSurfaceVelocity, normal));
 	}
-	const iterations = numContactPoints === 1 && combinedFriction === 0 ? 1 : numIterations;
-	for (let iter = 0; iter < iterations; iter++) {
-		if (combinedFriction > 0) {
-			let sumNormal = 0;
-			let sumDistanceWeighted = 0;
-			for (let c = 0; c < numContactPoints; c++) {
-				const ln = result.contactImpulse[c];
-				sumNormal += ln;
-				sumDistanceWeighted += _ecr_distanceToFrictionCenter[c] * ln;
+	const iterations = settings.combinedFriction <= 0 && numPoints === 1 ? 1 : numIterations;
+	for (let iteration = 0; iteration < iterations; iteration++) {
+		if (settings.combinedFriction > 0) {
+			let maxLinearLambda = 0;
+			let maxAngularLambda = 0;
+			for (let c = 0; c < numPoints; c++) {
+				const lambda = _ecr_contactConstraints[c].totalLambda;
+				maxLinearLambda += lambda;
+				maxAngularLambda += _ecr_distanceToFrictionCenter[c] * lambda;
 			}
-			let lambda1 = result.frictionImpulse1 + solveGetLambda(_ecr_frictionConstraint1, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, result.tangent1);
-			let lambda2 = result.frictionImpulse2 + solveGetLambda(_ecr_frictionConstraint2, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, result.tangent2);
-			const maxLinear = combinedFriction * sumNormal;
-			const magSq = lambda1 * lambda1 + lambda2 * lambda2;
-			if (magSq > maxLinear * maxLinear) {
-				const scale = maxLinear / Math.sqrt(magSq);
+			maxLinearLambda *= settings.combinedFriction;
+			maxAngularLambda *= settings.combinedFriction;
+			let lambda1 = totalLambdaFor(friction1, jacobianVelocity(friction1, tangent1, result));
+			let lambda2 = totalLambdaFor(friction2, jacobianVelocity(friction2, tangent2, result));
+			const totalLambdaSq = lambda1 * lambda1 + lambda2 * lambda2;
+			if (totalLambdaSq > maxLinearLambda * maxLinearLambda + 22250738585072014e-324) {
+				const scale = maxLinearLambda / Math.sqrt(totalLambdaSq);
 				lambda1 *= scale;
 				lambda2 *= scale;
 			}
-			applyLambda$1(_ecr_frictionConstraint1, lambda1 - result.frictionImpulse1, invMass1, invMass2, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, result.tangent1);
-			applyLambda$1(_ecr_frictionConstraint2, lambda2 - result.frictionImpulse2, invMass1, invMass2, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, result.tangent2);
-			result.frictionImpulse1 = lambda1;
-			result.frictionImpulse2 = lambda2;
-			if (_ecr_angularFrictionConstraint.effectiveMass !== 0) {
-				const lambdaAngularInc = solveGetAngularLambda(_ecr_angularFrictionConstraint, result.angularVelocity1, result.angularVelocity2, normal);
-				const maxAngular = combinedFriction * sumDistanceWeighted;
-				const candidate = result.angularFrictionImpulse + lambdaAngularInc;
-				const clamped = Math.max(-maxAngular, Math.min(maxAngular, candidate));
-				const deltaAngular = clamped - result.angularFrictionImpulse;
-				if (deltaAngular !== 0) applyAngularLambda(_ecr_angularFrictionConstraint, deltaAngular, result.angularVelocity1, result.angularVelocity2);
-				result.angularFrictionImpulse = clamped;
+			applyTotalLambda(friction1, lambda1, invMass1, invMass2, tangent1, result);
+			applyTotalLambda(friction2, lambda2, invMass1, invMass2, tangent2, result);
+			if (numPoints > 1) {
+				const w1 = result.angularVelocity1;
+				const w2 = result.angularVelocity2;
+				const unclamped = totalLambdaFor$1(angularFriction, nx * (w1[0] - w2[0]) + ny * (w1[1] - w2[1]) + nz * (w1[2] - w2[2]));
+				const delta = deltaLambdaFor$1(angularFriction, Math.max(-maxAngularLambda, Math.min(maxAngularLambda, unclamped)));
+				if (delta !== 0) {
+					scaleAndAdd(w1, w1, angularFriction.invI1_Axis, -delta);
+					scaleAndAdd(w2, w2, angularFriction.invI2_Axis, delta);
+				}
 			}
 		}
-		for (let c = 0; c < numContactPoints; c++) {
-			const normalConstraint = _ecr_normalConstraints[c];
-			result.contactImpulse[c] = solve(normalConstraint, result.contactImpulse[c], 0, Number.MAX_VALUE, invMass1, invMass2, result.linearVelocity1, result.angularVelocity1, result.linearVelocity2, result.angularVelocity2, normal);
+		for (let c = 0; c < numPoints; c++) {
+			const constraint = _ecr_contactConstraints[c];
+			applyTotalLambda(constraint, Math.max(0, totalLambdaFor(constraint, jacobianVelocity(constraint, normal, result))), invMass1, invMass2, normal, result);
 		}
 	}
+	for (let c = 0; c < numPoints; c++) result.contactImpulse[c] = _ecr_contactConstraints[c].totalLambda;
+	scale$4(result.frictionImpulse, tangent1, friction1.totalLambda);
+	scaleAndAdd(result.frictionImpulse, result.frictionImpulse, tangent2, friction2.totalLambda);
+	result.angularFrictionImpulse = angularFriction.totalLambda;
 }
 //#endregion
 //#region src/collision/epa-convex-hull-builder.ts
@@ -12835,283 +14247,9 @@ function penetrationCastShape(out, transformAtoB, shapeASupport, shapeBSupport, 
 	}
 }
 //#endregion
-//#region src/body/rigid-body-step.ts
-/**
-* Apply a position step (linear velocity * dt) to the body.
-* Used in position solver for Baumgarte stabilization.
-*
-* The translation dof mask applies to the step, not to the resulting position: a locked axis stops
-* the body moving along it, it does not snap the body to zero there.
-*
-* NOTE: This modifies centerOfMassPosition directly (the primary property for physics).
-* `rigidBody.derivePositionAndBounds` syncs the derived position and aabb from it.
-*
-* @param body - Body to update
-* @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
-*/
-function addPositionStep(body, linearVelocityTimesDeltaTime) {
-	const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 7;
-	if (allowedTranslation & 1) body.centerOfMassPosition[0] += linearVelocityTimesDeltaTime[0];
-	if (allowedTranslation & 2) body.centerOfMassPosition[1] += linearVelocityTimesDeltaTime[1];
-	if (allowedTranslation & 4) body.centerOfMassPosition[2] += linearVelocityTimesDeltaTime[2];
-}
-/**
-* Subtract a position step (linear velocity * dt) from the body.
-* Used in position solver for Baumgarte stabilization.
-*
-* See {@link addPositionStep} on why the dof mask applies to the step and not the position.
-*
-* @param body - Body to update
-* @param linearVelocityTimesDeltaTime - Linear velocity × deltaTime (v × dt)
-*/
-function subPositionStep(body, linearVelocityTimesDeltaTime) {
-	const allowedTranslation = body.motionProperties.allowedDegreesOfFreedom & 7;
-	if (allowedTranslation & 1) body.centerOfMassPosition[0] -= linearVelocityTimesDeltaTime[0];
-	if (allowedTranslation & 2) body.centerOfMassPosition[1] -= linearVelocityTimesDeltaTime[1];
-	if (allowedTranslation & 4) body.centerOfMassPosition[2] -= linearVelocityTimesDeltaTime[2];
-}
-const _addRotationStep_axis = /* @__PURE__ */ create$47();
-const _addRotationStep_rotation = /* @__PURE__ */ create$44();
-/**
-* Update rotation using an Euler step (used during position solver).
-*
-* This uses a proper axis-angle quaternion construction instead of a first-order
-* approximation, which is more accurate for large rotations (important for kinematic bodies).
-*
-* @param body - Body to update
-* @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
-*/
-function addRotationStep(body, angularVelocityTimesDeltaTime) {
-	const len = length(angularVelocityTimesDeltaTime);
-	if (len > 1e-6) {
-		scale$4(_addRotationStep_axis, angularVelocityTimesDeltaTime, 1 / len);
-		setAxisAngle(_addRotationStep_rotation, _addRotationStep_axis, len);
-		multiply$1(body.quaternion, _addRotationStep_rotation, body.quaternion);
-		normalize(body.quaternion, body.quaternion);
-	}
-}
-/**
-* Update rotation using an Euler step in the opposite direction (used during position solver).
-*
-* @param body - Body to update
-* @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
-*/
-function subRotationStep(body, angularVelocityTimesDeltaTime) {
-	const len = length(angularVelocityTimesDeltaTime);
-	if (len > 1e-6) {
-		scale$4(_addRotationStep_axis, angularVelocityTimesDeltaTime, 1 / len);
-		setAxisAngle(_addRotationStep_rotation, _addRotationStep_axis, -len);
-		multiply$1(body.quaternion, _addRotationStep_rotation, body.quaternion);
-		normalize(body.quaternion, body.quaternion);
-	}
-}
-const _deriveTransform_shapeCenterOfMassInWorldSpace = /* @__PURE__ */ create$47();
-/**
-* re-derive the cached world transform from the authoritative state the step helpers mutate:
-* `position` from `centerOfMassPosition` and `quaternion`, then the world `aabb` from that.
-* whatever moves the centre of mass owes a call to this before the next reader of either.
-*
-* does not publish to the broadphase - see `broadphase.notifyBodyBoundsChanged`.
-*/
-function deriveTransform(body) {
-	const shapeCenterOfMassInWorldSpace = _deriveTransform_shapeCenterOfMassInWorldSpace;
-	copy$9(shapeCenterOfMassInWorldSpace, body.shape.centerOfMass);
-	transformQuat(shapeCenterOfMassInWorldSpace, shapeCenterOfMassInWorldSpace, body.quaternion);
-	sub(body.position, body.centerOfMassPosition, shapeCenterOfMassInWorldSpace);
-	updateAABB(body);
-}
-//#endregion
-//#region src/constraints/constraint-part/spring-settings.ts
-var spring_settings_exports = /* @__PURE__ */ __exportAll({
-	SpringMode: () => SpringMode,
-	copy: () => copy$1,
-	create: () => create$30,
-	hasStiffness: () => hasStiffness$1,
-	hasStiffnessOrDamping: () => hasStiffnessOrDamping,
-	reset: () => reset$1
-});
-/** spring mode enum - specifies how the spring is defined */
-let SpringMode = /* @__PURE__ */ function(SpringMode) {
-	/** frequency and damping are specified (oscillation frequency in Hz) */
-	SpringMode[SpringMode["FREQUENCY_AND_DAMPING"] = 0] = "FREQUENCY_AND_DAMPING";
-	/** stiffness and damping are specified (spring equation: F = -k * x - c * v) */
-	SpringMode[SpringMode["STIFFNESS_AND_DAMPING"] = 1] = "STIFFNESS_AND_DAMPING";
-	return SpringMode;
-}({});
-/** create default spring settings (hard constraint, no spring) */
-function create$30() {
-	return {
-		mode: 0,
-		frequencyOrStiffness: 0,
-		damping: 0
-	};
-}
-/** reset spring settings to the defaults (hard constraint, no spring) */
-function reset$1(out) {
-	out.mode = 0;
-	out.frequencyOrStiffness = 0;
-	out.damping = 0;
-	return out;
-}
-/** copy spring settings from source to out */
-function copy$1(out, source) {
-	out.mode = source.mode;
-	out.frequencyOrStiffness = source.frequencyOrStiffness;
-	out.damping = source.damping;
-}
-/** check if the spring has valid frequency/stiffness (soft constraint), if false, the spring will be hard */
-function hasStiffness$1(settings) {
-	return settings.frequencyOrStiffness > 0;
-}
-/** check if the spring has stiffness or damping, which makes it active. if false, the constraint will be hard */
-function hasStiffnessOrDamping(settings) {
-	return settings.frequencyOrStiffness > 0 || settings.mode !== 0 && settings.damping > 0;
-}
-//#endregion
-//#region src/constraints/constraint-part/spring-part.ts
-/** Create a new SpringPart with zero values (hard constraint) */
-function createSpringPart() {
-	return {
-		bias: 0,
-		softness: 0
-	};
-}
-/**
-* Helper function to calculate spring properties with stiffness and damping.
-*
-* Note: The calculation of beta and gamma below are based on the solution of an
-* implicit Euler integration scheme. This scheme is unconditionally stable but
-* has built-in damping, so even when you set the damping ratio to 0 there will
-* still be damping. See Erin Catto GDC 2011 slides page 16 and 32.
-*
-* @param part spring part to update
-* @param deltaTime time step
-* @param invEffectiveMass inverse effective mass K (before spring adjustment)
-* @param bias bias term (b) for the constraint impulse
-* @param C value of the constraint equation (C)
-* @param stiffness spring stiffness k
-* @param damping spring damping coefficient c
-* @returns updated effective mass K^-1 (after spring adjustment)
-*/
-function calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping) {
-	part.softness = 1 / (deltaTime * (damping + deltaTime * stiffness));
-	part.bias = bias + deltaTime * stiffness * part.softness * C;
-	return 1 / (invEffectiveMass + part.softness);
-}
-/**
-* Turn off the spring and set a bias only (hard constraint).
-*
-* @param part - Spring part to update
-* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
-*/
-function calculateSpringPropertiesWithBias(part, bias) {
-	part.softness = 0;
-	part.bias = bias;
-}
-/**
-* Calculate spring properties based on frequency and damping ratio.
-*
-* @param part - Spring part to update
-* @param deltaTime - Time step
-* @param invEffectiveMass - Inverse effective mass K
-* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
-* @param C - Value of the constraint equation (C). Set to zero if you don't want to drive the constraint to zero with a spring.
-* @param frequency - Oscillation frequency (Hz). Set to zero if you don't want to drive the constraint to zero with a spring.
-* @param damping - Damping factor (0 = no damping, 1 = critical damping). Set to zero if you don't want to drive the constraint to zero with a spring.
-* @returns Updated effective mass K^-1 (after spring adjustment)
-*/
-function calculateSpringPropertiesWithFrequencyAndDamping(part, deltaTime, invEffectiveMass, bias, C, frequency, damping) {
-	const effectiveMass = 1 / invEffectiveMass;
-	if (frequency > 0) {
-		const omega = 2 * Math.PI * frequency;
-		return calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, effectiveMass * omega * omega, 2 * effectiveMass * damping * omega);
-	} else {
-		calculateSpringPropertiesWithBias(part, bias);
-		return effectiveMass;
-	}
-}
-/**
-* Calculate spring properties with spring stiffness (k) and damping (c).
-* This is based on the spring equation: F = -k * x - c * v
-*
-* @param part - Spring part to update
-* @param deltaTime - Time step
-* @param invEffectiveMass - Inverse effective mass K
-* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
-* @param C - Value of the constraint equation (C). Set to zero if you don't want to drive the constraint to zero with a spring.
-* @param stiffness - Spring stiffness k.
-* @param damping - Spring damping coefficient c. With stiffness and damping both zero the constraint is hard.
-* @returns Updated effective mass K^-1 (after spring adjustment)
-*/
-function calculateSpringPropertiesWithStiffnessAndDamping(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping) {
-	if (stiffness > 0 || damping > 0) return calculateSpringPropertiesHelper(part, deltaTime, invEffectiveMass, bias, C, stiffness, damping);
-	else {
-		const effectiveMass = 1 / invEffectiveMass;
-		calculateSpringPropertiesWithBias(part, bias);
-		return effectiveMass;
-	}
-}
-/**
-* Calculate spring properties using SpringSettings.
-* Selects the appropriate calculation method based on the spring mode.
-*
-* @param part - Spring part to update
-* @param deltaTime - Time step
-* @param invEffectiveMass - Inverse effective mass K
-* @param bias - Bias term (b) for the constraint impulse: lambda = J v + b
-* @param C - Value of the constraint equation (C)
-* @param settings - Spring settings (mode, frequency/stiffness, damping)
-* @returns Updated effective mass K^-1 (after spring adjustment)
-*/
-function calculateSpringPropertiesWithSettings(part, deltaTime, invEffectiveMass, bias, C, settings) {
-	if (settings.mode === 0) return calculateSpringPropertiesWithFrequencyAndDamping(part, deltaTime, invEffectiveMass, bias, C, settings.frequencyOrStiffness, settings.damping);
-	else return calculateSpringPropertiesWithStiffnessAndDamping(part, deltaTime, invEffectiveMass, bias, C, settings.frequencyOrStiffness, settings.damping);
-}
-/**
-* Returns if this spring is active (soft constraint).
-*/
-function isSpringActive(part) {
-	return part.softness !== 0;
-}
-/**
-* Get total bias b, including supplied bias and bias for spring: lambda = J v + b
-*
-* From Erin Catto: http://www.bulletphysics.org/Bullet/phpBB3/viewtopic.php?f=4&t=1354
-*
-* Each iteration we are not computing the whole impulse, we are computing an increment
-* to the impulse and we are updating the velocity. Also, as we solve each constraint we
-* get a perfect v2, but then some other constraint will come along and mess it up.
-* So we want to patch up the constraint while acknowledging the accumulated impulse and
-* the damaged velocity. To help with that we use P for the accumulated impulse and lambda
-* as the update. Mathematically we have:
-*
-* M * (v2new - v2damaged) = J^T * lambda
-* J * v2new + softness * (total_lambda + lambda) + b = 0
-*
-* If we solve this we get:
-*
-* v2new = v2damaged + M^-1 * J^T * lambda
-* J * (v2damaged + M^-1 * J^T * lambda) + softness * total_lambda + softness * lambda + b = 0
-*
-* (J * M^-1 * J^T + softness) * lambda = -(J * v2damaged + softness * total_lambda + b)
-*
-* So our lagrange multiplier becomes:
-*
-* lambda = -K^-1 (J v + softness * total_lambda + b)
-*
-* So we return the bias: softness * total_lambda + b
-*
-* @param part - Spring part
-* @param totalLambda - Total accumulated lambda from previous iterations
-* @returns Total bias for the constraint
-*/
-function getSpringBias(part, totalLambda) {
-	return part.softness * totalLambda + part.bias;
-}
-//#endregion
 //#region src/constraints/constraint-part/angle-constraint-part.ts
 /** create a new AngleConstraintPart with zero-initialized values */
-function create$29() {
+function create$27() {
 	return {
 		invI1_Axis: create$47(),
 		invI2_Axis: create$47(),
@@ -13121,18 +14259,18 @@ function create$29() {
 	};
 }
 /** deactivate this constraint part (zero out effective mass and lambda) */
-function deactivate$7(part) {
+function deactivate$5(part) {
 	part.effectiveMass = 0;
 	part.totalLambda = 0;
 }
 /** check if constraint is active (has non-zero effective mass) */
-function isActive$5(part) {
+function isActive$3(part) {
 	return part.effectiveMass !== 0;
 }
 const _calc_invI1_Axis = /* @__PURE__ */ create$47();
 const _calc_invI2_Axis = /* @__PURE__ */ create$47();
 /** helper to calculate inverse effective mass */
-function calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis) {
+function calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis) {
 	const [ax, ay, az] = worldSpaceAxis;
 	let i1x, i1y, i1z;
 	if (bodyA.motionType === 2) {
@@ -13173,9 +14311,9 @@ function calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis) {
 * @param worldSpaceAxis axis of rotation along which the constraint acts (normalized)
 * @param bias bias term (b) for the constraint impulse: lambda = J v + b
 */
-function calculateConstraintProperties$7(part, bodyA, bodyB, worldSpaceAxis, bias = 0) {
-	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
+function calculateConstraintProperties$5(part, bodyA, bodyB, worldSpaceAxis, bias = 0) {
+	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$5(part);
 	else {
 		part.effectiveMass = 1 / invEffectiveMass;
 		calculateSpringPropertiesWithBias(part.springPart, bias);
@@ -13193,9 +14331,9 @@ function calculateConstraintProperties$7(part, bodyA, bodyB, worldSpaceAxis, bia
 * @param C value of the constraint equation (angle error)
 * @param settings spring settings (mode, frequency/stiffness, damping)
 */
-function calculateConstraintPropertiesWithSettings$1(part, deltaTime, bodyA, bodyB, worldSpaceAxis, bias, C, settings) {
-	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
+function calculateConstraintPropertiesWithSettings(part, deltaTime, bodyA, bodyB, worldSpaceAxis, bias, C, settings) {
+	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$5(part);
 	else if (!hasStiffness$1(settings)) {
 		part.effectiveMass = 1 / invEffectiveMass;
 		calculateSpringPropertiesWithBias(part.springPart, bias);
@@ -13213,14 +14351,14 @@ function calculateConstraintPropertiesWithSettings$1(part, deltaTime, bodyA, bod
 * @param C value of the constraint equation (angle error)
 * @param settings spring settings (mode, frequency/stiffness, damping)
 */
-function calculateConstraintPropertiesWithSettingsForMotor$1(part, deltaTime, bodyA, bodyB, worldSpaceAxis, bias, C, settings) {
-	const invEffectiveMass = calculateInverseEffectiveMass$1(part, bodyA, bodyB, worldSpaceAxis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$7(part);
+function calculateConstraintPropertiesWithSettingsForMotor(part, deltaTime, bodyA, bodyB, worldSpaceAxis, bias, C, settings) {
+	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, worldSpaceAxis);
+	if (invEffectiveMass < 22250738585072014e-324) deactivate$5(part);
 	else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
 }
 const _ws_angularDelta$1 = /* @__PURE__ */ create$47();
 /** apply warm start impulse from previous frame */
-function warmStart$6(part, bodyA, bodyB, warmStartImpulseRatio) {
+function warmStart$5(part, bodyA, bodyB, warmStartImpulseRatio) {
 	part.totalLambda *= warmStartImpulseRatio;
 	applyVelocityStep$3(part, bodyA, bodyB, part.totalLambda);
 }
@@ -13248,8 +14386,8 @@ function applyVelocityStep$3(part, bodyA, bodyB, lambda) {
 * @param maxLambda maximum angular impulse (N m s)
 * @returns true if impulse was applied
 */
-function solveVelocityConstraint$6(part, bodyA, bodyB, worldSpaceAxis, minLambda, maxLambda) {
-	if (!isActive$5(part)) return false;
+function solveVelocityConstraint$5(part, bodyA, bodyB, worldSpaceAxis, minLambda, maxLambda) {
+	if (!isActive$3(part)) return false;
 	const mpA = bodyA.motionType !== 0 ? bodyA.motionProperties : null;
 	const mpB = bodyB.motionType !== 0 ? bodyB.motionProperties : null;
 	let jv = 0;
@@ -13272,8 +14410,8 @@ const _pos_angularDelta$1 = /* @__PURE__ */ create$47();
 * @param baumgarte Baumgarte stabilization factor
 * @returns true if correction was applied
 */
-function solvePositionConstraint$6(part, bodyA, bodyB, C, baumgarte) {
-	if (C === 0 || !isActive$5(part) || isSpringActive(part.springPart)) return false;
+function solvePositionConstraint$5(part, bodyA, bodyB, C, baumgarte) {
+	if (C === 0 || !isActive$3(part) || isSpringActive(part.springPart)) return false;
 	const lambda = -part.effectiveMass * baumgarte * C;
 	if (bodyA.motionType === 2) {
 		scale$4(_pos_angularDelta$1, part.invI1_Axis, lambda);
@@ -13288,7 +14426,7 @@ function solvePositionConstraint$6(part, bodyA, bodyB, C, baumgarte) {
 //#endregion
 //#region src/constraints/constraint-part/point-constraint-part.ts
 /** creates a new point constraint part */
-function create$28() {
+function create$26() {
 	return {
 		r1: create$47(),
 		r2: create$47(),
@@ -13299,12 +14437,12 @@ function create$28() {
 	};
 }
 /** deactivates the constraint part (resets state) */
-function deactivate$6(part) {
+function deactivate$4(part) {
 	zero(part.effectiveMass);
 	set$7(part.totalLambda, 0, 0, 0);
 }
 /** checks if the constraint part is active */
-function isActive$4(part) {
+function isActive$2(part) {
 	return part.effectiveMass[15] !== 0;
 }
 const _calc_r1Cross = /* @__PURE__ */ create$41();
@@ -13326,7 +14464,7 @@ const _calc_invInertia2 = /* @__PURE__ */ create$41();
 *
 * We then invert K^-1 to get the effective mass K.
 */
-function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB, rotationB, r2Local, stepStamp) {
+function calculateConstraintProperties$4(part, bodyA, rotationA, r1Local, bodyB, rotationB, r2Local, stepStamp) {
 	multiply3x3Vec(part.r1, rotationA, r1Local);
 	multiply3x3Vec(part.r2, rotationB, r2Local);
 	const invEffectiveMass = _calc_invEffectiveMass$2;
@@ -13361,14 +14499,14 @@ function calculateConstraintProperties$6(part, bodyA, rotationA, r1Local, bodyB,
 	invEffectiveMass[0] += summedInvMass;
 	invEffectiveMass[5] += summedInvMass;
 	invEffectiveMass[10] += summedInvMass;
-	if (invert3x3(part.effectiveMass, invEffectiveMass) === null) deactivate$6(part);
+	if (invert3x3(part.effectiveMass, invEffectiveMass) === null) deactivate$4(part);
 }
 /**
 * Warm start the velocity constraint by applying cached impulses.
 * Scales the previous frame's impulses by the warm start ratio.
 */
-function warmStart$5(part, bodyA, bodyB, warmStartImpulseRatio) {
-	if (!isActive$4(part)) return;
+function warmStart$4(part, bodyA, bodyB, warmStartImpulseRatio) {
+	if (!isActive$2(part)) return;
 	scale$4(part.totalLambda, part.totalLambda, warmStartImpulseRatio);
 	applyVelocityStep$2(part, bodyA, bodyB, part.totalLambda);
 }
@@ -13385,8 +14523,8 @@ const _solveVel_crossB = /* @__PURE__ */ create$47();
 * Solves for lambda: λ = -K^-1 * (J * v)
 * Applies impulse to correct velocities.
 */
-function solveVelocityConstraint$5(part, bodyA, bodyB) {
-	if (!isActive$4(part)) return false;
+function solveVelocityConstraint$4(part, bodyA, bodyB) {
+	if (!isActive$2(part)) return false;
 	const jv = _solveVel_jv$1;
 	copy$9(jv, bodyA.motionProperties.linearVelocity);
 	const angA = _solveVel_angA;
@@ -13446,8 +14584,8 @@ const _solvePos_angularStep$1 = /* @__PURE__ */ create$47();
 * described in 'Modeling and Solving Constraints' by Erin Catto (GDC 2007).
 * We combine an Euler velocity integrate + position integrate and discard velocity change.
 */
-function solvePositionConstraint$5(part, bodyA, bodyB, baumgarte) {
-	if (!isActive$4(part)) return false;
+function solvePositionConstraint$4(part, bodyA, bodyB, baumgarte) {
+	if (!isActive$2(part)) return false;
 	const separation = _solvePos_separation;
 	add$3(separation, bodyB.centerOfMassPosition, part.r2);
 	sub(separation, separation, bodyA.centerOfMassPosition);
@@ -13479,7 +14617,7 @@ function solvePositionConstraint$5(part, bodyA, bodyB, baumgarte) {
 //#endregion
 //#region src/constraints/cone-constraint.ts
 var cone_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$27,
+	create: () => create$25,
 	def: () => def$19,
 	get: () => get$7,
 	getCosHalfConeAngle: () => getCosHalfConeAngle,
@@ -13500,8 +14638,8 @@ function makeConeConstraint() {
 		cosHalfConeAngle: 1,
 		worldSpaceRotationAxis: fromValues$2(0, 1, 0),
 		cosTheta: 1,
-		pointConstraintPart: create$28(),
-		angleConstraintPart: create$29()
+		pointConstraintPart: create$26(),
+		angleConstraintPart: create$27()
 	};
 }
 /** reset constraint state for pooling reuse */
@@ -13509,11 +14647,11 @@ function resetConstraint$7(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$7(constraint.angleConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$5(constraint.angleConstraintPart);
 }
 /** Create a cone constraint */
-function create$27(world, settings) {
+function create$25(world, settings) {
 	const pool = ensurePool(world.constraints, 5);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -13567,6 +14705,7 @@ function create$27(world, settings) {
 	}
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a cone constraint */
@@ -13580,6 +14719,7 @@ function remove$7(world, constraint) {
 	resetConstraint$7(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** Get cone constraint by id */
@@ -13624,8 +14764,8 @@ function calculateRotationConstraintProperties(constraint, bodyA, bodyB) {
 		cross(_cone_rotAxis, _cone_twist2, _cone_twist1);
 		const len = length(_cone_rotAxis);
 		if (len > 0) scale$4(constraint.worldSpaceRotationAxis, _cone_rotAxis, 1 / len);
-		calculateConstraintProperties$7(constraint.angleConstraintPart, bodyA, bodyB, constraint.worldSpaceRotationAxis);
-	} else deactivate$7(constraint.angleConstraintPart);
+		calculateConstraintProperties$5(constraint.angleConstraintPart, bodyA, bodyB, constraint.worldSpaceRotationAxis);
+	} else deactivate$5(constraint.angleConstraintPart);
 }
 function setupVelocity$7(constraint, bodies, _deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -13633,23 +14773,23 @@ function setupVelocity$7(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_cone_rotA, bodyA.quaternion);
 	fromQuat(_cone_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 	calculateRotationConstraintProperties(constraint, bodyA, bodyB);
 }
 function warmStartVelocity$7(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	if (isActive$5(constraint.angleConstraintPart)) warmStart$6(constraint.angleConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	if (isActive$3(constraint.angleConstraintPart)) warmStart$5(constraint.angleConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 function solveVelocity$7(constraint, bodies, _deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
-	const pos = solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB);
+	const pos = solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB);
 	let rot = false;
-	if (isActive$5(constraint.angleConstraintPart)) rot = solveVelocityConstraint$6(constraint.angleConstraintPart, bodyA, bodyB, constraint.worldSpaceRotationAxis, 0, Infinity);
+	if (isActive$3(constraint.angleConstraintPart)) rot = solveVelocityConstraint$5(constraint.angleConstraintPart, bodyA, bodyB, constraint.worldSpaceRotationAxis, 0, Infinity);
 	return pos || rot;
 }
 function solvePosition$7(constraint, bodies, _deltaTime, baumgarteFactor) {
@@ -13658,19 +14798,19 @@ function solvePosition$7(constraint, bodies, _deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_cone_rotA, bodyA.quaternion);
 	fromQuat(_cone_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, -1);
-	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _cone_rotA, constraint.localSpacePosition1, bodyB, _cone_rotB, constraint.localSpacePosition2, -1);
+	const pos = solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	calculateRotationConstraintProperties(constraint, bodyA, bodyB);
 	let rot = false;
-	if (isActive$5(constraint.angleConstraintPart)) {
+	if (isActive$3(constraint.angleConstraintPart)) {
 		const positionError = constraint.cosTheta - constraint.cosHalfConeAngle;
-		rot = solvePositionConstraint$6(constraint.angleConstraintPart, bodyA, bodyB, positionError, baumgarteFactor);
+		rot = solvePositionConstraint$5(constraint.angleConstraintPart, bodyA, bodyB, positionError, baumgarteFactor);
 	}
 	return pos || rot;
 }
 function resetWarmStart$7(constraint) {
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$7(constraint.angleConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$5(constraint.angleConstraintPart);
 }
 /** Get total lambda for position constraint */
 function getTotalLambdaPosition$3(out, constraint) {
@@ -13697,7 +14837,7 @@ const def$19 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
@@ -13705,7 +14845,7 @@ const def$19 = /* @__PURE__ */ (() => defineConstraint({
 var motor_settings_exports = /* @__PURE__ */ __exportAll({
 	MotorState: () => MotorState,
 	copy: () => copy,
-	create: () => create$26,
+	create: () => create$24,
 	hasStiffness: () => hasStiffness,
 	isPositionMotor: () => isPositionMotor,
 	isValid: () => isValid,
@@ -13740,8 +14880,8 @@ function isPositionMotor(state) {
 * Create default motor settings.
 * Defaults to frequency/damping mode with 2 Hz frequency and 1.0 damping ratio.
 */
-function create$26() {
-	const settings = create$30();
+function create$24() {
+	const settings = create$29();
 	settings.mode = 0;
 	settings.frequencyOrStiffness = 2;
 	settings.damping = 1;
@@ -13820,7 +14960,7 @@ function copy(out, source) {
 //#endregion
 //#region src/constraints/constraint-part/rotation-euler-constraint-part.ts
 /** creates a new rotation euler constraint part */
-function create$25() {
+function create$23() {
 	const effectiveMass = create$41();
 	zero(effectiveMass);
 	return {
@@ -13831,7 +14971,7 @@ function create$25() {
 	};
 }
 /** deactivates the constraint part (resets state) */
-function deactivate$5(part) {
+function deactivate$3(part) {
 	zero(part.effectiveMass);
 	set$7(part.totalLambda, 0, 0, 0);
 }
@@ -13875,20 +15015,25 @@ const _calc_invEffectiveMass$1 = /* @__PURE__ */ create$41();
 *
 * We then invert K to get the effective mass.
 */
-function calculateConstraintProperties$5(part, bodyA, _rotationA, bodyB, _rotationB, stepStamp) {
+function calculateConstraintProperties$3(part, bodyA, _rotationA, bodyB, _rotationB, stepStamp) {
 	if (bodyA.motionType === 2) copy$5(part.invI1, getWorldInverseInertia(part.invI1, bodyA.motionProperties, bodyA.quaternion, stepStamp));
 	else zero(part.invI1);
 	if (bodyB.motionType === 2) copy$5(part.invI2, getWorldInverseInertia(part.invI2, bodyB.motionProperties, bodyB.quaternion, stepStamp));
 	else zero(part.invI2);
 	const invEffectiveMass = _calc_invEffectiveMass$1;
 	add$2(invEffectiveMass, part.invI1, part.invI2);
-	if (!invert3x3(part.effectiveMass, invEffectiveMass)) deactivate$5(part);
+	if (invert3x3(part.effectiveMass, invEffectiveMass)) return;
+	for (let axis = 0; axis < 3; axis++) {
+		const column = axis * 4;
+		if (invEffectiveMass[column] === 0 && invEffectiveMass[column + 1] === 0 && invEffectiveMass[column + 2] === 0 && invEffectiveMass[column + 3] === 0) invEffectiveMass[column + axis] = 1;
+	}
+	if (!invert3x3(part.effectiveMass, invEffectiveMass)) deactivate$3(part);
 }
 /**
 * Warm start the velocity constraint by applying cached impulses.
 * Scales the previous frame's impulses by the warm start ratio.
 */
-function warmStart$4(part, bodyA, bodyB, warmStartImpulseRatio) {
+function warmStart$3(part, bodyA, bodyB, warmStartImpulseRatio) {
 	scale$4(part.totalLambda, part.totalLambda, warmStartImpulseRatio);
 	applyVelocityStep$1(part, bodyA, bodyB, part.totalLambda);
 }
@@ -13906,7 +15051,7 @@ const _solveVel_w2 = /* @__PURE__ */ create$47();
 * Note: Both dynamic and kinematic bodies contribute velocity to the Jacobian calculation,
 * but only dynamic bodies receive impulse corrections.
 */
-function solveVelocityConstraint$4(part, bodyA, bodyB) {
+function solveVelocityConstraint$3(part, bodyA, bodyB) {
 	const jv = _solveVel_jv;
 	const w1 = _solveVel_w1;
 	const w2 = _solveVel_w2;
@@ -13961,7 +15106,7 @@ const _solvePos_q1Conj = /* @__PURE__ */ create$44();
 * Solves for lambda: λ = -K^-1 * β * error
 * Applies rotation correction directly.
 */
-function solvePositionConstraint$4(part, bodyA, bodyB, invInitialOrientation, baumgarte) {
+function solvePositionConstraint$3(part, bodyA, bodyB, invInitialOrientation, baumgarte) {
 	const diff = _solvePos_diff;
 	multiply$1(diff, bodyB.quaternion, invInitialOrientation);
 	const q1Conj = _solvePos_q1Conj;
@@ -13997,7 +15142,7 @@ let SwingType = /* @__PURE__ */ function(SwingType) {
 	return SwingType;
 }({});
 /** create a new SwingTwistConstraintPart with zero-initialized values */
-function create$24() {
+function create$22() {
 	return {
 		swingType: 0,
 		rotationFlags: 0,
@@ -14020,16 +15165,16 @@ function create$24() {
 		worldSpaceSwingLimitYRotationAxis: create$47(),
 		worldSpaceSwingLimitZRotationAxis: create$47(),
 		worldSpaceTwistLimitRotationAxis: create$47(),
-		swingLimitYConstraintPart: create$29(),
-		swingLimitZConstraintPart: create$29(),
-		twistLimitConstraintPart: create$29()
+		swingLimitYConstraintPart: create$27(),
+		swingLimitZConstraintPart: create$27(),
+		twistLimitConstraintPart: create$27()
 	};
 }
 /** deactivate this constraint part */
-function deactivate$4(part) {
-	deactivate$7(part.swingLimitYConstraintPart);
-	deactivate$7(part.swingLimitZConstraintPart);
-	deactivate$7(part.twistLimitConstraintPart);
+function deactivate$2(part) {
+	deactivate$5(part.swingLimitYConstraintPart);
+	deactivate$5(part.swingLimitZConstraintPart);
+	deactivate$5(part.twistLimitConstraintPart);
 }
 /** degrees to radians constant */
 const DEG_TO_RAD = Math.PI / 180;
@@ -14291,7 +15436,7 @@ const _calc_cross = /* @__PURE__ */ create$47();
 * @param constraintRotation current rotation of constraint in constraint space
 * @param constraintToWorld rotation from constraint space to world space
 */
-function calculateConstraintProperties$4(part, bodyA, bodyB, constraintRotation, constraintToWorld) {
+function calculateConstraintProperties$2(part, bodyA, bodyB, constraintRotation, constraintToWorld) {
 	getSwingTwist(constraintRotation, _calc_q_swing, _calc_q_twist);
 	copy$6(_calc_q_clamped_swing, _calc_q_swing);
 	copy$6(_calc_q_clamped_twist, _calc_q_twist);
@@ -14303,14 +15448,14 @@ function calculateConstraintProperties$4(part, bodyA, bodyB, constraintRotation,
 		transformQuat(part.worldSpaceSwingLimitYRotationAxis, _calc_axisY, _calc_twist_to_world);
 		transformQuat(part.worldSpaceSwingLimitZRotationAxis, _calc_axisZ, _calc_twist_to_world);
 		if (part.rotationFlags & 4) {
-			calculateConstraintProperties$7(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
-			calculateConstraintProperties$7(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
+			calculateConstraintProperties$5(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
+			calculateConstraintProperties$5(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
 		} else {
-			calculateConstraintProperties$7(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
+			calculateConstraintProperties$5(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
 			if (clampedAxis & 48) {
 				if (clampedAxis & 16) negate(part.worldSpaceSwingLimitZRotationAxis, part.worldSpaceSwingLimitZRotationAxis);
-				calculateConstraintProperties$7(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
-			} else deactivate$7(part.swingLimitZConstraintPart);
+				calculateConstraintProperties$5(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
+			} else deactivate$5(part.swingLimitZConstraintPart);
 		}
 	} else if (part.rotationFlags & 4) {
 		multiply$1(_calc_twist_to_world, constraintToWorld, _calc_q_swing);
@@ -14320,9 +15465,9 @@ function calculateConstraintProperties$4(part, bodyA, bodyB, constraintRotation,
 		transformQuat(part.worldSpaceSwingLimitZRotationAxis, _calc_axisZ, _calc_twist_to_world);
 		if (clampedAxis & 12) {
 			if (clampedAxis & 4) negate(part.worldSpaceSwingLimitYRotationAxis, part.worldSpaceSwingLimitYRotationAxis);
-			calculateConstraintProperties$7(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
-		} else deactivate$7(part.swingLimitYConstraintPart);
-		calculateConstraintProperties$7(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
+			calculateConstraintProperties$5(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
+		} else deactivate$5(part.swingLimitYConstraintPart);
+		calculateConstraintProperties$5(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis);
 	} else if ((part.rotationFlags & 48) !== 48) {
 		if (clampedAxis & 60) {
 			set$7(_calc_axisX, 1, 0, 0);
@@ -14334,51 +15479,51 @@ function calculateConstraintProperties$4(part, bodyA, bodyB, constraintRotation,
 			const len = length(_calc_cross);
 			if (len !== 0) {
 				scale$4(part.worldSpaceSwingLimitYRotationAxis, _calc_cross, 1 / len);
-				calculateConstraintProperties$7(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
-			} else deactivate$7(part.swingLimitYConstraintPart);
-		} else deactivate$7(part.swingLimitYConstraintPart);
-		deactivate$7(part.swingLimitZConstraintPart);
+				calculateConstraintProperties$5(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis);
+			} else deactivate$5(part.swingLimitYConstraintPart);
+		} else deactivate$5(part.swingLimitYConstraintPart);
+		deactivate$5(part.swingLimitZConstraintPart);
 	} else {
-		deactivate$7(part.swingLimitYConstraintPart);
-		deactivate$7(part.swingLimitZConstraintPart);
+		deactivate$5(part.swingLimitYConstraintPart);
+		deactivate$5(part.swingLimitZConstraintPart);
 	}
 	if (part.rotationFlags & 1) {
 		set$7(_calc_axisX, 1, 0, 0);
 		multiply$1(_calc_twist_to_world, constraintToWorld, _calc_q_swing);
 		transformQuat(part.worldSpaceTwistLimitRotationAxis, _calc_axisX, _calc_twist_to_world);
-		calculateConstraintProperties$7(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis);
+		calculateConstraintProperties$5(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis);
 	} else if ((part.rotationFlags & 8) === 0) if (clampedAxis & 3) {
 		set$7(_calc_axisX, 1, 0, 0);
 		multiply$1(_calc_twist_to_world, constraintToWorld, _calc_q_swing);
 		transformQuat(part.worldSpaceTwistLimitRotationAxis, _calc_axisX, _calc_twist_to_world);
 		if (clampedAxis & 1) negate(part.worldSpaceTwistLimitRotationAxis, part.worldSpaceTwistLimitRotationAxis);
-		calculateConstraintProperties$7(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis);
-	} else deactivate$7(part.twistLimitConstraintPart);
-	else deactivate$7(part.twistLimitConstraintPart);
+		calculateConstraintProperties$5(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis);
+	} else deactivate$5(part.twistLimitConstraintPart);
+	else deactivate$5(part.twistLimitConstraintPart);
 }
 /** Warm start velocity constraints */
-function warmStart$3(part, bodyA, bodyB, warmStartImpulseRatio) {
-	warmStart$6(part.swingLimitYConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$6(part.swingLimitZConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$6(part.twistLimitConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+function warmStart$2(part, bodyA, bodyB, warmStartImpulseRatio) {
+	warmStart$5(part.swingLimitYConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$5(part.swingLimitZConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$5(part.twistLimitConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 /**
 * Solve velocity constraints for swing-twist limits.
 * @returns true if any impulse was applied
 */
-function solveVelocityConstraint$3(part, bodyA, bodyB) {
+function solveVelocityConstraint$2(part, bodyA, bodyB) {
 	let impulse = false;
-	if (isActive$5(part.swingLimitYConstraintPart)) {
+	if (isActive$3(part.swingLimitYConstraintPart)) {
 		const maxLambda = part.sinSwingYHalfMinAngle === part.sinSwingYHalfMaxAngle ? Infinity : 0;
-		impulse = solveVelocityConstraint$6(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis, -Infinity, maxLambda) || impulse;
+		impulse = solveVelocityConstraint$5(part.swingLimitYConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitYRotationAxis, -Infinity, maxLambda) || impulse;
 	}
-	if (isActive$5(part.swingLimitZConstraintPart)) {
+	if (isActive$3(part.swingLimitZConstraintPart)) {
 		const maxLambda = part.sinSwingZHalfMinAngle === part.sinSwingZHalfMaxAngle ? Infinity : 0;
-		impulse = solveVelocityConstraint$6(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis, -Infinity, maxLambda) || impulse;
+		impulse = solveVelocityConstraint$5(part.swingLimitZConstraintPart, bodyA, bodyB, part.worldSpaceSwingLimitZRotationAxis, -Infinity, maxLambda) || impulse;
 	}
-	if (isActive$5(part.twistLimitConstraintPart)) {
+	if (isActive$3(part.twistLimitConstraintPart)) {
 		const maxLambda = part.sinTwistHalfMinAngle === part.sinTwistHalfMaxAngle ? Infinity : 0;
-		impulse = solveVelocityConstraint$6(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis, -Infinity, maxLambda) || impulse;
+		impulse = solveVelocityConstraint$5(part.twistLimitConstraintPart, bodyA, bodyB, part.worldSpaceTwistLimitRotationAxis, -Infinity, maxLambda) || impulse;
 	}
 	return impulse;
 }
@@ -14387,7 +15532,7 @@ const _pos_q_twist = /* @__PURE__ */ create$44();
 const _pos_inv_initial = /* @__PURE__ */ create$44();
 const _pos_rotA = /* @__PURE__ */ create$41();
 const _pos_rotB = /* @__PURE__ */ create$41();
-const _pos_rotation_part = create$25();
+const _pos_rotation_part = create$23();
 /**
 * Solve position constraints for swing-twist limits.
 * @param part the constraint part
@@ -14399,7 +15544,7 @@ const _pos_rotation_part = create$25();
 * @param baumgarte baumgarte stabilization factor
 * @returns true if any correction was applied
 */
-function solvePositionConstraint$3(part, bodyA, bodyB, constraintRotation, constraintToBody1, constraintToBody2, baumgarte) {
+function solvePositionConstraint$2(part, bodyA, bodyB, constraintRotation, constraintToBody1, constraintToBody2, baumgarte) {
 	getSwingTwist(constraintRotation, _pos_q_swing, _pos_q_twist);
 	if (clampSwingTwist(part, _pos_q_swing, _pos_q_twist) !== 0) {
 		const temp = create$44();
@@ -14409,8 +15554,8 @@ function solvePositionConstraint$3(part, bodyA, bodyB, constraintRotation, const
 		multiply$1(_pos_inv_initial, constraintToBody2, temp);
 		fromQuat(_pos_rotA, bodyA.quaternion);
 		fromQuat(_pos_rotB, bodyB.quaternion);
-		calculateConstraintProperties$5(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB, -1);
-		return solvePositionConstraint$4(_pos_rotation_part, bodyA, bodyB, _pos_inv_initial, baumgarte);
+		calculateConstraintProperties$3(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB, -1);
+		return solvePositionConstraint$3(_pos_rotation_part, bodyA, bodyB, _pos_inv_initial, baumgarte);
 	}
 	return false;
 }
@@ -14427,448 +15572,1687 @@ function getTotalTwistLambda(part) {
 	return part.twistLimitConstraintPart.totalLambda;
 }
 //#endregion
-//#region src/constraints/constraint-part/axis-constraint-part.ts
-/** create a new AxisConstraintPart with zero-initialized values */
-function create$23() {
+//#region src/manifold/clip.ts
+/**
+* Clips a polygon against a half-space plane using Sutherland-Hodgeman algorithm.
+* Keeps vertices in the negative half-space: (origin - vertex) · normal < 0
+*
+* @param out output face with clipped vertices
+* @param inPolygon input polygon to clip
+* @param inPlaneOrigin point on the clipping plane
+* @param inPlaneNormal plane normal (does NOT need to be normalized)
+*/
+function clipPolyVsPlane(out, inPolygon, inPlaneOrigin, inPlaneNormal) {
+	out.numVertices = 0;
+	if (inPolygon.numVertices < 2) return;
+	const e1Index = (inPolygon.numVertices - 1) * 3;
+	let e1x = inPolygon.vertices[e1Index];
+	let e1y = inPolygon.vertices[e1Index + 1];
+	let e1z = inPolygon.vertices[e1Index + 2];
+	const dx = inPlaneOrigin[0] - e1x;
+	const dy = inPlaneOrigin[1] - e1y;
+	const dz = inPlaneOrigin[2] - e1z;
+	let prevNum = dx * inPlaneNormal[0] + dy * inPlaneNormal[1] + dz * inPlaneNormal[2];
+	let prevInside = prevNum < 0;
+	for (let j = 0; j < inPolygon.numVertices; j++) {
+		const e2Index = j * 3;
+		const e2x = inPolygon.vertices[e2Index];
+		const e2y = inPolygon.vertices[e2Index + 1];
+		const e2z = inPolygon.vertices[e2Index + 2];
+		const dx2 = inPlaneOrigin[0] - e2x;
+		const dy2 = inPlaneOrigin[1] - e2y;
+		const dz2 = inPlaneOrigin[2] - e2z;
+		const num = dx2 * inPlaneNormal[0] + dy2 * inPlaneNormal[1] + dz2 * inPlaneNormal[2];
+		let curInside = num < 0;
+		if (curInside !== prevInside) {
+			const e12x = e2x - e1x;
+			const e12y = e2y - e1y;
+			const e12z = e2z - e1z;
+			const denom = e12x * inPlaneNormal[0] + e12y * inPlaneNormal[1] + e12z * inPlaneNormal[2];
+			if (denom !== 0) {
+				const t = prevNum / denom;
+				const outIndex = out.numVertices * 3;
+				out.vertices[outIndex] = e1x + e12x * t;
+				out.vertices[outIndex + 1] = e1y + e12y * t;
+				out.vertices[outIndex + 2] = e1z + e12z * t;
+				out.numVertices++;
+			} else curInside = prevInside;
+		}
+		if (curInside) {
+			const outIndex = out.numVertices * 3;
+			out.vertices[outIndex] = e2x;
+			out.vertices[outIndex + 1] = e2y;
+			out.vertices[outIndex + 2] = e2z;
+			out.numVertices++;
+		}
+		prevNum = num;
+		prevInside = curInside;
+		e1x = e2x;
+		e1y = e2y;
+		e1z = e2z;
+	}
+}
+const _clipPoly_tmpFace1 = /* @__PURE__ */ createFace();
+const _clipPoly_tmpFace2 = /* @__PURE__ */ createFace();
+const _clipPoly_clipE1 = /* @__PURE__ */ create$47();
+const _clipPoly_clipNormal = /* @__PURE__ */ create$47();
+/**
+* Clips one polygon against another using Sutherland-Hodgeman algorithm.
+* Both polygons assumed counter-clockwise order.
+*
+* @param out output face with clipped vertices
+* @param inPolygonToClip polygon to clip
+* @param inClippingPolygon polygon to clip against (must have >= 3 vertices)
+* @param inClippingPolygonNormal normal of clipping polygon (does NOT need to be normalized)
+*/
+function clipPolyVsPoly(out, inPolygonToClip, inClippingPolygon, inClippingPolygonNormal) {
+	out.numVertices = 0;
+	if (inPolygonToClip.numVertices < 2) return;
+	if (inClippingPolygon.numVertices < 3) return;
+	let tmpIdx = 0;
+	let srcFace;
+	let dstFace;
+	for (let i = 0; i < inClippingPolygon.numVertices; i++) {
+		const clipE1Index = i * 3;
+		const clipE1x = inClippingPolygon.vertices[clipE1Index];
+		const clipE1y = inClippingPolygon.vertices[clipE1Index + 1];
+		const clipE1z = inClippingPolygon.vertices[clipE1Index + 2];
+		const clipE2Index = (i + 1) % inClippingPolygon.numVertices * 3;
+		const clipE2x = inClippingPolygon.vertices[clipE2Index];
+		const clipE2y = inClippingPolygon.vertices[clipE2Index + 1];
+		const clipE2z = inClippingPolygon.vertices[clipE2Index + 2];
+		const edgeX = clipE2x - clipE1x;
+		const edgeY = clipE2y - clipE1y;
+		const edgeZ = clipE2z - clipE1z;
+		const clipNormalX = inClippingPolygonNormal[1] * edgeZ - inClippingPolygonNormal[2] * edgeY;
+		const clipNormalY = inClippingPolygonNormal[2] * edgeX - inClippingPolygonNormal[0] * edgeZ;
+		const clipNormalZ = inClippingPolygonNormal[0] * edgeY - inClippingPolygonNormal[1] * edgeX;
+		if (i === 0) srcFace = inPolygonToClip;
+		else srcFace = tmpIdx === 0 ? _clipPoly_tmpFace1 : _clipPoly_tmpFace2;
+		tmpIdx ^= 1;
+		if (i === inClippingPolygon.numVertices - 1) dstFace = out;
+		else dstFace = tmpIdx === 0 ? _clipPoly_tmpFace1 : _clipPoly_tmpFace2;
+		_clipPoly_clipE1[0] = clipE1x;
+		_clipPoly_clipE1[1] = clipE1y;
+		_clipPoly_clipE1[2] = clipE1z;
+		_clipPoly_clipNormal[0] = clipNormalX;
+		_clipPoly_clipNormal[1] = clipNormalY;
+		_clipPoly_clipNormal[2] = clipNormalZ;
+		clipPolyVsPlane(dstFace, srcFace, _clipPoly_clipE1, _clipPoly_clipNormal);
+		if (dstFace.numVertices < 3) {
+			out.numVertices = 0;
+			break;
+		}
+	}
+}
+/**
+* Clips a polygon against an edge. The edge is projected onto the polygon's plane,
+* then the polygon is clipped against the edge's half-space.
+*
+* IMPORTANT: This function only outputs intersection points where the polygon
+* boundary crosses the edge projection, NOT the interior vertices.
+*
+* @param out output face with clipped vertices
+* @param inPolygon polygon to clip (must have >= 3 vertices)
+* @param inEdgeVertex1 first vertex of edge
+* @param inEdgeVertex2 second vertex of edge
+* @param inClippingEdgeNormal normal used to orient clipping plane
+*/
+function clipPolyVsEdge(out, inPolygon, inEdgeVertex1, inEdgeVertex2, inClippingEdgeNormal) {
+	out.numVertices = 0;
+	if (inPolygon.numVertices < 3) return;
+	const edgeX = inEdgeVertex2[0] - inEdgeVertex1[0];
+	const edgeY = inEdgeVertex2[1] - inEdgeVertex1[1];
+	const edgeZ = inEdgeVertex2[2] - inEdgeVertex1[2];
+	const edgeNormalX = inClippingEdgeNormal[1] * edgeZ - inClippingEdgeNormal[2] * edgeY;
+	const edgeNormalY = inClippingEdgeNormal[2] * edgeX - inClippingEdgeNormal[0] * edgeZ;
+	const edgeNormalZ = inClippingEdgeNormal[0] * edgeY - inClippingEdgeNormal[1] * edgeX;
+	const p0x = inPolygon.vertices[0];
+	const p0y = inPolygon.vertices[1];
+	const p0z = inPolygon.vertices[2];
+	const p1x = inPolygon.vertices[3];
+	const p1y = inPolygon.vertices[4];
+	const p1z = inPolygon.vertices[5];
+	const p2x = inPolygon.vertices[6];
+	const p2y = inPolygon.vertices[7];
+	const p2z = inPolygon.vertices[8];
+	const v0v1x = p1x - p0x;
+	const v0v1y = p1y - p0y;
+	const v0v1z = p1z - p0z;
+	const v0v2x = p2x - p0x;
+	const v0v2y = p2y - p0y;
+	const v0v2z = p2z - p0z;
+	const polyNormalX = v0v2y * v0v1z - v0v2z * v0v1y;
+	const polyNormalY = v0v2z * v0v1x - v0v2x * v0v1z;
+	const polyNormalZ = v0v2x * v0v1y - v0v2y * v0v1x;
+	const polygonNormalLenSq = polyNormalX * polyNormalX + polyNormalY * polyNormalY + polyNormalZ * polyNormalZ;
+	const diff1x = p0x - inEdgeVertex1[0];
+	const diff1y = p0y - inEdgeVertex1[1];
+	const diff1z = p0z - inEdgeVertex1[2];
+	const scale1 = (diff1x * polyNormalX + diff1y * polyNormalY + diff1z * polyNormalZ) / polygonNormalLenSq;
+	const v1x = inEdgeVertex1[0] + polyNormalX * scale1;
+	const v1y = inEdgeVertex1[1] + polyNormalY * scale1;
+	const v1z = inEdgeVertex1[2] + polyNormalZ * scale1;
+	const diff2x = p0x - inEdgeVertex2[0];
+	const diff2y = p0y - inEdgeVertex2[1];
+	const diff2z = p0z - inEdgeVertex2[2];
+	const scale2 = (diff2x * polyNormalX + diff2y * polyNormalY + diff2z * polyNormalZ) / polygonNormalLenSq;
+	const v2x = inEdgeVertex2[0] + polyNormalX * scale2;
+	const v2y = inEdgeVertex2[1] + polyNormalY * scale2;
+	const v2z = inEdgeVertex2[2] + polyNormalZ * scale2;
+	const v12x = v2x - v1x;
+	const v12y = v2y - v1y;
+	const v12z = v2z - v1z;
+	const v12LenSq = v12x * v12x + v12y * v12y + v12z * v12z;
+	const e1Index = (inPolygon.numVertices - 1) * 3;
+	let e1x = inPolygon.vertices[e1Index];
+	let e1y = inPolygon.vertices[e1Index + 1];
+	let e1z = inPolygon.vertices[e1Index + 2];
+	const diffx = inEdgeVertex1[0] - e1x;
+	const diffy = inEdgeVertex1[1] - e1y;
+	const diffz = inEdgeVertex1[2] - e1z;
+	let prevNum = diffx * edgeNormalX + diffy * edgeNormalY + diffz * edgeNormalZ;
+	let prevInside = prevNum < 0;
+	for (let j = 0; j < inPolygon.numVertices; j++) {
+		const e2Index = j * 3;
+		const e2x = inPolygon.vertices[e2Index];
+		const e2y = inPolygon.vertices[e2Index + 1];
+		const e2z = inPolygon.vertices[e2Index + 2];
+		const diff2x_ = inEdgeVertex1[0] - e2x;
+		const diff2y_ = inEdgeVertex1[1] - e2y;
+		const diff2z_ = inEdgeVertex1[2] - e2z;
+		const num = diff2x_ * edgeNormalX + diff2y_ * edgeNormalY + diff2z_ * edgeNormalZ;
+		const curInside = num < 0;
+		if (curInside !== prevInside) {
+			const e12x = e2x - e1x;
+			const e12y = e2y - e1y;
+			const e12z = e2z - e1z;
+			const denom = e12x * edgeNormalX + e12y * edgeNormalY + e12z * edgeNormalZ;
+			let clippedX;
+			let clippedY;
+			let clippedZ;
+			if (denom !== 0) {
+				const t = prevNum / denom;
+				clippedX = e1x + e12x * t;
+				clippedY = e1y + e12y * t;
+				clippedZ = e1z + e12z * t;
+			} else {
+				clippedX = e1x;
+				clippedY = e1y;
+				clippedZ = e1z;
+			}
+			const clippedDiffX = clippedX - v1x;
+			const clippedDiffY = clippedY - v1y;
+			const clippedDiffZ = clippedZ - v1z;
+			const projection = clippedDiffX * v12x + clippedDiffY * v12y + clippedDiffZ * v12z;
+			const outIndex = out.numVertices * 3;
+			if (projection < 0) {
+				out.vertices[outIndex] = v1x;
+				out.vertices[outIndex + 1] = v1y;
+				out.vertices[outIndex + 2] = v1z;
+			} else if (projection > v12LenSq) {
+				out.vertices[outIndex] = v2x;
+				out.vertices[outIndex + 1] = v2y;
+				out.vertices[outIndex + 2] = v2z;
+			} else {
+				out.vertices[outIndex] = clippedX;
+				out.vertices[outIndex + 1] = clippedY;
+				out.vertices[outIndex + 2] = clippedZ;
+			}
+			out.numVertices++;
+		}
+		prevNum = num;
+		prevInside = curInside;
+		e1x = e2x;
+		e1y = e2y;
+		e1z = e2z;
+	}
+}
+/** creates a new contact manifold with pre-allocated storage for 64 contact points */
+function createContactManifold() {
 	return {
-		r1PlusUxAxis: create$47(),
-		r2xAxis: create$47(),
-		invI1_r1PlusUxAxis: create$47(),
-		invI2_r2xAxis: create$47(),
-		effectiveMass: 0,
-		totalLambda: 0,
-		springPart: createSpringPart()
+		numContactPoints: 0,
+		baseOffset: create$47(),
+		relativeContactPointsOnA: new Array(192).fill(0),
+		relativeContactPointsOnB: new Array(192).fill(0),
+		worldSpaceNormal: create$47(),
+		penetrationDepth: 0,
+		subShapeIdA: EMPTY_SUB_SHAPE_ID,
+		subShapeIdB: EMPTY_SUB_SHAPE_ID,
+		materialIdA: -1,
+		materialIdB: -1
 	};
 }
-const _acp_scaledInvInertiaA = /* @__PURE__ */ create$41();
-const _acp_scaledInvInertiaB = /* @__PURE__ */ create$41();
-/** calculate inverse effective mass (cached jacobian terms) */
-function calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis) {
-	let invEffectiveMass = 0;
-	if (bodyA.motionType !== 0) {
-		const r1x = r1PlusU[0];
-		const r1y = r1PlusU[1];
-		const r1z = r1PlusU[2];
-		const ax = axis[0];
-		const ay = axis[1];
-		const az = axis[2];
-		part.r1PlusUxAxis[0] = r1y * az - r1z * ay;
-		part.r1PlusUxAxis[1] = r1z * ax - r1x * az;
-		part.r1PlusUxAxis[2] = r1x * ay - r1y * ax;
+function resetContactManifold(manifold) {
+	manifold.numContactPoints = 0;
+	set$7(manifold.baseOffset, 0, 0, 0);
+	set$7(manifold.worldSpaceNormal, 0, 0, 0);
+	manifold.penetrationDepth = 0;
+	manifold.subShapeIdA = EMPTY_SUB_SHAPE_ID;
+	manifold.subShapeIdB = EMPTY_SUB_SHAPE_ID;
+	manifold.materialIdA = -1;
+	manifold.materialIdB = -1;
+}
+const _swapShapes_tempNormal = /* @__PURE__ */ create$47();
+function swapShapes(manifold) {
+	negate(_swapShapes_tempNormal, manifold.worldSpaceNormal);
+	copy$9(manifold.worldSpaceNormal, _swapShapes_tempNormal);
+	const tempSubShapeId = manifold.subShapeIdA;
+	manifold.subShapeIdA = manifold.subShapeIdB;
+	manifold.subShapeIdB = tempSubShapeId;
+	const tempMaterialId = manifold.materialIdA;
+	manifold.materialIdA = manifold.materialIdB;
+	manifold.materialIdB = tempMaterialId;
+	const tempArray = manifold.relativeContactPointsOnA;
+	manifold.relativeContactPointsOnA = manifold.relativeContactPointsOnB;
+	manifold.relativeContactPointsOnB = tempArray;
+}
+/** gets world-space contact point on shape A (baseOffset + relativePoint) */
+function getWorldSpaceContactPointOnA(out, manifold, index) {
+	const i = index * 3;
+	out[0] = manifold.baseOffset[0] + manifold.relativeContactPointsOnA[i];
+	out[1] = manifold.baseOffset[1] + manifold.relativeContactPointsOnA[i + 1];
+	out[2] = manifold.baseOffset[2] + manifold.relativeContactPointsOnA[i + 2];
+	return out;
+}
+/** gets world-space contact point on shape B (baseOffset + relativePoint) */
+function getWorldSpaceContactPointOnB(out, manifold, index) {
+	const i = index * 3;
+	out[0] = manifold.baseOffset[0] + manifold.relativeContactPointsOnB[i];
+	out[1] = manifold.baseOffset[1] + manifold.relativeContactPointsOnB[i + 1];
+	out[2] = manifold.baseOffset[2] + manifold.relativeContactPointsOnB[i + 2];
+	return out;
+}
+const _pruneProjectedPoints = new Float64Array(192);
+const _prunePenetrationDepthSq = new Float64Array(64);
+const _pruneKeptOnA = new Float64Array(12);
+const _pruneKeptOnB = new Float64Array(12);
+const MIN_DISTANCE_SQ = 1e-6;
+/**
+* Reduces contact points from up to 64 down to max 4.
+*
+* Algorithm:
+* 1. Project all contact points onto plane perpendicular to penetrationAxis
+* 2. Calculate metric for each point: (distance_in_plane²) × (penetration_depth²)
+*    where penetration_depth = distance between contact points on shape1 vs shape2
+* 3. Greedily select 4 points:
+*    - Point 1: Maximum metric (furthest from COM in plane + deepest penetration)
+*    - Point 2: Maximum distance from Point 1 (maximize edge length)
+*    - Point 3 & 4: On opposite sides of P1-P2 edge (maximize area)
+* 4. Output in winding order: [P1, P3, P2, P4] to form a proper quad
+*
+* The selected points are gathered in scratch, then copied back to indices 0-3,
+* manifold.numContactPoints is updated to final count (2-4).
+*
+* @param manifold contactManifold with contact points to prune (modifies in-place)
+* @param penetrationAxis normalized penetration direction (from shape 1 to shape 2)
+*/
+function pruneContactPoints(manifold, penetrationAxis) {
+	if (manifold.numContactPoints <= 4) return;
+	const numPoints = manifold.numContactPoints;
+	const axisX = penetrationAxis[0];
+	const axisY = penetrationAxis[1];
+	const axisZ = penetrationAxis[2];
+	for (let i = 0; i < numPoints; i++) {
+		const i3 = i * 3;
+		const v1x = manifold.relativeContactPointsOnA[i3];
+		const v1y = manifold.relativeContactPointsOnA[i3 + 1];
+		const v1z = manifold.relativeContactPointsOnA[i3 + 2];
+		const v2x = manifold.relativeContactPointsOnB[i3];
+		const v2y = manifold.relativeContactPointsOnB[i3 + 1];
+		const v2z = manifold.relativeContactPointsOnB[i3 + 2];
+		const dotProduct = v1x * axisX + v1y * axisY + v1z * axisZ;
+		const projX = v1x - axisX * dotProduct;
+		const projY = v1y - axisY * dotProduct;
+		const projZ = v1z - axisZ * dotProduct;
+		_pruneProjectedPoints[i3] = projX;
+		_pruneProjectedPoints[i3 + 1] = projY;
+		_pruneProjectedPoints[i3 + 2] = projZ;
+		const dx = v2x - v1x;
+		const dy = v2y - v1y;
+		const dz = v2z - v1z;
+		_prunePenetrationDepthSq[i] = Math.max(MIN_DISTANCE_SQ, dx * dx + dy * dy + dz * dz);
 	}
+	let point1 = 0;
+	const p0x = _pruneProjectedPoints[0];
+	const p0y = _pruneProjectedPoints[1];
+	const p0z = _pruneProjectedPoints[2];
+	let maxMetric = Math.max(MIN_DISTANCE_SQ, p0x * p0x + p0y * p0y + p0z * p0z) * _prunePenetrationDepthSq[0];
+	for (let i = 1; i < numPoints; i++) {
+		const i3 = i * 3;
+		const px = _pruneProjectedPoints[i3];
+		const py = _pruneProjectedPoints[i3 + 1];
+		const pz = _pruneProjectedPoints[i3 + 2];
+		const metric = Math.max(MIN_DISTANCE_SQ, px * px + py * py + pz * pz) * _prunePenetrationDepthSq[i];
+		if (metric > maxMetric) {
+			maxMetric = metric;
+			point1 = i;
+		}
+	}
+	let point2 = -1;
+	maxMetric = -Infinity;
+	const p1Idx = point1 * 3;
+	const p1x = _pruneProjectedPoints[p1Idx];
+	const p1y = _pruneProjectedPoints[p1Idx + 1];
+	const p1z = _pruneProjectedPoints[p1Idx + 2];
+	for (let i = 0; i < numPoints; i++) if (i !== point1) {
+		const i3 = i * 3;
+		const dx = _pruneProjectedPoints[i3] - p1x;
+		const dy = _pruneProjectedPoints[i3 + 1] - p1y;
+		const dz = _pruneProjectedPoints[i3 + 2] - p1z;
+		const metric = Math.max(MIN_DISTANCE_SQ, dx * dx + dy * dy + dz * dz) * _prunePenetrationDepthSq[i];
+		if (metric > maxMetric) {
+			maxMetric = metric;
+			point2 = i;
+		}
+	}
+	let point3 = -1;
+	let point4 = -1;
+	let minDot = 0;
+	let maxDot = 0;
+	const p2Idx = point2 * 3;
+	const p2x = _pruneProjectedPoints[p2Idx];
+	const p2y = _pruneProjectedPoints[p2Idx + 1];
+	const p2z = _pruneProjectedPoints[p2Idx + 2];
+	const edgeX = p2x - p1x;
+	const edgeY = p2y - p1y;
+	const edgeZ = p2z - p1z;
+	const perpX = edgeY * axisZ - edgeZ * axisY;
+	const perpY = edgeZ * axisX - edgeX * axisZ;
+	const perpZ = edgeX * axisY - edgeY * axisX;
+	for (let i = 0; i < numPoints; i++) if (i !== point1 && i !== point2) {
+		const i3 = i * 3;
+		const toX = _pruneProjectedPoints[i3] - p1x;
+		const toY = _pruneProjectedPoints[i3 + 1] - p1y;
+		const toZ = _pruneProjectedPoints[i3 + 2] - p1z;
+		const d = toX * perpX + toY * perpY + toZ * perpZ;
+		if (d < minDot) {
+			minDot = d;
+			point3 = i;
+		} else if (d > maxDot) {
+			maxDot = d;
+			point4 = i;
+		}
+	}
+	let numKept = pruneKeepPoint(manifold, point1, 0);
+	if (point3 !== -1) numKept = pruneKeepPoint(manifold, point3, numKept);
+	numKept = pruneKeepPoint(manifold, point2, numKept);
+	if (point4 !== -1) numKept = pruneKeepPoint(manifold, point4, numKept);
+	for (let i = 0; i < numKept * 3; i++) {
+		manifold.relativeContactPointsOnA[i] = _pruneKeptOnA[i];
+		manifold.relativeContactPointsOnB[i] = _pruneKeptOnB[i];
+	}
+	manifold.numContactPoints = numKept;
+}
+function pruneKeepPoint(manifold, index, numKept) {
+	const srcI = index * 3;
+	const dstI = numKept * 3;
+	_pruneKeptOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
+	_pruneKeptOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
+	_pruneKeptOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
+	_pruneKeptOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
+	_pruneKeptOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
+	_pruneKeptOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
+	return numKept + 1;
+}
+const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
+const _manifoldBetweenTwoFaces_penetrationAxis = /* @__PURE__ */ create$47();
+const _manifoldBetweenTwoFaces_edgeV1 = /* @__PURE__ */ create$47();
+const _manifoldBetweenTwoFaces_edgeV2 = /* @__PURE__ */ create$47();
+/**
+* Generates contact manifold from two supporting faces using polygon clipping.
+*
+* Algorithm:
+* 1. Clip the face with 3+ vertices (incident) against the other face (reference), swapping the faces and
+*    negating the penetration axis when face 2 is the one with fewer than 3 vertices
+* 2. Project clipped points onto the reference face's plane
+* 3. Filter by max contact distance
+* 4. Fallback to original contact points if clipping produces nothing
+*
+* Contact points are stored RELATIVE to manifold.baseOffset for numerical precision.
+*
+* @param out output contact manifold (points/numContactPoints populated)
+* @param inContactPoint1 initial contact point on shape 1 (world space)
+* @param inContactPoint2 initial contact point on shape 2 (world space)
+* @param inPenetrationAxis penetration direction (unnormalized, from shape 1 to 2, world space)
+* @param inMaxContactDistance max distance for contact filtering, > 0
+* @param inShape1Face supporting face on shape 1 (world space)
+* @param inShape2Face supporting face on shape 2 (world space)
+*/
+function manifoldBetweenTwoFaces(out, inContactPoint1, inContactPoint2, inPenetrationAxis, inMaxContactDistance, inShape1Face, inShape2Face) {
+	out.numContactPoints = 0;
+	if (Math.min(inShape1Face.numVertices, inShape2Face.numVertices) >= 2 && Math.max(inShape1Face.numVertices, inShape2Face.numVertices) >= 3) {
+		let shape1Face;
+		let shape2Face;
+		let contactPoints1;
+		let contactPoints2;
+		const penetrationAxis = _manifoldBetweenTwoFaces_penetrationAxis;
+		if (inShape2Face.numVertices >= 3) {
+			shape1Face = inShape1Face;
+			shape2Face = inShape2Face;
+			contactPoints1 = out.relativeContactPointsOnA;
+			contactPoints2 = out.relativeContactPointsOnB;
+			copy$9(penetrationAxis, inPenetrationAxis);
+		} else {
+			shape1Face = inShape2Face;
+			shape2Face = inShape1Face;
+			contactPoints1 = out.relativeContactPointsOnB;
+			contactPoints2 = out.relativeContactPointsOnA;
+			negate(penetrationAxis, inPenetrationAxis);
+		}
+		const clippedFace = _manifoldBetweenTwoFaces_clippedFace;
+		clippedFace.numVertices = 0;
+		if (shape1Face.numVertices >= 3) clipPolyVsPoly(clippedFace, shape2Face, shape1Face, penetrationAxis);
+		else {
+			const edgeV1 = set$7(_manifoldBetweenTwoFaces_edgeV1, shape1Face.vertices[0], shape1Face.vertices[1], shape1Face.vertices[2]);
+			const edgeV2 = set$7(_manifoldBetweenTwoFaces_edgeV2, shape1Face.vertices[3], shape1Face.vertices[4], shape1Face.vertices[5]);
+			clipPolyVsEdge(clippedFace, shape2Face, edgeV1, edgeV2, penetrationAxis);
+		}
+		const axisX = penetrationAxis[0];
+		const axisY = penetrationAxis[1];
+		const axisZ = penetrationAxis[2];
+		const planeOriginX = shape1Face.vertices[0];
+		const planeOriginY = shape1Face.vertices[1];
+		const planeOriginZ = shape1Face.vertices[2];
+		const firstEdgeX = shape1Face.vertices[3] - planeOriginX;
+		const firstEdgeY = shape1Face.vertices[4] - planeOriginY;
+		const firstEdgeZ = shape1Face.vertices[5] - planeOriginZ;
+		let planeNormalX;
+		let planeNormalY;
+		let planeNormalZ;
+		if (shape1Face.numVertices >= 3) {
+			const secondEdgeX = shape1Face.vertices[6] - planeOriginX;
+			const secondEdgeY = shape1Face.vertices[7] - planeOriginY;
+			const secondEdgeZ = shape1Face.vertices[8] - planeOriginZ;
+			planeNormalX = firstEdgeY * secondEdgeZ - firstEdgeZ * secondEdgeY;
+			planeNormalY = firstEdgeZ * secondEdgeX - firstEdgeX * secondEdgeZ;
+			planeNormalZ = firstEdgeX * secondEdgeY - firstEdgeY * secondEdgeX;
+		} else {
+			const perpX = firstEdgeY * axisZ - firstEdgeZ * axisY;
+			const perpY = firstEdgeZ * axisX - firstEdgeX * axisZ;
+			const perpZ = firstEdgeX * axisY - firstEdgeY * axisX;
+			planeNormalX = perpY * firstEdgeZ - perpZ * firstEdgeY;
+			planeNormalY = perpZ * firstEdgeX - perpX * firstEdgeZ;
+			planeNormalZ = perpX * firstEdgeY - perpY * firstEdgeX;
+		}
+		const penetrationAxisDotPlaneNormal = axisX * planeNormalX + axisY * planeNormalY + axisZ * planeNormalZ;
+		if (penetrationAxisDotPlaneNormal !== 0) {
+			const penetrationAxisLen = Math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
+			for (let i = 0; i < clippedFace.numVertices; i++) {
+				const vertexIndex = i * 3;
+				const p2X = clippedFace.vertices[vertexIndex];
+				const p2Y = clippedFace.vertices[vertexIndex + 1];
+				const p2Z = clippedFace.vertices[vertexIndex + 2];
+				const distance = ((p2X - planeOriginX) * planeNormalX + (p2Y - planeOriginY) * planeNormalY + (p2Z - planeOriginZ) * planeNormalZ) / penetrationAxisDotPlaneNormal;
+				if (distance * penetrationAxisLen < inMaxContactDistance) {
+					const outIndex = out.numContactPoints * 3;
+					contactPoints1[outIndex] = p2X - distance * axisX - out.baseOffset[0];
+					contactPoints1[outIndex + 1] = p2Y - distance * axisY - out.baseOffset[1];
+					contactPoints1[outIndex + 2] = p2Z - distance * axisZ - out.baseOffset[2];
+					contactPoints2[outIndex] = p2X - out.baseOffset[0];
+					contactPoints2[outIndex + 1] = p2Y - out.baseOffset[1];
+					contactPoints2[outIndex + 2] = p2Z - out.baseOffset[2];
+					out.numContactPoints++;
+					if (out.numContactPoints >= 64) break;
+				}
+			}
+		}
+	}
+	if (out.numContactPoints === 0) {
+		out.relativeContactPointsOnA[0] = inContactPoint1[0] - out.baseOffset[0];
+		out.relativeContactPointsOnA[1] = inContactPoint1[1] - out.baseOffset[1];
+		out.relativeContactPointsOnA[2] = inContactPoint1[2] - out.baseOffset[2];
+		out.relativeContactPointsOnB[0] = inContactPoint2[0] - out.baseOffset[0];
+		out.relativeContactPointsOnB[1] = inContactPoint2[1] - out.baseOffset[1];
+		out.relativeContactPointsOnB[2] = inContactPoint2[2] - out.baseOffset[2];
+		out.numContactPoints = 1;
+	}
+}
+//#endregion
+//#region src/constraints/contact-constraints.ts
+/** creates emopty contact constraints state */
+function init$3() {
+	return {
+		pool: [],
+		count: 0
+	};
+}
+/** create a contact settings object */
+function createContactSettings() {
+	return {
+		combinedFriction: 0,
+		combinedRestitution: 0,
+		isSensor: false,
+		invMassScale1: 1,
+		invMassScale2: 1,
+		invInertiaScale1: 1,
+		invInertiaScale2: 1,
+		relativeLinearSurfaceVelocity: create$47(),
+		relativeAngularSurfaceVelocity: create$47()
+	};
+}
+function setContactSettings(settings, combinedFriction, combinedRestitution, isSensor) {
+	settings.combinedFriction = combinedFriction;
+	settings.combinedRestitution = combinedRestitution;
+	settings.isSensor = isSensor;
+	settings.invMassScale1 = 1;
+	settings.invMassScale2 = 1;
+	settings.invInertiaScale1 = 1;
+	settings.invInertiaScale2 = 1;
+	settings.relativeLinearSurfaceVelocity[0] = 0;
+	settings.relativeLinearSurfaceVelocity[1] = 0;
+	settings.relativeLinearSurfaceVelocity[2] = 0;
+	settings.relativeAngularSurfaceVelocity[0] = 0;
+	settings.relativeAngularSurfaceVelocity[1] = 0;
+	settings.relativeAngularSurfaceVelocity[2] = 0;
+	return settings;
+}
+/**
+* Calculate friction bias with surface velocity support.
+* Enables conveyor belts, rotating platforms, etc.
+* @param settings contact settings containing surface velocities
+* @param rA moment arm from body A's COM to contact point
+* @param tangent friction tangent direction (normalized)
+* @returns friction bias (velocity along tangent)
+*/
+function calculateFrictionBias(settings, rA, tangent) {
+	const svx = settings.relativeLinearSurfaceVelocity[0] + (settings.relativeAngularSurfaceVelocity[1] * rA[2] - settings.relativeAngularSurfaceVelocity[2] * rA[1]);
+	const svy = settings.relativeLinearSurfaceVelocity[1] + (settings.relativeAngularSurfaceVelocity[2] * rA[0] - settings.relativeAngularSurfaceVelocity[0] * rA[2]);
+	const svz = settings.relativeLinearSurfaceVelocity[2] + (settings.relativeAngularSurfaceVelocity[0] * rA[1] - settings.relativeAngularSurfaceVelocity[1] * rA[0]);
+	return tangent[0] * svx + tangent[1] * svy + tangent[2] * svz;
+}
+const _calcBias_v1 = /* @__PURE__ */ create$47();
+const _calcBias_v2 = /* @__PURE__ */ create$47();
+/**
+* Calculate the normal velocity bias for a contact constraint.
+* Includes speculative contacts, restitution, and gravity+force correction.
+*
+* @param bodyA first body in contact
+* @param bodyB second body in contact
+* @param penetration how far the contact points overlap along the normal (> 0 penetrating, < 0 separated)
+* @param normal contact normal (world space, points from A to B)
+* @param rA moment arm from body A's COM to its contact point
+* @param rB moment arm from body B's COM to its contact point
+* @param combinedRestitution combined restitution coefficient
+* @param deltaTime physics time step
+* @param gravity gravity vector
+* @param minVelocityForRestitution minimum velocity threshold for restitution
+* @returns Normal velocity bias for constraint solving
+*/
+function calculateNormalVelocityBias(bodyA, bodyB, penetration, normal, rA, rB, combinedRestitution, deltaTime, gravity, minVelocityForRestitution) {
+	const aIsMoving = bodyA.motionType !== 0;
+	const bIsMoving = bodyB.motionType !== 0;
+	const aIsDynamic = bodyA.motionType === 2;
+	const bIsDynamic = bodyB.motionType === 2;
+	let relVelX;
+	let relVelY;
+	let relVelZ;
+	if (aIsMoving && bIsMoving) {
+		getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
+		getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
+		relVelX = _calcBias_v2[0] - _calcBias_v1[0];
+		relVelY = _calcBias_v2[1] - _calcBias_v1[1];
+		relVelZ = _calcBias_v2[2] - _calcBias_v1[2];
+	} else if (aIsMoving) {
+		getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
+		relVelX = -_calcBias_v1[0];
+		relVelY = -_calcBias_v1[1];
+		relVelZ = -_calcBias_v1[2];
+	} else if (bIsMoving) {
+		getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
+		relVelX = _calcBias_v2[0];
+		relVelY = _calcBias_v2[1];
+		relVelZ = _calcBias_v2[2];
+	} else return 0;
+	const normalVelocity = relVelX * normal[0] + relVelY * normal[1] + relVelZ * normal[2];
+	const speculativeContactVelocityBias = Math.max(0, -penetration / deltaTime);
+	let normalVelocityBias;
+	if (combinedRestitution > 0 && normalVelocity < -minVelocityForRestitution) if (normalVelocity < -speculativeContactVelocityBias) {
+		let relAccelX = 0;
+		let relAccelY = 0;
+		let relAccelZ = 0;
+		if (aIsMoving && bIsMoving) {
+			const gravityFactorA = bodyA.motionProperties.gravityFactor;
+			const gravityScale = bodyB.motionProperties.gravityFactor - gravityFactorA;
+			relAccelX += gravity[0] * gravityScale;
+			relAccelY += gravity[1] * gravityScale;
+			relAccelZ += gravity[2] * gravityScale;
+		} else if (aIsMoving) {
+			const gravityFactorA = bodyA.motionProperties.gravityFactor;
+			relAccelX += gravity[0] * -gravityFactorA;
+			relAccelY += gravity[1] * -gravityFactorA;
+			relAccelZ += gravity[2] * -gravityFactorA;
+		} else if (bIsMoving) {
+			const gravityFactorB = bodyB.motionProperties.gravityFactor;
+			relAccelX += gravity[0] * gravityFactorB;
+			relAccelY += gravity[1] * gravityFactorB;
+			relAccelZ += gravity[2] * gravityFactorB;
+		}
+		if (aIsDynamic) {
+			const forceScale = -bodyA.motionProperties.invMass;
+			relAccelX += bodyA.motionProperties.force[0] * forceScale;
+			relAccelY += bodyA.motionProperties.force[1] * forceScale;
+			relAccelZ += bodyA.motionProperties.force[2] * forceScale;
+		}
+		if (bIsDynamic) {
+			const forceScale = bodyB.motionProperties.invMass;
+			relAccelX += bodyB.motionProperties.force[0] * forceScale;
+			relAccelY += bodyB.motionProperties.force[1] * forceScale;
+			relAccelZ += bodyB.motionProperties.force[2] * forceScale;
+		}
+		const accelDotNormal = relAccelX * normal[0] + relAccelY * normal[1] + relAccelZ * normal[2];
+		normalVelocityBias = combinedRestitution * (normalVelocity - Math.min(0, accelDotNormal * deltaTime));
+	} else normalVelocityBias = speculativeContactVelocityBias;
+	else normalVelocityBias = speculativeContactVelocityBias;
+	return normalVelocityBias;
+}
+const _addContactConstraint_relativePointOnA = /* @__PURE__ */ create$47();
+const _addContactConstraint_relativePointOnB = /* @__PURE__ */ create$47();
+const _addContactConstraint_rA = /* @__PURE__ */ create$47();
+const _addContactConstraint_rB = /* @__PURE__ */ create$47();
+const _addContactConstraint_rotA = /* @__PURE__ */ create$41();
+const _addContactConstraint_rotB = /* @__PURE__ */ create$41();
+const _addContactConstraint_scaledInvInertiaA = /* @__PURE__ */ create$41();
+const _addContactConstraint_scaledInvInertiaB = /* @__PURE__ */ create$41();
+let _invInertiaA = _addContactConstraint_scaledInvInertiaA;
+let _invInertiaB = _addContactConstraint_scaledInvInertiaB;
+const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
+const _addContactConstraint_rAs = [
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47()
+];
+const _addContactConstraint_rBs = [
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47(),
+	/* @__PURE__ */ create$47()
+];
+const _addContactConstraint_comMinusBaseA = /* @__PURE__ */ create$47();
+const _addContactConstraint_comMinusBaseB = /* @__PURE__ */ create$47();
+const _addContactConstraint_deltaCom = /* @__PURE__ */ create$47();
+/**
+* Compute the manifold-level friction setup: each body's friction point (the mean of that body's own contact
+* points, so a speculative contact's separation along the normal does not lengthen the lever arms), each point's
+* moment arm to body A's friction point, and the 2 linear + 1 angular friction constraint properties.
+*
+* @param constraint contact constraint (already populated with N points and normal/tangents)
+* @param bodyA first body
+* @param bodyB second body
+* @param rAs each point on body A relative to body A's center of mass (world space)
+* @param rBs each point on body B relative to body B's center of mass (world space)
+* @param settings contact settings (used for surface velocities)
+*/
+function calculateFrictionConstraintProperties(constraint, bodyA, bodyB, rAs, rBs, settings) {
+	const N = constraint.numContactPoints;
+	let fpax = rAs[0][0];
+	let fpay = rAs[0][1];
+	let fpaz = rAs[0][2];
+	let fpbx = rBs[0][0];
+	let fpby = rBs[0][1];
+	let fpbz = rBs[0][2];
+	for (let i = 1; i < N; i++) {
+		fpax += rAs[i][0];
+		fpay += rAs[i][1];
+		fpaz += rAs[i][2];
+		fpbx += rBs[i][0];
+		fpby += rBs[i][1];
+		fpbz += rBs[i][2];
+	}
+	fpax /= N;
+	fpay /= N;
+	fpaz /= N;
+	fpbx /= N;
+	fpby /= N;
+	fpbz /= N;
+	const nx = constraint.normal[0];
+	const ny = constraint.normal[1];
+	const nz = constraint.normal[2];
+	for (let i = 0; i < N; i++) {
+		const dx = rAs[i][0] - fpax;
+		const dy = rAs[i][1] - fpay;
+		const dz = rAs[i][2] - fpaz;
+		const dotN = dx * nx + dy * ny + dz * nz;
+		const tx = dx - dotN * nx;
+		const ty = dy - dotN * ny;
+		const tz = dz - dotN * nz;
+		constraint.contactPoints[i].distanceToFrictionCenter = Math.sqrt(tx * tx + ty * ty + tz * tz);
+	}
+	const rA = _addContactConstraint_rA;
+	const rB = _addContactConstraint_rB;
+	set$7(rA, fpax, fpay, fpaz);
+	set$7(rB, fpbx, fpby, fpbz);
+	const frictionBias1 = calculateFrictionBias(settings, rA, constraint.tangent1);
+	const frictionBias2 = calculateFrictionBias(settings, rA, constraint.tangent2);
+	calculateConstraintProperties$6(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
+	calculateConstraintProperties$6(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
+	if (N > 1) {
+		const angBias = settings.relativeAngularSurfaceVelocity[0] * nx + settings.relativeAngularSurfaceVelocity[1] * ny + settings.relativeAngularSurfaceVelocity[2] * nz;
+		calculateConstraintProperties$7(constraint.angularFrictionConstraint, bodyA, bodyB, _invInertiaA, _invInertiaB, constraint.normal, angBias);
+	} else deactivate$7(constraint.angularFrictionConstraint);
+}
+const _toBodySpace_offset = /* @__PURE__ */ create$47();
+/** a point relative to a manifold's base offset into body space: rot^T * point - rot^T * (com - baseOffset) */
+function toBodySpace(out, rotation, point, comMinusBase) {
+	multiply3x3TransposedVec(_toBodySpace_offset, rotation, comMinusBase);
+	multiply3x3TransposedVec(out, rotation, point);
+	return subtract$1(out, out, _toBodySpace_offset);
+}
+/**
+* allocate the next constraint slot and fill the manifold-level fields shared by the narrowphase and
+* cache-hit paths: body and sub-shape ids, sort key, normal and tangent basis, combined materials and
+* scaled inverse masses. binds _invInertiaA/B for the per-point and friction setup that follows.
+*/
+function beginContactConstraint(contactConstraints, bodyA, bodyB, subShapeIdA, subShapeIdB, contactIndex, worldSpaceNormal, contactSettings, stepStamp) {
+	if (contactConstraints.count >= contactConstraints.pool.length) contactConstraints.pool.push(createContactConstraint());
+	const constraint = contactConstraints.pool[contactConstraints.count];
+	contactConstraints.count++;
+	constraint.bodyIndexA = bodyA.index;
+	constraint.bodyIndexB = bodyB.index;
+	constraint.subShapeIdA = subShapeIdA;
+	constraint.subShapeIdB = subShapeIdB;
+	constraint.contactIndex = contactIndex;
+	computeContactSortKey(constraint, bodyA.id, subShapeIdA, bodyB.id, subShapeIdB);
+	copy$9(constraint.normal, worldSpaceNormal);
+	const normalX = constraint.normal[0];
+	const normalY = constraint.normal[1];
+	const normalZ = constraint.normal[2];
+	if (Math.abs(normalX) > Math.abs(normalY)) {
+		const tangentLen = Math.sqrt(normalX * normalX + normalZ * normalZ);
+		constraint.tangent1[0] = normalZ / tangentLen;
+		constraint.tangent1[1] = 0;
+		constraint.tangent1[2] = -normalX / tangentLen;
+	} else {
+		const tangentLen = Math.sqrt(normalY * normalY + normalZ * normalZ);
+		constraint.tangent1[0] = 0;
+		constraint.tangent1[1] = normalZ / tangentLen;
+		constraint.tangent1[2] = -normalY / tangentLen;
+	}
+	cross(constraint.tangent2, constraint.normal, constraint.tangent1);
+	constraint.friction = contactSettings.combinedFriction;
+	constraint.restitution = contactSettings.combinedRestitution;
+	constraint.invMassA = bodyA.motionProperties.invMass * contactSettings.invMassScale1;
+	constraint.invMassB = bodyB.motionProperties.invMass * contactSettings.invMassScale2;
+	constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
+	constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
 	if (bodyA.motionType === 2) {
-		const cx = part.r1PlusUxAxis[0];
-		const cy = part.r1PlusUxAxis[1];
-		const cz = part.r1PlusUxAxis[2];
-		part.invI1_r1PlusUxAxis[0] = invInertiaA[0] * cx + invInertiaA[4] * cy + invInertiaA[8] * cz;
-		part.invI1_r1PlusUxAxis[1] = invInertiaA[1] * cx + invInertiaA[5] * cy + invInertiaA[9] * cz;
-		part.invI1_r1PlusUxAxis[2] = invInertiaA[2] * cx + invInertiaA[6] * cy + invInertiaA[10] * cz;
-		invEffectiveMass += invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
-	}
-	if (bodyB.motionType !== 0) {
-		const r2x = r2[0];
-		const r2y = r2[1];
-		const r2z = r2[2];
-		const ax = axis[0];
-		const ay = axis[1];
-		const az = axis[2];
-		part.r2xAxis[0] = r2y * az - r2z * ay;
-		part.r2xAxis[1] = r2z * ax - r2x * az;
-		part.r2xAxis[2] = r2x * ay - r2y * ax;
+		const worldInverseInertiaA = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaA, bodyA.motionProperties, bodyA.quaternion, stepStamp);
+		const scale1 = contactSettings.invInertiaScale1;
+		if (scale1 === 1) _invInertiaA = worldInverseInertiaA;
+		else {
+			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaA[j] = worldInverseInertiaA[j] * scale1;
+			_invInertiaA = _addContactConstraint_scaledInvInertiaA;
+		}
 	}
 	if (bodyB.motionType === 2) {
-		const cx = part.r2xAxis[0];
-		const cy = part.r2xAxis[1];
-		const cz = part.r2xAxis[2];
-		part.invI2_r2xAxis[0] = invInertiaB[0] * cx + invInertiaB[4] * cy + invInertiaB[8] * cz;
-		part.invI2_r2xAxis[1] = invInertiaB[1] * cx + invInertiaB[5] * cy + invInertiaB[9] * cz;
-		part.invI2_r2xAxis[2] = invInertiaB[2] * cx + invInertiaB[6] * cy + invInertiaB[10] * cz;
-		invEffectiveMass += invMassB + (part.invI2_r2xAxis[0] * cx + part.invI2_r2xAxis[1] * cy + part.invI2_r2xAxis[2] * cz);
+		const worldInverseInertiaB = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaB, bodyB.motionProperties, bodyB.quaternion, stepStamp);
+		const scale2 = contactSettings.invInertiaScale2;
+		if (scale2 === 1) _invInertiaB = worldInverseInertiaB;
+		else {
+			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaB[j] = worldInverseInertiaB[j] * scale2;
+			_invInertiaB = _addContactConstraint_scaledInvInertiaB;
+		}
 	}
-	return invEffectiveMass;
+	constraint.numContactPoints = 0;
+	return constraint;
 }
 /**
-* Calculate constraint properties (effective mass and cached jacobian terms).
-* Hard constraint version (no spring).
-* Call this during constraint initialization.
-*
-* @param part the constraint part to initialize
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass of body A (0 if static)
-* @param invMassB inverse mass of body B (0 if static)
-* @param invInertiaA inverse inertia of body A (world space)
-* @param invInertiaB inverse inertia of body B (world space)
-* @param r1PlusU moment arm for body A: (contactPoint - centerOfMassA)
-* @param r2 moment arm for body B: (contactPoint - centerOfMassB)
-* @param axis constraint axis (normalized, e.g., contact normal or friction tangent)
-* @param bias velocity bias (for restitution or speculative contacts)
+* finish contact point i of a constraint whose local positions and warm start lambda are already set: its
+* restitution / speculative velocity bias and its non-penetration constraint part, with the moment arms rA / rB
+* from each body's center of mass to that body's own contact point
 */
-function calculateConstraintProperties$3(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
-	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
-	else {
-		part.effectiveMass = 1 / invEffectiveMass;
-		calculateSpringPropertiesWithBias(part.springPart, bias);
-	}
+function setupContactPoint(constraint, i, bodyA, bodyB, rA, rB, penetration, contactSettings, settings, deltaTime) {
+	const cp = constraint.contactPoints[i];
+	const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, penetration, constraint.normal, rA, rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
+	calculateConstraintProperties$6(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.normal, normalVelocityBias);
 }
 /**
-* Calculate constraint properties with mass override (effective mass and cached jacobian terms).
-* Hard constraint version (no spring), allows custom inverse mass and inertia scaling.
-* Call this during constraint initialization when you need to override mass properties.
-*
-* @param part the constraint part to initialize
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass override for body A (only used when body A is dynamic)
-* @param invMassB inverse mass override for body B (only used when body B is dynamic)
-* @param invInertiaScaleA scale factor for the inverse inertia of body A
-* @param invInertiaScaleB scale factor for the inverse inertia of body B
-* @param invInertiaA inverse inertia of body A (world space)
-* @param invInertiaB inverse inertia of body B (world space)
-* @param r1PlusU moment arm for body A: (contactPoint - centerOfMassA)
-* @param r2 moment arm for body B: (contactPoint - centerOfMassB)
-* @param axis constraint axis (normalized, e.g., contact normal or friction tangent)
-* @param bias velocity bias (for restitution or speculative contacts)
+* manifold-level friction: 2 linear parts + 1 angular part anchored at each body's friction point,
+* with the previous step's lambdas transferred wholesale (zero for a new contact). the transferred
+* lambdas are mirrored into the write-side cache so they're a no-op if the constraint never runs
+* (e.g. fully kinematic pair).
 */
-function calculateConstraintPropertiesWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, invInertiaScaleA, invInertiaScaleB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias) {
-	let invIA = invInertiaA;
-	if (bodyA.motionType === 2 && invInertiaScaleA !== 1) {
-		multiplyScalar(_acp_scaledInvInertiaA, invInertiaA, invInertiaScaleA);
-		invIA = _acp_scaledInvInertiaA;
-	}
-	let invIB = invInertiaB;
-	if (bodyB.motionType === 2 && invInertiaScaleB !== 1) {
-		multiplyScalar(_acp_scaledInvInertiaB, invInertiaB, invInertiaScaleB);
-		invIB = _acp_scaledInvInertiaB;
-	}
-	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invIA, invIB, r1PlusU, r2, axis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
-	else {
-		part.effectiveMass = 1 / invEffectiveMass;
-		calculateSpringPropertiesWithBias(part.springPart, bias);
+function setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prevFrictionLambda1, prevFrictionLambda2, prevAngularFrictionLambda, curr) {
+	if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
+		constraint.frictionConstraint1.totalLambda = prevFrictionLambda1;
+		constraint.frictionConstraint2.totalLambda = prevFrictionLambda2;
+		constraint.angularFrictionConstraint.totalLambda = prevAngularFrictionLambda;
+		calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_rAs, _addContactConstraint_rBs, contactSettings);
+		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
+	} else {
+		deactivate$6(constraint.frictionConstraint1);
+		deactivate$6(constraint.frictionConstraint2);
+		deactivate$7(constraint.angularFrictionConstraint);
+		curr.frictionLambda1 = 0;
+		curr.frictionLambda2 = 0;
+		curr.angularFrictionLambda = 0;
 	}
 }
 /**
-* Calculate constraint properties for a limit using SpringSettings.
-* Turns to a hard limit when the spring has no frequency or stiffness.
-* @param part the constraint part to initialize
-* @param deltaTime time step
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass of body A
-* @param invMassB inverse mass of body B
-* @param invInertiaA inverse inertia of body A (world space)
-* @param invInertiaB inverse inertia of body B (world space)
-* @param r1PlusU moment arm for body A
-* @param r2 moment arm for body B
-* @param axis constraint axis (normalized)
-* @param bias velocity bias
-* @param C value of the constraint equation (C)
-* @param settings spring settings (mode, frequency/stiffness, damping)
+* add a contact constraint from a new manifold.
+* stepStamp keys the per-step world inverse inertia memo (bodies.stepStamp).
 */
-function calculateConstraintPropertiesWithSettings(part, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias, C, settings) {
-	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
-	else if (!hasStiffness$1(settings)) {
-		part.effectiveMass = 1 / invEffectiveMass;
-		calculateSpringPropertiesWithBias(part.springPart, bias);
-	} else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
-}
-/**
-* Calculate constraint properties for a motor using SpringSettings.
-* The spring must have stiffness or damping; damping alone drives the velocity only.
-* @param part the constraint part to initialize
-* @param deltaTime time step
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass of body A
-* @param invMassB inverse mass of body B
-* @param invInertiaA inverse inertia of body A (world space)
-* @param invInertiaB inverse inertia of body B (world space)
-* @param r1PlusU moment arm for body A
-* @param r2 moment arm for body B
-* @param axis constraint axis (normalized)
-* @param bias velocity bias
-* @param C value of the constraint equation (C)
-* @param settings spring settings (mode, frequency/stiffness, damping)
-*/
-function calculateConstraintPropertiesWithSettingsForMotor(part, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis, bias, C, settings) {
-	const invEffectiveMass = calculateInverseEffectiveMass(part, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, axis);
-	if (invEffectiveMass < 22250738585072014e-324) deactivate$3(part);
-	else part.effectiveMass = calculateSpringPropertiesWithSettings(part.springPart, deltaTime, invEffectiveMass, bias, C, settings);
-}
-/** Check if constraint is active (has non-zero effective mass) */
-function isActive$3(part) {
-	return part.effectiveMass !== 0;
-}
-/** Deactivate the constraint (zero out effective mass and lambda) */
-function deactivate$3(part) {
-	part.effectiveMass = 0;
-	part.totalLambda = 0;
-}
-/**
-* Get the current total lagrange multiplier.
-*
-* @param part the constraint part
-* @returns Current total lambda value
-*/
-function getTotalLambdaValue(part) {
-	return part.totalLambda;
-}
-/**
-* Turn a jacobian-velocity product into the part's new total lambda.
-*
-* NUMBERS IN, NUMBERS OUT. A solver that keeps a body pair's twelve velocity components in locals
-* computes `jv` itself — it already holds the operands — and this owns the constraint math. That
-* split is what lets those components stay in registers: a function which MUTATES a shared velocity
-* buffer forces that buffer to exist, while one which RETURNS a number costs nothing, because V8
-* inlines it. Worth ~1.75x on the contact solve loop.
-*/
-function totalLambdaFor$1(part, jv) {
-	return part.totalLambda + part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
-}
-/**
-* Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
-* The caller applies the delta to its own velocity locals.
-*/
-function deltaLambdaFor$1(part, totalLambda) {
-	const deltaLambda = totalLambda - part.totalLambda;
-	part.totalLambda = totalLambda;
-	return deltaLambda;
-}
-/**
-* Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
-* apply. The caller applies it to its own velocity locals.
-*/
-function warmStartLambda$1(part, warmStartRatio) {
-	part.totalLambda *= warmStartRatio;
-	return part.totalLambda;
-}
-/**
-* Apply warm start impulse from previous frame.
-* Call this once before velocity iterations.
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass of body A
-* @param invMassB inverse mass of body B
-* @param axis constraint axis (same as used in calculateConstraintProperties)
-* @param warmStartRatio scale factor for warm start (dt_new / dt_old)
-*/
-function warmStart$2(part, bodyA, bodyB, invMassA, invMassB, axis, warmStartRatio) {
-	part.totalLambda *= warmStartRatio;
-	if (part.totalLambda === 0) return;
-	const isDynamicA = bodyA.motionType === 2;
-	const isDynamicB = bodyB.motionType === 2;
-	const mpA = bodyA.motionProperties;
-	const mpB = bodyB.motionProperties;
-	if (isDynamicA) {
-		const linearScaleA = part.totalLambda * invMassA;
-		mpA.linearVelocity[0] -= axis[0] * linearScaleA;
-		mpA.linearVelocity[1] -= axis[1] * linearScaleA;
-		mpA.linearVelocity[2] -= axis[2] * linearScaleA;
-		const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
-		if (!(allowedTranslationA & 1)) mpA.linearVelocity[0] = 0;
-		if (!(allowedTranslationA & 2)) mpA.linearVelocity[1] = 0;
-		if (!(allowedTranslationA & 4)) mpA.linearVelocity[2] = 0;
-		const angularImpulseA = part.invI1_r1PlusUxAxis;
-		mpA.angularVelocity[0] -= angularImpulseA[0] * part.totalLambda;
-		mpA.angularVelocity[1] -= angularImpulseA[1] * part.totalLambda;
-		mpA.angularVelocity[2] -= angularImpulseA[2] * part.totalLambda;
+function addContactConstraint(contactConstraints, contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold, settings, contactListener, deltaTime, stepStamp) {
+	if (bodyA.id > bodyB.id) {
+		const temp = bodyA;
+		bodyA = bodyB;
+		bodyB = temp;
+		swapShapes(contactManifold);
 	}
-	if (isDynamicB) {
-		const linearScaleB = part.totalLambda * invMassB;
-		mpB.linearVelocity[0] += axis[0] * linearScaleB;
-		mpB.linearVelocity[1] += axis[1] * linearScaleB;
-		mpB.linearVelocity[2] += axis[2] * linearScaleB;
-		const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
-		if (!(allowedTranslationB & 1)) mpB.linearVelocity[0] = 0;
-		if (!(allowedTranslationB & 2)) mpB.linearVelocity[1] = 0;
-		if (!(allowedTranslationB & 4)) mpB.linearVelocity[2] = 0;
-		const angularImpulseB = part.invI2_r2xAxis;
-		mpB.angularVelocity[0] += angularImpulseB[0] * part.totalLambda;
-		mpB.angularVelocity[1] += angularImpulseB[1] * part.totalLambda;
-		mpB.angularVelocity[2] += angularImpulseB[2] * part.totalLambda;
+	const existingContact = findContactInPair(contactsState, pairs, pairRecordIndex, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
+	const contact = existingContact ?? createContact(contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
+	contact.lastProcessedFrame = contactsState.frameStamp;
+	const prev = getReadManifold(contact, contactsState);
+	const curr = getWriteManifold(contact, contactsState);
+	const rotA = fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+	const rotB = fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
+	multiply3x3TransposedVec(curr.contactNormal, rotB, contactManifold.worldSpaceNormal);
+	normalize$2(curr.contactNormal, curr.contactNormal);
+	curr.numContactPoints = contactManifold.numContactPoints;
+	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
+	contactManifold.materialIdA = getShapeMaterial(bodyA.shape, contactManifold.subShapeIdA);
+	contactManifold.materialIdB = getShapeMaterial(bodyB.shape, contactManifold.subShapeIdB);
+	if (existingContact) {
+		curr.flags |= 1;
+		contactListener?.onContactPersisted?.(bodyA, bodyB, contactManifold, contactSettings);
+	} else contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
+	if (!contactSettings.isSensor && (bodyA.motionType === 2 && contactSettings.invMassScale1 !== 0 || bodyB.motionType === 2 && contactSettings.invMassScale2 !== 0)) {
+		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB, contact.contactIndex, contactManifold.worldSpaceNormal, contactSettings, stepStamp);
+		const comMinusBaseA = subtract$1(_addContactConstraint_comMinusBaseA, bodyA.centerOfMassPosition, contactManifold.baseOffset);
+		const comMinusBaseB = subtract$1(_addContactConstraint_comMinusBaseB, bodyB.centerOfMassPosition, contactManifold.baseOffset);
+		for (let i = 0; i < contactManifold.numContactPoints; i++) {
+			const cp = constraint.contactPoints[constraint.numContactPoints];
+			constraint.numContactPoints++;
+			const contactPointIndex = i * 3;
+			const pointA = _addContactConstraint_relativePointOnA;
+			const pointB = _addContactConstraint_relativePointOnB;
+			fromBuffer(pointA, contactManifold.relativeContactPointsOnA, contactPointIndex);
+			fromBuffer(pointB, contactManifold.relativeContactPointsOnB, contactPointIndex);
+			add$3(cp.positionA, contactManifold.baseOffset, pointA);
+			add$3(cp.positionB, contactManifold.baseOffset, pointB);
+			toBodySpace(cp.localPositionA, rotA, pointA, comMinusBaseA);
+			toBodySpace(cp.localPositionB, rotB, pointB, comMinusBaseB);
+			let lambdaSet = false;
+			if (existingContact) for (let j = 0; j < prev.numContactPoints; j++) {
+				const point = prev.contactPoints[j];
+				const dist1Sq = squaredDistance(cp.localPositionA, point.position1);
+				const dist2Sq = squaredDistance(cp.localPositionB, point.position2);
+				const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
+				if (dist1Sq <= threshold && dist2Sq <= threshold) {
+					cp.normalConstraint.totalLambda = point.normalLambda;
+					lambdaSet = true;
+					break;
+				}
+			}
+			if (!lambdaSet) cp.normalConstraint.totalLambda = 0;
+			const penetration = (pointA[0] - pointB[0]) * contactManifold.worldSpaceNormal[0] + (pointA[1] - pointB[1]) * contactManifold.worldSpaceNormal[1] + (pointA[2] - pointB[2]) * contactManifold.worldSpaceNormal[2];
+			const rA = subtract$1(_addContactConstraint_rAs[i], pointA, comMinusBaseA);
+			const rB = subtract$1(_addContactConstraint_rBs[i], pointB, comMinusBaseB);
+			setupContactPoint(constraint, i, bodyA, bodyB, rA, rB, penetration, contactSettings, settings, deltaTime);
+			const cachedPoint = curr.contactPoints[i];
+			copy$9(cachedPoint.position1, cp.localPositionA);
+			copy$9(cachedPoint.position2, cp.localPositionB);
+			cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
+		}
+		if (existingContact) setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
+		else setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, 0, 0, 0, curr);
+		return true;
+	}
+	const comMinusBaseA = subtract$1(_addContactConstraint_comMinusBaseA, bodyA.centerOfMassPosition, contactManifold.baseOffset);
+	const comMinusBaseB = subtract$1(_addContactConstraint_comMinusBaseB, bodyB.centerOfMassPosition, contactManifold.baseOffset);
+	for (let i = 0; i < contactManifold.numContactPoints; i++) {
+		const contactPointIndex = i * 3;
+		const scratchA = _addContactConstraint_relativePointOnA;
+		const scratchB = _addContactConstraint_relativePointOnB;
+		const cachedPoint = curr.contactPoints[i];
+		fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
+		fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
+		toBodySpace(cachedPoint.position1, rotA, scratchA, comMinusBaseA);
+		toBodySpace(cachedPoint.position2, rotB, scratchB, comMinusBaseB);
+		cachedPoint.normalLambda = 0;
+	}
+	curr.frictionLambda1 = 0;
+	curr.frictionLambda2 = 0;
+	curr.angularFrictionLambda = 0;
+	return false;
+}
+const _fromCache_worldSpaceNormal = /* @__PURE__ */ create$47();
+const _fromCache_positionsA = [
+	create$47(),
+	create$47(),
+	create$47(),
+	create$47()
+];
+const _fromCache_positionsB = [
+	create$47(),
+	create$47(),
+	create$47(),
+	create$47()
+];
+const _fromCache_diffAB = /* @__PURE__ */ create$47();
+const _fromCache_listenerManifold = /* @__PURE__ */ createContactManifold();
+/**
+* add a contact constraint for a contact whose body pair hit the body-pair cache: the previous
+* step's cached manifold is carried forward verbatim and its body-local points and lambdas feed
+* constraint setup directly. no narrowphase, no world-to-local round trip, no point matching. a
+* ContactManifold is only reconstructed when a listener wants onContactPersisted.
+* jolt: ContactConstraintManager::GetContactsFromCache.
+*
+* bodyA / bodyB must be in the contact's stored (id-sorted) order.
+*/
+function addContactConstraintFromCache(contactConstraints, contactsState, bodyA, bodyB, contact, settings, contactListener, deltaTime, stepStamp) {
+	contact.lastProcessedFrame = contactsState.frameStamp;
+	const prev = getReadManifold(contact, contactsState);
+	const curr = getWriteManifold(contact, contactsState);
+	const numContactPoints = prev.numContactPoints;
+	copy$9(curr.contactNormal, prev.contactNormal);
+	curr.numContactPoints = numContactPoints;
+	for (let i = 0; i < numContactPoints; i++) {
+		const prevPoint = prev.contactPoints[i];
+		const currPoint = curr.contactPoints[i];
+		copy$9(currPoint.position1, prevPoint.position1);
+		copy$9(currPoint.position2, prevPoint.position2);
+		currPoint.normalLambda = prevPoint.normalLambda;
+	}
+	curr.frictionLambda1 = prev.frictionLambda1;
+	curr.frictionLambda2 = prev.frictionLambda2;
+	curr.angularFrictionLambda = prev.angularFrictionLambda;
+	curr.flags |= 1;
+	const rotA = fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
+	const rotB = fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
+	const worldSpaceNormal = _fromCache_worldSpaceNormal;
+	multiply3x3Vec(worldSpaceNormal, rotB, prev.contactNormal);
+	normalize$2(worldSpaceNormal, worldSpaceNormal);
+	const positionsA = _fromCache_positionsA;
+	const positionsB = _fromCache_positionsB;
+	for (let i = 0; i < numContactPoints; i++) {
+		const prevPoint = prev.contactPoints[i];
+		multiply3x3Vec(positionsA[i], rotA, prevPoint.position1);
+		add$3(positionsA[i], positionsA[i], bodyA.centerOfMassPosition);
+		multiply3x3Vec(positionsB[i], rotB, prevPoint.position2);
+		add$3(positionsB[i], positionsB[i], bodyB.centerOfMassPosition);
+	}
+	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
+	if (contactListener?.onContactPersisted) {
+		const listenerManifold = _fromCache_listenerManifold;
+		resetContactManifold(listenerManifold);
+		copy$9(listenerManifold.worldSpaceNormal, worldSpaceNormal);
+		copy$9(listenerManifold.baseOffset, bodyA.centerOfMassPosition);
+		let maxPenetration = -Number.MAX_VALUE;
+		for (let i = 0; i < numContactPoints; i++) {
+			const o = i * 3;
+			listenerManifold.relativeContactPointsOnA[o] = positionsA[i][0] - bodyA.centerOfMassPosition[0];
+			listenerManifold.relativeContactPointsOnA[o + 1] = positionsA[i][1] - bodyA.centerOfMassPosition[1];
+			listenerManifold.relativeContactPointsOnA[o + 2] = positionsA[i][2] - bodyA.centerOfMassPosition[2];
+			listenerManifold.relativeContactPointsOnB[o] = positionsB[i][0] - bodyA.centerOfMassPosition[0];
+			listenerManifold.relativeContactPointsOnB[o + 1] = positionsB[i][1] - bodyA.centerOfMassPosition[1];
+			listenerManifold.relativeContactPointsOnB[o + 2] = positionsB[i][2] - bodyA.centerOfMassPosition[2];
+			sub(_fromCache_diffAB, positionsA[i], positionsB[i]);
+			const d = dot$2(_fromCache_diffAB, worldSpaceNormal);
+			if (d > maxPenetration) maxPenetration = d;
+		}
+		listenerManifold.numContactPoints = numContactPoints;
+		listenerManifold.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
+		listenerManifold.subShapeIdA = contact.subShapeIdA;
+		listenerManifold.subShapeIdB = contact.subShapeIdB;
+		listenerManifold.materialIdA = getShapeMaterial(bodyA.shape, contact.subShapeIdA);
+		listenerManifold.materialIdB = getShapeMaterial(bodyB.shape, contact.subShapeIdB);
+		contactListener.onContactPersisted(bodyA, bodyB, listenerManifold, contactSettings);
+	}
+	if (!contactSettings.isSensor && (bodyA.motionType === 2 && contactSettings.invMassScale1 !== 0 || bodyB.motionType === 2 && contactSettings.invMassScale2 !== 0)) {
+		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contact.subShapeIdA, contact.subShapeIdB, contact.contactIndex, worldSpaceNormal, contactSettings, stepStamp);
+		const deltaCom = subtract$1(_addContactConstraint_deltaCom, bodyA.centerOfMassPosition, bodyB.centerOfMassPosition);
+		for (let i = 0; i < numContactPoints; i++) {
+			const cp = constraint.contactPoints[i];
+			constraint.numContactPoints++;
+			const prevPoint = prev.contactPoints[i];
+			copy$9(cp.positionA, positionsA[i]);
+			copy$9(cp.positionB, positionsB[i]);
+			copy$9(cp.localPositionA, prevPoint.position1);
+			copy$9(cp.localPositionB, prevPoint.position2);
+			cp.normalConstraint.totalLambda = prevPoint.normalLambda;
+			const rA = multiply3x3Vec(_addContactConstraint_rAs[i], rotA, prevPoint.position1);
+			const rB = multiply3x3Vec(_addContactConstraint_rBs[i], rotB, prevPoint.position2);
+			const penetration = (rA[0] - rB[0] + deltaCom[0]) * worldSpaceNormal[0] + (rA[1] - rB[1] + deltaCom[1]) * worldSpaceNormal[1] + (rA[2] - rB[2] + deltaCom[2]) * worldSpaceNormal[2];
+			setupContactPoint(constraint, i, bodyA, bodyB, rA, rB, penetration, contactSettings, settings, deltaTime);
+		}
+		setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
+		return true;
+	}
+	for (let i = 0; i < numContactPoints; i++) curr.contactPoints[i].normalLambda = 0;
+	curr.frictionLambda1 = 0;
+	curr.frictionLambda2 = 0;
+	curr.angularFrictionLambda = 0;
+	return false;
+}
+function createWorldContactPoint() {
+	return {
+		positionA: create$47(),
+		positionB: create$47(),
+		localPositionA: create$47(),
+		localPositionB: create$47(),
+		normalConstraint: create$28(),
+		distanceToFrictionCenter: 0
+	};
+}
+function createContactConstraint() {
+	return {
+		bodyIndexA: -1,
+		bodyIndexB: -1,
+		subShapeIdA: EMPTY_SUB_SHAPE_ID,
+		subShapeIdB: EMPTY_SUB_SHAPE_ID,
+		normal: create$47(),
+		tangent1: create$47(),
+		tangent2: create$47(),
+		friction: .5,
+		restitution: 0,
+		numContactPoints: 0,
+		contactPoints: [
+			createWorldContactPoint(),
+			createWorldContactPoint(),
+			createWorldContactPoint(),
+			createWorldContactPoint()
+		],
+		frictionConstraint1: create$28(),
+		frictionConstraint2: create$28(),
+		angularFrictionConstraint: create$30(),
+		invMassA: 0,
+		invMassB: 0,
+		invInertiaScaleA: 1,
+		invInertiaScaleB: 1,
+		contactIndex: -1,
+		sortKeyHigh: 0,
+		sortKeyLow: 0
+	};
+}
+/**
+* apply warm start impulses from previous frame to give solver a good initial guess.
+* significantly improves convergence speed (~3x faster).
+*
+* velocities are loaded once per constraint into twelve LOCALS, every warm start accumulates into
+* those, then they are written back with DOF masking applied once. Locals rather than shared `Vec3`
+* scratch because a buffer the whole module can see cannot live in registers — that is worth ~1.75x
+* here, and it is why each part hands back its impulse (`warmStartLambda`) instead of mutating four
+* buffers for us.
+*
+* @param contactConstraints contact constraint state
+* @param constraintIndices an island's contact constraint indices, in their solve order
+* @param warmStartRatio scale factor for warm start impulses (usually 1.0)
+*/
+function warmStartVelocityConstraints(contactConstraints, bodies, constraintIndices, warmStartRatio) {
+	for (let i = 0; i < constraintIndices.length; i++) {
+		const constraint = contactConstraints.pool[constraintIndices[i]];
+		const bodyA = bodies.pool[constraint.bodyIndexA];
+		const bodyB = bodies.pool[constraint.bodyIndexB];
+		const isDynamicA = bodyA.motionType === 2;
+		const isDynamicB = bodyB.motionType === 2;
+		const { normal, tangent1, tangent2 } = constraint;
+		let linVelAx = 0;
+		let linVelAy = 0;
+		let linVelAz = 0;
+		let angVelAx = 0;
+		let angVelAy = 0;
+		let angVelAz = 0;
+		let linVelBx = 0;
+		let linVelBy = 0;
+		let linVelBz = 0;
+		let angVelBx = 0;
+		let angVelBy = 0;
+		let angVelBz = 0;
+		if (isDynamicA) {
+			const mpA = bodyA.motionProperties;
+			linVelAx = mpA.linearVelocity[0];
+			linVelAy = mpA.linearVelocity[1];
+			linVelAz = mpA.linearVelocity[2];
+			angVelAx = mpA.angularVelocity[0];
+			angVelAy = mpA.angularVelocity[1];
+			angVelAz = mpA.angularVelocity[2];
+		}
+		if (isDynamicB) {
+			const mpB = bodyB.motionProperties;
+			linVelBx = mpB.linearVelocity[0];
+			linVelBy = mpB.linearVelocity[1];
+			linVelBz = mpB.linearVelocity[2];
+			angVelBx = mpB.angularVelocity[0];
+			angVelBy = mpB.angularVelocity[1];
+			angVelBz = mpB.angularVelocity[2];
+		}
+		const invMassA = constraint.invMassA;
+		const invMassB = constraint.invMassB;
+		let applied = false;
+		if (isActive$4(constraint.frictionConstraint1) || isActive$4(constraint.frictionConstraint2)) {
+			const friction1 = constraint.frictionConstraint1;
+			const lambda1 = warmStartLambda(friction1, warmStartRatio);
+			if (lambda1 !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					const scale = lambda1 * invMassA;
+					const angular = friction1.invI1_r1PlusUxAxis;
+					linVelAx -= tangent1[0] * scale;
+					linVelAy -= tangent1[1] * scale;
+					linVelAz -= tangent1[2] * scale;
+					angVelAx -= angular[0] * lambda1;
+					angVelAy -= angular[1] * lambda1;
+					angVelAz -= angular[2] * lambda1;
+				}
+				if (isDynamicB) {
+					const scale = lambda1 * invMassB;
+					const angular = friction1.invI2_r2xAxis;
+					linVelBx += tangent1[0] * scale;
+					linVelBy += tangent1[1] * scale;
+					linVelBz += tangent1[2] * scale;
+					angVelBx += angular[0] * lambda1;
+					angVelBy += angular[1] * lambda1;
+					angVelBz += angular[2] * lambda1;
+				}
+			}
+			const friction2 = constraint.frictionConstraint2;
+			const lambda2 = warmStartLambda(friction2, warmStartRatio);
+			if (lambda2 !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					const scale = lambda2 * invMassA;
+					const angular = friction2.invI1_r1PlusUxAxis;
+					linVelAx -= tangent2[0] * scale;
+					linVelAy -= tangent2[1] * scale;
+					linVelAz -= tangent2[2] * scale;
+					angVelAx -= angular[0] * lambda2;
+					angVelAy -= angular[1] * lambda2;
+					angVelAz -= angular[2] * lambda2;
+				}
+				if (isDynamicB) {
+					const scale = lambda2 * invMassB;
+					const angular = friction2.invI2_r2xAxis;
+					linVelBx += tangent2[0] * scale;
+					linVelBy += tangent2[1] * scale;
+					linVelBz += tangent2[2] * scale;
+					angVelBx += angular[0] * lambda2;
+					angVelBy += angular[1] * lambda2;
+					angVelBz += angular[2] * lambda2;
+				}
+			}
+		}
+		if (isActive$5(constraint.angularFrictionConstraint)) {
+			const angularFriction = constraint.angularFrictionConstraint;
+			const lambda = warmStartLambda$1(angularFriction, warmStartRatio);
+			if (lambda !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					angVelAx -= angularFriction.invI1_Axis[0] * lambda;
+					angVelAy -= angularFriction.invI1_Axis[1] * lambda;
+					angVelAz -= angularFriction.invI1_Axis[2] * lambda;
+				}
+				if (isDynamicB) {
+					angVelBx += angularFriction.invI2_Axis[0] * lambda;
+					angVelBy += angularFriction.invI2_Axis[1] * lambda;
+					angVelBz += angularFriction.invI2_Axis[2] * lambda;
+				}
+			}
+		}
+		for (let j = 0; j < constraint.numContactPoints; j++) {
+			const normalConstraint = constraint.contactPoints[j].normalConstraint;
+			const lambda = warmStartLambda(normalConstraint, warmStartRatio);
+			if (lambda === 0) continue;
+			applied = true;
+			if (isDynamicA) {
+				const scale = lambda * invMassA;
+				const angular = normalConstraint.invI1_r1PlusUxAxis;
+				linVelAx -= normal[0] * scale;
+				linVelAy -= normal[1] * scale;
+				linVelAz -= normal[2] * scale;
+				angVelAx -= angular[0] * lambda;
+				angVelAy -= angular[1] * lambda;
+				angVelAz -= angular[2] * lambda;
+			}
+			if (isDynamicB) {
+				const scale = lambda * invMassB;
+				const angular = normalConstraint.invI2_r2xAxis;
+				linVelBx += normal[0] * scale;
+				linVelBy += normal[1] * scale;
+				linVelBz += normal[2] * scale;
+				angVelBx += angular[0] * lambda;
+				angVelBy += angular[1] * lambda;
+				angVelBz += angular[2] * lambda;
+			}
+		}
+		if (!applied) continue;
+		if (isDynamicA) {
+			const mpA = bodyA.motionProperties;
+			const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
+			mpA.linearVelocity[0] = allowedTranslationA & 1 ? linVelAx : 0;
+			mpA.linearVelocity[1] = allowedTranslationA & 2 ? linVelAy : 0;
+			mpA.linearVelocity[2] = allowedTranslationA & 4 ? linVelAz : 0;
+			mpA.angularVelocity[0] = angVelAx;
+			mpA.angularVelocity[1] = angVelAy;
+			mpA.angularVelocity[2] = angVelAz;
+		}
+		if (isDynamicB) {
+			const mpB = bodyB.motionProperties;
+			const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
+			mpB.linearVelocity[0] = allowedTranslationB & 1 ? linVelBx : 0;
+			mpB.linearVelocity[1] = allowedTranslationB & 2 ? linVelBy : 0;
+			mpB.linearVelocity[2] = allowedTranslationB & 4 ? linVelBz : 0;
+			mpB.angularVelocity[0] = angVelBx;
+			mpB.angularVelocity[1] = angVelBy;
+			mpB.angularVelocity[2] = angVelBz;
+		}
 	}
 }
 /**
-* Solve velocity constraint (one iteration).
-* Standard version - uses body's actual inverse mass.
-* Call this during velocity solver iterations.
+* solve velocity constraints for a specific island. only processes constraints at the given indices.
 *
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param axis constraint axis
-* @param minLambda minimum lambda (typically -Infinity for friction, 0 for normal)
-* @param maxLambda maximum lambda (typically +Infinity for normal, friction_coeff × normalLambda for friction)
-* @returns True if impulse was applied
+* for each constraint: velocities are loaded once into twelve LOCALS, every part solve reads and
+* accumulates into those, then they are written back with DOF masking applied once. The parts hand
+* back numbers — `totalLambdaFor` turns a jacobian-velocity product into an impulse, `deltaLambdaFor`
+* commits it — and this loop owns the velocity arithmetic, so nothing has to mutate a shared buffer.
+* A buffer the whole module can see cannot live in registers; that is worth ~1.75x on this loop.
+*
+* @param contactConstraints contact constraint state
+* @param bodies body array
+* @param constraintIndices indices of constraints to solve (from island)
+* @returns true if any impulse was applied (not yet converged)
 */
-function solveVelocityConstraint$2(part, bodyA, bodyB, axis, minLambda, maxLambda) {
-	return solveVelocityConstraintWithMassOverride(part, bodyA, bodyB, bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0, bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0, axis, minLambda, maxLambda);
-}
-/**
-* Calculate what the total lambda would be (without applying impulse).
-* Part 1 of two-step solve process.
-*
-* note: caller must check isActive() before calling this function
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param axis constraint axis
-* @returns new total lambda (unclamped)
-*/
-function getTotalLambda$2(part, bodyA, bodyB, axis) {
-	const movingA = bodyA.motionType !== 0;
-	const movingB = bodyB.motionType !== 0;
-	const mpA = bodyA.motionProperties;
-	const mpB = bodyB.motionProperties;
-	let jv;
-	if (movingA && movingB) {
-		const dx = mpA.linearVelocity[0] - mpB.linearVelocity[0];
-		const dy = mpA.linearVelocity[1] - mpB.linearVelocity[1];
-		const dz = mpA.linearVelocity[2] - mpB.linearVelocity[2];
-		jv = axis[0] * dx + axis[1] * dy + axis[2] * dz;
-	} else if (movingA) jv = axis[0] * mpA.linearVelocity[0] + axis[1] * mpA.linearVelocity[1] + axis[2] * mpA.linearVelocity[2];
-	else if (movingB) jv = -(axis[0] * mpB.linearVelocity[0] + axis[1] * mpB.linearVelocity[1] + axis[2] * mpB.linearVelocity[2]);
-	else jv = 0;
-	if (movingA) jv += part.r1PlusUxAxis[0] * mpA.angularVelocity[0] + part.r1PlusUxAxis[1] * mpA.angularVelocity[1] + part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
-	if (movingB) jv -= part.r2xAxis[0] * mpB.angularVelocity[0] + part.r2xAxis[1] * mpB.angularVelocity[1] + part.r2xAxis[2] * mpB.angularVelocity[2];
-	const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
-	return part.totalLambda + lambda;
-}
-/**
-* Apply a total lambda value (calculates delta and applies impulse).
-* Part 2 of two-step solve process.
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass override for body A
-* @param invMassB inverse mass override for body B
-* @param axis constraint axis
-* @param totalLambda new total lambda to apply
-* @returns true if impulse was applied
-*/
-function applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, totalLambda) {
-	const deltaLambda = totalLambda - part.totalLambda;
-	part.totalLambda = totalLambda;
-	if (deltaLambda === 0) return false;
-	const isDynamicA = bodyA.motionType === 2;
-	const isDynamicB = bodyB.motionType === 2;
-	const mpA = bodyA.motionProperties;
-	const mpB = bodyB.motionProperties;
-	if (isDynamicA) {
-		const linearScale = deltaLambda * invMassA;
-		mpA.linearVelocity[0] -= axis[0] * linearScale;
-		mpA.linearVelocity[1] -= axis[1] * linearScale;
-		mpA.linearVelocity[2] -= axis[2] * linearScale;
-		const allowedTranslation = mpA.allowedDegreesOfFreedom & 7;
-		if (!(allowedTranslation & 1)) mpA.linearVelocity[0] = 0;
-		if (!(allowedTranslation & 2)) mpA.linearVelocity[1] = 0;
-		if (!(allowedTranslation & 4)) mpA.linearVelocity[2] = 0;
-		const angularImpulse = part.invI1_r1PlusUxAxis;
-		mpA.angularVelocity[0] -= angularImpulse[0] * deltaLambda;
-		mpA.angularVelocity[1] -= angularImpulse[1] * deltaLambda;
-		mpA.angularVelocity[2] -= angularImpulse[2] * deltaLambda;
+function solveVelocityConstraintsForIsland(contactConstraints, bodies, constraintIndices) {
+	let anyImpulseApplied = false;
+	for (const constraintIndex of constraintIndices) {
+		const constraint = contactConstraints.pool[constraintIndex];
+		const bodyA = bodies.pool[constraint.bodyIndexA];
+		const bodyB = bodies.pool[constraint.bodyIndexB];
+		const isDynamicA = bodyA.motionType === 2;
+		const isDynamicB = bodyB.motionType === 2;
+		if (!isDynamicA && !isDynamicB) continue;
+		const movingA = bodyA.motionType !== 0;
+		const movingB = bodyB.motionType !== 0;
+		const { normal, tangent1, tangent2, friction } = constraint;
+		let linVelAx = 0;
+		let linVelAy = 0;
+		let linVelAz = 0;
+		let angVelAx = 0;
+		let angVelAy = 0;
+		let angVelAz = 0;
+		let linVelBx = 0;
+		let linVelBy = 0;
+		let linVelBz = 0;
+		let angVelBx = 0;
+		let angVelBy = 0;
+		let angVelBz = 0;
+		if (movingA) {
+			const mpA = bodyA.motionProperties;
+			linVelAx = mpA.linearVelocity[0];
+			linVelAy = mpA.linearVelocity[1];
+			linVelAz = mpA.linearVelocity[2];
+			angVelAx = mpA.angularVelocity[0];
+			angVelAy = mpA.angularVelocity[1];
+			angVelAz = mpA.angularVelocity[2];
+		}
+		if (movingB) {
+			const mpB = bodyB.motionProperties;
+			linVelBx = mpB.linearVelocity[0];
+			linVelBy = mpB.linearVelocity[1];
+			linVelBz = mpB.linearVelocity[2];
+			angVelBx = mpB.angularVelocity[0];
+			angVelBy = mpB.angularVelocity[1];
+			angVelBz = mpB.angularVelocity[2];
+		}
+		const invMassA = constraint.invMassA;
+		const invMassB = constraint.invMassB;
+		let applied = false;
+		const linearFrictionActive = isActive$4(constraint.frictionConstraint1) || isActive$4(constraint.frictionConstraint2);
+		const angularFrictionActive = isActive$5(constraint.angularFrictionConstraint);
+		let sumNormalLambda = 0;
+		let sumDistanceWeightedNormalLambda = 0;
+		if (linearFrictionActive || angularFrictionActive) for (let i = 0; i < constraint.numContactPoints; i++) {
+			const cp = constraint.contactPoints[i];
+			const ln = cp.normalConstraint.totalLambda;
+			sumNormalLambda += ln;
+			sumDistanceWeightedNormalLambda += cp.distanceToFrictionCenter * ln;
+		}
+		if (linearFrictionActive) {
+			const friction1 = constraint.frictionConstraint1;
+			const friction2 = constraint.frictionConstraint2;
+			let jv1x;
+			let jv1y;
+			let jv1z;
+			let jv2x;
+			let jv2y;
+			let jv2z;
+			if (movingA && movingB) {
+				const dx = linVelAx - linVelBx;
+				const dy = linVelAy - linVelBy;
+				const dz = linVelAz - linVelBz;
+				jv1x = tangent1[0] * dx;
+				jv1y = tangent1[1] * dy;
+				jv1z = tangent1[2] * dz;
+				jv2x = tangent2[0] * dx;
+				jv2y = tangent2[1] * dy;
+				jv2z = tangent2[2] * dz;
+			} else if (movingA) {
+				jv1x = tangent1[0] * linVelAx;
+				jv1y = tangent1[1] * linVelAy;
+				jv1z = tangent1[2] * linVelAz;
+				jv2x = tangent2[0] * linVelAx;
+				jv2y = tangent2[1] * linVelAy;
+				jv2z = tangent2[2] * linVelAz;
+			} else if (movingB) {
+				jv1x = tangent1[0] * -linVelBx;
+				jv1y = tangent1[1] * -linVelBy;
+				jv1z = tangent1[2] * -linVelBz;
+				jv2x = tangent2[0] * -linVelBx;
+				jv2y = tangent2[1] * -linVelBy;
+				jv2z = tangent2[2] * -linVelBz;
+			} else {
+				jv1x = jv1y = jv1z = 0;
+				jv2x = jv2y = jv2z = 0;
+			}
+			if (movingA) {
+				const r1 = friction1.r1PlusUxAxis;
+				const r2 = friction2.r1PlusUxAxis;
+				jv1x += r1[0] * angVelAx;
+				jv1y += r1[1] * angVelAy;
+				jv1z += r1[2] * angVelAz;
+				jv2x += r2[0] * angVelAx;
+				jv2y += r2[1] * angVelAy;
+				jv2z += r2[2] * angVelAz;
+			}
+			if (movingB) {
+				const r1 = friction1.r2xAxis;
+				const r2 = friction2.r2xAxis;
+				jv1x -= r1[0] * angVelBx;
+				jv1y -= r1[1] * angVelBy;
+				jv1z -= r1[2] * angVelBz;
+				jv2x -= r2[0] * angVelBx;
+				jv2y -= r2[1] * angVelBy;
+				jv2z -= r2[2] * angVelBz;
+			}
+			const jv1 = jv1x + jv1y + jv1z;
+			const jv2 = jv2x + jv2y + jv2z;
+			let lambda1 = totalLambdaFor(friction1, jv1);
+			let lambda2 = totalLambdaFor(friction2, jv2);
+			const maxLinearFriction = friction * sumNormalLambda;
+			const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
+			if (frictionMagnitudeSq > maxLinearFriction * maxLinearFriction + 22250738585072014e-324) {
+				const scale = maxLinearFriction / Math.sqrt(frictionMagnitudeSq);
+				lambda1 *= scale;
+				lambda2 *= scale;
+			}
+			const delta1 = deltaLambdaFor(friction1, lambda1);
+			if (delta1 !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					const scale = delta1 * invMassA;
+					const angular = friction1.invI1_r1PlusUxAxis;
+					linVelAx -= tangent1[0] * scale;
+					linVelAy -= tangent1[1] * scale;
+					linVelAz -= tangent1[2] * scale;
+					angVelAx -= angular[0] * delta1;
+					angVelAy -= angular[1] * delta1;
+					angVelAz -= angular[2] * delta1;
+				}
+				if (isDynamicB) {
+					const scale = delta1 * invMassB;
+					const angular = friction1.invI2_r2xAxis;
+					linVelBx += tangent1[0] * scale;
+					linVelBy += tangent1[1] * scale;
+					linVelBz += tangent1[2] * scale;
+					angVelBx += angular[0] * delta1;
+					angVelBy += angular[1] * delta1;
+					angVelBz += angular[2] * delta1;
+				}
+			}
+			const delta2 = deltaLambdaFor(friction2, lambda2);
+			if (delta2 !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					const scale = delta2 * invMassA;
+					const angular = friction2.invI1_r1PlusUxAxis;
+					linVelAx -= tangent2[0] * scale;
+					linVelAy -= tangent2[1] * scale;
+					linVelAz -= tangent2[2] * scale;
+					angVelAx -= angular[0] * delta2;
+					angVelAy -= angular[1] * delta2;
+					angVelAz -= angular[2] * delta2;
+				}
+				if (isDynamicB) {
+					const scale = delta2 * invMassB;
+					const angular = friction2.invI2_r2xAxis;
+					linVelBx += tangent2[0] * scale;
+					linVelBy += tangent2[1] * scale;
+					linVelBz += tangent2[2] * scale;
+					angVelBx += angular[0] * delta2;
+					angVelBy += angular[1] * delta2;
+					angVelBz += angular[2] * delta2;
+				}
+			}
+		}
+		if (angularFrictionActive) {
+			const angularFriction = constraint.angularFrictionConstraint;
+			let jv = 0;
+			if (movingA) jv += normal[0] * angVelAx + normal[1] * angVelAy + normal[2] * angVelAz;
+			if (movingB) jv -= normal[0] * angVelBx + normal[1] * angVelBy + normal[2] * angVelBz;
+			const unclamped = totalLambdaFor$1(angularFriction, jv);
+			const maxAngularFriction = friction * sumDistanceWeightedNormalLambda;
+			const delta = deltaLambdaFor$1(angularFriction, Math.max(-maxAngularFriction, Math.min(maxAngularFriction, unclamped)));
+			if (delta !== 0) {
+				applied = true;
+				if (isDynamicA) {
+					angVelAx -= angularFriction.invI1_Axis[0] * delta;
+					angVelAy -= angularFriction.invI1_Axis[1] * delta;
+					angVelAz -= angularFriction.invI1_Axis[2] * delta;
+				}
+				if (isDynamicB) {
+					angVelBx += angularFriction.invI2_Axis[0] * delta;
+					angVelBy += angularFriction.invI2_Axis[1] * delta;
+					angVelBz += angularFriction.invI2_Axis[2] * delta;
+				}
+			}
+		}
+		for (let i = 0; i < constraint.numContactPoints; i++) {
+			const normalConstraint = constraint.contactPoints[i].normalConstraint;
+			let jvx;
+			let jvy;
+			let jvz;
+			if (movingA && movingB) {
+				jvx = normal[0] * (linVelAx - linVelBx);
+				jvy = normal[1] * (linVelAy - linVelBy);
+				jvz = normal[2] * (linVelAz - linVelBz);
+			} else if (movingA) {
+				jvx = normal[0] * linVelAx;
+				jvy = normal[1] * linVelAy;
+				jvz = normal[2] * linVelAz;
+			} else if (movingB) {
+				jvx = normal[0] * -linVelBx;
+				jvy = normal[1] * -linVelBy;
+				jvz = normal[2] * -linVelBz;
+			} else jvx = jvy = jvz = 0;
+			if (movingA) {
+				const r = normalConstraint.r1PlusUxAxis;
+				jvx += r[0] * angVelAx;
+				jvy += r[1] * angVelAy;
+				jvz += r[2] * angVelAz;
+			}
+			if (movingB) {
+				const r = normalConstraint.r2xAxis;
+				jvx -= r[0] * angVelBx;
+				jvy -= r[1] * angVelBy;
+				jvz -= r[2] * angVelBz;
+			}
+			const jv = jvx + jvy + jvz;
+			const delta = deltaLambdaFor(normalConstraint, Math.max(0, totalLambdaFor(normalConstraint, jv)));
+			if (delta === 0) continue;
+			applied = true;
+			if (isDynamicA) {
+				const scale = delta * invMassA;
+				const angular = normalConstraint.invI1_r1PlusUxAxis;
+				linVelAx -= normal[0] * scale;
+				linVelAy -= normal[1] * scale;
+				linVelAz -= normal[2] * scale;
+				angVelAx -= angular[0] * delta;
+				angVelAy -= angular[1] * delta;
+				angVelAz -= angular[2] * delta;
+			}
+			if (isDynamicB) {
+				const scale = delta * invMassB;
+				const angular = normalConstraint.invI2_r2xAxis;
+				linVelBx += normal[0] * scale;
+				linVelBy += normal[1] * scale;
+				linVelBz += normal[2] * scale;
+				angVelBx += angular[0] * delta;
+				angVelBy += angular[1] * delta;
+				angVelBz += angular[2] * delta;
+			}
+		}
+		if (!applied) continue;
+		anyImpulseApplied = true;
+		if (isDynamicA) {
+			const mpA = bodyA.motionProperties;
+			const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
+			mpA.linearVelocity[0] = allowedTranslationA & 1 ? linVelAx : 0;
+			mpA.linearVelocity[1] = allowedTranslationA & 2 ? linVelAy : 0;
+			mpA.linearVelocity[2] = allowedTranslationA & 4 ? linVelAz : 0;
+			mpA.angularVelocity[0] = angVelAx;
+			mpA.angularVelocity[1] = angVelAy;
+			mpA.angularVelocity[2] = angVelAz;
+		}
+		if (isDynamicB) {
+			const mpB = bodyB.motionProperties;
+			const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
+			mpB.linearVelocity[0] = allowedTranslationB & 1 ? linVelBx : 0;
+			mpB.linearVelocity[1] = allowedTranslationB & 2 ? linVelBy : 0;
+			mpB.linearVelocity[2] = allowedTranslationB & 4 ? linVelBz : 0;
+			mpB.angularVelocity[0] = angVelBx;
+			mpB.angularVelocity[1] = angVelBy;
+			mpB.angularVelocity[2] = angVelBz;
+		}
 	}
-	if (isDynamicB) {
-		const linearScale = deltaLambda * invMassB;
-		mpB.linearVelocity[0] += axis[0] * linearScale;
-		mpB.linearVelocity[1] += axis[1] * linearScale;
-		mpB.linearVelocity[2] += axis[2] * linearScale;
-		const allowedTranslation = mpB.allowedDegreesOfFreedom & 7;
-		if (!(allowedTranslation & 1)) mpB.linearVelocity[0] = 0;
-		if (!(allowedTranslation & 2)) mpB.linearVelocity[1] = 0;
-		if (!(allowedTranslation & 4)) mpB.linearVelocity[2] = 0;
-		const angularImpulse = part.invI2_r2xAxis;
-		mpB.angularVelocity[0] += angularImpulse[0] * deltaLambda;
-		mpB.angularVelocity[1] += angularImpulse[1] * deltaLambda;
-		mpB.angularVelocity[2] += angularImpulse[2] * deltaLambda;
-	}
-	return true;
+	return anyImpulseApplied;
 }
 /**
-* Solve velocity constraint (one iteration) with mass override.
-* Combines getTotalLambda + clamp + applyLambda in one call.
-* Mass override version - allows custom inverse mass values (for soft contacts, etc.).
-* Call this during velocity solver iterations.
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass override for body A (only used when body A is dynamic)
-* @param invMassB inverse mass override for body B (only used when body B is dynamic)
-* @param axis constraint axis
-* @param minLambda minimum lambda (typically -Infinity for friction, 0 for normal)
-* @param maxLambda maximum lambda (typically +Infinity for normal, friction_coeff × normalLambda for friction)
-* @returns true if impulse was applied
+* Store solved impulses back to Contact array for warm starting next frame.
+* Must be called after solveVelocityConstraints to persist the solved lambda values.
+* @param contactConstraints contact constraint state
+* @param contactsState contacts state
 */
-function solveVelocityConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, minLambda, maxLambda) {
-	const totalLambda = getTotalLambda$2(part, bodyA, bodyB, axis);
-	return applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, Math.max(minLambda, Math.min(maxLambda, totalLambda)));
-}
-const _acp_sp_impulse = /* @__PURE__ */ create$47();
-const _acp_sp_angularStep = /* @__PURE__ */ create$47();
-/**
-* Solve position constraint (Baumgarte stabilization).
-* Standard version - uses body's actual inverse mass.
-* Call this during position solver iterations.
-*
-* Note: Position constraints are only applied for hard constraints, not soft springs.
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param axis constraint axis
-* @param C constraint error (penetration depth, or 0 if separated)
-* @param baumgarte baumgarte stabilization factor (typically 0.2)
-* @returns true if position correction was applied
-*/
-function solvePositionConstraint$2(part, bodyA, bodyB, axis, C, baumgarte) {
-	return solvePositionConstraintWithMassOverride(part, bodyA, bodyB, bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0, bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0, axis, C, baumgarte);
-}
-/**
-* Solve position constraint (Baumgarte stabilization) with mass override.
-* Mass override version - allows custom inverse mass values (for soft contacts, etc.).
-* Call this during position solver iterations.
-*
-* Note: Position constraints are only applied for hard constraints, not soft springs.
-*
-* @param part the constraint part
-* @param bodyA first body
-* @param bodyB second body
-* @param invMassA inverse mass override for body A (only used when body A is dynamic)
-* @param invMassB inverse mass override for body B (only used when body B is dynamic)
-* @param axis constraint axis
-* @param C constraint error (penetration depth, or 0 if separated)
-* @param baumgarte baumgarte stabilization factor (typically 0.2)
-* @returns true if position correction was applied
-*/
-function solvePositionConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, C, baumgarte) {
-	if (C === 0 || !isActive$3(part) || isSpringActive(part.springPart)) return false;
-	const lambda = -part.effectiveMass * baumgarte * C;
-	if (bodyA.motionType === 2) {
-		scale$4(_acp_sp_impulse, axis, lambda * invMassA);
-		subPositionStep(bodyA, _acp_sp_impulse);
-		scale$4(_acp_sp_angularStep, part.invI1_r1PlusUxAxis, lambda);
-		subRotationStep(bodyA, _acp_sp_angularStep);
+function storeAppliedImpulses(contactConstraints, contactsState) {
+	for (let i = 0; i < contactConstraints.count; i++) {
+		const constraint = contactConstraints.pool[i];
+		const contact = contactsState.contacts[constraint.contactIndex];
+		const curr = getWriteManifold(contact, contactsState);
+		for (let j = 0; j < constraint.numContactPoints; j++) curr.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
+		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
+		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
+		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
 	}
-	if (bodyB.motionType === 2) {
-		scale$4(_acp_sp_impulse, axis, lambda * invMassB);
-		addPositionStep(bodyB, _acp_sp_impulse);
-		scale$4(_acp_sp_angularStep, part.invI2_r2xAxis, lambda);
-		addRotationStep(bodyB, _acp_sp_angularStep);
+}
+const _solvePos_rA = /* @__PURE__ */ create$47();
+const _solvePos_rB = /* @__PURE__ */ create$47();
+const _solvePos_invInertiaA = /* @__PURE__ */ create$41();
+const _solvePos_invInertiaB = /* @__PURE__ */ create$41();
+const _solvePos_rotA = /* @__PURE__ */ create$41();
+const _solvePos_rotB = /* @__PURE__ */ create$41();
+/**
+* Solve position constraints for a specific island. Only processes constraints at the given indices.
+*
+* @param contactConstraints contact constraint state
+* @param bodies body array
+* @param constraintIndices indices of constraints to solve (from island)
+* @param penetrationSlop allowed penetration before correction
+* @param baumgarteFactor position correction factor 0-1
+* @param maxPenetrationDistance maximum distance to correct in a single iteration
+* @returns true if any impulses were applied
+*
+*/
+function solvePositionConstraintsForIsland(contactConstraints, bodies, constraintIndices, penetrationSlop, baumgarteFactor, maxPenetrationDistance) {
+	let anyImpulseApplied = false;
+	for (const constraintIndex of constraintIndices) {
+		const constraint = contactConstraints.pool[constraintIndex];
+		if (!constraint) continue;
+		const bodyA = bodies.pool[constraint.bodyIndexA];
+		const bodyB = bodies.pool[constraint.bodyIndexB];
+		const { normal } = constraint;
+		if (bodyA.motionType !== 2 && bodyB.motionType !== 2) continue;
+		fromQuat(_solvePos_rotA, bodyA.quaternion);
+		fromQuat(_solvePos_rotB, bodyB.quaternion);
+		const deltaComX = bodyA.centerOfMassPosition[0] - bodyB.centerOfMassPosition[0];
+		const deltaComY = bodyA.centerOfMassPosition[1] - bodyB.centerOfMassPosition[1];
+		const deltaComZ = bodyA.centerOfMassPosition[2] - bodyB.centerOfMassPosition[2];
+		let inertiaComputed = false;
+		for (let i = 0; i < constraint.numContactPoints; i++) {
+			const cp = constraint.contactPoints[i];
+			const rA = multiply3x3Vec(_solvePos_rA, _solvePos_rotA, cp.localPositionA);
+			const rB = multiply3x3Vec(_solvePos_rB, _solvePos_rotB, cp.localPositionB);
+			let separation = (rB[0] - rA[0] - deltaComX) * normal[0] + (rB[1] - rA[1] - deltaComY) * normal[1] + (rB[2] - rA[2] - deltaComZ) * normal[2] + penetrationSlop;
+			separation = Math.max(separation, -maxPenetrationDistance);
+			if (separation >= 0) continue;
+			if (!inertiaComputed) {
+				inertiaComputed = true;
+				if (bodyA.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
+				if (bodyB.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
+			}
+			calculateConstraintPropertiesWithMassOverride(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaScaleA, constraint.invInertiaScaleB, _solvePos_invInertiaA, _solvePos_invInertiaB, rA, rB, normal, 0);
+			if (solvePositionConstraintWithMassOverride(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, normal, separation, baumgarteFactor)) anyImpulseApplied = true;
+		}
 	}
-	return true;
+	return anyImpulseApplied;
+}
+let _sortKeyHigh = 0;
+let _sortKeyLow = 0;
+/** fold the four little endian bytes of a u32 into the 64 bit fnv-1a hash held in _sortKeyHigh / _sortKeyLow */
+function fnv1a64Word(word) {
+	let high = _sortKeyHigh;
+	let low = _sortKeyLow;
+	for (let byte = 0; byte < 4; byte++) {
+		low = (low ^ word >>> byte * 8 & 255) >>> 0;
+		const lowProduct = low * 435;
+		high = Math.imul(high, 435) + Math.floor(lowProduct / 4294967296) + (low << 8) >>> 0;
+		low = lowProduct >>> 0;
+	}
+	_sortKeyHigh = high;
+	_sortKeyLow = low;
+}
+/**
+* the contact's sort key: the 64 bit fnv-1a hash of body id a, sub shape id a, body id b, sub shape id b, each id
+* as its little endian bytes (a body id as 8: index then sequence), stored as two u32 halves
+* (jolt: SubShapeIDPair::GetHash, over 4 byte body ids)
+*/
+function computeContactSortKey(out, bodyIdA, subShapeIdA, bodyIdB, subShapeIdB) {
+	_sortKeyHigh = 3421674724;
+	_sortKeyLow = 2216829733;
+	fnv1a64Word(bodyIdA >>> 0);
+	fnv1a64Word(Math.floor(bodyIdA / 4294967296));
+	fnv1a64Word(subShapeIdA);
+	fnv1a64Word(bodyIdB >>> 0);
+	fnv1a64Word(Math.floor(bodyIdB / 4294967296));
+	fnv1a64Word(subShapeIdB);
+	out.sortKeyHigh = _sortKeyHigh;
+	out.sortKeyLow = _sortKeyLow;
+}
+/**
+* Sort contact constraint indices for deterministic solving.
+* Sorts by:
+* 1. Sort key (hash of body pair + sub-shapes)
+* 2. Body A ID
+* 3. Body B ID
+*/
+function sortContactIndices(contactConstraints, bodies, contactIndices) {
+	contactIndices.sort((aIdx, bIdx) => {
+		const a = contactConstraints.pool[aIdx];
+		const b = contactConstraints.pool[bIdx];
+		if (!a || !b) return 0;
+		if (a.sortKeyHigh !== b.sortKeyHigh) return a.sortKeyHigh - b.sortKeyHigh;
+		if (a.sortKeyLow !== b.sortKeyLow) return a.sortKeyLow - b.sortKeyLow;
+		const bodyAIdA = bodies.pool[a.bodyIndexA]?.id ?? 0;
+		const bodyAIdB = bodies.pool[b.bodyIndexA]?.id ?? 0;
+		if (bodyAIdA !== bodyAIdB) return bodyAIdA - bodyAIdB;
+		return (bodies.pool[a.bodyIndexB]?.id ?? 0) - (bodies.pool[b.bodyIndexB]?.id ?? 0);
+	});
 }
 //#endregion
 //#region src/constraints/distance-constraint.ts
 var distance_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$22,
+	create: () => create$21,
 	def: () => def$18,
 	get: () => get$6,
 	getTotalLambda: () => getTotalLambda$1,
@@ -14883,13 +17267,13 @@ function makeDistanceConstraint() {
 		localSpacePosition2: create$47(),
 		minDistance: 0,
 		maxDistance: 0,
-		limitsSpringSettings: create$30(),
+		limitsSpringSettings: create$29(),
 		worldSpacePosition1: create$47(),
 		worldSpacePosition2: create$47(),
 		worldSpaceNormal: fromValues$2(0, 1, 0),
 		minLambda: 0,
 		maxLambda: 0,
-		axisConstraint: create$23()
+		axisConstraint: create$28()
 	};
 }
 /** reset constraint state for pooling reuse */
@@ -14897,10 +17281,10 @@ function resetConstraint$6(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$3(constraint.axisConstraint);
+	deactivate$6(constraint.axisConstraint);
 }
 /** create a distance constraint */
-function create$22(world, settings) {
+function create$21(world, settings) {
 	const pool = ensurePool(world.constraints, 1);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -14961,6 +17345,7 @@ function create$22(world, settings) {
 	else reset$1(constraint.limitsSpringSettings);
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a distance constraint */
@@ -14974,6 +17359,7 @@ function remove$6(world, constraint) {
 	resetConstraint$6(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** get distance constraint by id */
@@ -15013,18 +17399,18 @@ function calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTi
 	if (mpA) copy$5(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, stepStamp));
 	if (mpB) copy$5(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, stepStamp));
 	if (constraint.minDistance === constraint.maxDistance) {
-		calculateConstraintPropertiesWithSettings(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.minDistance, constraint.limitsSpringSettings);
+		calculateConstraintPropertiesWithSettings$1(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.minDistance, constraint.limitsSpringSettings);
 		constraint.minLambda = -Infinity;
 		constraint.maxLambda = Infinity;
 	} else if (deltaLen <= constraint.minDistance) {
-		calculateConstraintPropertiesWithSettings(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.minDistance, constraint.limitsSpringSettings);
+		calculateConstraintPropertiesWithSettings$1(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.minDistance, constraint.limitsSpringSettings);
 		constraint.minLambda = 0;
 		constraint.maxLambda = Infinity;
 	} else if (deltaLen >= constraint.maxDistance) {
-		calculateConstraintPropertiesWithSettings(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.maxDistance, constraint.limitsSpringSettings);
+		calculateConstraintPropertiesWithSettings$1(constraint.axisConstraint, deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, r1PlusU, r2, constraint.worldSpaceNormal, 0, deltaLen - constraint.maxDistance, constraint.limitsSpringSettings);
 		constraint.minLambda = -Infinity;
 		constraint.maxLambda = 0;
-	} else deactivate$3(constraint.axisConstraint);
+	} else deactivate$6(constraint.axisConstraint);
 }
 function setupVelocity$6(constraint, bodies, deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -15038,14 +17424,14 @@ function warmStartVelocity$6(constraint, bodies, warmStartImpulseRatio) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	const invMassA = bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0;
 	const invMassB = bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0;
-	warmStart$2(constraint.axisConstraint, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceNormal, warmStartImpulseRatio);
+	warmStart$6(constraint.axisConstraint, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceNormal, warmStartImpulseRatio);
 }
 function solveVelocity$6(constraint, bodies, _deltaTime) {
-	if (!isActive$3(constraint.axisConstraint)) return false;
+	if (!isActive$4(constraint.axisConstraint)) return false;
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
-	return solveVelocityConstraint$2(constraint.axisConstraint, bodyA, bodyB, constraint.worldSpaceNormal, constraint.minLambda, constraint.maxLambda);
+	return solveVelocityConstraint$6(constraint.axisConstraint, bodyA, bodyB, constraint.worldSpaceNormal, constraint.minLambda, constraint.maxLambda);
 }
 function solvePosition$6(constraint, bodies, deltaTime, baumgarteFactor) {
 	if (constraint.limitsSpringSettings.frequencyOrStiffness > 0) return false;
@@ -15058,10 +17444,10 @@ function solvePosition$6(constraint, bodies, deltaTime, baumgarteFactor) {
 	else if (distance > constraint.maxDistance) positionError = distance - constraint.maxDistance;
 	if (positionError === 0) return false;
 	calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, -1);
-	return solvePositionConstraint$2(constraint.axisConstraint, bodyA, bodyB, constraint.worldSpaceNormal, positionError, baumgarteFactor);
+	return solvePositionConstraint$6(constraint.axisConstraint, bodyA, bodyB, constraint.worldSpaceNormal, positionError, baumgarteFactor);
 }
 function resetWarmStart$6(constraint) {
-	deactivate$3(constraint.axisConstraint);
+	deactivate$6(constraint.axisConstraint);
 }
 /**
 * Get total accumulated impulse (lambda) from distance constraint.
@@ -15094,13 +17480,13 @@ const def$18 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/fixed-constraint.ts
 var fixed_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$21,
+	create: () => create$20,
 	def: () => def$17,
 	get: () => get$5,
 	getTotalLambdaPosition: () => getTotalLambdaPosition$2,
@@ -15114,8 +17500,8 @@ function makeFixedConstraint() {
 		localSpacePosition1: create$47(),
 		localSpacePosition2: create$47(),
 		invInitialOrientation: create$44(),
-		pointConstraintPart: create$28(),
-		rotationConstraintPart: create$25()
+		pointConstraintPart: create$26(),
+		rotationConstraintPart: create$23()
 	};
 }
 /** reset constraint state for pooling reuse */
@@ -15123,11 +17509,11 @@ function resetConstraint$5(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$6(constraint.pointConstraintPart);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
 }
 /** create a fixed constraint */
-function create$21(world, settings) {
+function create$20(world, settings) {
 	const pool = ensurePool(world.constraints, 4);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -15211,6 +17597,7 @@ function create$21(world, settings) {
 	}
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a fixed constraint */
@@ -15224,6 +17611,7 @@ function remove$5(world, constraint) {
 	resetConstraint$5(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** get fixed constraint by id */
@@ -15243,22 +17631,22 @@ function setupVelocity$5(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, bodies.stepStamp);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, bodies.stepStamp);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 }
 function warmStartVelocity$5(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	warmStart$4(constraint.rotationConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$3(constraint.rotationConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 function solveVelocity$5(constraint, bodies, _deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
-	const rot = solveVelocityConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB);
-	const pos = solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB);
+	const rot = solveVelocityConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB);
+	const pos = solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB);
 	return rot || pos;
 }
 function solvePosition$5(constraint, bodies, _deltaTime, baumgarteFactor) {
@@ -15267,17 +17655,17 @@ function solvePosition$5(constraint, bodies, _deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, -1);
-	const rot = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
+	calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, _fixedConstraint_rotA, bodyB, _fixedConstraint_rotB, -1);
+	const rot = solvePositionConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
 	fromQuat(_fixedConstraint_rotA, bodyA.quaternion);
 	fromQuat(_fixedConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, -1);
-	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _fixedConstraint_rotA, constraint.localSpacePosition1, bodyB, _fixedConstraint_rotB, constraint.localSpacePosition2, -1);
+	const pos = solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	return rot || pos;
 }
 function resetWarmStart$5(constraint) {
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$6(constraint.pointConstraintPart);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
 }
 /** Get total lambda for position constraint (for debugging/inspection) */
 function getTotalLambdaPosition$2(out, constraint) {
@@ -15307,13 +17695,13 @@ const def$17 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/constraint-part/hinge-rotation-constraint-part.ts
 /** Create a new HingeRotationConstraintPart with zero-initialized values */
-function create$20() {
+function create$19() {
 	return {
 		a1: create$47(),
 		b2: create$47(),
@@ -15332,7 +17720,7 @@ function create$20() {
 	};
 }
 /** Deactivate this constraint part (zero out effective mass and lambda) */
-function deactivate$2(part) {
+function deactivate$1(part) {
 	part.effectiveMass[0] = 0;
 	part.effectiveMass[1] = 0;
 	part.effectiveMass[2] = 0;
@@ -15341,7 +17729,7 @@ function deactivate$2(part) {
 	part.totalLambda[1] = 0;
 }
 /** Check if constraint is active (has non-zero effective mass) */
-function isActive$2(part) {
+function isActive$1(part) {
 	return part.effectiveMass[0] !== 0 || part.effectiveMass[1] !== 0 || part.effectiveMass[2] !== 0 || part.effectiveMass[3] !== 0;
 }
 const _calc_a2 = /* @__PURE__ */ create$47();
@@ -15358,7 +17746,7 @@ const _calc_invEffMass = /* @__PURE__ */ create$42();
 * @param worldSpaceHingeAxis1 hinge axis for body A in world space (normalized)
 * @param worldSpaceHingeAxis2 hinge axis for body B in world space (normalized)
 */
-function calculateConstraintProperties$2(part, bodyA, bodyB, worldSpaceHingeAxis1, worldSpaceHingeAxis2, stepStamp) {
+function calculateConstraintProperties$1(part, bodyA, bodyB, worldSpaceHingeAxis1, worldSpaceHingeAxis2, stepStamp) {
 	copy$9(part.a1, worldSpaceHingeAxis1);
 	copy$9(_calc_a2, worldSpaceHingeAxis2);
 	const dot = dot$2(part.a1, _calc_a2);
@@ -15387,7 +17775,7 @@ function calculateConstraintProperties$2(part, bodyA, bodyB, worldSpaceHingeAxis
 	_calc_invEffMass[3] = dot$2(part.c2xA1, _calc_temp);
 	const det = _calc_invEffMass[0] * _calc_invEffMass[3] - _calc_invEffMass[1] * _calc_invEffMass[2];
 	if (Math.abs(det) < 1e-10) {
-		deactivate$2(part);
+		deactivate$1(part);
 		return;
 	}
 	const invDet = 1 / det;
@@ -15424,7 +17812,7 @@ function applyVelocityStep(part, bodyA, bodyB, lambda0, lambda1) {
 * Enforces d/dt C(...) = 0 where C is the constraint equation.
 */
 function solveVelocityConstraint$1(part, bodyA, bodyB) {
-	if (!isActive$2(part)) return false;
+	if (!isActive$1(part)) return false;
 	const mpA = bodyA.motionType !== 0 ? bodyA.motionProperties : null;
 	const mpB = bodyB.motionType !== 0 ? bodyB.motionProperties : null;
 	let jv0 = 0;
@@ -15450,7 +17838,7 @@ const _pos_angularDelta = /* @__PURE__ */ create$47();
 * Enforces C(...) = 0.
 */
 function solvePositionConstraint$1(part, bodyA, bodyB, baumgarte) {
-	if (!isActive$2(part)) return false;
+	if (!isActive$1(part)) return false;
 	const c0 = dot$2(part.a1, part.b2);
 	const c1 = dot$2(part.a1, part.c2);
 	if (Math.abs(c0) < 1e-10 && Math.abs(c1) < 1e-10) return false;
@@ -15485,7 +17873,7 @@ function getPerpendicularVector(out, v) {
 //#endregion
 //#region src/constraints/hinge-constraint.ts
 var hinge_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$19,
+	create: () => create$18,
 	def: () => def$16,
 	get: () => get$4,
 	getCurrentAngle: () => getCurrentAngle,
@@ -15511,16 +17899,16 @@ function makeHingeConstraint() {
 		hasLimits: false,
 		limitsMin: -Math.PI,
 		limitsMax: Math.PI,
-		limitsSpringSettings: create$30(),
+		limitsSpringSettings: create$29(),
 		motorState: 0,
 		targetAngularVelocity: 0,
 		targetAngle: 0,
 		maxFrictionTorque: 0,
-		motorSettings: create$26(),
-		pointConstraintPart: create$28(),
-		rotationConstraintPart: create$20(),
-		rotationLimitsConstraintPart: create$29(),
-		motorConstraintPart: create$29()
+		motorSettings: create$24(),
+		pointConstraintPart: create$26(),
+		rotationConstraintPart: create$19(),
+		rotationLimitsConstraintPart: create$27(),
+		motorConstraintPart: create$27()
 	};
 }
 /** Calculate the inverse initial orientation for angle tracking */
@@ -15547,13 +17935,13 @@ function resetConstraint$4(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$2(constraint.rotationConstraintPart);
-	deactivate$7(constraint.rotationLimitsConstraintPart);
-	deactivate$7(constraint.motorConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$1(constraint.rotationConstraintPart);
+	deactivate$5(constraint.rotationLimitsConstraintPart);
+	deactivate$5(constraint.motorConstraintPart);
 }
 /** create a hinge constraint */
-function create$19(world, settings) {
+function create$18(world, settings) {
 	const pool = ensurePool(world.constraints, 2);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -15627,6 +18015,7 @@ function create$19(world, settings) {
 	if (settings.motorSettings) copy(constraint.motorSettings, settings.motorSettings);
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a hinge constraint */
@@ -15640,6 +18029,7 @@ function remove$4(world, constraint) {
 	resetConstraint$4(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** get hinge constraint by id */
@@ -15730,26 +18120,26 @@ function isMinLimitClosest(constraint) {
 }
 /** calculate rotation limits constraint properties. */
 function calculateRotationLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime) {
-	if (constraint.hasLimits && (constraint.theta <= constraint.limitsMin || constraint.theta >= constraint.limitsMax)) calculateConstraintPropertiesWithSettings$1(constraint.rotationLimitsConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0, getSmallestAngleToLimit(constraint), constraint.limitsSpringSettings);
-	else deactivate$7(constraint.rotationLimitsConstraintPart);
+	if (constraint.hasLimits && (constraint.theta <= constraint.limitsMin || constraint.theta >= constraint.limitsMax)) calculateConstraintPropertiesWithSettings(constraint.rotationLimitsConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0, getSmallestAngleToLimit(constraint), constraint.limitsSpringSettings);
+	else deactivate$5(constraint.rotationLimitsConstraintPart);
 }
 /** calculate motor constraint properties. */
 function calculateMotorConstraintProperties$1(constraint, bodyA, bodyB, deltaTime) {
 	switch (constraint.motorState) {
 		case 0:
-			if (constraint.maxFrictionTorque > 0) calculateConstraintProperties$7(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0);
-			else deactivate$7(constraint.motorConstraintPart);
+			if (constraint.maxFrictionTorque > 0) calculateConstraintProperties$5(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0);
+			else deactivate$5(constraint.motorConstraintPart);
 			break;
 		case 1:
-			calculateConstraintProperties$7(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -constraint.targetAngularVelocity);
+			calculateConstraintProperties$5(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -constraint.targetAngularVelocity);
 			break;
 		case 2:
-			if (hasStiffness$1(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0, centerAngleAroundZero(constraint.theta - constraint.targetAngle), constraint.motorSettings.springSettings);
-			else deactivate$7(constraint.motorConstraintPart);
+			if (hasStiffness$1(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, 0, centerAngleAroundZero(constraint.theta - constraint.targetAngle), constraint.motorSettings.springSettings);
+			else deactivate$5(constraint.motorConstraintPart);
 			break;
 		case 3:
-			if (hasStiffnessOrDamping(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -constraint.targetAngularVelocity, centerAngleAroundZero(constraint.theta - constraint.targetAngle), constraint.motorSettings.springSettings);
-			else deactivate$7(constraint.motorConstraintPart);
+			if (hasStiffnessOrDamping(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -constraint.targetAngularVelocity, centerAngleAroundZero(constraint.theta - constraint.targetAngle), constraint.motorSettings.springSettings);
+			else deactivate$5(constraint.motorConstraintPart);
 			break;
 	}
 }
@@ -15761,8 +18151,8 @@ function setupVelocity$4(constraint, bodies, deltaTime) {
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis1, constraint.localSpaceHingeAxis1, bodyA.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis2, constraint.localSpaceHingeAxis2, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
-	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, bodies.stepStamp);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$1(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, bodies.stepStamp);
 	calculateA1AndTheta(constraint, bodyA, bodyB);
 	calculateRotationLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime);
 	calculateMotorConstraintProperties$1(constraint, bodyA, bodyB, deltaTime);
@@ -15771,10 +18161,10 @@ function warmStartVelocity$4(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	warmStart$6(constraint.motorConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$5(constraint.motorConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 	warmStart$1(constraint.rotationConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$6(constraint.rotationLimitsConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$5(constraint.rotationLimitsConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 function solveVelocity$4(constraint, bodies, deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -15784,21 +18174,21 @@ function solveVelocity$4(constraint, bodies, deltaTime) {
 	let pos = false;
 	let rot = false;
 	let limit = false;
-	if (isActive$5(constraint.motorConstraintPart)) switch (constraint.motorState) {
+	if (isActive$3(constraint.motorConstraintPart)) switch (constraint.motorState) {
 		case 0: {
 			const maxLambda = constraint.maxFrictionTorque * deltaTime;
-			motor = solveVelocityConstraint$6(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -maxLambda, maxLambda);
+			motor = solveVelocityConstraint$5(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, -maxLambda, maxLambda);
 			break;
 		}
 		case 1:
 		case 2:
 		case 3:
-			motor = solveVelocityConstraint$6(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, deltaTime * constraint.motorSettings.minTorqueLimit, deltaTime * constraint.motorSettings.maxTorqueLimit);
+			motor = solveVelocityConstraint$5(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, deltaTime * constraint.motorSettings.minTorqueLimit, deltaTime * constraint.motorSettings.maxTorqueLimit);
 			break;
 	}
-	pos = solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB);
+	pos = solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB);
 	rot = solveVelocityConstraint$1(constraint.rotationConstraintPart, bodyA, bodyB);
-	if (isActive$5(constraint.rotationLimitsConstraintPart)) {
+	if (isActive$3(constraint.rotationLimitsConstraintPart)) {
 		let minLambda;
 		let maxLambda;
 		if (constraint.limitsMin === constraint.limitsMax) {
@@ -15811,7 +18201,7 @@ function solveVelocity$4(constraint, bodies, deltaTime) {
 			minLambda = -Infinity;
 			maxLambda = 0;
 		}
-		limit = solveVelocityConstraint$6(constraint.rotationLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, minLambda, maxLambda);
+		limit = solveVelocityConstraint$5(constraint.rotationLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceHingeAxis1, minLambda, maxLambda);
 	}
 	return motor || pos || rot || limit;
 }
@@ -15821,27 +18211,27 @@ function solvePosition$4(constraint, bodies, deltaTime, baumgarteFactor) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	fromQuat(_hingeConstraint_rotA, bodyA.quaternion);
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, -1);
-	const pos = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _hingeConstraint_rotA, constraint.localSpacePosition1, bodyB, _hingeConstraint_rotB, constraint.localSpacePosition2, -1);
+	const pos = solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 	fromQuat(_hingeConstraint_rotA, bodyA.quaternion);
 	fromQuat(_hingeConstraint_rotB, bodyB.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis1, constraint.localSpaceHingeAxis1, bodyA.quaternion);
 	transformQuat(_hingeConstraint_worldHingeAxis2, constraint.localSpaceHingeAxis2, bodyB.quaternion);
-	calculateConstraintProperties$2(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, -1);
+	calculateConstraintProperties$1(constraint.rotationConstraintPart, bodyA, bodyB, _hingeConstraint_worldHingeAxis1, _hingeConstraint_worldHingeAxis2, -1);
 	const rot = solvePositionConstraint$1(constraint.rotationConstraintPart, bodyA, bodyB, baumgarteFactor);
 	let limit = false;
 	if (constraint.hasLimits && constraint.limitsSpringSettings.frequencyOrStiffness <= 0) {
 		calculateA1AndTheta(constraint, bodyA, bodyB);
 		calculateRotationLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime);
-		if (isActive$5(constraint.rotationLimitsConstraintPart)) limit = solvePositionConstraint$6(constraint.rotationLimitsConstraintPart, bodyA, bodyB, getSmallestAngleToLimit(constraint), baumgarteFactor);
+		if (isActive$3(constraint.rotationLimitsConstraintPart)) limit = solvePositionConstraint$5(constraint.rotationLimitsConstraintPart, bodyA, bodyB, getSmallestAngleToLimit(constraint), baumgarteFactor);
 	}
 	return pos || rot || limit;
 }
 function resetWarmStart$4(constraint) {
-	deactivate$7(constraint.motorConstraintPart);
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$2(constraint.rotationConstraintPart);
-	deactivate$7(constraint.rotationLimitsConstraintPart);
+	deactivate$5(constraint.motorConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$1(constraint.rotationConstraintPart);
+	deactivate$5(constraint.rotationLimitsConstraintPart);
 }
 /** the constraint definition for hinge constraint */
 const def$16 = /* @__PURE__ */ (() => defineConstraint({
@@ -15857,13 +18247,13 @@ const def$16 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/point-constraint.ts
 var point_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$18,
+	create: () => create$17,
 	def: () => def$15,
 	get: () => get$3,
 	getTotalLambda: () => getTotalLambda,
@@ -15875,7 +18265,7 @@ function makePointConstraint() {
 		...makeConstraintBase(),
 		localSpacePosition1: create$47(),
 		localSpacePosition2: create$47(),
-		pointConstraintPart: create$28()
+		pointConstraintPart: create$26()
 	};
 }
 /** reset constraint state for pooling reuse */
@@ -15883,10 +18273,10 @@ function resetConstraint$3(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$6(constraint.pointConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
 }
 /** create a point constraint */
-function create$18(world, settings) {
+function create$17(world, settings) {
 	const pool = ensurePool(world.constraints, 0);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -15929,6 +18319,7 @@ function create$18(world, settings) {
 	}
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a point constraint */
@@ -15942,6 +18333,7 @@ function remove$3(world, constraint) {
 	resetConstraint$3(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** get point constraint by id */
@@ -15961,18 +18353,18 @@ function setupVelocity$3(constraint, bodies, _deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_setupPointConstraintVelocity_rotA, bodyA.quaternion);
 	fromQuat(_setupPointConstraintVelocity_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setupPointConstraintVelocity_rotA, constraint.localSpacePosition1, bodyB, _setupPointConstraintVelocity_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _setupPointConstraintVelocity_rotA, constraint.localSpacePosition1, bodyB, _setupPointConstraintVelocity_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 }
 function warmStartVelocity$3(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 function solveVelocity$3(constraint, bodies, _deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
-	return solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB);
+	return solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB);
 }
 const _solvePointConstraintPosition_rotA = /* @__PURE__ */ create$41();
 const _solvePointConstraintPosition_rotB = /* @__PURE__ */ create$41();
@@ -15981,11 +18373,11 @@ function solvePosition$3(constraint, bodies, _deltaTime, baumgarte) {
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	fromQuat(_solvePointConstraintPosition_rotA, bodyA.quaternion);
 	fromQuat(_solvePointConstraintPosition_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePointConstraintPosition_rotA, constraint.localSpacePosition1, bodyB, _solvePointConstraintPosition_rotB, constraint.localSpacePosition2, -1);
-	return solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarte);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _solvePointConstraintPosition_rotA, constraint.localSpacePosition1, bodyB, _solvePointConstraintPosition_rotB, constraint.localSpacePosition2, -1);
+	return solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarte);
 }
 function resetWarmStart$3(constraint) {
-	deactivate$6(constraint.pointConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
 }
 /**
 * Get total accumulated impulse (lambda) from constraint
@@ -16008,14 +18400,14 @@ const def$15 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/six-dof-constraint.ts
 var six_dof_constraint_exports = /* @__PURE__ */ __exportAll({
 	SixDOFAxis: () => SixDOFAxis,
-	create: () => create$17,
+	create: () => create$16,
 	def: () => def$14,
 	get: () => get$2,
 	makeFixedAxis: () => makeFixedAxis,
@@ -16078,9 +18470,9 @@ function makeSixDOFConstraint() {
 			Math.PI
 		],
 		limitsSpringSettings: [
-			create$30(),
-			create$30(),
-			create$30()
+			create$29(),
+			create$29(),
+			create$29()
 		],
 		maxFriction: [
 			0,
@@ -16099,12 +18491,12 @@ function makeSixDOFConstraint() {
 			0
 		],
 		motorSettings: [
-			create$26(),
-			create$26(),
-			create$26(),
-			create$26(),
-			create$26(),
-			create$26()
+			create$24(),
+			create$24(),
+			create$24(),
+			create$24(),
+			create$24(),
+			create$24()
 		],
 		targetVelocity: create$47(),
 		targetAngularVelocity: create$47(),
@@ -16133,22 +18525,22 @@ function makeSixDOFConstraint() {
 		rotationPositionMotorActive: 0,
 		hasSpringLimits: false,
 		translationConstraintPart: [
-			create$23(),
-			create$23(),
-			create$23()
+			create$28(),
+			create$28(),
+			create$28()
 		],
-		pointConstraintPart: create$28(),
-		swingTwistConstraintPart: create$24(),
-		rotationConstraintPart: create$25(),
+		pointConstraintPart: create$26(),
+		swingTwistConstraintPart: create$22(),
+		rotationConstraintPart: create$23(),
 		motorTranslationConstraintPart: [
-			create$23(),
-			create$23(),
-			create$23()
+			create$28(),
+			create$28(),
+			create$28()
 		],
 		motorRotationConstraintPart: [
-			create$29(),
-			create$29(),
-			create$29()
+			create$27(),
+			create$27(),
+			create$27()
 		]
 	};
 }
@@ -16157,12 +18549,12 @@ function resetConstraint$2(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$4(constraint.swingTwistConstraintPart);
-	for (const part of constraint.translationConstraintPart) deactivate$3(part);
-	for (const part of constraint.motorTranslationConstraintPart) deactivate$3(part);
-	for (const part of constraint.motorRotationConstraintPart) deactivate$7(part);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$2(constraint.swingTwistConstraintPart);
+	for (const part of constraint.translationConstraintPart) deactivate$6(part);
+	for (const part of constraint.motorTranslationConstraintPart) deactivate$6(part);
+	for (const part of constraint.motorRotationConstraintPart) deactivate$5(part);
 }
 function isFixedAxis(constraint, axis) {
 	return (constraint.fixedAxis & 1 << axis) !== 0;
@@ -16213,12 +18605,12 @@ function updateFixedFreeAxis(constraint) {
 		else if (constraint.limitMin[a] <= -limit && constraint.limitMax[a] >= limit) constraint.freeAxis |= 1 << a;
 	}
 	if (oldFreeAxis !== constraint.freeAxis || oldFixedAxis !== constraint.fixedAxis) {
-		for (const part of constraint.translationConstraintPart) deactivate$3(part);
-		deactivate$6(constraint.pointConstraintPart);
-		deactivate$4(constraint.swingTwistConstraintPart);
-		deactivate$5(constraint.rotationConstraintPart);
-		for (const part of constraint.motorTranslationConstraintPart) deactivate$3(part);
-		for (const part of constraint.motorRotationConstraintPart) deactivate$7(part);
+		for (const part of constraint.translationConstraintPart) deactivate$6(part);
+		deactivate$4(constraint.pointConstraintPart);
+		deactivate$2(constraint.swingTwistConstraintPart);
+		deactivate$3(constraint.rotationConstraintPart);
+		for (const part of constraint.motorTranslationConstraintPart) deactivate$6(part);
+		for (const part of constraint.motorRotationConstraintPart) deactivate$5(part);
 	}
 }
 function cacheTranslationMotorActive(constraint) {
@@ -16245,7 +18637,7 @@ const _create_axisY2 = /* @__PURE__ */ create$47();
 const _create_invQuatA$1 = /* @__PURE__ */ create$44();
 const _create_invQuatB$1 = /* @__PURE__ */ create$44();
 /** Create a SixDOF constraint */
-function create$17(world, settings) {
+function create$16(world, settings) {
 	const pool = ensurePool(world.constraints, 7);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -16330,6 +18722,7 @@ function create$17(world, settings) {
 	identity$1(constraint.targetOrientation);
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** Remove a SixDOF constraint */
@@ -16343,6 +18736,7 @@ function remove$2(world, constraint) {
 	resetConstraint$2(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** Get SixDOF constraint by id */
@@ -16399,7 +18793,7 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 	multiply$1(_setup_c1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
 	fromQuat(_setup_wsAxisMat, _setup_c1ToWorld);
 	for (let i = 0; i < 3; i++) set$7(constraint.translationAxis[i], _setup_wsAxisMat[i * 4], _setup_wsAxisMat[i * 4 + 1], _setup_wsAxisMat[i * 4 + 2]);
-	if (isTranslationFullyConstrained(constraint)) calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, constraint.localSpacePosition1, bodyB, _setup_rotB$1, constraint.localSpacePosition2, bodies.stepStamp);
+	if (isTranslationFullyConstrained(constraint)) calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _setup_rotA$1, constraint.localSpacePosition1, bodyB, _setup_rotB$1, constraint.localSpacePosition2, bodies.stepStamp);
 	else if (isTranslationConstrained(constraint) || constraint.translationMotorActive) {
 		getPositionConstraintProperties(constraint, bodies, _setup_r1PlusU, _setup_r2, _setup_u);
 		for (let i = 0; i < 3; i++) {
@@ -16429,26 +18823,26 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 					constraintActive = true;
 				}
 			}
-			if (constraintActive) calculateConstraintPropertiesWithSettings(constraint.translationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0, constraintValue, constraint.limitsSpringSettings[i]);
-			else deactivate$3(constraint.translationConstraintPart[i]);
+			if (constraintActive) calculateConstraintPropertiesWithSettings$1(constraint.translationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0, constraintValue, constraint.limitsSpringSettings[i]);
+			else deactivate$6(constraint.translationConstraintPart[i]);
 			switch (constraint.motorState[i]) {
 				case 0:
-					if (hasFriction(constraint, axis)) calculateConstraintProperties$3(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0);
-					else deactivate$3(constraint.motorTranslationConstraintPart[i]);
+					if (hasFriction(constraint, axis)) calculateConstraintProperties$6(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0);
+					else deactivate$6(constraint.motorTranslationConstraintPart[i]);
 					break;
 				case 1:
-					calculateConstraintProperties$3(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, -constraint.targetVelocity[i]);
+					calculateConstraintProperties$6(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, -constraint.targetVelocity[i]);
 					break;
 				case 2: {
 					const motorSpring = constraint.motorSettings[i].springSettings;
-					if (hasStiffness$1(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorTranslationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0, d - constraint.targetPosition[i], motorSpring);
-					else deactivate$3(constraint.motorTranslationConstraintPart[i]);
+					if (hasStiffness$1(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorTranslationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, 0, d - constraint.targetPosition[i], motorSpring);
+					else deactivate$6(constraint.motorTranslationConstraintPart[i]);
 					break;
 				}
 				case 3: {
 					const motorSpring = constraint.motorSettings[i].springSettings;
-					if (hasStiffnessOrDamping(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorTranslationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, -constraint.targetVelocity[i], d - constraint.targetPosition[i], motorSpring);
-					else deactivate$3(constraint.motorTranslationConstraintPart[i]);
+					if (hasStiffnessOrDamping(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorTranslationConstraintPart[i], deltaTime, bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, translationAxis, -constraint.targetVelocity[i], d - constraint.targetPosition[i], motorSpring);
+					else deactivate$6(constraint.motorTranslationConstraintPart[i]);
 					break;
 				}
 			}
@@ -16457,10 +18851,10 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 	multiply$1(_setup_c2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 	conjugate(_setup_qConj$1, _setup_c1ToWorld);
 	multiply$1(_setup_q$1, _setup_qConj$1, _setup_c2ToWorld);
-	if (isRotationFullyConstrained(constraint)) calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, bodies.stepStamp);
+	if (isRotationFullyConstrained(constraint)) calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, bodies.stepStamp);
 	else if (isRotationConstrained(constraint) || constraint.rotationMotorActive) {
-		if (isRotationConstrained(constraint)) calculateConstraintProperties$4(constraint.swingTwistConstraintPart, bodyA, bodyB, _setup_q$1, _setup_c1ToWorld);
-		else deactivate$4(constraint.swingTwistConstraintPart);
+		if (isRotationConstrained(constraint)) calculateConstraintProperties$2(constraint.swingTwistConstraintPart, bodyA, bodyB, _setup_q$1, _setup_c1ToWorld);
+		else deactivate$2(constraint.swingTwistConstraintPart);
 		if (constraint.rotationMotorActive) {
 			fromQuat(_setup_wsAxisMat, _setup_c2ToWorld);
 			for (let i = 0; i < 3; i++) set$7(constraint.rotationAxis[i], _setup_wsAxisMat[i * 4], _setup_wsAxisMat[i * 4 + 1], _setup_wsAxisMat[i * 4 + 2]);
@@ -16503,22 +18897,22 @@ function setupVelocity$2(constraint, bodies, deltaTime) {
 				const rotationAxis = constraint.rotationAxis[i];
 				switch (constraint.motorState[axis]) {
 					case 0:
-						if (hasFriction(constraint, axis)) calculateConstraintProperties$7(constraint.motorRotationConstraintPart[i], bodyA, bodyB, rotationAxis, 0);
-						else deactivate$7(constraint.motorRotationConstraintPart[i]);
+						if (hasFriction(constraint, axis)) calculateConstraintProperties$5(constraint.motorRotationConstraintPart[i], bodyA, bodyB, rotationAxis, 0);
+						else deactivate$5(constraint.motorRotationConstraintPart[i]);
 						break;
 					case 1:
-						calculateConstraintProperties$7(constraint.motorRotationConstraintPart[i], bodyA, bodyB, rotationAxis, -constraint.targetAngularVelocity[i]);
+						calculateConstraintProperties$5(constraint.motorRotationConstraintPart[i], bodyA, bodyB, rotationAxis, -constraint.targetAngularVelocity[i]);
 						break;
 					case 2: {
 						const motorSpring = constraint.motorSettings[axis].springSettings;
-						if (hasStiffness$1(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorRotationConstraintPart[i], deltaTime, bodyA, bodyB, rotationAxis, 0, _setup_rotationError$1[i], motorSpring);
-						else deactivate$7(constraint.motorRotationConstraintPart[i]);
+						if (hasStiffness$1(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorRotationConstraintPart[i], deltaTime, bodyA, bodyB, rotationAxis, 0, _setup_rotationError$1[i], motorSpring);
+						else deactivate$5(constraint.motorRotationConstraintPart[i]);
 						break;
 					}
 					case 3: {
 						const motorSpring = constraint.motorSettings[axis].springSettings;
-						if (hasStiffnessOrDamping(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorRotationConstraintPart[i], deltaTime, bodyA, bodyB, rotationAxis, -constraint.targetAngularVelocity[i], _setup_rotationError$1[i], motorSpring);
-						else deactivate$7(constraint.motorRotationConstraintPart[i]);
+						if (hasStiffnessOrDamping(motorSpring)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorRotationConstraintPart[i], deltaTime, bodyA, bodyB, rotationAxis, -constraint.targetAngularVelocity[i], _setup_rotationError$1[i], motorSpring);
+						else deactivate$5(constraint.motorRotationConstraintPart[i]);
 						break;
 					}
 				}
@@ -16533,25 +18927,25 @@ function warmStartVelocity$2(constraint, bodies, warmStartRatio) {
 	const invMassA = bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0;
 	const invMassB = bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0;
 	if (constraint.translationMotorActive) {
-		for (let i = 0; i < 3; i++) if (isActive$3(constraint.motorTranslationConstraintPart[i])) warmStart$2(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, constraint.translationAxis[i], warmStartRatio);
+		for (let i = 0; i < 3; i++) if (isActive$4(constraint.motorTranslationConstraintPart[i])) warmStart$6(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, constraint.translationAxis[i], warmStartRatio);
 	}
 	if (constraint.rotationMotorActive) {
-		for (let i = 0; i < 3; i++) if (isActive$5(constraint.motorRotationConstraintPart[i])) warmStart$6(constraint.motorRotationConstraintPart[i], bodyA, bodyB, warmStartRatio);
+		for (let i = 0; i < 3; i++) if (isActive$3(constraint.motorRotationConstraintPart[i])) warmStart$5(constraint.motorRotationConstraintPart[i], bodyA, bodyB, warmStartRatio);
 	}
-	if (isRotationFullyConstrained(constraint)) warmStart$4(constraint.rotationConstraintPart, bodyA, bodyB, warmStartRatio);
-	else if (isRotationConstrained(constraint)) warmStart$3(constraint.swingTwistConstraintPart, bodyA, bodyB, warmStartRatio);
-	if (isTranslationFullyConstrained(constraint)) warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartRatio);
+	if (isRotationFullyConstrained(constraint)) warmStart$3(constraint.rotationConstraintPart, bodyA, bodyB, warmStartRatio);
+	else if (isRotationConstrained(constraint)) warmStart$2(constraint.swingTwistConstraintPart, bodyA, bodyB, warmStartRatio);
+	if (isTranslationFullyConstrained(constraint)) warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartRatio);
 	else if (isTranslationConstrained(constraint)) {
-		for (let i = 0; i < 3; i++) if (isActive$3(constraint.translationConstraintPart[i])) warmStart$2(constraint.translationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, constraint.translationAxis[i], warmStartRatio);
+		for (let i = 0; i < 3; i++) if (isActive$4(constraint.translationConstraintPart[i])) warmStart$6(constraint.translationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, constraint.translationAxis[i], warmStartRatio);
 	}
 }
 function resetWarmStart$2(constraint) {
-	for (let i = 0; i < 3; i++) deactivate$3(constraint.motorTranslationConstraintPart[i]);
-	for (let i = 0; i < 3; i++) deactivate$7(constraint.motorRotationConstraintPart[i]);
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$4(constraint.swingTwistConstraintPart);
-	deactivate$6(constraint.pointConstraintPart);
-	for (let i = 0; i < 3; i++) deactivate$3(constraint.translationConstraintPart[i]);
+	for (let i = 0; i < 3; i++) deactivate$6(constraint.motorTranslationConstraintPart[i]);
+	for (let i = 0; i < 3; i++) deactivate$5(constraint.motorRotationConstraintPart[i]);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$2(constraint.swingTwistConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
+	for (let i = 0; i < 3; i++) deactivate$6(constraint.translationConstraintPart[i]);
 }
 function solveVelocity$2(constraint, bodies, deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
@@ -16559,46 +18953,46 @@ function solveVelocity$2(constraint, bodies, deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	let impulse = false;
 	if (constraint.translationMotorActive) {
-		for (let i = 0; i < 3; i++) if (isActive$3(constraint.motorTranslationConstraintPart[i])) switch (constraint.motorState[i]) {
+		for (let i = 0; i < 3; i++) if (isActive$4(constraint.motorTranslationConstraintPart[i])) switch (constraint.motorState[i]) {
 			case 0: {
 				const maxLambda = constraint.maxFriction[i] * deltaTime;
-				impulse = solveVelocityConstraint$2(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], -maxLambda, maxLambda) || impulse;
+				impulse = solveVelocityConstraint$6(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], -maxLambda, maxLambda) || impulse;
 				break;
 			}
 			case 1:
 			case 2:
 			case 3:
-				impulse = solveVelocityConstraint$2(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], deltaTime * constraint.motorSettings[i].minForceLimit, deltaTime * constraint.motorSettings[i].maxForceLimit) || impulse;
+				impulse = solveVelocityConstraint$6(constraint.motorTranslationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], deltaTime * constraint.motorSettings[i].minForceLimit, deltaTime * constraint.motorSettings[i].maxForceLimit) || impulse;
 				break;
 		}
 	}
 	if (constraint.rotationMotorActive) for (let i = 0; i < 3; i++) {
 		const axis = 3 + i;
-		if (isActive$5(constraint.motorRotationConstraintPart[i])) switch (constraint.motorState[axis]) {
+		if (isActive$3(constraint.motorRotationConstraintPart[i])) switch (constraint.motorState[axis]) {
 			case 0: {
 				const maxLambda = constraint.maxFriction[axis] * deltaTime;
-				impulse = solveVelocityConstraint$6(constraint.motorRotationConstraintPart[i], bodyA, bodyB, constraint.rotationAxis[i], -maxLambda, maxLambda) || impulse;
+				impulse = solveVelocityConstraint$5(constraint.motorRotationConstraintPart[i], bodyA, bodyB, constraint.rotationAxis[i], -maxLambda, maxLambda) || impulse;
 				break;
 			}
 			case 1:
 			case 2:
 			case 3:
-				impulse = solveVelocityConstraint$6(constraint.motorRotationConstraintPart[i], bodyA, bodyB, constraint.rotationAxis[i], deltaTime * constraint.motorSettings[axis].minTorqueLimit, deltaTime * constraint.motorSettings[axis].maxTorqueLimit) || impulse;
+				impulse = solveVelocityConstraint$5(constraint.motorRotationConstraintPart[i], bodyA, bodyB, constraint.rotationAxis[i], deltaTime * constraint.motorSettings[axis].minTorqueLimit, deltaTime * constraint.motorSettings[axis].maxTorqueLimit) || impulse;
 				break;
 		}
 	}
-	if (isRotationFullyConstrained(constraint)) impulse = solveVelocityConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB) || impulse;
-	else if (isRotationConstrained(constraint)) impulse = solveVelocityConstraint$3(constraint.swingTwistConstraintPart, bodyA, bodyB) || impulse;
-	if (isTranslationFullyConstrained(constraint)) impulse = solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB) || impulse;
+	if (isRotationFullyConstrained(constraint)) impulse = solveVelocityConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB) || impulse;
+	else if (isRotationConstrained(constraint)) impulse = solveVelocityConstraint$2(constraint.swingTwistConstraintPart, bodyA, bodyB) || impulse;
+	if (isTranslationFullyConstrained(constraint)) impulse = solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB) || impulse;
 	else if (isTranslationConstrained(constraint)) {
-		for (let i = 0; i < 3; i++) if (isActive$3(constraint.translationConstraintPart[i])) {
+		for (let i = 0; i < 3; i++) if (isActive$4(constraint.translationConstraintPart[i])) {
 			let limitMin = -Infinity;
 			let limitMax = Infinity;
 			if (!isFixedAxis(constraint, i)) {
 				if (constraint.displacement[i] <= constraint.limitMin[i]) limitMin = 0;
 				else if (constraint.displacement[i] >= constraint.limitMax[i]) limitMax = 0;
 			}
-			impulse = solveVelocityConstraint$2(constraint.translationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], limitMin, limitMax) || impulse;
+			impulse = solveVelocityConstraint$6(constraint.translationConstraintPart[i], bodyA, bodyB, constraint.translationAxis[i], limitMin, limitMax) || impulse;
 		}
 	}
 	return impulse;
@@ -16627,15 +19021,15 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 		multiply$1(constraintToBody1WithOffset, constraint.constraintToBody1, rotLimitsMin);
 		conjugate(_pos_invInitialOrientation, constraintToBody1WithOffset);
 		multiply$1(_pos_invInitialOrientation, constraint.constraintToBody2, _pos_invInitialOrientation);
-		calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, -1);
-		impulse = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, _pos_invInitialOrientation, baumgarte) || impulse;
+		calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, _setup_rotA$1, bodyB, _setup_rotB$1, -1);
+		impulse = solvePositionConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB, _pos_invInitialOrientation, baumgarte) || impulse;
 	} else if (isRotationConstrained(constraint)) {
 		multiply$1(_pos_c1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
 		const c2ToWorld = _solvePosition_c2ToWorld$1;
 		multiply$1(c2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 		conjugate(_setup_qConj$1, _pos_c1ToWorld);
 		multiply$1(_pos_q, _setup_qConj$1, c2ToWorld);
-		impulse = solvePositionConstraint$3(constraint.swingTwistConstraintPart, bodyA, bodyB, _pos_q, constraint.constraintToBody1, constraint.constraintToBody2, baumgarte) || impulse;
+		impulse = solvePositionConstraint$2(constraint.swingTwistConstraintPart, bodyA, bodyB, _pos_q, constraint.constraintToBody1, constraint.constraintToBody2, baumgarte) || impulse;
 	}
 	fromQuat(_setup_rotA$1, bodyA.quaternion);
 	fromQuat(_setup_rotB$1, bodyB.quaternion);
@@ -16643,8 +19037,8 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 		set$7(_pos_transLimitsMin, constraint.limitMin[0], constraint.limitMin[1], constraint.limitMin[2]);
 		transformQuat(_pos_localSpacePosition1WithOffset, _pos_transLimitsMin, constraint.constraintToBody1);
 		add$3(_pos_localSpacePosition1WithOffset, constraint.localSpacePosition1, _pos_localSpacePosition1WithOffset);
-		calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA$1, _pos_localSpacePosition1WithOffset, bodyB, _setup_rotB$1, constraint.localSpacePosition2, -1);
-		impulse = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarte) || impulse;
+		calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _setup_rotA$1, _pos_localSpacePosition1WithOffset, bodyB, _setup_rotB$1, constraint.localSpacePosition2, -1);
+		impulse = solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarte) || impulse;
 	} else if (isTranslationConstrained(constraint)) {
 		for (let i = 0; i < 3; i++) if (constraint.limitsSpringSettings[i].frequencyOrStiffness <= 0) {
 			getPositionConstraintProperties(constraint, bodies, _setup_r1PlusU, _setup_r2, _setup_u);
@@ -16669,8 +19063,8 @@ function solvePosition$2(constraint, bodies, _deltaTime, baumgarte) {
 				identity(invInertiaB);
 				if (bodyA.motionType === 2) getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, -1);
 				if (bodyB.motionType === 2) getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, -1);
-				calculateConstraintProperties$3(constraint.translationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, _pos_translationAxis, 0);
-				impulse = solvePositionConstraint$2(constraint.translationConstraintPart[i], bodyA, bodyB, _pos_translationAxis, error, baumgarte) || impulse;
+				calculateConstraintProperties$6(constraint.translationConstraintPart[i], bodyA, bodyB, invMassA, invMassB, invInertiaA, invInertiaB, _setup_r1PlusU, _setup_r2, _pos_translationAxis, 0);
+				impulse = solvePositionConstraint$6(constraint.translationConstraintPart[i], bodyA, bodyB, _pos_translationAxis, error, baumgarte) || impulse;
 			}
 		}
 	}
@@ -16703,11 +19097,11 @@ function setMotorState$1(constraint, axis, state) {
 	if (constraint.motorState[axis] !== state) {
 		constraint.motorState[axis] = state;
 		if (axis === 0 || axis === 1 || axis === 2) {
-			deactivate$3(constraint.motorTranslationConstraintPart[axis]);
+			deactivate$6(constraint.motorTranslationConstraintPart[axis]);
 			cacheTranslationMotorActive(constraint);
 		} else {
 			const rotIndex = axis - 3;
-			deactivate$7(constraint.motorRotationConstraintPart[rotIndex]);
+			deactivate$5(constraint.motorRotationConstraintPart[rotIndex]);
 			cacheRotationMotorActive(constraint);
 			cacheRotationPositionMotorActive(constraint);
 		}
@@ -16767,13 +19161,13 @@ const def$14 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/constraint-part/dual-axis-constraint-part.ts
 /** Creates a new DualAxisConstraintPart with zero-initialized values */
-function create$16() {
+function create$15() {
 	return {
 		r1PlusUxN1: create$47(),
 		r1PlusUxN2: create$47(),
@@ -16788,12 +19182,12 @@ function create$16() {
 	};
 }
 /** Deactivates the constraint part (resets state) */
-function deactivate$1(part) {
+function deactivate(part) {
 	zero$2(part.totalLambda);
 	set$2(part.effectiveMass, 0, 0, 0, 0);
 }
 /** Checks if the constraint part is active (has invertible effective mass) */
-function isActive$1(part) {
+function isActive(part) {
 	return part.effectiveMass[0] !== 0 || part.effectiveMass[1] !== 0 || part.effectiveMass[2] !== 0 || part.effectiveMass[3] !== 0;
 }
 const _calc_invEffectiveMass = /* @__PURE__ */ create$42();
@@ -16814,7 +19208,7 @@ const _calc_invI_crossN2 = /* @__PURE__ */ create$47();
 * @param n1 First constraint axis (normalized, perpendicular to slider axis)
 * @param n2 Second constraint axis (normalized, perpendicular to slider axis and n1)
 */
-function calculateConstraintProperties$1(part, bodyA, r1PlusU, bodyB, r2, n1, n2, stepStamp) {
+function calculateConstraintProperties(part, bodyA, r1PlusU, bodyB, r2, n1, n2, stepStamp) {
 	cross(part.r1PlusUxN1, r1PlusU, n1);
 	cross(part.r1PlusUxN2, r1PlusU, n2);
 	cross(part.r2xN1, r2, n1);
@@ -16844,7 +19238,7 @@ function calculateConstraintProperties$1(part, bodyA, r1PlusU, bodyB, r2, n1, n2
 		_calc_invEffectiveMass[2] += dot$2(part.r2xN1, _calc_invI_crossN2);
 		_calc_invEffectiveMass[3] += mpB.invMass + dot$2(part.r2xN2, _calc_invI_crossN2);
 	}
-	if (invert$1(part.effectiveMass, _calc_invEffectiveMass) === null) deactivate$1(part);
+	if (invert$1(part.effectiveMass, _calc_invEffectiveMass) === null) deactivate(part);
 }
 const _warmStart_impulse = /* @__PURE__ */ create$47();
 const _warmStart_scaledLambda = /* @__PURE__ */ create$47();
@@ -16853,7 +19247,7 @@ const _warmStart_scaledLambda = /* @__PURE__ */ create$47();
 * Scales the previous frame's impulses by the warm start ratio.
 */
 function warmStart(part, bodyA, bodyB, n1, n2, warmStartImpulseRatio) {
-	if (!isActive$1(part)) return;
+	if (!isActive(part)) return;
 	part.totalLambda[0] *= warmStartImpulseRatio;
 	part.totalLambda[1] *= warmStartImpulseRatio;
 	if (part.totalLambda[0] === 0 && part.totalLambda[1] === 0) return;
@@ -16890,7 +19284,7 @@ const _sv_angularImpulse = /* @__PURE__ */ create$47();
 * @returns True if any impulse was applied
 */
 function solveVelocityConstraint(part, bodyA, bodyB, n1, n2) {
-	if (!isActive$1(part)) return false;
+	if (!isActive(part)) return false;
 	const mpAForVelocity = bodyA.motionType !== 0 ? bodyA.motionProperties : null;
 	const mpBForVelocity = bodyB.motionType !== 0 ? bodyB.motionProperties : null;
 	const mpAForImpulse = bodyA.motionType === 2 ? bodyA.motionProperties : null;
@@ -16950,7 +19344,7 @@ const _sp_angularImpulse = /* @__PURE__ */ create$47();
 * @returns True if any correction was applied
 */
 function solvePositionConstraint(part, bodyA, bodyB, u, n1, n2, baumgarte) {
-	if (!isActive$1(part)) return false;
+	if (!isActive(part)) return false;
 	_sp_c[0] = dot$2(u, n1);
 	_sp_c[1] = dot$2(u, n2);
 	if (_sp_c[0] === 0 && _sp_c[1] === 0) return false;
@@ -16980,7 +19374,7 @@ function solvePositionConstraint(part, bodyA, bodyB, u, n1, n2, baumgarte) {
 //#endregion
 //#region src/constraints/slider-constraint.ts
 var slider_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$15,
+	create: () => create$14,
 	def: () => def$13,
 	get: () => get$1,
 	getCurrentPosition: () => getCurrentPosition,
@@ -17016,16 +19410,16 @@ function makeSliderConstraint() {
 		hasLimits: false,
 		limitsMin: -Infinity,
 		limitsMax: Infinity,
-		limitsSpringSettings: create$30(),
+		limitsSpringSettings: create$29(),
 		motorState: 0,
 		targetVelocity: 0,
 		targetPosition: 0,
 		maxFrictionForce: 0,
-		motorSettings: create$26(),
-		positionConstraintPart: create$16(),
-		rotationConstraintPart: create$25(),
-		positionLimitsConstraintPart: create$23(),
-		motorConstraintPart: create$23()
+		motorSettings: create$24(),
+		positionConstraintPart: create$15(),
+		rotationConstraintPart: create$23(),
+		positionLimitsConstraintPart: create$28(),
+		motorConstraintPart: create$28()
 	};
 }
 /** reset constraint state for pooling reuse */
@@ -17033,10 +19427,10 @@ function resetConstraint$1(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$1(constraint.positionConstraintPart);
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$3(constraint.positionLimitsConstraintPart);
-	deactivate$3(constraint.motorConstraintPart);
+	deactivate(constraint.positionConstraintPart);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$6(constraint.positionLimitsConstraintPart);
+	deactivate$6(constraint.motorConstraintPart);
 }
 const V0 = /* @__PURE__ */ create$47();
 const _create_sliderAxis1 = /* @__PURE__ */ create$47();
@@ -17047,7 +19441,7 @@ const _create_invQuatA = /* @__PURE__ */ create$44();
 const _create_invQuatB = /* @__PURE__ */ create$44();
 const _create_anchor = /* @__PURE__ */ create$47();
 /** Create a slider constraint */
-function create$15(world, settings) {
+function create$14(world, settings) {
 	const pool = ensurePool(world.constraints, 3);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -17133,6 +19527,7 @@ function create$15(world, settings) {
 	if (settings.motorSettings) copy(constraint.motorSettings, settings.motorSettings);
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** remove a slider constraint */
@@ -17146,6 +19541,7 @@ function remove$1(world, constraint) {
 	resetConstraint$1(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** get slider constraint by id */
@@ -17256,12 +19652,12 @@ function calculatePositionConstraintProperties(constraint, bodyA, bodyB, rotatio
 	multiply3x3Vec(constraint.n1, rotationA, constraint.localSpaceNormalA);
 	multiply3x3Vec(constraint.n2, rotationA, constraint.localSpaceNormalB);
 	add$3(_sliderConstraint_r1PlusU, constraint.r1, constraint.u);
-	calculateConstraintProperties$1(constraint.positionConstraintPart, bodyA, _sliderConstraint_r1PlusU, bodyB, constraint.r2, constraint.n1, constraint.n2, stepStamp);
+	calculateConstraintProperties(constraint.positionConstraintPart, bodyA, _sliderConstraint_r1PlusU, bodyB, constraint.r2, constraint.n1, constraint.n2, stepStamp);
 }
 /** calculate position limits constraint properties */
 function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, stepStamp) {
 	if (!constraint.hasLimits) {
-		deactivate$3(constraint.positionLimitsConstraintPart);
+		deactivate$6(constraint.positionLimitsConstraintPart);
 		return;
 	}
 	const belowMin = constraint.d <= constraint.limitsMin;
@@ -17276,7 +19672,7 @@ function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, d
 			const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
 			if (bodyA.motionType === 2) copy$5(_sliderConstraint_invInertiaA, getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp));
 			if (bodyB.motionType === 2) copy$5(_sliderConstraint_invInertiaB, getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp));
-			calculateConstraintPropertiesWithSettings(constraint.positionLimitsConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0, error, constraint.limitsSpringSettings);
+			calculateConstraintPropertiesWithSettings$1(constraint.positionLimitsConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0, error, constraint.limitsSpringSettings);
 		} else {
 			const mpA = bodyA.motionProperties;
 			const mpB = bodyB.motionProperties;
@@ -17284,9 +19680,9 @@ function calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, d
 			const invMassB = bodyB.motionType === 2 ? mpB.invMass : 0;
 			if (bodyA.motionType === 2) copy$5(_sliderConstraint_invInertiaA, getWorldInverseInertia(_sliderConstraint_invInertiaA, mpA, bodyA.quaternion, stepStamp));
 			if (bodyB.motionType === 2) copy$5(_sliderConstraint_invInertiaB, getWorldInverseInertia(_sliderConstraint_invInertiaB, mpB, bodyB.quaternion, stepStamp));
-			calculateConstraintProperties$3(constraint.positionLimitsConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0);
+			calculateConstraintProperties$6(constraint.positionLimitsConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0);
 		}
-	} else deactivate$3(constraint.positionLimitsConstraintPart);
+	} else deactivate$6(constraint.positionLimitsConstraintPart);
 }
 function calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime, stepStamp) {
 	const mpA = bodyA.motionProperties;
@@ -17298,19 +19694,19 @@ function calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime,
 	add$3(_sliderConstraint_r1PlusU, constraint.r1, constraint.u);
 	switch (constraint.motorState) {
 		case 0:
-			if (constraint.maxFrictionForce > 0) calculateConstraintProperties$3(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0);
-			else deactivate$3(constraint.motorConstraintPart);
+			if (constraint.maxFrictionForce > 0) calculateConstraintProperties$6(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0);
+			else deactivate$6(constraint.motorConstraintPart);
 			break;
 		case 1:
-			calculateConstraintProperties$3(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, -constraint.targetVelocity);
+			calculateConstraintProperties$6(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, -constraint.targetVelocity);
 			break;
 		case 2:
-			if (hasStiffness$1(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0, constraint.d - constraint.targetPosition, constraint.motorSettings.springSettings);
-			else deactivate$3(constraint.motorConstraintPart);
+			if (hasStiffness$1(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, 0, constraint.d - constraint.targetPosition, constraint.motorSettings.springSettings);
+			else deactivate$6(constraint.motorConstraintPart);
 			break;
 		case 3:
-			if (hasStiffnessOrDamping(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, -constraint.targetVelocity, constraint.d - constraint.targetPosition, constraint.motorSettings.springSettings);
-			else deactivate$3(constraint.motorConstraintPart);
+			if (hasStiffnessOrDamping(constraint.motorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintPart, deltaTime, bodyA, bodyB, invMassA, invMassB, _sliderConstraint_invInertiaA, _sliderConstraint_invInertiaB, _sliderConstraint_r1PlusU, constraint.r2, constraint.worldSpaceSliderAxis, -constraint.targetVelocity, constraint.d - constraint.targetPosition, constraint.motorSettings.springSettings);
+			else deactivate$6(constraint.motorConstraintPart);
 			break;
 	}
 }
@@ -17322,7 +19718,7 @@ function setupVelocity$1(constraint, bodies, deltaTime) {
 	fromQuat(_sliderConstraint_rotB, bodyB.quaternion);
 	calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
 	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, bodies.stepStamp);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, _sliderConstraint_rotA, bodyB, _sliderConstraint_rotB, bodies.stepStamp);
+	calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, _sliderConstraint_rotA, bodyB, _sliderConstraint_rotB, bodies.stepStamp);
 	calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
 	calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 	calculateMotorConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
@@ -17331,17 +19727,17 @@ function warmStartVelocity$1(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	if (isActive$3(constraint.motorConstraintPart)) {
+	if (isActive$4(constraint.motorConstraintPart)) {
 		const invMassA = bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0;
 		const invMassB = bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0;
-		warmStart$2(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceSliderAxis, warmStartImpulseRatio);
+		warmStart$6(constraint.motorConstraintPart, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceSliderAxis, warmStartImpulseRatio);
 	}
 	warmStart(constraint.positionConstraintPart, bodyA, bodyB, constraint.n1, constraint.n2, warmStartImpulseRatio);
-	warmStart$4(constraint.rotationConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	if (isActive$3(constraint.positionLimitsConstraintPart)) {
+	warmStart$3(constraint.rotationConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	if (isActive$4(constraint.positionLimitsConstraintPart)) {
 		const invMassA = bodyA.motionType === 2 ? bodyA.motionProperties.invMass : 0;
 		const invMassB = bodyB.motionType === 2 ? bodyB.motionProperties.invMass : 0;
-		warmStart$2(constraint.positionLimitsConstraintPart, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceSliderAxis, warmStartImpulseRatio);
+		warmStart$6(constraint.positionLimitsConstraintPart, bodyA, bodyB, invMassA, invMassB, constraint.worldSpaceSliderAxis, warmStartImpulseRatio);
 	}
 }
 function solveVelocity$1(constraint, bodies, deltaTime) {
@@ -17352,21 +19748,21 @@ function solveVelocity$1(constraint, bodies, deltaTime) {
 	let pos = false;
 	let rot = false;
 	let limit = false;
-	if (isActive$3(constraint.motorConstraintPart)) switch (constraint.motorState) {
+	if (isActive$4(constraint.motorConstraintPart)) switch (constraint.motorState) {
 		case 0: {
 			const maxLambda = constraint.maxFrictionForce * deltaTime;
-			motor = solveVelocityConstraint$2(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, -maxLambda, maxLambda);
+			motor = solveVelocityConstraint$6(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, -maxLambda, maxLambda);
 			break;
 		}
 		case 1:
 		case 2:
 		case 3:
-			motor = solveVelocityConstraint$2(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, deltaTime * constraint.motorSettings.minForceLimit, deltaTime * constraint.motorSettings.maxForceLimit);
+			motor = solveVelocityConstraint$6(constraint.motorConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, deltaTime * constraint.motorSettings.minForceLimit, deltaTime * constraint.motorSettings.maxForceLimit);
 			break;
 	}
 	pos = solveVelocityConstraint(constraint.positionConstraintPart, bodyA, bodyB, constraint.n1, constraint.n2);
-	rot = solveVelocityConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB);
-	if (isActive$3(constraint.positionLimitsConstraintPart)) {
+	rot = solveVelocityConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB);
+	if (isActive$4(constraint.positionLimitsConstraintPart)) {
 		let minLambda;
 		let maxLambda;
 		if (constraint.limitsMin === constraint.limitsMax) {
@@ -17379,7 +19775,7 @@ function solveVelocity$1(constraint, bodies, deltaTime) {
 			minLambda = -Infinity;
 			maxLambda = 0;
 		}
-		limit = solveVelocityConstraint$2(constraint.positionLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, minLambda, maxLambda);
+		limit = solveVelocityConstraint$6(constraint.positionLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, minLambda, maxLambda);
 	}
 	return motor || pos || rot || limit;
 }
@@ -17392,8 +19788,8 @@ function solvePosition$1(constraint, bodies, deltaTime, baumgarteFactor) {
 	calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
 	calculatePositionConstraintProperties(constraint, bodyA, bodyB, _sliderConstraint_rotA, -1);
 	const pos = solvePositionConstraint(constraint.positionConstraintPart, bodyA, bodyB, constraint.u, constraint.n1, constraint.n2, baumgarteFactor);
-	calculateConstraintProperties$5(constraint.rotationConstraintPart, bodyA, fromQuat(_sliderConstraint_rotA, bodyA.quaternion), bodyB, fromQuat(_sliderConstraint_rotB, bodyB.quaternion), -1);
-	const rot = solvePositionConstraint$4(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
+	calculateConstraintProperties$3(constraint.rotationConstraintPart, bodyA, fromQuat(_sliderConstraint_rotA, bodyA.quaternion), bodyB, fromQuat(_sliderConstraint_rotB, bodyB.quaternion), -1);
+	const rot = solvePositionConstraint$3(constraint.rotationConstraintPart, bodyA, bodyB, constraint.invInitialOrientation, baumgarteFactor);
 	let limit = false;
 	if (constraint.hasLimits && !hasStiffness$1(constraint.limitsSpringSettings)) {
 		fromQuat(_sliderConstraint_rotA, bodyA.quaternion);
@@ -17401,20 +19797,20 @@ function solvePosition$1(constraint, bodies, deltaTime, baumgarteFactor) {
 		calculateR1R2U(constraint, bodyA, bodyB, _sliderConstraint_rotA, _sliderConstraint_rotB);
 		calculateSlidingAxisAndPosition(constraint, _sliderConstraint_rotA);
 		calculatePositionLimitsConstraintProperties(constraint, bodyA, bodyB, deltaTime, -1);
-		if (isActive$3(constraint.positionLimitsConstraintPart)) {
+		if (isActive$4(constraint.positionLimitsConstraintPart)) {
 			let positionError;
 			if (constraint.d <= constraint.limitsMin) positionError = constraint.d - constraint.limitsMin;
 			else positionError = constraint.d - constraint.limitsMax;
-			limit = solvePositionConstraint$2(constraint.positionLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, positionError, baumgarteFactor);
+			limit = solvePositionConstraint$6(constraint.positionLimitsConstraintPart, bodyA, bodyB, constraint.worldSpaceSliderAxis, positionError, baumgarteFactor);
 		}
 	}
 	return pos || rot || limit;
 }
 function resetWarmStart$1(constraint) {
-	deactivate$1(constraint.positionConstraintPart);
-	deactivate$5(constraint.rotationConstraintPart);
-	deactivate$3(constraint.positionLimitsConstraintPart);
-	deactivate$3(constraint.motorConstraintPart);
+	deactivate(constraint.positionConstraintPart);
+	deactivate$3(constraint.rotationConstraintPart);
+	deactivate$6(constraint.positionLimitsConstraintPart);
+	deactivate$6(constraint.motorConstraintPart);
 }
 /** Get total lambda for position constraint */
 function getTotalLambdaPosition$1(out, constraint) {
@@ -17451,13 +19847,13 @@ const def$13 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
 //#region src/constraints/swing-twist-constraint.ts
 var swing_twist_constraint_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$14,
+	create: () => create$13,
 	def: () => def$12,
 	get: () => get,
 	getRotationInConstraintSpace: () => getRotationInConstraintSpace,
@@ -17495,19 +19891,19 @@ function makeSwingTwistConstraint() {
 		twistMotorState: 0,
 		targetAngularVelocity: create$47(),
 		targetOrientation: create$44(),
-		swingMotorSettings: create$26(),
-		twistMotorSettings: create$26(),
+		swingMotorSettings: create$24(),
+		twistMotorSettings: create$24(),
 		worldSpaceMotorAxis: [
 			create$47(),
 			create$47(),
 			create$47()
 		],
-		pointConstraintPart: create$28(),
-		swingTwistConstraintPart: create$24(),
+		pointConstraintPart: create$26(),
+		swingTwistConstraintPart: create$22(),
 		motorConstraintParts: [
-			create$29(),
-			create$29(),
-			create$29()
+			create$27(),
+			create$27(),
+			create$27()
 		]
 	};
 }
@@ -17516,16 +19912,16 @@ function resetConstraint(constraint) {
 	constraint.enabled = true;
 	constraint._sleeping = false;
 	constraint._pooled = false;
-	deactivate$6(constraint.pointConstraintPart);
-	deactivate$4(constraint.swingTwistConstraintPart);
-	for (const part of constraint.motorConstraintParts) deactivate$7(part);
+	deactivate$4(constraint.pointConstraintPart);
+	deactivate$2(constraint.swingTwistConstraintPart);
+	for (const part of constraint.motorConstraintParts) deactivate$5(part);
 }
 const _create_normalAxis1 = /* @__PURE__ */ create$47();
 const _create_normalAxis2 = /* @__PURE__ */ create$47();
 const _create_c_to_b1 = /* @__PURE__ */ create$45();
 const _create_c_to_b2 = /* @__PURE__ */ create$45();
 /** Create a swing-twist constraint */
-function create$14(world, settings) {
+function create$13(world, settings) {
 	const pool = ensurePool(world.constraints, 6);
 	const bodies = world.bodies;
 	const sequence = pool.nextSequence;
@@ -17599,6 +19995,7 @@ function create$14(world, settings) {
 	if (settings.twistMotorSettings) copy(constraint.twistMotorSettings, settings.twistMotorSettings);
 	bodyA.constraintIds.push(constraint.id);
 	if (constraint.bodyIndexA !== constraint.bodyIndexB) bodyB.constraintIds.push(constraint.id);
+	addToList(world.constraints, constraint);
 	return constraint;
 }
 /** Update the limits in the swing-twist constraint part */
@@ -17616,6 +20013,7 @@ function remove(world, constraint) {
 	resetConstraint(constraint);
 	constraint._pooled = true;
 	constraint.id = -1;
+	removeFromList(world.constraints, constraint);
 	pool.freeIndices.push(constraint.index);
 }
 /** Get swing-twist constraint by id */
@@ -17655,16 +20053,16 @@ function setMaxFrictionTorque(constraint, torque) {
 function setSwingMotorState(constraint, state) {
 	if (constraint.swingMotorState !== state) {
 		constraint.swingMotorState = state;
-		deactivate$7(constraint.motorConstraintParts[0]);
-		deactivate$7(constraint.motorConstraintParts[1]);
-		deactivate$7(constraint.motorConstraintParts[2]);
+		deactivate$5(constraint.motorConstraintParts[0]);
+		deactivate$5(constraint.motorConstraintParts[1]);
+		deactivate$5(constraint.motorConstraintParts[2]);
 	}
 }
 /** Set twist motor state */
 function setTwistMotorState(constraint, state) {
 	if (constraint.twistMotorState !== state) {
 		constraint.twistMotorState = state;
-		deactivate$7(constraint.motorConstraintParts[0]);
+		deactivate$5(constraint.motorConstraintParts[0]);
 	}
 }
 /** Set target angular velocity in constraint space of body 2 */
@@ -17716,12 +20114,12 @@ function setupVelocity(constraint, bodies, deltaTime) {
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 	fromQuat(_setup_rotA, bodyA.quaternion);
 	fromQuat(_setup_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _setup_rotA, constraint.localSpacePosition1, bodyB, _setup_rotB, constraint.localSpacePosition2, bodies.stepStamp);
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _setup_rotA, constraint.localSpacePosition1, bodyB, _setup_rotB, constraint.localSpacePosition2, bodies.stepStamp);
 	multiply$1(_setup_constraintBody1ToWorld, bodyA.quaternion, constraint.constraintToBody1);
 	multiply$1(_setup_constraintBody2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 	conjugate(_setup_c1Conj, _setup_constraintBody1ToWorld);
 	multiply$1(_setup_q, _setup_c1Conj, _setup_constraintBody2ToWorld);
-	calculateConstraintProperties$4(constraint.swingTwistConstraintPart, bodyA, bodyB, _setup_q, _setup_constraintBody1ToWorld);
+	calculateConstraintProperties$2(constraint.swingTwistConstraintPart, bodyA, bodyB, _setup_q, _setup_constraintBody1ToWorld);
 	if (constraint.swingMotorState !== 0 || constraint.twistMotorState !== 0 || constraint.maxFrictionTorque > 0) {
 		fromQuat(_setup_wsAxis, _setup_constraintBody2ToWorld);
 		for (let i = 0; i < 3; i++) set$7(constraint.worldSpaceMotorAxis[i], _setup_wsAxis[i * 4 + 0], _setup_wsAxis[i * 4 + 1], _setup_wsAxis[i * 4 + 2]);
@@ -17734,54 +20132,54 @@ function setupVelocity(constraint, bodies, deltaTime) {
 		}
 		switch (constraint.swingMotorState) {
 			case 0:
-				if (constraint.maxFrictionTorque > 0) for (let i = 1; i < 3; i++) calculateConstraintProperties$7(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], 0);
-				else for (let i = 0; i < 3; i++) deactivate$7(constraint.motorConstraintParts[i]);
+				if (constraint.maxFrictionTorque > 0) for (let i = 1; i < 3; i++) calculateConstraintProperties$5(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], 0);
+				else for (let i = 0; i < 3; i++) deactivate$5(constraint.motorConstraintParts[i]);
 				break;
 			case 1:
-				for (let i = 1; i < 3; i++) calculateConstraintProperties$7(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], -constraint.targetAngularVelocity[i]);
+				for (let i = 1; i < 3; i++) calculateConstraintProperties$5(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], -constraint.targetAngularVelocity[i]);
 				break;
 			case 2:
-				if (hasStiffness$1(constraint.swingMotorSettings.springSettings)) for (let i = 1; i < 3; i++) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintParts[i], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[i], 0, _setup_rotationError[i], constraint.swingMotorSettings.springSettings);
-				else for (let i = 1; i < 3; i++) deactivate$7(constraint.motorConstraintParts[i]);
+				if (hasStiffness$1(constraint.swingMotorSettings.springSettings)) for (let i = 1; i < 3; i++) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintParts[i], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[i], 0, _setup_rotationError[i], constraint.swingMotorSettings.springSettings);
+				else for (let i = 1; i < 3; i++) deactivate$5(constraint.motorConstraintParts[i]);
 				break;
 			case 3:
-				if (hasStiffnessOrDamping(constraint.swingMotorSettings.springSettings)) for (let i = 1; i < 3; i++) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintParts[i], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[i], -constraint.targetAngularVelocity[i], _setup_rotationError[i], constraint.swingMotorSettings.springSettings);
-				else for (let i = 1; i < 3; i++) deactivate$7(constraint.motorConstraintParts[i]);
+				if (hasStiffnessOrDamping(constraint.swingMotorSettings.springSettings)) for (let i = 1; i < 3; i++) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintParts[i], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[i], -constraint.targetAngularVelocity[i], _setup_rotationError[i], constraint.swingMotorSettings.springSettings);
+				else for (let i = 1; i < 3; i++) deactivate$5(constraint.motorConstraintParts[i]);
 				break;
 		}
 		switch (constraint.twistMotorState) {
 			case 0:
-				if (constraint.maxFrictionTorque > 0) calculateConstraintProperties$7(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], 0);
-				else deactivate$7(constraint.motorConstraintParts[0]);
+				if (constraint.maxFrictionTorque > 0) calculateConstraintProperties$5(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], 0);
+				else deactivate$5(constraint.motorConstraintParts[0]);
 				break;
 			case 1:
-				calculateConstraintProperties$7(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], -constraint.targetAngularVelocity[0]);
+				calculateConstraintProperties$5(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], -constraint.targetAngularVelocity[0]);
 				break;
 			case 2:
-				if (hasStiffness$1(constraint.twistMotorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintParts[0], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[0], 0, _setup_rotationError[0], constraint.twistMotorSettings.springSettings);
-				else deactivate$7(constraint.motorConstraintParts[0]);
+				if (hasStiffness$1(constraint.twistMotorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintParts[0], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[0], 0, _setup_rotationError[0], constraint.twistMotorSettings.springSettings);
+				else deactivate$5(constraint.motorConstraintParts[0]);
 				break;
 			case 3:
-				if (hasStiffnessOrDamping(constraint.twistMotorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor$1(constraint.motorConstraintParts[0], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[0], -constraint.targetAngularVelocity[0], _setup_rotationError[0], constraint.twistMotorSettings.springSettings);
-				else deactivate$7(constraint.motorConstraintParts[0]);
+				if (hasStiffnessOrDamping(constraint.twistMotorSettings.springSettings)) calculateConstraintPropertiesWithSettingsForMotor(constraint.motorConstraintParts[0], deltaTime, bodyA, bodyB, constraint.worldSpaceMotorAxis[0], -constraint.targetAngularVelocity[0], _setup_rotationError[0], constraint.twistMotorSettings.springSettings);
+				else deactivate$5(constraint.motorConstraintParts[0]);
 				break;
 		}
-	} else for (const part of constraint.motorConstraintParts) deactivate$7(part);
+	} else for (const part of constraint.motorConstraintParts) deactivate$5(part);
 }
 function warmStartVelocity(constraint, bodies, warmStartImpulseRatio) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
-	for (const part of constraint.motorConstraintParts) warmStart$6(part, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$3(constraint.swingTwistConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
-	warmStart$5(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	for (const part of constraint.motorConstraintParts) warmStart$5(part, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$2(constraint.swingTwistConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
+	warmStart$4(constraint.pointConstraintPart, bodyA, bodyB, warmStartImpulseRatio);
 }
 function solveVelocity(constraint, bodies, deltaTime) {
 	const bodyA = bodies.pool[constraint.bodyIndexA];
 	const bodyB = bodies.pool[constraint.bodyIndexB];
 	if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return false;
 	let impulse = false;
-	if (isActive$5(constraint.motorConstraintParts[0])) {
+	if (isActive$3(constraint.motorConstraintParts[0])) {
 		let minLimit;
 		let maxLimit;
 		if (constraint.twistMotorState === 0) {
@@ -17791,9 +20189,9 @@ function solveVelocity(constraint, bodies, deltaTime) {
 			minLimit = deltaTime * constraint.twistMotorSettings.minTorqueLimit;
 			maxLimit = deltaTime * constraint.twistMotorSettings.maxTorqueLimit;
 		}
-		impulse = solveVelocityConstraint$6(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], minLimit, maxLimit) || impulse;
+		impulse = solveVelocityConstraint$5(constraint.motorConstraintParts[0], bodyA, bodyB, constraint.worldSpaceMotorAxis[0], minLimit, maxLimit) || impulse;
 	}
-	if (isActive$5(constraint.motorConstraintParts[1])) {
+	if (isActive$3(constraint.motorConstraintParts[1])) {
 		let minLimit;
 		let maxLimit;
 		if (constraint.swingMotorState === 0) {
@@ -17803,10 +20201,10 @@ function solveVelocity(constraint, bodies, deltaTime) {
 			minLimit = deltaTime * constraint.swingMotorSettings.minTorqueLimit;
 			maxLimit = deltaTime * constraint.swingMotorSettings.maxTorqueLimit;
 		}
-		for (let i = 1; i < 3; i++) impulse = solveVelocityConstraint$6(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], minLimit, maxLimit) || impulse;
+		for (let i = 1; i < 3; i++) impulse = solveVelocityConstraint$5(constraint.motorConstraintParts[i], bodyA, bodyB, constraint.worldSpaceMotorAxis[i], minLimit, maxLimit) || impulse;
 	}
-	impulse = solveVelocityConstraint$3(constraint.swingTwistConstraintPart, bodyA, bodyB) || impulse;
-	impulse = solveVelocityConstraint$5(constraint.pointConstraintPart, bodyA, bodyB) || impulse;
+	impulse = solveVelocityConstraint$2(constraint.swingTwistConstraintPart, bodyA, bodyB) || impulse;
+	impulse = solveVelocityConstraint$4(constraint.pointConstraintPart, bodyA, bodyB) || impulse;
 	return impulse;
 }
 const _solvePosition_rotA = /* @__PURE__ */ create$41();
@@ -17824,17 +20222,17 @@ function solvePosition(constraint, bodies, _deltaTime, baumgarteFactor) {
 	multiply$1(_solvePosition_c2ToWorld, bodyB.quaternion, constraint.constraintToBody2);
 	conjugate(_solvePosition_c1Conj, _solvePosition_c1ToWorld);
 	multiply$1(_solvePosition_q, _solvePosition_c1Conj, _solvePosition_c2ToWorld);
-	impulse = solvePositionConstraint$3(constraint.swingTwistConstraintPart, bodyA, bodyB, _solvePosition_q, constraint.constraintToBody1, constraint.constraintToBody2, baumgarteFactor) || impulse;
+	impulse = solvePositionConstraint$2(constraint.swingTwistConstraintPart, bodyA, bodyB, _solvePosition_q, constraint.constraintToBody1, constraint.constraintToBody2, baumgarteFactor) || impulse;
 	fromQuat(_solvePosition_rotA, bodyA.quaternion);
 	fromQuat(_solvePosition_rotB, bodyB.quaternion);
-	calculateConstraintProperties$6(constraint.pointConstraintPart, bodyA, _solvePosition_rotA, constraint.localSpacePosition1, bodyB, _solvePosition_rotB, constraint.localSpacePosition2, -1);
-	impulse = solvePositionConstraint$5(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor) || impulse;
+	calculateConstraintProperties$4(constraint.pointConstraintPart, bodyA, _solvePosition_rotA, constraint.localSpacePosition1, bodyB, _solvePosition_rotB, constraint.localSpacePosition2, -1);
+	impulse = solvePositionConstraint$4(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor) || impulse;
 	return impulse;
 }
 function resetWarmStart(constraint) {
-	for (const part of constraint.motorConstraintParts) deactivate$7(part);
-	deactivate$4(constraint.swingTwistConstraintPart);
-	deactivate$6(constraint.pointConstraintPart);
+	for (const part of constraint.motorConstraintParts) deactivate$5(part);
+	deactivate$2(constraint.swingTwistConstraintPart);
+	deactivate$4(constraint.pointConstraintPart);
 }
 /** Get total lambda for position constraint */
 function getTotalLambdaPosition(out, constraint) {
@@ -17876,7 +20274,7 @@ const def$12 = /* @__PURE__ */ (() => defineConstraint({
 	},
 	getSortFields: (out, constraint) => {
 		out.priority = constraint.constraintPriority;
-		out.index = constraint.index;
+		out.index = constraint.listIndex;
 	}
 }))();
 //#endregion
@@ -18447,7 +20845,8 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, sx, sy, sz, r, g, b) 
 				multiply$2(localPos, localPos, scale);
 				const rotatedPos = create$47();
 				transformQuat(rotatedPos, localPos, parentQ);
-				drawShape(out, child.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], sx, sy, sz, r, g, b);
+				const childScale = transformScale(create$47(), childLocalQ, sx, sy, sz);
+				drawShape(out, child.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], childScale[0], childScale[1], childScale[2], r, g, b);
 			}
 			break;
 		case 6: {
@@ -18475,7 +20874,8 @@ function drawShape(out, shape, px, py, pz, qx, qy, qz, qw, sx, sy, sz, r, g, b) 
 			multiply$2(localPos, localPos, scale);
 			const rotatedPos = create$47();
 			transformQuat(rotatedPos, localPos, parentQ);
-			drawShape(out, shape.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], sx, sy, sz, r, g, b);
+			const innerScale = transformScale(create$47(), childLocalQ, sx, sy, sz);
+			drawShape(out, shape.shape, px + rotatedPos[0], py + rotatedPos[1], pz + rotatedPos[2], combined[0], combined[1], combined[2], combined[3], innerScale[0], innerScale[1], innerScale[2], r, g, b);
 			break;
 		}
 		case 7:
@@ -18502,6 +20902,9 @@ function pushConstraintMarker(out, pos, size, r, g, b) {
 }
 function pushConstraintLine(out, from, to, r, g, b) {
 	pushLine(out, from[0], from[1], from[2], to[0], to[1], to[2], r, g, b);
+}
+function pushConstraintAxis(out, from, direction, length, r, g, b) {
+	pushLine(out, from[0], from[1], from[2], from[0] + direction[0] * length, from[1] + direction[1] * length, from[2] + direction[2] * length, r, g, b);
 }
 const _pieRotationQuat = /* @__PURE__ */ create$44();
 const _pieRotatedAxis = /* @__PURE__ */ create$47();
@@ -18673,8 +21076,9 @@ function contactConstraints(world, _options) {
 			const [ax, ay, az] = cp.positionA;
 			const [bx, by, bz] = cp.positionB;
 			const hasImpulse = cp.normalConstraint.totalLambda !== 0 || constraint.frictionConstraint1.totalLambda !== 0 || constraint.frictionConstraint2.totalLambda !== 0 || constraint.angularFrictionConstraint.totalLambda !== 0;
-			pushCross(out, ax, ay, az, hasImpulse ? .04 : .02, hasImpulse ? 0 : 0, hasImpulse ? 1 : .4, hasImpulse ? 1 : .6);
-			pushCross(out, bx, by, bz, hasImpulse ? .04 : .02, hasImpulse ? 1 : .5, hasImpulse ? 0 : 0, hasImpulse ? 1 : .5);
+			const crossSize = hasImpulse ? .04 : .02;
+			pushCross(out, ax, ay, az, crossSize, 0, hasImpulse ? 1 : .4, hasImpulse ? 1 : .6);
+			pushCross(out, bx, by, bz, crossSize, hasImpulse ? 1 : .5, 0, hasImpulse ? 1 : .5);
 			if (hasPrev) pushLine(out, prevAx, prevAy, prevAz, ax, ay, az, .8, .8, 0);
 			prevAx = ax;
 			prevAy = ay;
@@ -18741,14 +21145,16 @@ function joints(world, options) {
 		transformPointToWorld(_constraintPointA, constraint.localSpacePosition1, xfA);
 		transformPointToWorld(_constraintPointB, constraint.localSpacePosition2, xfB);
 		transformDirectionToWorld(_constraintDirA, constraint.localSpaceHingeAxis1, xfA);
+		transformDirectionToWorld(_constraintDirB, constraint.localSpaceHingeAxis2, xfB);
 		pushConstraintMarker(out, _constraintPointA, size * .1, 1, 0, 0);
-		pushLine(out, _constraintPointA[0], _constraintPointA[1], _constraintPointA[2], _constraintPointA[0] + _constraintDirA[0] * size, _constraintPointA[1] + _constraintDirA[1] * size, _constraintPointA[2] + _constraintDirA[2] * size, 1, 0, 0);
+		pushConstraintAxis(out, _constraintPointA, _constraintDirA, size, 1, 0, 0);
 		pushConstraintMarker(out, _constraintPointB, size * .1, 0, 1, 0);
-		transformQuat(_constraintNormalAxis, constraint.localSpaceNormalAxis1, xfA.quaternion);
-		pushLine(out, _constraintPointB[0], _constraintPointB[1], _constraintPointB[2], _constraintPointB[0] + _constraintNormalAxis[0] * size, _constraintPointB[1] + _constraintNormalAxis[1] * size, _constraintPointB[2] + _constraintNormalAxis[2] * size, 1, 1, 1);
-		if (drawLimits && constraint.hasLimits) {
-			const c = constraint;
-			if (c.limitsMax > c.limitsMin) drawPie(out, _constraintPointA, size, _constraintDirA, _constraintNormalAxis, c.limitsMin, c.limitsMax, .5, 0, .5);
+		pushConstraintAxis(out, _constraintPointB, _constraintDirB, size, 0, 1, 0);
+		transformDirectionToWorld(_constraintNormalAxis, constraint.localSpaceNormalAxis2, xfB);
+		pushConstraintAxis(out, _constraintPointB, _constraintNormalAxis, size, 1, 1, 1);
+		if (drawLimits && constraint.hasLimits && constraint.limitsMax > constraint.limitsMin) {
+			transformDirectionToWorld(_constraintNormalAxis, constraint.localSpaceNormalAxis1, xfA);
+			drawPie(out, _constraintPointA, size, _constraintDirA, _constraintNormalAxis, constraint.limitsMin, constraint.limitsMax, .5, 0, .5);
 		}
 	}
 	const swingTwistPool = world.constraints.pools[6];
@@ -18995,543 +21401,6 @@ let ContactValidateResult = /* @__PURE__ */ function(ContactValidateResult) {
 	return ContactValidateResult;
 }({});
 //#endregion
-//#region src/manifold/clip.ts
-/**
-* Clips a polygon against a half-space plane using Sutherland-Hodgeman algorithm.
-* Keeps vertices in the negative half-space: (origin - vertex) · normal < 0
-*
-* @param out output face with clipped vertices
-* @param inPolygon input polygon to clip
-* @param inPlaneOrigin point on the clipping plane
-* @param inPlaneNormal plane normal (does NOT need to be normalized)
-*/
-function clipPolyVsPlane(out, inPolygon, inPlaneOrigin, inPlaneNormal) {
-	out.numVertices = 0;
-	if (inPolygon.numVertices < 2) return;
-	const e1Index = (inPolygon.numVertices - 1) * 3;
-	let e1x = inPolygon.vertices[e1Index];
-	let e1y = inPolygon.vertices[e1Index + 1];
-	let e1z = inPolygon.vertices[e1Index + 2];
-	const dx = inPlaneOrigin[0] - e1x;
-	const dy = inPlaneOrigin[1] - e1y;
-	const dz = inPlaneOrigin[2] - e1z;
-	let prevNum = dx * inPlaneNormal[0] + dy * inPlaneNormal[1] + dz * inPlaneNormal[2];
-	let prevInside = prevNum < 0;
-	for (let j = 0; j < inPolygon.numVertices; j++) {
-		const e2Index = j * 3;
-		const e2x = inPolygon.vertices[e2Index];
-		const e2y = inPolygon.vertices[e2Index + 1];
-		const e2z = inPolygon.vertices[e2Index + 2];
-		const dx2 = inPlaneOrigin[0] - e2x;
-		const dy2 = inPlaneOrigin[1] - e2y;
-		const dz2 = inPlaneOrigin[2] - e2z;
-		const num = dx2 * inPlaneNormal[0] + dy2 * inPlaneNormal[1] + dz2 * inPlaneNormal[2];
-		let curInside = num < 0;
-		if (curInside !== prevInside) {
-			const e12x = e2x - e1x;
-			const e12y = e2y - e1y;
-			const e12z = e2z - e1z;
-			const denom = e12x * inPlaneNormal[0] + e12y * inPlaneNormal[1] + e12z * inPlaneNormal[2];
-			if (denom !== 0) {
-				const t = prevNum / denom;
-				const outIndex = out.numVertices * 3;
-				out.vertices[outIndex] = e1x + e12x * t;
-				out.vertices[outIndex + 1] = e1y + e12y * t;
-				out.vertices[outIndex + 2] = e1z + e12z * t;
-				out.numVertices++;
-			} else curInside = prevInside;
-		}
-		if (curInside) {
-			const outIndex = out.numVertices * 3;
-			out.vertices[outIndex] = e2x;
-			out.vertices[outIndex + 1] = e2y;
-			out.vertices[outIndex + 2] = e2z;
-			out.numVertices++;
-		}
-		prevNum = num;
-		prevInside = curInside;
-		e1x = e2x;
-		e1y = e2y;
-		e1z = e2z;
-	}
-}
-const _clipPoly_tmpFace1 = /* @__PURE__ */ createFace();
-const _clipPoly_tmpFace2 = /* @__PURE__ */ createFace();
-const _clipPoly_clipE1 = /* @__PURE__ */ create$47();
-const _clipPoly_clipNormal = /* @__PURE__ */ create$47();
-/**
-* Clips one polygon against another using Sutherland-Hodgeman algorithm.
-* Both polygons assumed counter-clockwise order.
-*
-* @param out output face with clipped vertices
-* @param inPolygonToClip polygon to clip
-* @param inClippingPolygon polygon to clip against (must have >= 3 vertices)
-* @param inClippingPolygonNormal normal of clipping polygon (does NOT need to be normalized)
-*/
-function clipPolyVsPoly(out, inPolygonToClip, inClippingPolygon, inClippingPolygonNormal) {
-	out.numVertices = 0;
-	if (inPolygonToClip.numVertices < 2) return;
-	if (inClippingPolygon.numVertices < 3) return;
-	let tmpIdx = 0;
-	let srcFace;
-	let dstFace;
-	for (let i = 0; i < inClippingPolygon.numVertices; i++) {
-		const clipE1Index = i * 3;
-		const clipE1x = inClippingPolygon.vertices[clipE1Index];
-		const clipE1y = inClippingPolygon.vertices[clipE1Index + 1];
-		const clipE1z = inClippingPolygon.vertices[clipE1Index + 2];
-		const clipE2Index = (i + 1) % inClippingPolygon.numVertices * 3;
-		const clipE2x = inClippingPolygon.vertices[clipE2Index];
-		const clipE2y = inClippingPolygon.vertices[clipE2Index + 1];
-		const clipE2z = inClippingPolygon.vertices[clipE2Index + 2];
-		const edgeX = clipE2x - clipE1x;
-		const edgeY = clipE2y - clipE1y;
-		const edgeZ = clipE2z - clipE1z;
-		const clipNormalX = inClippingPolygonNormal[1] * edgeZ - inClippingPolygonNormal[2] * edgeY;
-		const clipNormalY = inClippingPolygonNormal[2] * edgeX - inClippingPolygonNormal[0] * edgeZ;
-		const clipNormalZ = inClippingPolygonNormal[0] * edgeY - inClippingPolygonNormal[1] * edgeX;
-		if (i === 0) srcFace = inPolygonToClip;
-		else srcFace = tmpIdx === 0 ? _clipPoly_tmpFace1 : _clipPoly_tmpFace2;
-		tmpIdx ^= 1;
-		if (i === inClippingPolygon.numVertices - 1) dstFace = out;
-		else dstFace = tmpIdx === 0 ? _clipPoly_tmpFace1 : _clipPoly_tmpFace2;
-		_clipPoly_clipE1[0] = clipE1x;
-		_clipPoly_clipE1[1] = clipE1y;
-		_clipPoly_clipE1[2] = clipE1z;
-		_clipPoly_clipNormal[0] = clipNormalX;
-		_clipPoly_clipNormal[1] = clipNormalY;
-		_clipPoly_clipNormal[2] = clipNormalZ;
-		clipPolyVsPlane(dstFace, srcFace, _clipPoly_clipE1, _clipPoly_clipNormal);
-		if (dstFace.numVertices < 3) {
-			out.numVertices = 0;
-			break;
-		}
-	}
-}
-/**
-* Clips a polygon against an edge. The edge is projected onto the polygon's plane,
-* then the polygon is clipped against the edge's half-space.
-*
-* IMPORTANT: This function only outputs intersection points where the polygon
-* boundary crosses the edge projection, NOT the interior vertices.
-*
-* @param out output face with clipped vertices
-* @param inPolygon polygon to clip (must have >= 3 vertices)
-* @param inEdgeVertex1 first vertex of edge
-* @param inEdgeVertex2 second vertex of edge
-* @param inClippingEdgeNormal normal used to orient clipping plane
-*/
-function clipPolyVsEdge(out, inPolygon, inEdgeVertex1, inEdgeVertex2, inClippingEdgeNormal) {
-	out.numVertices = 0;
-	if (inPolygon.numVertices < 3) return;
-	const edgeX = inEdgeVertex2[0] - inEdgeVertex1[0];
-	const edgeY = inEdgeVertex2[1] - inEdgeVertex1[1];
-	const edgeZ = inEdgeVertex2[2] - inEdgeVertex1[2];
-	const edgeNormalX = inClippingEdgeNormal[1] * edgeZ - inClippingEdgeNormal[2] * edgeY;
-	const edgeNormalY = inClippingEdgeNormal[2] * edgeX - inClippingEdgeNormal[0] * edgeZ;
-	const edgeNormalZ = inClippingEdgeNormal[0] * edgeY - inClippingEdgeNormal[1] * edgeX;
-	const p0x = inPolygon.vertices[0];
-	const p0y = inPolygon.vertices[1];
-	const p0z = inPolygon.vertices[2];
-	const p1x = inPolygon.vertices[3];
-	const p1y = inPolygon.vertices[4];
-	const p1z = inPolygon.vertices[5];
-	const p2x = inPolygon.vertices[6];
-	const p2y = inPolygon.vertices[7];
-	const p2z = inPolygon.vertices[8];
-	const v0v1x = p1x - p0x;
-	const v0v1y = p1y - p0y;
-	const v0v1z = p1z - p0z;
-	const v0v2x = p2x - p0x;
-	const v0v2y = p2y - p0y;
-	const v0v2z = p2z - p0z;
-	const polyNormalX = v0v2y * v0v1z - v0v2z * v0v1y;
-	const polyNormalY = v0v2z * v0v1x - v0v2x * v0v1z;
-	const polyNormalZ = v0v2x * v0v1y - v0v2y * v0v1x;
-	const polygonNormalLenSq = polyNormalX * polyNormalX + polyNormalY * polyNormalY + polyNormalZ * polyNormalZ;
-	const diff1x = p0x - inEdgeVertex1[0];
-	const diff1y = p0y - inEdgeVertex1[1];
-	const diff1z = p0z - inEdgeVertex1[2];
-	const scale1 = (diff1x * polyNormalX + diff1y * polyNormalY + diff1z * polyNormalZ) / polygonNormalLenSq;
-	const v1x = inEdgeVertex1[0] + polyNormalX * scale1;
-	const v1y = inEdgeVertex1[1] + polyNormalY * scale1;
-	const v1z = inEdgeVertex1[2] + polyNormalZ * scale1;
-	const diff2x = p0x - inEdgeVertex2[0];
-	const diff2y = p0y - inEdgeVertex2[1];
-	const diff2z = p0z - inEdgeVertex2[2];
-	const scale2 = (diff2x * polyNormalX + diff2y * polyNormalY + diff2z * polyNormalZ) / polygonNormalLenSq;
-	const v2x = inEdgeVertex2[0] + polyNormalX * scale2;
-	const v2y = inEdgeVertex2[1] + polyNormalY * scale2;
-	const v2z = inEdgeVertex2[2] + polyNormalZ * scale2;
-	const v12x = v2x - v1x;
-	const v12y = v2y - v1y;
-	const v12z = v2z - v1z;
-	const v12LenSq = v12x * v12x + v12y * v12y + v12z * v12z;
-	const e1Index = (inPolygon.numVertices - 1) * 3;
-	let e1x = inPolygon.vertices[e1Index];
-	let e1y = inPolygon.vertices[e1Index + 1];
-	let e1z = inPolygon.vertices[e1Index + 2];
-	const diffx = inEdgeVertex1[0] - e1x;
-	const diffy = inEdgeVertex1[1] - e1y;
-	const diffz = inEdgeVertex1[2] - e1z;
-	let prevNum = diffx * edgeNormalX + diffy * edgeNormalY + diffz * edgeNormalZ;
-	let prevInside = prevNum < 0;
-	for (let j = 0; j < inPolygon.numVertices; j++) {
-		const e2Index = j * 3;
-		const e2x = inPolygon.vertices[e2Index];
-		const e2y = inPolygon.vertices[e2Index + 1];
-		const e2z = inPolygon.vertices[e2Index + 2];
-		const diff2x_ = inEdgeVertex1[0] - e2x;
-		const diff2y_ = inEdgeVertex1[1] - e2y;
-		const diff2z_ = inEdgeVertex1[2] - e2z;
-		const num = diff2x_ * edgeNormalX + diff2y_ * edgeNormalY + diff2z_ * edgeNormalZ;
-		const curInside = num < 0;
-		if (curInside !== prevInside) {
-			const e12x = e2x - e1x;
-			const e12y = e2y - e1y;
-			const e12z = e2z - e1z;
-			const denom = e12x * edgeNormalX + e12y * edgeNormalY + e12z * edgeNormalZ;
-			let clippedX;
-			let clippedY;
-			let clippedZ;
-			if (denom !== 0) {
-				const t = prevNum / denom;
-				clippedX = e1x + e12x * t;
-				clippedY = e1y + e12y * t;
-				clippedZ = e1z + e12z * t;
-			} else {
-				clippedX = e1x;
-				clippedY = e1y;
-				clippedZ = e1z;
-			}
-			const clippedDiffX = clippedX - v1x;
-			const clippedDiffY = clippedY - v1y;
-			const clippedDiffZ = clippedZ - v1z;
-			const projection = clippedDiffX * v12x + clippedDiffY * v12y + clippedDiffZ * v12z;
-			const outIndex = out.numVertices * 3;
-			if (projection < 0) {
-				out.vertices[outIndex] = v1x;
-				out.vertices[outIndex + 1] = v1y;
-				out.vertices[outIndex + 2] = v1z;
-			} else if (projection > v12LenSq) {
-				out.vertices[outIndex] = v2x;
-				out.vertices[outIndex + 1] = v2y;
-				out.vertices[outIndex + 2] = v2z;
-			} else {
-				out.vertices[outIndex] = clippedX;
-				out.vertices[outIndex + 1] = clippedY;
-				out.vertices[outIndex + 2] = clippedZ;
-			}
-			out.numVertices++;
-		}
-		prevNum = num;
-		prevInside = curInside;
-		e1x = e2x;
-		e1y = e2y;
-		e1z = e2z;
-	}
-}
-/** creates a new contact manifold with pre-allocated storage for 64 contact points */
-function createContactManifold() {
-	return {
-		numContactPoints: 0,
-		baseOffset: create$47(),
-		relativeContactPointsOnA: new Array(192).fill(0),
-		relativeContactPointsOnB: new Array(192).fill(0),
-		worldSpaceNormal: create$47(),
-		penetrationDepth: 0,
-		subShapeIdA: EMPTY_SUB_SHAPE_ID,
-		subShapeIdB: EMPTY_SUB_SHAPE_ID,
-		materialIdA: -1,
-		materialIdB: -1
-	};
-}
-function resetContactManifold(manifold) {
-	manifold.numContactPoints = 0;
-	set$7(manifold.baseOffset, 0, 0, 0);
-	set$7(manifold.worldSpaceNormal, 0, 0, 0);
-	manifold.penetrationDepth = 0;
-	manifold.subShapeIdA = EMPTY_SUB_SHAPE_ID;
-	manifold.subShapeIdB = EMPTY_SUB_SHAPE_ID;
-	manifold.materialIdA = -1;
-	manifold.materialIdB = -1;
-}
-const _swapShapes_tempNormal = /* @__PURE__ */ create$47();
-function swapShapes(manifold) {
-	negate(_swapShapes_tempNormal, manifold.worldSpaceNormal);
-	copy$9(manifold.worldSpaceNormal, _swapShapes_tempNormal);
-	const tempSubShapeId = manifold.subShapeIdA;
-	manifold.subShapeIdA = manifold.subShapeIdB;
-	manifold.subShapeIdB = tempSubShapeId;
-	const tempMaterialId = manifold.materialIdA;
-	manifold.materialIdA = manifold.materialIdB;
-	manifold.materialIdB = tempMaterialId;
-	const tempArray = manifold.relativeContactPointsOnA;
-	manifold.relativeContactPointsOnA = manifold.relativeContactPointsOnB;
-	manifold.relativeContactPointsOnB = tempArray;
-}
-/** gets world-space contact point on shape A (baseOffset + relativePoint) */
-function getWorldSpaceContactPointOnA(out, manifold, index) {
-	const i = index * 3;
-	out[0] = manifold.baseOffset[0] + manifold.relativeContactPointsOnA[i];
-	out[1] = manifold.baseOffset[1] + manifold.relativeContactPointsOnA[i + 1];
-	out[2] = manifold.baseOffset[2] + manifold.relativeContactPointsOnA[i + 2];
-	return out;
-}
-/** gets world-space contact point on shape B (baseOffset + relativePoint) */
-function getWorldSpaceContactPointOnB(out, manifold, index) {
-	const i = index * 3;
-	out[0] = manifold.baseOffset[0] + manifold.relativeContactPointsOnB[i];
-	out[1] = manifold.baseOffset[1] + manifold.relativeContactPointsOnB[i + 1];
-	out[2] = manifold.baseOffset[2] + manifold.relativeContactPointsOnB[i + 2];
-	return out;
-}
-const _pruneProjectedPoints = new Float64Array(192);
-const _prunePenetrationDepthSq = new Float64Array(64);
-const _pruneKeptOnA = new Float64Array(12);
-const _pruneKeptOnB = new Float64Array(12);
-const MIN_DISTANCE_SQ = 1e-6;
-/**
-* Reduces contact points from up to 64 down to max 4.
-*
-* Algorithm:
-* 1. Project all contact points onto plane perpendicular to penetrationAxis
-* 2. Calculate metric for each point: (distance_in_plane²) × (penetration_depth²)
-*    where penetration_depth = distance between contact points on shape1 vs shape2
-* 3. Greedily select 4 points:
-*    - Point 1: Maximum metric (furthest from COM in plane + deepest penetration)
-*    - Point 2: Maximum distance from Point 1 (maximize edge length)
-*    - Point 3 & 4: On opposite sides of P1-P2 edge (maximize area)
-* 4. Output in winding order: [P1, P3, P2, P4] to form a proper quad
-*
-* The selected points are gathered in scratch, then copied back to indices 0-3,
-* manifold.numContactPoints is updated to final count (2-4).
-*
-* @param manifold contactManifold with contact points to prune (modifies in-place)
-* @param penetrationAxis normalized penetration direction (from shape 1 to shape 2)
-*/
-function pruneContactPoints(manifold, penetrationAxis) {
-	if (manifold.numContactPoints <= 4) return;
-	const numPoints = manifold.numContactPoints;
-	const axisX = penetrationAxis[0];
-	const axisY = penetrationAxis[1];
-	const axisZ = penetrationAxis[2];
-	for (let i = 0; i < numPoints; i++) {
-		const i3 = i * 3;
-		const v1x = manifold.relativeContactPointsOnA[i3];
-		const v1y = manifold.relativeContactPointsOnA[i3 + 1];
-		const v1z = manifold.relativeContactPointsOnA[i3 + 2];
-		const v2x = manifold.relativeContactPointsOnB[i3];
-		const v2y = manifold.relativeContactPointsOnB[i3 + 1];
-		const v2z = manifold.relativeContactPointsOnB[i3 + 2];
-		const dotProduct = v1x * axisX + v1y * axisY + v1z * axisZ;
-		const projX = v1x - axisX * dotProduct;
-		const projY = v1y - axisY * dotProduct;
-		const projZ = v1z - axisZ * dotProduct;
-		_pruneProjectedPoints[i3] = projX;
-		_pruneProjectedPoints[i3 + 1] = projY;
-		_pruneProjectedPoints[i3 + 2] = projZ;
-		const dx = v2x - v1x;
-		const dy = v2y - v1y;
-		const dz = v2z - v1z;
-		_prunePenetrationDepthSq[i] = Math.max(MIN_DISTANCE_SQ, dx * dx + dy * dy + dz * dz);
-	}
-	let point1 = 0;
-	const p0x = _pruneProjectedPoints[0];
-	const p0y = _pruneProjectedPoints[1];
-	const p0z = _pruneProjectedPoints[2];
-	let maxMetric = Math.max(MIN_DISTANCE_SQ, p0x * p0x + p0y * p0y + p0z * p0z) * _prunePenetrationDepthSq[0];
-	for (let i = 1; i < numPoints; i++) {
-		const i3 = i * 3;
-		const px = _pruneProjectedPoints[i3];
-		const py = _pruneProjectedPoints[i3 + 1];
-		const pz = _pruneProjectedPoints[i3 + 2];
-		const metric = Math.max(MIN_DISTANCE_SQ, px * px + py * py + pz * pz) * _prunePenetrationDepthSq[i];
-		if (metric > maxMetric) {
-			maxMetric = metric;
-			point1 = i;
-		}
-	}
-	let point2 = -1;
-	maxMetric = -Infinity;
-	const p1Idx = point1 * 3;
-	const p1x = _pruneProjectedPoints[p1Idx];
-	const p1y = _pruneProjectedPoints[p1Idx + 1];
-	const p1z = _pruneProjectedPoints[p1Idx + 2];
-	for (let i = 0; i < numPoints; i++) if (i !== point1) {
-		const i3 = i * 3;
-		const dx = _pruneProjectedPoints[i3] - p1x;
-		const dy = _pruneProjectedPoints[i3 + 1] - p1y;
-		const dz = _pruneProjectedPoints[i3 + 2] - p1z;
-		const metric = Math.max(MIN_DISTANCE_SQ, dx * dx + dy * dy + dz * dz) * _prunePenetrationDepthSq[i];
-		if (metric > maxMetric) {
-			maxMetric = metric;
-			point2 = i;
-		}
-	}
-	let point3 = -1;
-	let point4 = -1;
-	let minDot = 0;
-	let maxDot = 0;
-	const p2Idx = point2 * 3;
-	const p2x = _pruneProjectedPoints[p2Idx];
-	const p2y = _pruneProjectedPoints[p2Idx + 1];
-	const p2z = _pruneProjectedPoints[p2Idx + 2];
-	const edgeX = p2x - p1x;
-	const edgeY = p2y - p1y;
-	const edgeZ = p2z - p1z;
-	const perpX = edgeY * axisZ - edgeZ * axisY;
-	const perpY = edgeZ * axisX - edgeX * axisZ;
-	const perpZ = edgeX * axisY - edgeY * axisX;
-	for (let i = 0; i < numPoints; i++) if (i !== point1 && i !== point2) {
-		const i3 = i * 3;
-		const toX = _pruneProjectedPoints[i3] - p1x;
-		const toY = _pruneProjectedPoints[i3 + 1] - p1y;
-		const toZ = _pruneProjectedPoints[i3 + 2] - p1z;
-		const d = toX * perpX + toY * perpY + toZ * perpZ;
-		if (d < minDot) {
-			minDot = d;
-			point3 = i;
-		} else if (d > maxDot) {
-			maxDot = d;
-			point4 = i;
-		}
-	}
-	let numKept = pruneKeepPoint(manifold, point1, 0);
-	if (point3 !== -1) numKept = pruneKeepPoint(manifold, point3, numKept);
-	numKept = pruneKeepPoint(manifold, point2, numKept);
-	if (point4 !== -1) numKept = pruneKeepPoint(manifold, point4, numKept);
-	for (let i = 0; i < numKept * 3; i++) {
-		manifold.relativeContactPointsOnA[i] = _pruneKeptOnA[i];
-		manifold.relativeContactPointsOnB[i] = _pruneKeptOnB[i];
-	}
-	manifold.numContactPoints = numKept;
-}
-function pruneKeepPoint(manifold, index, numKept) {
-	const srcI = index * 3;
-	const dstI = numKept * 3;
-	_pruneKeptOnA[dstI] = manifold.relativeContactPointsOnA[srcI];
-	_pruneKeptOnA[dstI + 1] = manifold.relativeContactPointsOnA[srcI + 1];
-	_pruneKeptOnA[dstI + 2] = manifold.relativeContactPointsOnA[srcI + 2];
-	_pruneKeptOnB[dstI] = manifold.relativeContactPointsOnB[srcI];
-	_pruneKeptOnB[dstI + 1] = manifold.relativeContactPointsOnB[srcI + 1];
-	_pruneKeptOnB[dstI + 2] = manifold.relativeContactPointsOnB[srcI + 2];
-	return numKept + 1;
-}
-const _manifoldBetweenTwoFaces_clippedFace = /* @__PURE__ */ createFace();
-const _manifoldBetweenTwoFaces_penetrationAxis = /* @__PURE__ */ create$47();
-const _manifoldBetweenTwoFaces_edgeV1 = /* @__PURE__ */ create$47();
-const _manifoldBetweenTwoFaces_edgeV2 = /* @__PURE__ */ create$47();
-/**
-* Generates contact manifold from two supporting faces using polygon clipping.
-*
-* Algorithm:
-* 1. Clip the face with 3+ vertices (incident) against the other face (reference), swapping the faces and
-*    negating the penetration axis when face 2 is the one with fewer than 3 vertices
-* 2. Project clipped points onto the reference face's plane
-* 3. Filter by max contact distance
-* 4. Fallback to original contact points if clipping produces nothing
-*
-* Contact points are stored RELATIVE to manifold.baseOffset for numerical precision.
-*
-* @param out output contact manifold (points/numContactPoints populated)
-* @param inContactPoint1 initial contact point on shape 1 (world space)
-* @param inContactPoint2 initial contact point on shape 2 (world space)
-* @param inPenetrationAxis penetration direction (unnormalized, from shape 1 to 2, world space)
-* @param inMaxContactDistance max distance for contact filtering, > 0
-* @param inShape1Face supporting face on shape 1 (world space)
-* @param inShape2Face supporting face on shape 2 (world space)
-*/
-function manifoldBetweenTwoFaces(out, inContactPoint1, inContactPoint2, inPenetrationAxis, inMaxContactDistance, inShape1Face, inShape2Face) {
-	out.numContactPoints = 0;
-	if (Math.min(inShape1Face.numVertices, inShape2Face.numVertices) >= 2 && Math.max(inShape1Face.numVertices, inShape2Face.numVertices) >= 3) {
-		let shape1Face;
-		let shape2Face;
-		let contactPoints1;
-		let contactPoints2;
-		const penetrationAxis = _manifoldBetweenTwoFaces_penetrationAxis;
-		if (inShape2Face.numVertices >= 3) {
-			shape1Face = inShape1Face;
-			shape2Face = inShape2Face;
-			contactPoints1 = out.relativeContactPointsOnA;
-			contactPoints2 = out.relativeContactPointsOnB;
-			copy$9(penetrationAxis, inPenetrationAxis);
-		} else {
-			shape1Face = inShape2Face;
-			shape2Face = inShape1Face;
-			contactPoints1 = out.relativeContactPointsOnB;
-			contactPoints2 = out.relativeContactPointsOnA;
-			negate(penetrationAxis, inPenetrationAxis);
-		}
-		const clippedFace = _manifoldBetweenTwoFaces_clippedFace;
-		clippedFace.numVertices = 0;
-		if (shape1Face.numVertices >= 3) clipPolyVsPoly(clippedFace, shape2Face, shape1Face, penetrationAxis);
-		else {
-			const edgeV1 = set$7(_manifoldBetweenTwoFaces_edgeV1, shape1Face.vertices[0], shape1Face.vertices[1], shape1Face.vertices[2]);
-			const edgeV2 = set$7(_manifoldBetweenTwoFaces_edgeV2, shape1Face.vertices[3], shape1Face.vertices[4], shape1Face.vertices[5]);
-			clipPolyVsEdge(clippedFace, shape2Face, edgeV1, edgeV2, penetrationAxis);
-		}
-		const axisX = penetrationAxis[0];
-		const axisY = penetrationAxis[1];
-		const axisZ = penetrationAxis[2];
-		const planeOriginX = shape1Face.vertices[0];
-		const planeOriginY = shape1Face.vertices[1];
-		const planeOriginZ = shape1Face.vertices[2];
-		const firstEdgeX = shape1Face.vertices[3] - planeOriginX;
-		const firstEdgeY = shape1Face.vertices[4] - planeOriginY;
-		const firstEdgeZ = shape1Face.vertices[5] - planeOriginZ;
-		let planeNormalX;
-		let planeNormalY;
-		let planeNormalZ;
-		if (shape1Face.numVertices >= 3) {
-			const secondEdgeX = shape1Face.vertices[6] - planeOriginX;
-			const secondEdgeY = shape1Face.vertices[7] - planeOriginY;
-			const secondEdgeZ = shape1Face.vertices[8] - planeOriginZ;
-			planeNormalX = firstEdgeY * secondEdgeZ - firstEdgeZ * secondEdgeY;
-			planeNormalY = firstEdgeZ * secondEdgeX - firstEdgeX * secondEdgeZ;
-			planeNormalZ = firstEdgeX * secondEdgeY - firstEdgeY * secondEdgeX;
-		} else {
-			const perpX = firstEdgeY * axisZ - firstEdgeZ * axisY;
-			const perpY = firstEdgeZ * axisX - firstEdgeX * axisZ;
-			const perpZ = firstEdgeX * axisY - firstEdgeY * axisX;
-			planeNormalX = perpY * firstEdgeZ - perpZ * firstEdgeY;
-			planeNormalY = perpZ * firstEdgeX - perpX * firstEdgeZ;
-			planeNormalZ = perpX * firstEdgeY - perpY * firstEdgeX;
-		}
-		const penetrationAxisDotPlaneNormal = axisX * planeNormalX + axisY * planeNormalY + axisZ * planeNormalZ;
-		if (penetrationAxisDotPlaneNormal !== 0) {
-			const penetrationAxisLen = Math.sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ);
-			for (let i = 0; i < clippedFace.numVertices; i++) {
-				const vertexIndex = i * 3;
-				const p2X = clippedFace.vertices[vertexIndex];
-				const p2Y = clippedFace.vertices[vertexIndex + 1];
-				const p2Z = clippedFace.vertices[vertexIndex + 2];
-				const distance = ((p2X - planeOriginX) * planeNormalX + (p2Y - planeOriginY) * planeNormalY + (p2Z - planeOriginZ) * planeNormalZ) / penetrationAxisDotPlaneNormal;
-				if (distance * penetrationAxisLen < inMaxContactDistance) {
-					const outIndex = out.numContactPoints * 3;
-					contactPoints1[outIndex] = p2X - distance * axisX - out.baseOffset[0];
-					contactPoints1[outIndex + 1] = p2Y - distance * axisY - out.baseOffset[1];
-					contactPoints1[outIndex + 2] = p2Z - distance * axisZ - out.baseOffset[2];
-					contactPoints2[outIndex] = p2X - out.baseOffset[0];
-					contactPoints2[outIndex + 1] = p2Y - out.baseOffset[1];
-					contactPoints2[outIndex + 2] = p2Z - out.baseOffset[2];
-					out.numContactPoints++;
-					if (out.numContactPoints >= 64) break;
-				}
-			}
-		}
-	}
-	if (out.numContactPoints === 0) {
-		out.relativeContactPointsOnA[0] = inContactPoint1[0] - out.baseOffset[0];
-		out.relativeContactPointsOnA[1] = inContactPoint1[1] - out.baseOffset[1];
-		out.relativeContactPointsOnA[2] = inContactPoint1[2] - out.baseOffset[2];
-		out.relativeContactPointsOnB[0] = inContactPoint2[0] - out.baseOffset[0];
-		out.relativeContactPointsOnB[1] = inContactPoint2[1] - out.baseOffset[1];
-		out.relativeContactPointsOnB[2] = inContactPoint2[2] - out.baseOffset[2];
-		out.numContactPoints = 1;
-	}
-}
-//#endregion
 //#region src/register.ts
 /** register shape definitions */
 function registerShapes(defs) {
@@ -19583,7 +21452,6 @@ function castRayVsConvex(collector, settings, originX, originY, originZ, directi
 		_castRayVsConvex_hit.status = 1;
 		_castRayVsConvex_hit.fraction = Math.max(0, fraction);
 		_castRayVsConvex_hit.subShapeId = subShapeId;
-		_castRayVsConvex_hit.materialId = shape.materialId;
 		_castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
 		collector.addHit(_castRayVsConvex_hit);
 		hitAdded = true;
@@ -19599,7 +21467,6 @@ function castRayVsConvex(collector, settings, originX, originY, originZ, directi
 				_castRayVsConvex_hit.status = 1;
 				_castRayVsConvex_hit.fraction = fraction + (_castRayVsConvex_gjkResult.lambda - 1) * deltaFraction;
 				_castRayVsConvex_hit.subShapeId = subShapeId;
-				_castRayVsConvex_hit.materialId = shape.materialId;
 				_castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
 				collector.addHit(_castRayVsConvex_hit);
 				hitAdded = true;
@@ -19639,7 +21506,6 @@ function collidePointVsConvex(collector, settings, pointX, pointY, pointZ, shape
 	const toleranceSq = settings.collisionTolerance * settings.collisionTolerance;
 	if (_collidePointVsConvex_gjkResult.squaredDistance <= toleranceSq) {
 		_collidePointHit$2.subShapeIdB = subShapeIdB;
-		_collidePointHit$2.materialId = shapeB.materialId;
 		_collidePointHit$2.bodyIdB = collector.bodyIdB;
 		collector.addHit(_collidePointHit$2);
 	}
@@ -19745,8 +21611,6 @@ function collideConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, sh
 	_collideConvex_hit.penetration = penetration;
 	_collideConvex_hit.subShapeIdA = subShapeIdA;
 	_collideConvex_hit.subShapeIdB = subShapeIdB;
-	_collideConvex_hit.materialIdA = shapeA.materialId;
-	_collideConvex_hit.materialIdB = shapeB.materialId;
 	_collideConvex_hit.bodyIdB = collector.bodyIdB;
 	if (settings.collectFaces) {
 		_collideConvex_faceDirA[0] = -penetrationDepth.penetrationAxis[0];
@@ -19797,13 +21661,13 @@ function castConvexVsConvex(collector, settings, shapeA, subShapeIdA, _subShapeI
 	castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shapeB, subShapeIdB, _castConvex_AtoB, _castConvex_scaleA, _castConvex_displacementInB, _castConvex_scaleB, targetTransform);
 }
 function castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shapeB, subShapeIdB, castTransform, scaleA, displacementInB, scaleB, targetTransform) {
+	const supportMode = settings.useShrunkenShapeAndConvexRadius ? 1 : 2;
 	const supportA = castConvex_supportA;
 	const supportB = castConvex_supportB;
-	setShapeSupport(supportA, shapeA, 1, scaleA);
-	setShapeSupport(supportB, shapeB, 1, scaleB);
-	const tolerance = 1e-4;
+	setShapeSupport(supportA, shapeA, supportMode, scaleA);
+	setShapeSupport(supportB, shapeB, supportMode, scaleB);
 	_castConvex_gjkResult.lambda = collector.earlyOutFraction;
-	penetrationCastShape(_castConvex_gjkResult, castTransform, supportA, supportB, displacementInB, tolerance, settings.penetrationTolerance, supportA.convexRadius, supportB.convexRadius, collector.earlyOutFraction, settings.returnDeepestPoint);
+	penetrationCastShape(_castConvex_gjkResult, castTransform, supportA, supportB, displacementInB, settings.collisionTolerance, settings.penetrationTolerance, supportA.convexRadius + settings.extraConvexRadius, supportB.convexRadius, collector.earlyOutFraction, settings.returnDeepestPoint);
 	if (!_castConvex_gjkResult.hit) {
 		collector.addMiss();
 		return;
@@ -19813,7 +21677,7 @@ function castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shape
 		return;
 	}
 	if (!settings.collideWithBackfacesConvex) {
-		if (dot$2(_castConvex_gjkResult.separatingAxis, displacementInB) <= 0) {
+		if (dot$2(_castConvex_gjkResult.separatingAxis, displacementInB) < 0) {
 			collector.addMiss();
 			return;
 		}
@@ -19833,8 +21697,6 @@ function castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shape
 	_castConvex_castShapeHit.penetrationDepth = penetrationDepth;
 	_castConvex_castShapeHit.subShapeIdA = subShapeIdA;
 	_castConvex_castShapeHit.subShapeIdB = subShapeIdB;
-	_castConvex_castShapeHit.materialIdA = shapeA.materialId;
-	_castConvex_castShapeHit.materialIdB = shapeB.materialId;
 	_castConvex_castShapeHit.bodyIdB = collector.bodyIdB;
 	if (settings.collectFaces) {
 		copy$5(_castConvex_AtoWorldAtContact, castTransform);
@@ -19857,12 +21719,12 @@ function castConvexVsConvexLocal(collector, settings, shapeA, subShapeIdA, shape
 var box_exports = /* @__PURE__ */ __exportAll({
 	castRayVsBox: () => castRayVsBox,
 	collideSphereVsBox: () => collideSphereVsBox,
-	create: () => create$13,
+	create: () => create$12,
 	def: () => def$11,
 	update: () => update$9
 });
 /** create a box shape from settings */
-function create$13(o) {
+function create$12(o) {
 	const requestedConvexRadius = o.convexRadius ?? .05;
 	const minHalfExtent = Math.min(o.halfExtents[0], o.halfExtents[1], o.halfExtents[2]);
 	const convexRadius = Math.min(requestedConvexRadius, minHalfExtent);
@@ -20056,8 +21918,6 @@ function collideSphereVsBox(collector, settings, shapeA, subShapeIdA, _subShapeI
 	hit.penetration = penetration;
 	hit.subShapeIdA = subShapeIdA;
 	hit.subShapeIdB = subShapeIdB;
-	hit.materialIdA = sphereShape.materialId;
-	hit.materialIdB = boxShape.materialId;
 	hit.bodyIdB = collector.bodyIdB;
 	if (settings.collectFaces) {
 		set$7(_collideSphereVsBox_faceDirection, -normalX, -normalY, -normalZ);
@@ -20300,7 +22160,6 @@ function castRayVsBox(collector, settings, originX, originY, originZ, directionX
 	}
 	_castRayVsBox_hit.status = 1;
 	_castRayVsBox_hit.subShapeId = subShapeId;
-	_castRayVsBox_hit.materialId = shape.materialId;
 	_castRayVsBox_hit.bodyIdB = collector.bodyIdB;
 	let hitAdded = false;
 	if (settings.treatConvexAsSolid || tmin > 0) {
@@ -20331,7 +22190,6 @@ function collidePointVsBox(collector, _settings, pointX, pointY, pointZ, shapeB,
 	const scaledHalfZ = shapeB.halfExtents[2] * Math.abs(scaleBZ);
 	if (Math.abs(_collidePointVsBox_posB[0]) <= scaledHalfX && Math.abs(_collidePointVsBox_posB[1]) <= scaledHalfY && Math.abs(_collidePointVsBox_posB[2]) <= scaledHalfZ) {
 		_collidePointVsBox_hit.subShapeIdB = subShapeIdB;
-		_collidePointVsBox_hit.materialId = shapeB.materialId;
 		_collidePointVsBox_hit.bodyIdB = collector.bodyIdB;
 		collector.addHit(_collidePointVsBox_hit);
 	}
@@ -20339,12 +22197,12 @@ function collidePointVsBox(collector, _settings, pointX, pointY, pointZ, shapeB,
 //#endregion
 //#region src/shapes/capsule.ts
 var capsule_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$12,
+	create: () => create$11,
 	def: () => def$10,
 	update: () => update$8
 });
 /** create a capsule shape from settings */
-function create$12(o) {
+function create$11(o) {
 	if (o.radius <= 0) throw new Error("Invalid radius, must be > 0");
 	if (o.halfHeightOfCylinder <= 0) throw new Error("Invalid height, must be > 0");
 	const shape = {
@@ -20496,11 +22354,11 @@ function getInnerRadius$9(shape) {
 //#endregion
 //#region src/shapes/compound.ts
 var compound_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$11,
+	create: () => create$10,
 	def: () => def$9,
 	update: () => update$7
 });
-function create$11(o) {
+function create$10(o) {
 	const shape = {
 		type: 5,
 		children: o.children,
@@ -20634,8 +22492,8 @@ const def$9 = /* @__PURE__ */ (() => defineShape({
 	getSupportingFace: getSupportingFace$9,
 	getMaterial: getMaterial$6,
 	getInnerRadius: getInnerRadius$8,
-	getLeafShape: getLeafShape$3,
-	getSubShapeTransformedShape: getSubShapeTransformedShape$3,
+	getLeafShape: getLeafShape$4,
+	getSubShapeTransformedShape: getSubShapeTransformedShape$4,
 	castRay: castRayVsCompound,
 	collidePoint: collidePointVsCompound,
 	register: () => {
@@ -20709,7 +22567,7 @@ function getInnerRadius$8(shape) {
 	for (const child of shape.children) innerRadius = Math.min(innerRadius, getShapeInnerRadius(child.shape));
 	return innerRadius;
 }
-function getLeafShape$3(out, shape, subShapeId) {
+function getLeafShape$4(out, shape, subShapeId) {
 	popIndex(_subShapeIdPopResult$2, subShapeId, shape.children.length);
 	if (_subShapeIdPopResult$2.value >= shape.children.length) {
 		out.shape = null;
@@ -20719,7 +22577,7 @@ function getLeafShape$3(out, shape, subShapeId) {
 	const childShape = shape.children[_subShapeIdPopResult$2.value].shape;
 	shapeDefs[childShape.type].getLeafShape(out, childShape, _subShapeIdPopResult$2.remainder);
 }
-function getSubShapeTransformedShape$3(out, shape, subShapeId) {
+function getSubShapeTransformedShape$4(out, shape, subShapeId) {
 	popIndex(_subShapeIdPopResult$2, subShapeId, shape.children.length);
 	const child = shape.children[_subShapeIdPopResult$2.value];
 	const childPosition = _getSubShapeTransformedShape_childPosition$1;
@@ -20903,9 +22761,10 @@ function castShapeVsCompound(collector, settings, shapeA, subShapeIdA, subShapeI
 	const centerX = (queryBounds[0] + queryBounds[3]) * .5;
 	const centerY = (queryBounds[1] + queryBounds[4]) * .5;
 	const centerZ = (queryBounds[2] + queryBounds[5]) * .5;
-	const extentX = (queryBounds[3] - queryBounds[0]) * .5;
-	const extentY = (queryBounds[4] - queryBounds[1]) * .5;
-	const extentZ = (queryBounds[5] - queryBounds[2]) * .5;
+	const extra = settings.extraConvexRadius;
+	const extentX = (queryBounds[3] - queryBounds[0]) * .5 + extra / Math.abs(scaleBX);
+	const extentY = (queryBounds[4] - queryBounds[1]) * .5 + extra / Math.abs(scaleBY);
+	const extentZ = (queryBounds[5] - queryBounds[2]) * .5 + extra / Math.abs(scaleBZ);
 	const invQuatB = set$4(_castShapeVsCompound_invQuatB, -quatBX, -quatBY, -quatBZ, quatBW);
 	const localDisplacement = set$7(_castShapeVsCompound_localDisplacement, dispAX, dispAY, dispAZ);
 	transformQuat(localDisplacement, localDisplacement, invQuatB);
@@ -21204,7 +23063,7 @@ function isFacing$1(edge, inPosition) {
 var convex_hull_builder_exports = /* @__PURE__ */ __exportAll({
 	Result: () => Result,
 	containsFace: () => containsFace,
-	create: () => create$10,
+	create: () => create$9,
 	determineMaxError: () => determineMaxError,
 	getCenterOfMassAndVolume: () => getCenterOfMassAndVolume,
 	getNumVerticesUsed: () => getNumVerticesUsed,
@@ -21220,7 +23079,7 @@ let Result = /* @__PURE__ */ function(Result) {
 	Result[Result["Degenerate"] = 4] = "Degenerate";
 	return Result;
 }({});
-const create$10 = (inPositions) => {
+const create$9 = (inPositions) => {
 	return {
 		positions: inPositions,
 		faces: [],
@@ -22244,7 +24103,7 @@ function removeTwoEdgeFace(inFace, ioAffectedFaces) {
 //#region src/shapes/convex-hull.ts
 var convex_hull_exports = /* @__PURE__ */ __exportAll({
 	SUPPORT_HILL_CLIMB_MIN_POINTS: () => 32,
-	create: () => create$9,
+	create: () => create$8,
 	def: () => def$8
 });
 const MAX_POINTS_IN_HULL = 256;
@@ -22263,7 +24122,7 @@ const _affineTransform = /* @__PURE__ */ create$41();
 const _supportingFace_invScale = /* @__PURE__ */ create$47();
 const _supportingFace_planeNormal = /* @__PURE__ */ create$47();
 /** create a convex hull shape */
-function create$9(o) {
+function create$8(o) {
 	const hullTolerance = o.hullTolerance ?? .001;
 	const convexRadius = o.convexRadius ?? .05;
 	const density = o.density ?? 1e3;
@@ -22273,7 +24132,7 @@ function create$9(o) {
 		const idx = i * 3;
 		inputPoints.push(fromValues$2(o.positions[idx], o.positions[idx + 1], o.positions[idx + 2]));
 	}
-	const builder = create$10(inputPoints);
+	const builder = create$9(inputPoints);
 	const initResult = initialize(builder, MAX_POINTS_IN_HULL, hullTolerance);
 	if (initResult.result !== 0 && initResult.result !== 1) throw new Error(`Convex hull build failed: ${initResult.error}`);
 	if (initResult.result === 0) {
@@ -22630,7 +24489,7 @@ function getInnerRadius$7(shape) {
 //#endregion
 //#region src/shapes/cylinder.ts
 var cylinder_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$8,
+	create: () => create$7,
 	def: () => def$7,
 	update: () => update$6
 });
@@ -22677,7 +24536,7 @@ const CYLINDER_CAP_OCTAGON = [
 	]
 ];
 /** create cylinder shape from settings */
-function create$8(o) {
+function create$7(o) {
 	const requestedConvexRadius = o.convexRadius ?? .05;
 	const convexRadius = Math.min(requestedConvexRadius, Math.min(o.halfHeight, o.radius));
 	const density = o.density ?? 1e3;
@@ -22840,12 +24699,12 @@ function getInnerRadius$6(shape) {
 //#endregion
 //#region src/shapes/offset-center-of-mass.ts
 var offset_center_of_mass_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$7,
+	create: () => create$6,
 	def: () => def$6,
 	update: () => update$5
 });
 /** create an offset center of mass shape */
-function create$7(o) {
+function create$6(o) {
 	const shape = {
 		type: 10,
 		shape: o.shape,
@@ -22879,6 +24738,8 @@ const def$6 = /* @__PURE__ */ (() => defineShape({
 	getSupportingFace: getSupportingFace$6,
 	getMaterial: getMaterial$5,
 	getInnerRadius: getInnerRadius$5,
+	getLeafShape: getLeafShape$3,
+	getSubShapeTransformedShape: getSubShapeTransformedShape$3,
 	castRay: castRayVsOffsetCenterOfMass,
 	collidePoint: collidePointVsOffsetCenterOfMass,
 	register: () => {
@@ -22905,6 +24766,12 @@ function getSupportingFace$6(ioResult, direction, shape, subShapeId) {
 }
 function getInnerRadius$5(shape) {
 	return getShapeInnerRadius(shape.shape);
+}
+function getLeafShape$3(outResult, shape, subShapeId) {
+	shapeDefs[shape.shape.type].getLeafShape(outResult, shape.shape, subShapeId);
+}
+function getSubShapeTransformedShape$3(outResult, shape, subShapeId) {
+	shapeDefs[shape.shape.type].getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
 }
 function castRayVsOffsetCenterOfMass(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, shape, subShapeId, subShapeIdBits, posX, posY, posZ, quatX, quatY, quatZ, quatW, scaleX, scaleY, scaleZ) {
 	shapeDefs[shape.shape.type].castRay(collector, settings, originX, originY, originZ, directionX, directionY, directionZ, length, shape.shape, subShapeId, subShapeIdBits, posX, posY, posZ, quatX, quatY, quatZ, quatW, scaleX, scaleY, scaleZ);
@@ -22941,16 +24808,17 @@ function castShapeVsOffsetCenterOfMass(collector, settings, shapeA, subShapeIdA,
 var plane_exports = /* @__PURE__ */ __exportAll({
 	DEFAULT_PLANE_HALF_EXTENT: () => DEFAULT_PLANE_HALF_EXTENT,
 	castConvexVsPlane: () => castConvexVsPlane,
-	create: () => create$6,
+	create: () => create$5,
 	def: () => def$5,
 	update: () => update$4
 });
 const DEFAULT_PLANE_HALF_EXTENT = 1e3;
 /** create a plane shape from settings */
-function create$6(o) {
+function create$5(o) {
 	const plane = create$37();
-	normalize$2(plane.normal, o.plane.normal);
-	plane.constant = o.plane.constant;
+	const normalLength = length(o.plane.normal);
+	scale$4(plane.normal, o.plane.normal, 1 / normalLength);
+	plane.constant = o.plane.constant / normalLength;
 	const shape = {
 		type: 11,
 		plane,
@@ -22985,6 +24853,7 @@ const def$5 = /* @__PURE__ */ (() => defineShape({
 }))();
 function computeMassProperties$6(out, _shape) {
 	out.mass = 0;
+	zero(out.inertia);
 }
 function getMaterial$4(shape, subShapeId) {
 	return shape.materialId;
@@ -23141,14 +25010,12 @@ function castRayVsPlane(collector, settings, originX, originY, originZ, directio
 		_castRayVsPlane_hit.status = 1;
 		_castRayVsPlane_hit.fraction = 0;
 		_castRayVsPlane_hit.subShapeId = subShapeId;
-		_castRayVsPlane_hit.materialId = shape.materialId;
 		_castRayVsPlane_hit.bodyIdB = collector.bodyIdB;
 		collector.addHit(_castRayVsPlane_hit);
-		return;
 	}
 	set$7(_castRayVsPlane_rayDirection, directionX, directionY, directionZ);
 	const dot = dot$2(_castRayVsPlane_rayDirection, _castRayVsPlane_worldPlane.normal);
-	if (Math.abs(dot) < 1e-10) return;
+	if (dot === 0) return;
 	const isBackFacing = dot > 0;
 	if (!settings.collideWithBackfacesConvex && isBackFacing) return;
 	const fraction = -distance / dot / length;
@@ -23156,7 +25023,6 @@ function castRayVsPlane(collector, settings, originX, originY, originZ, directio
 		_castRayVsPlane_hit.status = 1;
 		_castRayVsPlane_hit.fraction = fraction;
 		_castRayVsPlane_hit.subShapeId = subShapeId;
-		_castRayVsPlane_hit.materialId = shape.materialId;
 		_castRayVsPlane_hit.bodyIdB = collector.bodyIdB;
 		collector.addHit(_castRayVsPlane_hit);
 	} else collector.addMiss();
@@ -23245,8 +25111,6 @@ function collideConvexVsPlane(collector, settings, shapeA, subShapeIdA, _subShap
 		_collideConvexVsPlane_hit.penetration = penetration;
 		_collideConvexVsPlane_hit.subShapeIdA = subShapeIdA;
 		_collideConvexVsPlane_hit.subShapeIdB = subShapeIdB;
-		_collideConvexVsPlane_hit.materialIdA = convexShape.materialId;
-		_collideConvexVsPlane_hit.materialIdB = planeShape.materialId;
 		_collideConvexVsPlane_hit.bodyIdB = collector.bodyIdB;
 		if (settings.collectFaces) {
 			set$7(_collideConvexVsPlane_scaleVec, scaleAX, scaleAY, scaleAZ);
@@ -23357,7 +25221,7 @@ function castConvexVsPlane(collector, settings, shapeA, subShapeIdA, _subShapeId
 	_castConvexVsPlane_support.getSupport(_castConvexVsPlane_supportPointLocal, _castConvexVsPlane_support, _castConvexVsPlane_negatedNormalInConvexSpace);
 	const supportPoint = transformMat4$1(_castConvexVsPlane_supportPoint, _castConvexVsPlane_supportPointLocal, AtoB);
 	const signedDistance = distanceToPoint(plane, supportPoint);
-	const convexRadius = _castConvexVsPlane_support.convexRadius;
+	const convexRadius = _castConvexVsPlane_support.convexRadius + settings.extraConvexRadius;
 	const penetrationDepth = -signedDistance + convexRadius;
 	const dot = dot$2(_castConvexVsPlane_directionInB, normal);
 	const comHit = _castConvexVsPlane_comHit;
@@ -23392,8 +25256,6 @@ function castConvexVsPlane(collector, settings, shapeA, subShapeIdA, _subShapeId
 	normalize$2(_castConvexVsPlane_hit.normal, _castConvexVsPlane_hit.normal);
 	_castConvexVsPlane_hit.subShapeIdA = subShapeIdA;
 	_castConvexVsPlane_hit.subShapeIdB = subShapeIdB;
-	_castConvexVsPlane_hit.materialIdA = shapeA.materialId;
-	_castConvexVsPlane_hit.materialIdB = planeShape.materialId;
 	_castConvexVsPlane_hit.bodyIdB = collector.bodyIdB;
 	if (settings.collectFaces) {
 		multiply(_castConvexVsPlane_shapeToWorld, comHit, AtoB);
@@ -23408,12 +25270,12 @@ function castConvexVsPlane(collector, settings, shapeA, subShapeIdA, _subShapeId
 //#endregion
 //#region src/shapes/scaled.ts
 var scaled_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$5,
+	create: () => create$4,
 	def: () => def$4,
 	update: () => update$3
 });
 /** create a scaled shape */
-function create$5(o) {
+function create$4(o) {
 	const shape = {
 		type: 7,
 		shape: o.shape,
@@ -23434,20 +25296,18 @@ function computeScaledVolume(shape) {
 }
 function computeScaledLocalBounds(out, shape) {
 	const innerAABB = shape.shape.aabb;
-	const scaleX = Math.abs(shape.scale[0]);
-	const scaleY = Math.abs(shape.scale[1]);
-	const scaleZ = Math.abs(shape.scale[2]);
-	out[0] = innerAABB[0] * scaleX;
-	out[1] = innerAABB[1] * scaleY;
-	out[2] = innerAABB[2] * scaleZ;
-	out[3] = innerAABB[3] * scaleX;
-	out[4] = innerAABB[4] * scaleY;
-	out[5] = innerAABB[5] * scaleZ;
+	for (let i = 0; i < 3; i++) {
+		const scaledMin = innerAABB[i] * shape.scale[i];
+		const scaledMax = innerAABB[i + 3] * shape.scale[i];
+		out[i] = Math.min(scaledMin, scaledMax);
+		out[i + 3] = Math.max(scaledMin, scaledMax);
+	}
 }
 function computeScaledCenterOfMass(out, shape) {
-	out[0] = shape.centerOfMass[0] * shape.scale[0];
-	out[1] = shape.centerOfMass[1] * shape.scale[1];
-	out[2] = shape.centerOfMass[2] * shape.scale[2];
+	const innerCenterOfMass = shape.shape.centerOfMass;
+	out[0] = innerCenterOfMass[0] * shape.scale[0];
+	out[1] = innerCenterOfMass[1] * shape.scale[1];
+	out[2] = innerCenterOfMass[2] * shape.scale[2];
 }
 /** updates a scaled shape after it's properties have changed */
 function update$3(shape) {
@@ -23556,12 +25416,12 @@ function castShapeVsScaled(collector, settings, shapeA, subShapeIdA, subShapeIdB
 //#region src/shapes/sphere.ts
 var sphere_exports = /* @__PURE__ */ __exportAll({
 	collideSphereVsSphere: () => collideSphereVsSphere,
-	create: () => create$4,
+	create: () => create$3,
 	def: () => def$3,
 	update: () => update$2
 });
 /** create a sphere shape */
-function create$4(o) {
+function create$3(o) {
 	const shape = {
 		type: 0,
 		radius: o.radius,
@@ -23661,7 +25521,6 @@ function collidePointVsSphere(collector, _settings, pointX, pointY, pointZ, shap
 	const radius = shapeB.radius * Math.abs(scaleBX);
 	if (localX * localX + localY * localY + localZ * localZ <= radius * radius) {
 		_collidePointHit$1.subShapeIdB = subShapeIdB;
-		_collidePointHit$1.materialId = shapeB.materialId;
 		_collidePointHit$1.bodyIdB = collector.bodyIdB;
 		collector.addHit(_collidePointHit$1);
 	}
@@ -23706,8 +25565,6 @@ function collideSphereVsSphere(collector, settings, shapeA, subShapeIdA, _subSha
 	hit.penetration = penetration;
 	hit.subShapeIdA = subShapeIdA;
 	hit.subShapeIdB = subShapeIdB;
-	hit.materialIdA = sphereA.materialId;
-	hit.materialIdB = sphereB.materialId;
 	hit.bodyIdB = collector.bodyIdB;
 	hit.faceA.numVertices = 0;
 	hit.faceB.numVertices = 0;
@@ -24089,12 +25946,12 @@ function stats$1(bvh) {
 //#region src/shapes/static-compound.ts
 var static_compound_exports = /* @__PURE__ */ __exportAll({
 	DEFAULT_STATIC_COMPOUND_OPTIONS: () => DEFAULT_STATIC_COMPOUND_OPTIONS,
-	create: () => create$3,
+	create: () => create$2,
 	def: () => def$2,
 	update: () => update$1
 });
 const DEFAULT_STATIC_COMPOUND_OPTIONS = { bvhMaxLeafChildren: 4 };
-function create$3(o) {
+function create$2(o) {
 	const bvhSettings = { maxLeafChildren: o.bvhMaxLeafChildren ?? DEFAULT_STATIC_COMPOUND_OPTIONS.bvhMaxLeafChildren };
 	const shape = {
 		type: 12,
@@ -24757,9 +26614,10 @@ function castShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, sub
 	const rayDirX = _castShapeVsStaticCompound_displacementInB[0] * invRayLength;
 	const rayDirY = _castShapeVsStaticCompound_displacementInB[1] * invRayLength;
 	const rayDirZ = _castShapeVsStaticCompound_displacementInB[2] * invRayLength;
-	const halfExtentX = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * .5;
-	const halfExtentY = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * .5;
-	const halfExtentZ = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * .5;
+	const extra = settings.extraConvexRadius;
+	const halfExtentX = (_castShapeVsStaticCompound_sweptAABB[3] - _castShapeVsStaticCompound_sweptAABB[0]) * .5 + extra / Math.abs(scaleBX);
+	const halfExtentY = (_castShapeVsStaticCompound_sweptAABB[4] - _castShapeVsStaticCompound_sweptAABB[1]) * .5 + extra / Math.abs(scaleBY);
+	const halfExtentZ = (_castShapeVsStaticCompound_sweptAABB[5] - _castShapeVsStaticCompound_sweptAABB[2]) * .5 + extra / Math.abs(scaleBZ);
 	const stackBase = _castShapeVsStaticCompound_stackTop;
 	let stackSize = stackBase;
 	_castShapeVsStaticCompound_stackNodes[stackSize] = 0;
@@ -24852,12 +26710,12 @@ function castShapeVsStaticCompound(collector, settings, shapeA, subShapeIdA, sub
 //#endregion
 //#region src/shapes/transformed.ts
 var transformed_exports = /* @__PURE__ */ __exportAll({
-	create: () => create$2,
+	create: () => create$1,
 	def: () => def$1,
 	update: () => update
 });
 /** create a transformed shape */
-function create$2(o) {
+function create$1(o) {
 	const shape = {
 		type: 6,
 		shape: o.shape,
@@ -26247,7 +28105,7 @@ function edgeKey(ia, ib) {
 var triangle_mesh_exports = /* @__PURE__ */ __exportAll({
 	BvhSplitStrategy: () => BvhSplitStrategy,
 	DEFAULT_TRIANGLE_MESH_OPTIONS: () => DEFAULT_TRIANGLE_MESH_OPTIONS,
-	create: () => create$1,
+	create: () => create,
 	def: () => def
 });
 const DEFAULT_TRIANGLE_MESH_OPTIONS = {
@@ -26256,7 +28114,7 @@ const DEFAULT_TRIANGLE_MESH_OPTIONS = {
 	degenerateTolerance: 1e-6,
 	activeEdgeCosThresholdAngle: .996195
 };
-function create$1(o) {
+function create(o) {
 	const result = buildTriangleMesh({
 		positions: o.positions,
 		indices: o.indices,
@@ -26426,7 +28284,6 @@ function castRayVsTriangleMesh(collector, settings, originX, originY, originZ, d
 					_castRayVsTriangleMesh_hit.status = 1;
 					_castRayVsTriangleMesh_hit.fraction = _castRayVsTriangleMesh_hitResult.fraction;
 					_castRayVsTriangleMesh_hit.subShapeId = _castRayVsTriangleMesh_subShapeIdBuilder.value;
-					_castRayVsTriangleMesh_hit.materialId = getMaterialId(meshData, triangleIndex);
 					_castRayVsTriangleMesh_hit.bodyIdB = collector.bodyIdB;
 					collector.addHit(_castRayVsTriangleMesh_hit);
 					earlyOut = collector.earlyOutFraction;
@@ -26520,7 +28377,6 @@ function collidePointVsTriangleMesh(collector, _settings, pointX, pointY, pointZ
 	if ((hitCountCollector.hitCount & 1) !== 0) {
 		_collidePointHit.subShapeIdB = hitCountCollector.lastSubShapeId;
 		popIndex(_collidePointVsTriangleMesh_popResult, hitCountCollector.lastSubShapeId, shapeB.data.triangleCount);
-		_collidePointHit.materialId = getMaterialId(shapeB.data, _collidePointVsTriangleMesh_popResult.value);
 		_collidePointHit.bodyIdB = collector.bodyIdB;
 		collector.addHit(_collidePointHit);
 	}
@@ -26632,9 +28488,10 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const rayDirY = _castConvexVsTriangleMesh_walkDisplacement[1] * invRayLength;
 	const rayDirZ = _castConvexVsTriangleMesh_walkDisplacement[2] * invRayLength;
 	const halfExtents = _castConvexVsTriangleMesh_halfExtents;
-	halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * .5;
-	halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * .5;
-	halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * .5;
+	const extra = settings.extraConvexRadius;
+	halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * .5 + extra / Math.abs(scaleBX);
+	halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * .5 + extra / Math.abs(scaleBY);
+	halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * .5 + extra / Math.abs(scaleBZ);
 	let stackSize = 0;
 	_castConvexVsTriangleMesh_stackNodes[stackSize] = 0;
 	_castConvexVsTriangleMesh_stackDist[stackSize] = 0;
@@ -26668,7 +28525,7 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 				const backFacing = dot$2(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
 				if (!settings.collideWithBackfacesTriangles && backFacing) continue;
 				setTriangleSupport(_castConvexVsTriangleMesh_triangleSupport, a, b, c);
-				penetrationCastShape(_castConvexVsTriangleMesh_gjkResult, castTransform, supportA, _castConvexVsTriangleMesh_triangleSupport, _castConvexVsTriangleMesh_displacementInB, settings.collisionTolerance, settings.penetrationTolerance, supportA.convexRadius, 0, collector.earlyOutFraction, settings.returnDeepestPoint);
+				penetrationCastShape(_castConvexVsTriangleMesh_gjkResult, castTransform, supportA, _castConvexVsTriangleMesh_triangleSupport, _castConvexVsTriangleMesh_displacementInB, settings.collisionTolerance, settings.penetrationTolerance, supportA.convexRadius + settings.extraConvexRadius, 0, collector.earlyOutFraction, settings.returnDeepestPoint);
 				if (!_castConvexVsTriangleMesh_gjkResult.hit) continue;
 				const fraction = _castConvexVsTriangleMesh_gjkResult.lambda;
 				const penetrationDepth = length(sub(_castConvexVsTriangleMesh_penetrationDifference, _castConvexVsTriangleMesh_gjkResult.pointA, _castConvexVsTriangleMesh_gjkResult.pointB));
@@ -26695,8 +28552,6 @@ function castConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 				_castConvexVsTriangleMesh_subShapeIdBuilder.currentBit = _subShapeIdBitsB;
 				pushIndex(_castConvexVsTriangleMesh_subShapeIdBuilder, _castConvexVsTriangleMesh_subShapeIdBuilder, triangleIndex, meshData.triangleCount);
 				_castConvexVsTriangleMesh_castShapeHit.subShapeIdB = _castConvexVsTriangleMesh_subShapeIdBuilder.value;
-				_castConvexVsTriangleMesh_castShapeHit.materialIdA = shapeA.materialId;
-				_castConvexVsTriangleMesh_castShapeHit.materialIdB = getMaterialId(meshData, triangleIndex);
 				_castConvexVsTriangleMesh_castShapeHit.bodyIdB = collector.bodyIdB;
 				if (settings.collectFaces) {
 					const normalInA = negate(_castConvexVsTriangleMesh_faceNormal, _castConvexVsTriangleMesh_gjkResult.separatingAxis);
@@ -26920,8 +28775,6 @@ function collideConvexVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 				_collideConvexVsTriangleMesh_collideShapeHit.penetration = penetration;
 				_collideConvexVsTriangleMesh_collideShapeHit.subShapeIdA = subShapeIdA;
 				_collideConvexVsTriangleMesh_collideShapeHit.subShapeIdB = _collideConvexVsTriangleMesh_subShapeIdBuilder.value;
-				_collideConvexVsTriangleMesh_collideShapeHit.materialIdA = shapeA.materialId;
-				_collideConvexVsTriangleMesh_collideShapeHit.materialIdB = getMaterialId(meshShape.data, triangleIndex);
 				_collideConvexVsTriangleMesh_collideShapeHit.bodyIdB = collector.bodyIdB;
 				if (settings.collectFaces) {
 					const faceDirectionA = negate(_collideConvexVsTriangleMesh_temp_faceDirA, _collideConvexVsTriangleMesh_penetrationDepth.penetrationAxis);
@@ -27110,8 +28963,6 @@ function collideSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _
 				hit.penetration = penetrationDepth;
 				hit.subShapeIdA = subShapeIdA;
 				hit.subShapeIdB = _collideSphereVsTriangleMesh_subShapeIdBuilder.value;
-				hit.materialIdA = sphereShape.materialId;
-				hit.materialIdB = getMaterialId(meshShape.data, triangleIndex);
 				hit.bodyIdB = collector.bodyIdB;
 				if (settings.collectFaces) {
 					hit.faceA.numVertices = 0;
@@ -27208,7 +29059,7 @@ const _castSphereVsTriangleMesh_v2Rel = /* @__PURE__ */ create$47();
 const _castSphereVsTriangleMesh_barycentric = /* @__PURE__ */ createBarycentricCoordinatesResult();
 const _castSphereVsTriangleMesh_p = /* @__PURE__ */ create$47();
 /** helper to add a cast hit with active edge detection for sphere vs triangle mesh */
-function castSphereVsTriangleMeshAddHit(collector, settings, sphereShape, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, v0, v1, v2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, fraction, contactPointA, contactPointB, contactNormal) {
+function castSphereVsTriangleMeshAddHit(collector, settings, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, v0, v1, v2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, fraction, contactPointA, contactPointB, contactNormal) {
 	let finalContactNormal = contactNormal;
 	if (settings.collideOnlyWithActiveEdges && triangleActiveEdges !== 7) {
 		const edgeDir = settings.activeEdgeMovementDirection;
@@ -27247,8 +29098,6 @@ function castSphereVsTriangleMeshAddHit(collector, settings, sphereShape, meshSh
 	hit.penetrationDepth = distance(hit.pointA, hit.pointB);
 	hit.subShapeIdA = subShapeIdA;
 	hit.subShapeIdB = _castSphereVsTriangleMesh_subShapeIdBuilder.value;
-	hit.materialIdA = sphereShape.materialId;
-	hit.materialIdB = getMaterialId(meshShape.data, triangleIndex);
 	hit.bodyIdB = collector.bodyIdB;
 	hit.faceA.numVertices = 0;
 	hit.faceB.numVertices = 0;
@@ -27264,7 +29113,7 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 	const buffer = meshShape.bvh.buffer;
 	const meshData = meshShape.data;
 	if (buffer.length === 0) return;
-	const sphereRadius = Math.abs(scaleAX) * sphereShape.radius;
+	const sphereRadius = Math.abs(scaleAX) * sphereShape.radius + settings.extraConvexRadius;
 	const posB = set$7(_castSphereVsTriangleMesh_posB, posBX, posBY, posBZ);
 	const scaleB = set$7(_castSphereVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 	const x2 = quatBX + quatBX;
@@ -27354,7 +29203,7 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 						const penetrationDepth = sphereRadius - qLen;
 						if (-penetrationDepth >= collector.earlyOutFraction) continue;
 						const contactNormal = qLen > 0 ? scale$4(_castSphereVsTriangleMesh_contactNormal, q, 1 / qLen) : set$7(_castSphereVsTriangleMesh_contactNormal, 0, 1, 0);
-						castSphereVsTriangleMeshAddHit(collector, settings, sphereShape, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, 0, scaleAndAdd(_castSphereVsTriangleMesh_contactPointA, q, contactNormal, penetrationDepth), q, contactNormal);
+						castSphereVsTriangleMeshAddHit(collector, settings, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, 0, scaleAndAdd(_castSphereVsTriangleMesh_contactPointA, q, contactNormal, penetrationDepth), q, contactNormal);
 						continue;
 					}
 				}
@@ -27368,7 +29217,7 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 							const barycentric = _castSphereVsTriangleMesh_barycentric;
 							computeBarycentricCoordinates3d(barycentric, subtract$1(_castSphereVsTriangleMesh_v0Rel, rv0, p), subtract$1(_castSphereVsTriangleMesh_v1Rel, rv1, p), subtract$1(_castSphereVsTriangleMesh_v2Rel, rv2, p), 1e-10);
 							if (barycentric.isValid && barycentric.u >= 0 && barycentric.v >= 0 && barycentric.w >= 0) {
-								castSphereVsTriangleMeshAddHit(collector, settings, sphereShape, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, 7, triangleIndex, planeIntersection, p, p, backFacing ? triangleNormal : negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal));
+								castSphereVsTriangleMeshAddHit(collector, settings, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, 7, triangleIndex, planeIntersection, p, p, backFacing ? triangleNormal : negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal));
 								continue;
 							}
 						}
@@ -27393,7 +29242,7 @@ function castSphereVsTriangleMesh(collector, settings, shapeA, subShapeIdA, _sub
 					else if (backFacing) copy$9(contactNormal, triangleNormal);
 					else negate(contactNormal, triangleNormal);
 					const contactPointAB = add$3(_castSphereVsTriangleMesh_edgeVertexContactPoint, p, q);
-					castSphereVsTriangleMeshAddHit(collector, settings, sphereShape, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, fraction, contactPointAB, contactPointAB, contactNormal);
+					castSphereVsTriangleMeshAddHit(collector, settings, meshShape, subShapeIdA, subShapeIdB, subShapeIdBitsB, start, posB, m0, m1, m2, m4, m5, m6, m8, m9, m10, rv0, rv1, rv2, backFacing, triangleNormal, triangleActiveEdges, triangleIndex, fraction, contactPointAB, contactPointAB, contactNormal);
 				}
 			}
 		} else {
@@ -27482,1208 +29331,6 @@ function registerAll() {
 	registerAllConstraints();
 }
 //#endregion
-//#region src/constraints/constraint-part/angular-friction-constraint-part.ts
-/** create a new AngularFrictionConstraintPart with zero-initialized values */
-function create() {
-	return {
-		invI1_Axis: create$47(),
-		invI2_Axis: create$47(),
-		effectiveMass: 0,
-		bias: 0,
-		totalLambda: 0
-	};
-}
-/** deactivate this constraint part (zero out effective mass) */
-function deactivate(part) {
-	part.effectiveMass = 0;
-	part.totalLambda = 0;
-}
-/** check if constraint is active (has non-zero effective mass) */
-function isActive(part) {
-	return part.effectiveMass !== 0;
-}
-/**
-* Calculate constraint properties (effective mass and cached I^-1 × axis terms).
-*
-* @param part the constraint part to initialize
-* @param bodyA first body
-* @param bodyB second body
-* @param invInertiaA inverse inertia of body A (world space, mass-scaled)
-* @param invInertiaB inverse inertia of body B (world space, mass-scaled)
-* @param worldSpaceAxis axis around which friction torque acts (normalized — the contact normal)
-* @param bias velocity bias (e.g. relative angular surface velocity along the axis)
-*/
-function calculateConstraintProperties(part, bodyA, bodyB, invInertiaA, invInertiaB, worldSpaceAxis, bias) {
-	const ax = worldSpaceAxis[0];
-	const ay = worldSpaceAxis[1];
-	const az = worldSpaceAxis[2];
-	let invEffectiveMass = 0;
-	if (bodyA.motionType === 2) {
-		const i1x = invInertiaA[0] * ax + invInertiaA[4] * ay + invInertiaA[8] * az;
-		const i1y = invInertiaA[1] * ax + invInertiaA[5] * ay + invInertiaA[9] * az;
-		const i1z = invInertiaA[2] * ax + invInertiaA[6] * ay + invInertiaA[10] * az;
-		part.invI1_Axis[0] = i1x;
-		part.invI1_Axis[1] = i1y;
-		part.invI1_Axis[2] = i1z;
-		invEffectiveMass += ax * i1x + ay * i1y + az * i1z;
-	} else {
-		part.invI1_Axis[0] = 0;
-		part.invI1_Axis[1] = 0;
-		part.invI1_Axis[2] = 0;
-	}
-	if (bodyB.motionType === 2) {
-		const i2x = invInertiaB[0] * ax + invInertiaB[4] * ay + invInertiaB[8] * az;
-		const i2y = invInertiaB[1] * ax + invInertiaB[5] * ay + invInertiaB[9] * az;
-		const i2z = invInertiaB[2] * ax + invInertiaB[6] * ay + invInertiaB[10] * az;
-		part.invI2_Axis[0] = i2x;
-		part.invI2_Axis[1] = i2y;
-		part.invI2_Axis[2] = i2z;
-		invEffectiveMass += ax * i2x + ay * i2y + az * i2z;
-	} else {
-		part.invI2_Axis[0] = 0;
-		part.invI2_Axis[1] = 0;
-		part.invI2_Axis[2] = 0;
-	}
-	if (invEffectiveMass < 22250738585072014e-324) deactivate(part);
-	else {
-		part.effectiveMass = 1 / invEffectiveMass;
-		part.bias = bias;
-	}
-}
-/**
-* Turn a jacobian-velocity product into the part's new total lambda. The caller computes `jv` from
-* its own angular velocity locals; this owns the constraint math.
-*/
-function totalLambdaFor(part, jv) {
-	return part.totalLambda + part.effectiveMass * (jv - part.bias);
-}
-/**
-* Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
-* The caller applies the delta to its own velocity locals.
-*/
-function deltaLambdaFor(part, totalLambda) {
-	const deltaLambda = totalLambda - part.totalLambda;
-	part.totalLambda = totalLambda;
-	return deltaLambda;
-}
-/**
-* Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
-* apply. The caller applies it to its own angular velocity locals — see the note on
-* `contactConstraintPart.warmStartLambda` for why the split is worth having.
-*/
-function warmStartLambda(part, warmStartRatio) {
-	part.totalLambda *= warmStartRatio;
-	return part.totalLambda;
-}
-//#endregion
-//#region src/constraints/contact-constraints.ts
-/** creates emopty contact constraints state */
-function init$3() {
-	return {
-		pool: [],
-		count: 0
-	};
-}
-/** create a contact settings object */
-function createContactSettings() {
-	return {
-		combinedFriction: 0,
-		combinedRestitution: 0,
-		isSensor: false,
-		invMassScale1: 1,
-		invMassScale2: 1,
-		invInertiaScale1: 1,
-		invInertiaScale2: 1,
-		relativeLinearSurfaceVelocity: create$47(),
-		relativeAngularSurfaceVelocity: create$47()
-	};
-}
-function setContactSettings(settings, combinedFriction, combinedRestitution, isSensor) {
-	settings.combinedFriction = combinedFriction;
-	settings.combinedRestitution = combinedRestitution;
-	settings.isSensor = isSensor;
-	settings.invMassScale1 = 1;
-	settings.invMassScale2 = 1;
-	settings.invInertiaScale1 = 1;
-	settings.invInertiaScale2 = 1;
-	settings.relativeLinearSurfaceVelocity[0] = 0;
-	settings.relativeLinearSurfaceVelocity[1] = 0;
-	settings.relativeLinearSurfaceVelocity[2] = 0;
-	settings.relativeAngularSurfaceVelocity[0] = 0;
-	settings.relativeAngularSurfaceVelocity[1] = 0;
-	settings.relativeAngularSurfaceVelocity[2] = 0;
-	return settings;
-}
-/**
-* Calculate friction bias with surface velocity support.
-* Enables conveyor belts, rotating platforms, etc.
-* @param settings contact settings containing surface velocities
-* @param rA moment arm from body A's COM to contact point
-* @param tangent friction tangent direction (normalized)
-* @returns friction bias (velocity along tangent)
-*/
-function calculateFrictionBias(settings, rA, tangent) {
-	const svx = settings.relativeLinearSurfaceVelocity[0] + (settings.relativeAngularSurfaceVelocity[1] * rA[2] - settings.relativeAngularSurfaceVelocity[2] * rA[1]);
-	const svy = settings.relativeLinearSurfaceVelocity[1] + (settings.relativeAngularSurfaceVelocity[2] * rA[0] - settings.relativeAngularSurfaceVelocity[0] * rA[2]);
-	const svz = settings.relativeLinearSurfaceVelocity[2] + (settings.relativeAngularSurfaceVelocity[0] * rA[1] - settings.relativeAngularSurfaceVelocity[1] * rA[0]);
-	return tangent[0] * svx + tangent[1] * svy + tangent[2] * svz;
-}
-const _calcBias_v1 = /* @__PURE__ */ create$47();
-const _calcBias_v2 = /* @__PURE__ */ create$47();
-/**
-* Calculate the normal velocity bias for a contact constraint.
-* Includes speculative contacts, restitution, and gravity+force correction.
-*
-* @param bodyA first body in contact
-* @param bodyB second body in contact
-* @param positionA contact position on body A (world space)
-* @param positionB contact position on body B (world space)
-* @param normal contact normal (world space, points from A to B)
-* @param rA moment arm from body A's COM to contact point
-* @param rB moment arm from body B's COM to contact point
-* @param combinedRestitution combined restitution coefficient
-* @param deltaTime physics time step
-* @param gravity gravity vector
-* @param minVelocityForRestitution minimum velocity threshold for restitution
-* @returns Normal velocity bias for constraint solving
-*/
-function calculateNormalVelocityBias(bodyA, bodyB, positionA, positionB, normal, rA, rB, combinedRestitution, deltaTime, gravity, minVelocityForRestitution) {
-	const aIsMoving = bodyA.motionType !== 0;
-	const bIsMoving = bodyB.motionType !== 0;
-	const aIsDynamic = bodyA.motionType === 2;
-	const bIsDynamic = bodyB.motionType === 2;
-	let relVelX;
-	let relVelY;
-	let relVelZ;
-	if (aIsMoving && bIsMoving) {
-		getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
-		getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
-		relVelX = _calcBias_v2[0] - _calcBias_v1[0];
-		relVelY = _calcBias_v2[1] - _calcBias_v1[1];
-		relVelZ = _calcBias_v2[2] - _calcBias_v1[2];
-	} else if (aIsMoving) {
-		getVelocityAtPointCOM(_calcBias_v1, bodyA, rA);
-		relVelX = -_calcBias_v1[0];
-		relVelY = -_calcBias_v1[1];
-		relVelZ = -_calcBias_v1[2];
-	} else if (bIsMoving) {
-		getVelocityAtPointCOM(_calcBias_v2, bodyB, rB);
-		relVelX = _calcBias_v2[0];
-		relVelY = _calcBias_v2[1];
-		relVelZ = _calcBias_v2[2];
-	} else return 0;
-	const normalVelocity = relVelX * normal[0] + relVelY * normal[1] + relVelZ * normal[2];
-	const diffX = positionA[0] - positionB[0];
-	const diffY = positionA[1] - positionB[1];
-	const diffZ = positionA[2] - positionB[2];
-	const penetration = diffX * normal[0] + diffY * normal[1] + diffZ * normal[2];
-	const speculativeContactVelocityBias = Math.max(0, -penetration / deltaTime);
-	let normalVelocityBias;
-	if (combinedRestitution > 0 && normalVelocity < -minVelocityForRestitution) if (normalVelocity < -speculativeContactVelocityBias) {
-		let relAccelX = 0;
-		let relAccelY = 0;
-		let relAccelZ = 0;
-		if (aIsMoving && bIsMoving) {
-			const gravityFactorA = bodyA.motionProperties.gravityFactor;
-			const gravityScale = bodyB.motionProperties.gravityFactor - gravityFactorA;
-			relAccelX += gravity[0] * gravityScale;
-			relAccelY += gravity[1] * gravityScale;
-			relAccelZ += gravity[2] * gravityScale;
-		} else if (aIsMoving) {
-			const gravityFactorA = bodyA.motionProperties.gravityFactor;
-			relAccelX += gravity[0] * -gravityFactorA;
-			relAccelY += gravity[1] * -gravityFactorA;
-			relAccelZ += gravity[2] * -gravityFactorA;
-		} else if (bIsMoving) {
-			const gravityFactorB = bodyB.motionProperties.gravityFactor;
-			relAccelX += gravity[0] * gravityFactorB;
-			relAccelY += gravity[1] * gravityFactorB;
-			relAccelZ += gravity[2] * gravityFactorB;
-		}
-		if (aIsDynamic) {
-			const forceScale = -bodyA.motionProperties.invMass;
-			relAccelX += bodyA.motionProperties.force[0] * forceScale;
-			relAccelY += bodyA.motionProperties.force[1] * forceScale;
-			relAccelZ += bodyA.motionProperties.force[2] * forceScale;
-		}
-		if (bIsDynamic) {
-			const forceScale = bodyB.motionProperties.invMass;
-			relAccelX += bodyB.motionProperties.force[0] * forceScale;
-			relAccelY += bodyB.motionProperties.force[1] * forceScale;
-			relAccelZ += bodyB.motionProperties.force[2] * forceScale;
-		}
-		const accelDotNormal = relAccelX * normal[0] + relAccelY * normal[1] + relAccelZ * normal[2];
-		normalVelocityBias = combinedRestitution * (normalVelocity - Math.min(0, accelDotNormal * deltaTime));
-	} else normalVelocityBias = speculativeContactVelocityBias;
-	else normalVelocityBias = speculativeContactVelocityBias;
-	return normalVelocityBias;
-}
-const _addContactConstraint_relativePointOnA = /* @__PURE__ */ create$47();
-const _addContactConstraint_relativePointOnB = /* @__PURE__ */ create$47();
-const _addContactConstraint_rA = /* @__PURE__ */ create$47();
-const _addContactConstraint_rB = /* @__PURE__ */ create$47();
-const _addContactConstraint_rotA = /* @__PURE__ */ create$41();
-const _addContactConstraint_rotB = /* @__PURE__ */ create$41();
-const _addContactConstraint_scaledInvInertiaA = /* @__PURE__ */ create$41();
-const _addContactConstraint_scaledInvInertiaB = /* @__PURE__ */ create$41();
-let _invInertiaA = _addContactConstraint_scaledInvInertiaA;
-let _invInertiaB = _addContactConstraint_scaledInvInertiaB;
-const _addContactConstraint_contactSettings = /* @__PURE__ */ createContactSettings();
-const _addContactConstraint_midpoints = [
-	/* @__PURE__ */ create$47(),
-	/* @__PURE__ */ create$47(),
-	/* @__PURE__ */ create$47(),
-	/* @__PURE__ */ create$47()
-];
-/**
-* Compute the manifold-level friction setup: average "friction point", per-point moment arm
-* to it, and the 2 linear + 1 angular friction constraint properties anchored at that point.
-*
-* Must be called after all per-point non-penetration constraints have been initialised, so
-* the midpoints are known.
-*
-* @param constraint contact constraint (already populated with N points and normal/tangents)
-* @param bodyA first body
-* @param bodyB second body
-* @param midpoints world-space midpoints (0.5*(positionA + positionB)) for each contact point
-* @param settings contact settings (used for surface velocities)
-*/
-function calculateFrictionConstraintProperties(constraint, bodyA, bodyB, midpoints, settings) {
-	const N = constraint.numContactPoints;
-	let fpx = 0;
-	let fpy = 0;
-	let fpz = 0;
-	for (let i = 0; i < N; i++) {
-		fpx += midpoints[i][0];
-		fpy += midpoints[i][1];
-		fpz += midpoints[i][2];
-	}
-	const invN = 1 / N;
-	fpx *= invN;
-	fpy *= invN;
-	fpz *= invN;
-	constraint.frictionPoint[0] = fpx;
-	constraint.frictionPoint[1] = fpy;
-	constraint.frictionPoint[2] = fpz;
-	const nx = constraint.normal[0];
-	const ny = constraint.normal[1];
-	const nz = constraint.normal[2];
-	for (let i = 0; i < N; i++) {
-		const dx = midpoints[i][0] - fpx;
-		const dy = midpoints[i][1] - fpy;
-		const dz = midpoints[i][2] - fpz;
-		const dotN = dx * nx + dy * ny + dz * nz;
-		const tx = dx - dotN * nx;
-		const ty = dy - dotN * ny;
-		const tz = dz - dotN * nz;
-		constraint.contactPoints[i].distanceToFrictionCenter = Math.sqrt(tx * tx + ty * ty + tz * tz);
-	}
-	const rA = _addContactConstraint_rA;
-	const rB = _addContactConstraint_rB;
-	rA[0] = fpx - bodyA.centerOfMassPosition[0];
-	rA[1] = fpy - bodyA.centerOfMassPosition[1];
-	rA[2] = fpz - bodyA.centerOfMassPosition[2];
-	rB[0] = fpx - bodyB.centerOfMassPosition[0];
-	rB[1] = fpy - bodyB.centerOfMassPosition[1];
-	rB[2] = fpz - bodyB.centerOfMassPosition[2];
-	const frictionBias1 = calculateFrictionBias(settings, rA, constraint.tangent1);
-	const frictionBias2 = calculateFrictionBias(settings, rA, constraint.tangent2);
-	calculateConstraintProperties$3(constraint.frictionConstraint1, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent1, frictionBias1);
-	calculateConstraintProperties$3(constraint.frictionConstraint2, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.tangent2, frictionBias2);
-	if (N > 1) {
-		const angBias = settings.relativeAngularSurfaceVelocity[0] * nx + settings.relativeAngularSurfaceVelocity[1] * ny + settings.relativeAngularSurfaceVelocity[2] * nz;
-		calculateConstraintProperties(constraint.angularFrictionConstraint, bodyA, bodyB, _invInertiaA, _invInertiaB, constraint.normal, angBias);
-	} else deactivate(constraint.angularFrictionConstraint);
-}
-/**
-* allocate the next constraint slot and fill the manifold-level fields shared by the narrowphase and
-* cache-hit paths: body and sub-shape ids, sort key, normal and tangent basis, combined materials and
-* scaled inverse masses. binds _invInertiaA/B for the per-point and friction setup that follows.
-*/
-function beginContactConstraint(contactConstraints, bodyA, bodyB, subShapeIdA, subShapeIdB, contactIndex, worldSpaceNormal, contactSettings, stepStamp) {
-	if (contactConstraints.count >= contactConstraints.pool.length) contactConstraints.pool.push(createContactConstraint());
-	const constraint = contactConstraints.pool[contactConstraints.count];
-	contactConstraints.count++;
-	constraint.bodyIndexA = bodyA.index;
-	constraint.bodyIndexB = bodyB.index;
-	constraint.subShapeIdA = subShapeIdA;
-	constraint.subShapeIdB = subShapeIdB;
-	constraint.contactIndex = contactIndex;
-	computeContactSortKey(constraint, bodyA.id, subShapeIdA, bodyB.id, subShapeIdB);
-	copy$9(constraint.normal, worldSpaceNormal);
-	const normalX = constraint.normal[0];
-	const normalY = constraint.normal[1];
-	const normalZ = constraint.normal[2];
-	if (Math.abs(normalX) > Math.abs(normalY)) {
-		const tangentLen = Math.sqrt(normalX * normalX + normalZ * normalZ);
-		constraint.tangent1[0] = normalZ / tangentLen;
-		constraint.tangent1[1] = 0;
-		constraint.tangent1[2] = -normalX / tangentLen;
-	} else {
-		const tangentLen = Math.sqrt(normalY * normalY + normalZ * normalZ);
-		constraint.tangent1[0] = 0;
-		constraint.tangent1[1] = normalZ / tangentLen;
-		constraint.tangent1[2] = -normalY / tangentLen;
-	}
-	cross(constraint.tangent2, constraint.normal, constraint.tangent1);
-	constraint.friction = contactSettings.combinedFriction;
-	constraint.restitution = contactSettings.combinedRestitution;
-	constraint.invMassA = bodyA.motionProperties.invMass * contactSettings.invMassScale1;
-	constraint.invMassB = bodyB.motionProperties.invMass * contactSettings.invMassScale2;
-	constraint.invInertiaScaleA = contactSettings.invInertiaScale1;
-	constraint.invInertiaScaleB = contactSettings.invInertiaScale2;
-	if (bodyA.motionType === 2) {
-		const worldInverseInertiaA = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaA, bodyA.motionProperties, bodyA.quaternion, stepStamp);
-		const scale1 = contactSettings.invInertiaScale1;
-		if (scale1 === 1) _invInertiaA = worldInverseInertiaA;
-		else {
-			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaA[j] = worldInverseInertiaA[j] * scale1;
-			_invInertiaA = _addContactConstraint_scaledInvInertiaA;
-		}
-	}
-	if (bodyB.motionType === 2) {
-		const worldInverseInertiaB = getWorldInverseInertia(_addContactConstraint_scaledInvInertiaB, bodyB.motionProperties, bodyB.quaternion, stepStamp);
-		const scale2 = contactSettings.invInertiaScale2;
-		if (scale2 === 1) _invInertiaB = worldInverseInertiaB;
-		else {
-			for (let j = 0; j < 16; j++) _addContactConstraint_scaledInvInertiaB[j] = worldInverseInertiaB[j] * scale2;
-			_invInertiaB = _addContactConstraint_scaledInvInertiaB;
-		}
-	}
-	constraint.numContactPoints = 0;
-	return constraint;
-}
-/**
-* finish contact point i of a constraint whose world positions, local positions and warm start
-* lambda are already set: friction midpoint, moment arms, restitution / speculative velocity bias
-* and the non-penetration constraint part.
-*/
-function setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime) {
-	const cp = constraint.contactPoints[i];
-	const midpoint = _addContactConstraint_midpoints[i];
-	const rA = _addContactConstraint_rA;
-	const rB = _addContactConstraint_rB;
-	lerp(midpoint, cp.positionA, cp.positionB, .5);
-	subtract$1(rA, midpoint, bodyA.centerOfMassPosition);
-	subtract$1(rB, midpoint, bodyB.centerOfMassPosition);
-	const normalVelocityBias = calculateNormalVelocityBias(bodyA, bodyB, cp.positionA, cp.positionB, constraint.normal, rA, rB, contactSettings.combinedRestitution, deltaTime, settings.gravity, settings.solver.minVelocityForRestitution);
-	calculateConstraintProperties$3(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, _invInertiaA, _invInertiaB, rA, rB, constraint.normal, normalVelocityBias);
-}
-/**
-* manifold-level friction: 2 linear parts + 1 angular part anchored at the average "friction point",
-* with the previous step's lambdas transferred wholesale (zero for a new contact). the transferred
-* lambdas are mirrored into the write-side cache so they're a no-op if the constraint never runs
-* (e.g. fully kinematic pair).
-*/
-function setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prevFrictionLambda1, prevFrictionLambda2, prevAngularFrictionLambda, curr) {
-	if (contactSettings.combinedFriction > 0 && constraint.numContactPoints > 0) {
-		constraint.frictionConstraint1.totalLambda = prevFrictionLambda1;
-		constraint.frictionConstraint2.totalLambda = prevFrictionLambda2;
-		constraint.angularFrictionConstraint.totalLambda = prevAngularFrictionLambda;
-		calculateFrictionConstraintProperties(constraint, bodyA, bodyB, _addContactConstraint_midpoints, contactSettings);
-		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
-	} else {
-		deactivate$3(constraint.frictionConstraint1);
-		deactivate$3(constraint.frictionConstraint2);
-		deactivate(constraint.angularFrictionConstraint);
-		curr.frictionLambda1 = 0;
-		curr.frictionLambda2 = 0;
-		curr.angularFrictionLambda = 0;
-	}
-}
-/**
-* add a contact constraint from a new manifold.
-* stepStamp keys the per-step world inverse inertia memo (bodies.stepStamp).
-*/
-function addContactConstraint(contactConstraints, contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold, settings, contactListener, deltaTime, stepStamp) {
-	if (bodyA.id > bodyB.id) {
-		const temp = bodyA;
-		bodyA = bodyB;
-		bodyB = temp;
-		swapShapes(contactManifold);
-	}
-	const existingContact = findContactInPair(contactsState, pairs, pairRecordIndex, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
-	const contact = existingContact ?? createContact(contactsState, pairs, pairRecordIndex, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB);
-	contact.lastProcessedFrame = contactsState.frameStamp;
-	const prev = getReadManifold(contact, contactsState);
-	const curr = getWriteManifold(contact, contactsState);
-	const rotA = fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
-	const rotB = fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
-	multiply3x3TransposedVec(curr.contactNormal, rotB, contactManifold.worldSpaceNormal);
-	normalize$2(curr.contactNormal, curr.contactNormal);
-	curr.numContactPoints = contactManifold.numContactPoints;
-	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
-	if (existingContact) {
-		curr.flags |= 1;
-		contactListener?.onContactPersisted?.(bodyA, bodyB, contactManifold, contactSettings);
-	} else contactListener?.onContactAdded?.(bodyA, bodyB, contactManifold, contactSettings);
-	if (!contactSettings.isSensor && (bodyA.motionType === 2 && contactSettings.invMassScale1 !== 0 || bodyB.motionType === 2 && contactSettings.invMassScale2 !== 0)) {
-		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contactManifold.subShapeIdA, contactManifold.subShapeIdB, contact.contactIndex, contactManifold.worldSpaceNormal, contactSettings, stepStamp);
-		for (let i = 0; i < contactManifold.numContactPoints; i++) {
-			const cp = constraint.contactPoints[constraint.numContactPoints];
-			constraint.numContactPoints++;
-			const contactPointIndex = i * 3;
-			const scratchA = _addContactConstraint_relativePointOnA;
-			const scratchB = _addContactConstraint_relativePointOnB;
-			fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
-			fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
-			add$3(cp.positionA, contactManifold.baseOffset, scratchA);
-			add$3(cp.positionB, contactManifold.baseOffset, scratchB);
-			subtract$1(scratchA, cp.positionA, bodyA.centerOfMassPosition);
-			subtract$1(scratchB, cp.positionB, bodyB.centerOfMassPosition);
-			multiply3x3TransposedVec(cp.localPositionA, rotA, scratchA);
-			multiply3x3TransposedVec(cp.localPositionB, rotB, scratchB);
-			let lambdaSet = false;
-			if (existingContact) for (let j = 0; j < prev.numContactPoints; j++) {
-				const point = prev.contactPoints[j];
-				const dist1Sq = squaredDistance(cp.localPositionA, point.position1);
-				const dist2Sq = squaredDistance(cp.localPositionB, point.position2);
-				const threshold = settings.contacts.contactPointPreserveLambdaMaxDistSq;
-				if (dist1Sq < threshold && dist2Sq < threshold) {
-					cp.normalConstraint.totalLambda = point.normalLambda;
-					lambdaSet = true;
-					break;
-				}
-			}
-			if (!lambdaSet) cp.normalConstraint.totalLambda = 0;
-			setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
-			const cachedPoint = curr.contactPoints[i];
-			copy$9(cachedPoint.position1, cp.localPositionA);
-			copy$9(cachedPoint.position2, cp.localPositionB);
-			cachedPoint.normalLambda = cp.normalConstraint.totalLambda;
-		}
-		if (existingContact) setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
-		else setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, 0, 0, 0, curr);
-		return true;
-	}
-	for (let i = 0; i < contactManifold.numContactPoints; i++) {
-		const contactPointIndex = i * 3;
-		const scratchA = _addContactConstraint_relativePointOnA;
-		const scratchB = _addContactConstraint_relativePointOnB;
-		const cachedPoint = curr.contactPoints[i];
-		fromBuffer(scratchA, contactManifold.relativeContactPointsOnA, contactPointIndex);
-		fromBuffer(scratchB, contactManifold.relativeContactPointsOnB, contactPointIndex);
-		add$3(scratchA, contactManifold.baseOffset, scratchA);
-		add$3(scratchB, contactManifold.baseOffset, scratchB);
-		subtract$1(scratchA, scratchA, bodyA.centerOfMassPosition);
-		subtract$1(scratchB, scratchB, bodyB.centerOfMassPosition);
-		multiply3x3TransposedVec(cachedPoint.position1, rotA, scratchA);
-		multiply3x3TransposedVec(cachedPoint.position2, rotB, scratchB);
-		cachedPoint.normalLambda = 0;
-	}
-	curr.frictionLambda1 = 0;
-	curr.frictionLambda2 = 0;
-	curr.angularFrictionLambda = 0;
-	return false;
-}
-const _fromCache_worldSpaceNormal = /* @__PURE__ */ create$47();
-const _fromCache_positionsA = [
-	create$47(),
-	create$47(),
-	create$47(),
-	create$47()
-];
-const _fromCache_positionsB = [
-	create$47(),
-	create$47(),
-	create$47(),
-	create$47()
-];
-const _fromCache_diffAB = /* @__PURE__ */ create$47();
-const _fromCache_listenerManifold = /* @__PURE__ */ createContactManifold();
-/**
-* add a contact constraint for a contact whose body pair hit the body-pair cache: the previous
-* step's cached manifold is carried forward verbatim and its body-local points and lambdas feed
-* constraint setup directly. no narrowphase, no world-to-local round trip, no point matching. a
-* ContactManifold is only reconstructed when a listener wants onContactPersisted.
-* jolt: ContactConstraintManager::GetContactsFromCache.
-*
-* bodyA / bodyB must be in the contact's stored (id-sorted) order.
-*/
-function addContactConstraintFromCache(contactConstraints, contactsState, bodyA, bodyB, contact, settings, contactListener, deltaTime, stepStamp) {
-	contact.lastProcessedFrame = contactsState.frameStamp;
-	const prev = getReadManifold(contact, contactsState);
-	const curr = getWriteManifold(contact, contactsState);
-	const numContactPoints = prev.numContactPoints;
-	copy$9(curr.contactNormal, prev.contactNormal);
-	curr.numContactPoints = numContactPoints;
-	for (let i = 0; i < numContactPoints; i++) {
-		const prevPoint = prev.contactPoints[i];
-		const currPoint = curr.contactPoints[i];
-		copy$9(currPoint.position1, prevPoint.position1);
-		copy$9(currPoint.position2, prevPoint.position2);
-		currPoint.normalLambda = prevPoint.normalLambda;
-	}
-	curr.frictionLambda1 = prev.frictionLambda1;
-	curr.frictionLambda2 = prev.frictionLambda2;
-	curr.angularFrictionLambda = prev.angularFrictionLambda;
-	curr.flags |= 1;
-	const rotA = fromQuat(_addContactConstraint_rotA, bodyA.quaternion);
-	const rotB = fromQuat(_addContactConstraint_rotB, bodyB.quaternion);
-	const worldSpaceNormal = _fromCache_worldSpaceNormal;
-	multiply3x3Vec(worldSpaceNormal, rotB, prev.contactNormal);
-	normalize$2(worldSpaceNormal, worldSpaceNormal);
-	const positionsA = _fromCache_positionsA;
-	const positionsB = _fromCache_positionsB;
-	for (let i = 0; i < numContactPoints; i++) {
-		const prevPoint = prev.contactPoints[i];
-		multiply3x3Vec(positionsA[i], rotA, prevPoint.position1);
-		add$3(positionsA[i], positionsA[i], bodyA.centerOfMassPosition);
-		multiply3x3Vec(positionsB[i], rotB, prevPoint.position2);
-		add$3(positionsB[i], positionsB[i], bodyB.centerOfMassPosition);
-	}
-	const contactSettings = setContactSettings(_addContactConstraint_contactSettings, combineMaterial(bodyA.friction, bodyB.friction, bodyA.frictionCombineMode, bodyB.frictionCombineMode), combineMaterial(bodyA.restitution, bodyB.restitution, bodyA.restitutionCombineMode, bodyB.restitutionCombineMode), bodyA.sensor || bodyB.sensor);
-	if (contactListener?.onContactPersisted) {
-		const listenerManifold = _fromCache_listenerManifold;
-		resetContactManifold(listenerManifold);
-		copy$9(listenerManifold.worldSpaceNormal, worldSpaceNormal);
-		copy$9(listenerManifold.baseOffset, bodyA.centerOfMassPosition);
-		let maxPenetration = -Number.MAX_VALUE;
-		for (let i = 0; i < numContactPoints; i++) {
-			const o = i * 3;
-			listenerManifold.relativeContactPointsOnA[o] = positionsA[i][0] - bodyA.centerOfMassPosition[0];
-			listenerManifold.relativeContactPointsOnA[o + 1] = positionsA[i][1] - bodyA.centerOfMassPosition[1];
-			listenerManifold.relativeContactPointsOnA[o + 2] = positionsA[i][2] - bodyA.centerOfMassPosition[2];
-			listenerManifold.relativeContactPointsOnB[o] = positionsB[i][0] - bodyA.centerOfMassPosition[0];
-			listenerManifold.relativeContactPointsOnB[o + 1] = positionsB[i][1] - bodyA.centerOfMassPosition[1];
-			listenerManifold.relativeContactPointsOnB[o + 2] = positionsB[i][2] - bodyA.centerOfMassPosition[2];
-			sub(_fromCache_diffAB, positionsA[i], positionsB[i]);
-			const d = dot$2(_fromCache_diffAB, worldSpaceNormal);
-			if (d > maxPenetration) maxPenetration = d;
-		}
-		listenerManifold.numContactPoints = numContactPoints;
-		listenerManifold.penetrationDepth = maxPenetration === -Number.MAX_VALUE ? 0 : maxPenetration;
-		listenerManifold.subShapeIdA = contact.subShapeIdA;
-		listenerManifold.subShapeIdB = contact.subShapeIdB;
-		listenerManifold.materialIdA = getShapeMaterial(bodyA.shape, contact.subShapeIdA);
-		listenerManifold.materialIdB = getShapeMaterial(bodyB.shape, contact.subShapeIdB);
-		contactListener.onContactPersisted(bodyA, bodyB, listenerManifold, contactSettings);
-	}
-	if (!contactSettings.isSensor && (bodyA.motionType === 2 && contactSettings.invMassScale1 !== 0 || bodyB.motionType === 2 && contactSettings.invMassScale2 !== 0)) {
-		const constraint = beginContactConstraint(contactConstraints, bodyA, bodyB, contact.subShapeIdA, contact.subShapeIdB, contact.contactIndex, worldSpaceNormal, contactSettings, stepStamp);
-		for (let i = 0; i < numContactPoints; i++) {
-			const cp = constraint.contactPoints[i];
-			constraint.numContactPoints++;
-			const prevPoint = prev.contactPoints[i];
-			copy$9(cp.positionA, positionsA[i]);
-			copy$9(cp.positionB, positionsB[i]);
-			copy$9(cp.localPositionA, prevPoint.position1);
-			copy$9(cp.localPositionB, prevPoint.position2);
-			cp.normalConstraint.totalLambda = prevPoint.normalLambda;
-			setupContactPoint(constraint, i, bodyA, bodyB, contactSettings, settings, deltaTime);
-		}
-		setupFrictionConstraints(constraint, bodyA, bodyB, contactSettings, prev.frictionLambda1, prev.frictionLambda2, prev.angularFrictionLambda, curr);
-		return true;
-	}
-	for (let i = 0; i < numContactPoints; i++) curr.contactPoints[i].normalLambda = 0;
-	curr.frictionLambda1 = 0;
-	curr.frictionLambda2 = 0;
-	curr.angularFrictionLambda = 0;
-	return false;
-}
-function createWorldContactPoint() {
-	return {
-		positionA: create$47(),
-		positionB: create$47(),
-		localPositionA: create$47(),
-		localPositionB: create$47(),
-		normalConstraint: create$23(),
-		distanceToFrictionCenter: 0
-	};
-}
-function createContactConstraint() {
-	return {
-		bodyIndexA: -1,
-		bodyIndexB: -1,
-		subShapeIdA: EMPTY_SUB_SHAPE_ID,
-		subShapeIdB: EMPTY_SUB_SHAPE_ID,
-		normal: create$47(),
-		tangent1: create$47(),
-		tangent2: create$47(),
-		friction: .5,
-		restitution: 0,
-		numContactPoints: 0,
-		contactPoints: [
-			createWorldContactPoint(),
-			createWorldContactPoint(),
-			createWorldContactPoint(),
-			createWorldContactPoint()
-		],
-		frictionPoint: create$47(),
-		frictionConstraint1: create$23(),
-		frictionConstraint2: create$23(),
-		angularFrictionConstraint: create(),
-		invMassA: 0,
-		invMassB: 0,
-		invInertiaScaleA: 1,
-		invInertiaScaleB: 1,
-		contactIndex: -1,
-		sortKeyHigh: 0,
-		sortKeyLow: 0
-	};
-}
-/**
-* apply warm start impulses from previous frame to give solver a good initial guess.
-* significantly improves convergence speed (~3x faster).
-*
-* velocities are loaded once per constraint into twelve LOCALS, every warm start accumulates into
-* those, then they are written back with DOF masking applied once. Locals rather than shared `Vec3`
-* scratch because a buffer the whole module can see cannot live in registers — that is worth ~1.75x
-* here, and it is why each part hands back its impulse (`warmStartLambda`) instead of mutating four
-* buffers for us.
-*
-* @param contactConstraints contact constraint state
-* @param warmStartRatio scale factor for warm start impulses (usually 1.0)
-*/
-function warmStartVelocityConstraints(contactConstraints, bodies, warmStartRatio) {
-	for (let i = 0; i < contactConstraints.count; i++) {
-		const constraint = contactConstraints.pool[i];
-		const bodyA = bodies.pool[constraint.bodyIndexA];
-		const bodyB = bodies.pool[constraint.bodyIndexB];
-		const isDynamicA = bodyA.motionType === 2;
-		const isDynamicB = bodyB.motionType === 2;
-		const { normal, tangent1, tangent2 } = constraint;
-		let linVelAx = 0;
-		let linVelAy = 0;
-		let linVelAz = 0;
-		let angVelAx = 0;
-		let angVelAy = 0;
-		let angVelAz = 0;
-		let linVelBx = 0;
-		let linVelBy = 0;
-		let linVelBz = 0;
-		let angVelBx = 0;
-		let angVelBy = 0;
-		let angVelBz = 0;
-		if (isDynamicA) {
-			const mpA = bodyA.motionProperties;
-			linVelAx = mpA.linearVelocity[0];
-			linVelAy = mpA.linearVelocity[1];
-			linVelAz = mpA.linearVelocity[2];
-			angVelAx = mpA.angularVelocity[0];
-			angVelAy = mpA.angularVelocity[1];
-			angVelAz = mpA.angularVelocity[2];
-		}
-		if (isDynamicB) {
-			const mpB = bodyB.motionProperties;
-			linVelBx = mpB.linearVelocity[0];
-			linVelBy = mpB.linearVelocity[1];
-			linVelBz = mpB.linearVelocity[2];
-			angVelBx = mpB.angularVelocity[0];
-			angVelBy = mpB.angularVelocity[1];
-			angVelBz = mpB.angularVelocity[2];
-		}
-		const invMassA = constraint.invMassA;
-		const invMassB = constraint.invMassB;
-		let applied = false;
-		if (isActive$3(constraint.frictionConstraint1) || isActive$3(constraint.frictionConstraint2)) {
-			const friction1 = constraint.frictionConstraint1;
-			const lambda1 = warmStartLambda$1(friction1, warmStartRatio);
-			if (lambda1 !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					const scale = lambda1 * invMassA;
-					const angular = friction1.invI1_r1PlusUxAxis;
-					linVelAx -= tangent1[0] * scale;
-					linVelAy -= tangent1[1] * scale;
-					linVelAz -= tangent1[2] * scale;
-					angVelAx -= angular[0] * lambda1;
-					angVelAy -= angular[1] * lambda1;
-					angVelAz -= angular[2] * lambda1;
-				}
-				if (isDynamicB) {
-					const scale = lambda1 * invMassB;
-					const angular = friction1.invI2_r2xAxis;
-					linVelBx += tangent1[0] * scale;
-					linVelBy += tangent1[1] * scale;
-					linVelBz += tangent1[2] * scale;
-					angVelBx += angular[0] * lambda1;
-					angVelBy += angular[1] * lambda1;
-					angVelBz += angular[2] * lambda1;
-				}
-			}
-			const friction2 = constraint.frictionConstraint2;
-			const lambda2 = warmStartLambda$1(friction2, warmStartRatio);
-			if (lambda2 !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					const scale = lambda2 * invMassA;
-					const angular = friction2.invI1_r1PlusUxAxis;
-					linVelAx -= tangent2[0] * scale;
-					linVelAy -= tangent2[1] * scale;
-					linVelAz -= tangent2[2] * scale;
-					angVelAx -= angular[0] * lambda2;
-					angVelAy -= angular[1] * lambda2;
-					angVelAz -= angular[2] * lambda2;
-				}
-				if (isDynamicB) {
-					const scale = lambda2 * invMassB;
-					const angular = friction2.invI2_r2xAxis;
-					linVelBx += tangent2[0] * scale;
-					linVelBy += tangent2[1] * scale;
-					linVelBz += tangent2[2] * scale;
-					angVelBx += angular[0] * lambda2;
-					angVelBy += angular[1] * lambda2;
-					angVelBz += angular[2] * lambda2;
-				}
-			}
-		}
-		if (isActive(constraint.angularFrictionConstraint)) {
-			const angularFriction = constraint.angularFrictionConstraint;
-			const lambda = warmStartLambda(angularFriction, warmStartRatio);
-			if (lambda !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					angVelAx -= angularFriction.invI1_Axis[0] * lambda;
-					angVelAy -= angularFriction.invI1_Axis[1] * lambda;
-					angVelAz -= angularFriction.invI1_Axis[2] * lambda;
-				}
-				if (isDynamicB) {
-					angVelBx += angularFriction.invI2_Axis[0] * lambda;
-					angVelBy += angularFriction.invI2_Axis[1] * lambda;
-					angVelBz += angularFriction.invI2_Axis[2] * lambda;
-				}
-			}
-		}
-		for (let j = 0; j < constraint.numContactPoints; j++) {
-			const normalConstraint = constraint.contactPoints[j].normalConstraint;
-			const lambda = warmStartLambda$1(normalConstraint, warmStartRatio);
-			if (lambda === 0) continue;
-			applied = true;
-			if (isDynamicA) {
-				const scale = lambda * invMassA;
-				const angular = normalConstraint.invI1_r1PlusUxAxis;
-				linVelAx -= normal[0] * scale;
-				linVelAy -= normal[1] * scale;
-				linVelAz -= normal[2] * scale;
-				angVelAx -= angular[0] * lambda;
-				angVelAy -= angular[1] * lambda;
-				angVelAz -= angular[2] * lambda;
-			}
-			if (isDynamicB) {
-				const scale = lambda * invMassB;
-				const angular = normalConstraint.invI2_r2xAxis;
-				linVelBx += normal[0] * scale;
-				linVelBy += normal[1] * scale;
-				linVelBz += normal[2] * scale;
-				angVelBx += angular[0] * lambda;
-				angVelBy += angular[1] * lambda;
-				angVelBz += angular[2] * lambda;
-			}
-		}
-		if (!applied) continue;
-		if (isDynamicA) {
-			const mpA = bodyA.motionProperties;
-			const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
-			mpA.linearVelocity[0] = allowedTranslationA & 1 ? linVelAx : 0;
-			mpA.linearVelocity[1] = allowedTranslationA & 2 ? linVelAy : 0;
-			mpA.linearVelocity[2] = allowedTranslationA & 4 ? linVelAz : 0;
-			mpA.angularVelocity[0] = angVelAx;
-			mpA.angularVelocity[1] = angVelAy;
-			mpA.angularVelocity[2] = angVelAz;
-		}
-		if (isDynamicB) {
-			const mpB = bodyB.motionProperties;
-			const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
-			mpB.linearVelocity[0] = allowedTranslationB & 1 ? linVelBx : 0;
-			mpB.linearVelocity[1] = allowedTranslationB & 2 ? linVelBy : 0;
-			mpB.linearVelocity[2] = allowedTranslationB & 4 ? linVelBz : 0;
-			mpB.angularVelocity[0] = angVelBx;
-			mpB.angularVelocity[1] = angVelBy;
-			mpB.angularVelocity[2] = angVelBz;
-		}
-	}
-}
-/**
-* solve velocity constraints for a specific island. only processes constraints at the given indices.
-*
-* for each constraint: velocities are loaded once into twelve LOCALS, every part solve reads and
-* accumulates into those, then they are written back with DOF masking applied once. The parts hand
-* back numbers — `totalLambdaFor` turns a jacobian-velocity product into an impulse, `deltaLambdaFor`
-* commits it — and this loop owns the velocity arithmetic, so nothing has to mutate a shared buffer.
-* A buffer the whole module can see cannot live in registers; that is worth ~1.75x on this loop.
-*
-* @param contactConstraints contact constraint state
-* @param bodies body array
-* @param constraintIndices indices of constraints to solve (from island)
-* @returns true if any impulse was applied (not yet converged)
-*/
-function solveVelocityConstraintsForIsland(contactConstraints, bodies, constraintIndices) {
-	let anyImpulseApplied = false;
-	for (const constraintIndex of constraintIndices) {
-		const constraint = contactConstraints.pool[constraintIndex];
-		const bodyA = bodies.pool[constraint.bodyIndexA];
-		const bodyB = bodies.pool[constraint.bodyIndexB];
-		const isDynamicA = bodyA.motionType === 2;
-		const isDynamicB = bodyB.motionType === 2;
-		if (!isDynamicA && !isDynamicB) continue;
-		const movingA = bodyA.motionType !== 0;
-		const movingB = bodyB.motionType !== 0;
-		const { normal, tangent1, tangent2, friction } = constraint;
-		let linVelAx = 0;
-		let linVelAy = 0;
-		let linVelAz = 0;
-		let angVelAx = 0;
-		let angVelAy = 0;
-		let angVelAz = 0;
-		let linVelBx = 0;
-		let linVelBy = 0;
-		let linVelBz = 0;
-		let angVelBx = 0;
-		let angVelBy = 0;
-		let angVelBz = 0;
-		if (movingA) {
-			const mpA = bodyA.motionProperties;
-			linVelAx = mpA.linearVelocity[0];
-			linVelAy = mpA.linearVelocity[1];
-			linVelAz = mpA.linearVelocity[2];
-			angVelAx = mpA.angularVelocity[0];
-			angVelAy = mpA.angularVelocity[1];
-			angVelAz = mpA.angularVelocity[2];
-		}
-		if (movingB) {
-			const mpB = bodyB.motionProperties;
-			linVelBx = mpB.linearVelocity[0];
-			linVelBy = mpB.linearVelocity[1];
-			linVelBz = mpB.linearVelocity[2];
-			angVelBx = mpB.angularVelocity[0];
-			angVelBy = mpB.angularVelocity[1];
-			angVelBz = mpB.angularVelocity[2];
-		}
-		const invMassA = constraint.invMassA;
-		const invMassB = constraint.invMassB;
-		let applied = false;
-		const linearFrictionActive = isActive$3(constraint.frictionConstraint1) || isActive$3(constraint.frictionConstraint2);
-		const angularFrictionActive = isActive(constraint.angularFrictionConstraint);
-		let sumNormalLambda = 0;
-		let sumDistanceWeightedNormalLambda = 0;
-		if (linearFrictionActive || angularFrictionActive) for (let i = 0; i < constraint.numContactPoints; i++) {
-			const cp = constraint.contactPoints[i];
-			const ln = cp.normalConstraint.totalLambda;
-			sumNormalLambda += ln;
-			sumDistanceWeightedNormalLambda += cp.distanceToFrictionCenter * ln;
-		}
-		if (linearFrictionActive) {
-			const friction1 = constraint.frictionConstraint1;
-			const friction2 = constraint.frictionConstraint2;
-			let jv1;
-			let jv2;
-			if (movingA && movingB) {
-				const dx = linVelAx - linVelBx;
-				const dy = linVelAy - linVelBy;
-				const dz = linVelAz - linVelBz;
-				jv1 = tangent1[0] * dx + tangent1[1] * dy + tangent1[2] * dz;
-				jv2 = tangent2[0] * dx + tangent2[1] * dy + tangent2[2] * dz;
-			} else if (movingA) {
-				jv1 = tangent1[0] * linVelAx + tangent1[1] * linVelAy + tangent1[2] * linVelAz;
-				jv2 = tangent2[0] * linVelAx + tangent2[1] * linVelAy + tangent2[2] * linVelAz;
-			} else if (movingB) {
-				jv1 = -(tangent1[0] * linVelBx + tangent1[1] * linVelBy + tangent1[2] * linVelBz);
-				jv2 = -(tangent2[0] * linVelBx + tangent2[1] * linVelBy + tangent2[2] * linVelBz);
-			} else {
-				jv1 = 0;
-				jv2 = 0;
-			}
-			if (movingA) {
-				const r1 = friction1.r1PlusUxAxis;
-				const r2 = friction2.r1PlusUxAxis;
-				jv1 += r1[0] * angVelAx + r1[1] * angVelAy + r1[2] * angVelAz;
-				jv2 += r2[0] * angVelAx + r2[1] * angVelAy + r2[2] * angVelAz;
-			}
-			if (movingB) {
-				const r1 = friction1.r2xAxis;
-				const r2 = friction2.r2xAxis;
-				jv1 -= r1[0] * angVelBx + r1[1] * angVelBy + r1[2] * angVelBz;
-				jv2 -= r2[0] * angVelBx + r2[1] * angVelBy + r2[2] * angVelBz;
-			}
-			let lambda1 = totalLambdaFor$1(friction1, jv1);
-			let lambda2 = totalLambdaFor$1(friction2, jv2);
-			const maxLinearFriction = friction * sumNormalLambda;
-			const frictionMagnitudeSq = lambda1 * lambda1 + lambda2 * lambda2;
-			if (frictionMagnitudeSq > maxLinearFriction * maxLinearFriction) {
-				const scale = maxLinearFriction / Math.sqrt(frictionMagnitudeSq);
-				lambda1 *= scale;
-				lambda2 *= scale;
-			}
-			const delta1 = deltaLambdaFor$1(friction1, lambda1);
-			if (delta1 !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					const scale = delta1 * invMassA;
-					const angular = friction1.invI1_r1PlusUxAxis;
-					linVelAx -= tangent1[0] * scale;
-					linVelAy -= tangent1[1] * scale;
-					linVelAz -= tangent1[2] * scale;
-					angVelAx -= angular[0] * delta1;
-					angVelAy -= angular[1] * delta1;
-					angVelAz -= angular[2] * delta1;
-				}
-				if (isDynamicB) {
-					const scale = delta1 * invMassB;
-					const angular = friction1.invI2_r2xAxis;
-					linVelBx += tangent1[0] * scale;
-					linVelBy += tangent1[1] * scale;
-					linVelBz += tangent1[2] * scale;
-					angVelBx += angular[0] * delta1;
-					angVelBy += angular[1] * delta1;
-					angVelBz += angular[2] * delta1;
-				}
-			}
-			const delta2 = deltaLambdaFor$1(friction2, lambda2);
-			if (delta2 !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					const scale = delta2 * invMassA;
-					const angular = friction2.invI1_r1PlusUxAxis;
-					linVelAx -= tangent2[0] * scale;
-					linVelAy -= tangent2[1] * scale;
-					linVelAz -= tangent2[2] * scale;
-					angVelAx -= angular[0] * delta2;
-					angVelAy -= angular[1] * delta2;
-					angVelAz -= angular[2] * delta2;
-				}
-				if (isDynamicB) {
-					const scale = delta2 * invMassB;
-					const angular = friction2.invI2_r2xAxis;
-					linVelBx += tangent2[0] * scale;
-					linVelBy += tangent2[1] * scale;
-					linVelBz += tangent2[2] * scale;
-					angVelBx += angular[0] * delta2;
-					angVelBy += angular[1] * delta2;
-					angVelBz += angular[2] * delta2;
-				}
-			}
-		}
-		if (angularFrictionActive) {
-			const angularFriction = constraint.angularFrictionConstraint;
-			let jv = 0;
-			if (movingA) jv += normal[0] * angVelAx + normal[1] * angVelAy + normal[2] * angVelAz;
-			if (movingB) jv -= normal[0] * angVelBx + normal[1] * angVelBy + normal[2] * angVelBz;
-			const unclamped = totalLambdaFor(angularFriction, jv);
-			const maxAngularFriction = friction * sumDistanceWeightedNormalLambda;
-			const delta = deltaLambdaFor(angularFriction, Math.max(-maxAngularFriction, Math.min(maxAngularFriction, unclamped)));
-			if (delta !== 0) {
-				applied = true;
-				if (isDynamicA) {
-					angVelAx -= angularFriction.invI1_Axis[0] * delta;
-					angVelAy -= angularFriction.invI1_Axis[1] * delta;
-					angVelAz -= angularFriction.invI1_Axis[2] * delta;
-				}
-				if (isDynamicB) {
-					angVelBx += angularFriction.invI2_Axis[0] * delta;
-					angVelBy += angularFriction.invI2_Axis[1] * delta;
-					angVelBz += angularFriction.invI2_Axis[2] * delta;
-				}
-			}
-		}
-		for (let i = 0; i < constraint.numContactPoints; i++) {
-			const normalConstraint = constraint.contactPoints[i].normalConstraint;
-			let jv;
-			if (movingA && movingB) {
-				const dx = linVelAx - linVelBx;
-				const dy = linVelAy - linVelBy;
-				const dz = linVelAz - linVelBz;
-				jv = normal[0] * dx + normal[1] * dy + normal[2] * dz;
-			} else if (movingA) jv = normal[0] * linVelAx + normal[1] * linVelAy + normal[2] * linVelAz;
-			else if (movingB) jv = -(normal[0] * linVelBx + normal[1] * linVelBy + normal[2] * linVelBz);
-			else jv = 0;
-			if (movingA) {
-				const r = normalConstraint.r1PlusUxAxis;
-				jv += r[0] * angVelAx + r[1] * angVelAy + r[2] * angVelAz;
-			}
-			if (movingB) {
-				const r = normalConstraint.r2xAxis;
-				jv -= r[0] * angVelBx + r[1] * angVelBy + r[2] * angVelBz;
-			}
-			const delta = deltaLambdaFor$1(normalConstraint, Math.max(0, totalLambdaFor$1(normalConstraint, jv)));
-			if (delta === 0) continue;
-			applied = true;
-			if (isDynamicA) {
-				const scale = delta * invMassA;
-				const angular = normalConstraint.invI1_r1PlusUxAxis;
-				linVelAx -= normal[0] * scale;
-				linVelAy -= normal[1] * scale;
-				linVelAz -= normal[2] * scale;
-				angVelAx -= angular[0] * delta;
-				angVelAy -= angular[1] * delta;
-				angVelAz -= angular[2] * delta;
-			}
-			if (isDynamicB) {
-				const scale = delta * invMassB;
-				const angular = normalConstraint.invI2_r2xAxis;
-				linVelBx += normal[0] * scale;
-				linVelBy += normal[1] * scale;
-				linVelBz += normal[2] * scale;
-				angVelBx += angular[0] * delta;
-				angVelBy += angular[1] * delta;
-				angVelBz += angular[2] * delta;
-			}
-		}
-		if (!applied) continue;
-		anyImpulseApplied = true;
-		if (isDynamicA) {
-			const mpA = bodyA.motionProperties;
-			const allowedTranslationA = mpA.allowedDegreesOfFreedom & 7;
-			mpA.linearVelocity[0] = allowedTranslationA & 1 ? linVelAx : 0;
-			mpA.linearVelocity[1] = allowedTranslationA & 2 ? linVelAy : 0;
-			mpA.linearVelocity[2] = allowedTranslationA & 4 ? linVelAz : 0;
-			mpA.angularVelocity[0] = angVelAx;
-			mpA.angularVelocity[1] = angVelAy;
-			mpA.angularVelocity[2] = angVelAz;
-		}
-		if (isDynamicB) {
-			const mpB = bodyB.motionProperties;
-			const allowedTranslationB = mpB.allowedDegreesOfFreedom & 7;
-			mpB.linearVelocity[0] = allowedTranslationB & 1 ? linVelBx : 0;
-			mpB.linearVelocity[1] = allowedTranslationB & 2 ? linVelBy : 0;
-			mpB.linearVelocity[2] = allowedTranslationB & 4 ? linVelBz : 0;
-			mpB.angularVelocity[0] = angVelBx;
-			mpB.angularVelocity[1] = angVelBy;
-			mpB.angularVelocity[2] = angVelBz;
-		}
-	}
-	return anyImpulseApplied;
-}
-/**
-* Store solved impulses back to Contact array for warm starting next frame.
-* Must be called after solveVelocityConstraints to persist the solved lambda values.
-* @param contactConstraints contact constraint state
-* @param contactsState contacts state
-*/
-function storeAppliedImpulses(contactConstraints, contactsState) {
-	for (let i = 0; i < contactConstraints.count; i++) {
-		const constraint = contactConstraints.pool[i];
-		const contact = contactsState.contacts[constraint.contactIndex];
-		const curr = getWriteManifold(contact, contactsState);
-		for (let j = 0; j < constraint.numContactPoints; j++) curr.contactPoints[j].normalLambda = constraint.contactPoints[j].normalConstraint.totalLambda;
-		curr.frictionLambda1 = constraint.frictionConstraint1.totalLambda;
-		curr.frictionLambda2 = constraint.frictionConstraint2.totalLambda;
-		curr.angularFrictionLambda = constraint.angularFrictionConstraint.totalLambda;
-	}
-}
-const _solvePos_worldRa = /* @__PURE__ */ create$47();
-const _solvePos_worldRb = /* @__PURE__ */ create$47();
-const _solvePos_rA = /* @__PURE__ */ create$47();
-const _solvePos_rB = /* @__PURE__ */ create$47();
-const _solvePos_invInertiaA = /* @__PURE__ */ create$41();
-const _solvePos_invInertiaB = /* @__PURE__ */ create$41();
-const _solvePos_rotA = /* @__PURE__ */ create$41();
-const _solvePos_rotB = /* @__PURE__ */ create$41();
-/**
-* Solve position constraints for a specific island. Only processes constraints at the given indices.
-*
-* @param contactConstraints contact constraint state
-* @param bodies body array
-* @param constraintIndices indices of constraints to solve (from island)
-* @param penetrationSlop allowed penetration before correction
-* @param baumgarteFactor position correction factor 0-1
-* @param maxPenetrationDistance maximum distance to correct in a single iteration
-* @returns true if any impulses were applied
-*
-*/
-function solvePositionConstraintsForIsland(contactConstraints, bodies, constraintIndices, penetrationSlop, baumgarteFactor, maxPenetrationDistance) {
-	let anyImpulseApplied = false;
-	for (const constraintIndex of constraintIndices) {
-		const constraint = contactConstraints.pool[constraintIndex];
-		if (!constraint) continue;
-		const bodyA = bodies.pool[constraint.bodyIndexA];
-		const bodyB = bodies.pool[constraint.bodyIndexB];
-		const { normal } = constraint;
-		if (bodyA.motionType !== 2 && bodyB.motionType !== 2) continue;
-		fromQuat(_solvePos_rotA, bodyA.quaternion);
-		fromQuat(_solvePos_rotB, bodyB.quaternion);
-		let inertiaComputed = false;
-		for (let i = 0; i < constraint.numContactPoints; i++) {
-			const cp = constraint.contactPoints[i];
-			multiply3x3Vec(_solvePos_worldRa, _solvePos_rotA, cp.localPositionA);
-			const pointAX = bodyA.centerOfMassPosition[0] + _solvePos_worldRa[0];
-			const pointAY = bodyA.centerOfMassPosition[1] + _solvePos_worldRa[1];
-			const pointAZ = bodyA.centerOfMassPosition[2] + _solvePos_worldRa[2];
-			multiply3x3Vec(_solvePos_worldRb, _solvePos_rotB, cp.localPositionB);
-			const pointBX = bodyB.centerOfMassPosition[0] + _solvePos_worldRb[0];
-			const pointBY = bodyB.centerOfMassPosition[1] + _solvePos_worldRb[1];
-			const pointBZ = bodyB.centerOfMassPosition[2] + _solvePos_worldRb[2];
-			const penVecX = pointBX - pointAX;
-			const penVecY = pointBY - pointAY;
-			const penVecZ = pointBZ - pointAZ;
-			let separation = penVecX * normal[0] + penVecY * normal[1] + penVecZ * normal[2] + penetrationSlop;
-			separation = Math.max(separation, -maxPenetrationDistance);
-			if (separation >= 0) continue;
-			if (!inertiaComputed) {
-				inertiaComputed = true;
-				if (bodyA.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaA, bodyA.motionProperties, _solvePos_rotA);
-				if (bodyB.motionType === 2) getInverseInertiaForRotation(_solvePos_invInertiaB, bodyB.motionProperties, _solvePos_rotB);
-			}
-			const midpointX = (pointAX + pointBX) * .5;
-			const midpointY = (pointAY + pointBY) * .5;
-			const midpointZ = (pointAZ + pointBZ) * .5;
-			_solvePos_rA[0] = midpointX - bodyA.centerOfMassPosition[0];
-			_solvePos_rA[1] = midpointY - bodyA.centerOfMassPosition[1];
-			_solvePos_rA[2] = midpointZ - bodyA.centerOfMassPosition[2];
-			_solvePos_rB[0] = midpointX - bodyB.centerOfMassPosition[0];
-			_solvePos_rB[1] = midpointY - bodyB.centerOfMassPosition[1];
-			_solvePos_rB[2] = midpointZ - bodyB.centerOfMassPosition[2];
-			calculateConstraintPropertiesWithMassOverride(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, constraint.invInertiaScaleA, constraint.invInertiaScaleB, _solvePos_invInertiaA, _solvePos_invInertiaB, _solvePos_rA, _solvePos_rB, normal, 0);
-			if (solvePositionConstraintWithMassOverride(cp.normalConstraint, bodyA, bodyB, constraint.invMassA, constraint.invMassB, normal, separation, baumgarteFactor)) anyImpulseApplied = true;
-		}
-	}
-	return anyImpulseApplied;
-}
-let _sortKeyHigh = 0;
-let _sortKeyLow = 0;
-/** fold the four little endian bytes of a u32 into the 64 bit fnv-1a hash held in _sortKeyHigh / _sortKeyLow */
-function fnv1a64Word(word) {
-	let high = _sortKeyHigh;
-	let low = _sortKeyLow;
-	for (let byte = 0; byte < 4; byte++) {
-		low = (low ^ word >>> byte * 8 & 255) >>> 0;
-		const lowProduct = low * 435;
-		high = Math.imul(high, 435) + Math.floor(lowProduct / 4294967296) + (low << 8) >>> 0;
-		low = lowProduct >>> 0;
-	}
-	_sortKeyHigh = high;
-	_sortKeyLow = low;
-}
-/**
-* the contact's sort key: the 64 bit fnv-1a hash of body id a, sub shape id a, body id b, sub shape id b, each id
-* as its little endian bytes (a body id as 8: index then sequence), stored as two u32 halves
-* (jolt: SubShapeIDPair::GetHash, over 4 byte body ids)
-*/
-function computeContactSortKey(out, bodyIdA, subShapeIdA, bodyIdB, subShapeIdB) {
-	_sortKeyHigh = 3421674724;
-	_sortKeyLow = 2216829733;
-	fnv1a64Word(bodyIdA >>> 0);
-	fnv1a64Word(Math.floor(bodyIdA / 4294967296));
-	fnv1a64Word(subShapeIdA);
-	fnv1a64Word(bodyIdB >>> 0);
-	fnv1a64Word(Math.floor(bodyIdB / 4294967296));
-	fnv1a64Word(subShapeIdB);
-	out.sortKeyHigh = _sortKeyHigh;
-	out.sortKeyLow = _sortKeyLow;
-}
-/**
-* Sort contact constraint indices for deterministic solving.
-* Sorts by:
-* 1. Sort key (hash of body pair + sub-shapes)
-* 2. Body A ID
-* 3. Body B ID
-*/
-function sortContactIndices(contactConstraints, bodies, contactIndices) {
-	contactIndices.sort((aIdx, bIdx) => {
-		const a = contactConstraints.pool[aIdx];
-		const b = contactConstraints.pool[bIdx];
-		if (!a || !b) return 0;
-		if (a.sortKeyHigh !== b.sortKeyHigh) return a.sortKeyHigh - b.sortKeyHigh;
-		if (a.sortKeyLow !== b.sortKeyLow) return a.sortKeyLow - b.sortKeyLow;
-		const bodyAIdA = bodies.pool[a.bodyIndexA]?.id ?? 0;
-		const bodyAIdB = bodies.pool[b.bodyIndexA]?.id ?? 0;
-		if (bodyAIdA !== bodyAIdB) return bodyAIdA - bodyAIdB;
-		return (bodies.pool[a.bodyIndexB]?.id ?? 0) - (bodies.pool[b.bodyIndexB]?.id ?? 0);
-	});
-}
-//#endregion
 //#region src/ccd.ts
 function createCCDBody() {
 	return {
@@ -28724,7 +29371,10 @@ function resetCCDBody(ccdBody) {
 	zero$1(ccdBody.contactSettings.relativeAngularSurfaceVelocity);
 }
 function init$2() {
-	return { ccdBodies: [] };
+	return {
+		ccdBodies: [],
+		order: []
+	};
 }
 const ccdBodyPool = /* @__PURE__ */ pool(createCCDBody);
 /** clear CCD state for a new physics step, clears state from previous frame */
@@ -28735,6 +29385,7 @@ function clear(state, bodies) {
 		ccdBodyPool.release(ccdBody);
 	}
 	state.ccdBodies.length = 0;
+	state.order.length = 0;
 }
 const _computeSweptAABB_endAABB = /* @__PURE__ */ create$38();
 /** compute AABB that encompasses both start and end positions (swept AABB) */
@@ -28802,14 +29453,16 @@ function linkBodies(state, bodies, bodyIndexA, bodyIndexB) {
 	if (state.bodyLinks[bodyIndexA] > lowestLinkTo) state.bodyLinks[bodyIndexA] = lowestLinkTo;
 	if (state.bodyLinks[bodyIndexB] > lowestLinkTo) state.bodyLinks[bodyIndexB] = lowestLinkTo;
 }
+/** the body a constraint or contact goes into the island of: the first dynamic one, as only a dynamic body's velocity it changes */
+function firstDynamic(bodyA, bodyB) {
+	return bodyA.motionType === 2 ? bodyA : bodyB;
+}
 /**
-* Link bodies connected by a contact. Stores the minimum active body index - does NOT call LinkBodies.
+* Link a contact to the island of its dynamic body - does NOT call LinkBodies.
 * The union-find happens only through explicit body links (constraints, etc).
-*
-* INACTIVE_BODY_INDEX is 0xffffffff, so min() will pick the active body when one is inactive, or INACTIVE_BODY_INDEX when both are inactive.
 */
 function linkContact(state, contactIndex, bodyA, bodyB) {
-	state.contactLinks[contactIndex] = Math.min(bodyA.activeIndex, bodyB.activeIndex);
+	state.contactLinks[contactIndex] = firstDynamic(bodyA, bodyB).activeIndex;
 }
 /**
 * Link a constraint to islands. Links the bodies together and stores the constraint ID.
@@ -28819,9 +29472,9 @@ function linkContact(state, contactIndex, bodyA, bodyB) {
 * @param bodyB second body
 */
 function linkConstraint(state, bodies, constraintId, bodyA, bodyB) {
-	if (bodyA.activeIndex !== INACTIVE_BODY_INDEX && bodyB.activeIndex !== INACTIVE_BODY_INDEX) linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
+	if (bodyA.motionType === 2 && bodyB.motionType === 2) linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
 	state.constraintIds.push(constraintId);
-	state.constraintLinks.push(Math.min(bodyA.activeIndex, bodyB.activeIndex));
+	state.constraintLinks.push(firstDynamic(bodyA, bodyB).activeIndex);
 }
 /**
 * Link all contact constraints to islands.
@@ -28833,7 +29486,7 @@ function linkContactConstraints(state, contactConstraints, contacts, bodies) {
 		const contact = contacts.contacts[constraint.contactIndex];
 		const bodyA = bodies.pool[contact.bodyIndexA];
 		const bodyB = bodies.pool[contact.bodyIndexB];
-		if (bodyA.activeIndex !== INACTIVE_BODY_INDEX && bodyB.activeIndex !== INACTIVE_BODY_INDEX) linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
+		if (bodyA.motionType === 2 && bodyB.motionType === 2) linkBodies(state, bodies, bodyA.activeIndex, bodyB.activeIndex);
 		linkContact(state, constraintIdx, bodyA, bodyB);
 	}
 }
@@ -28847,7 +29500,9 @@ function linkUserConstraints(state, constraintsState, bodies) {
 		for (const constraint of pool.constraints) if (!constraint._pooled && constraint.enabled) {
 			const bodyA = bodies.pool[constraint.bodyIndexA];
 			const bodyB = bodies.pool[constraint.bodyIndexB];
-			if (bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX) linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
+			const hasActiveBody = bodyA.activeIndex !== INACTIVE_BODY_INDEX || bodyB.activeIndex !== INACTIVE_BODY_INDEX;
+			const hasDynamicBody = bodyA.motionType === 2 || bodyB.motionType === 2;
+			if (hasActiveBody && hasDynamicBody) linkConstraint(state, bodies, constraint.id, bodyA, bodyB);
 		}
 	}
 }
@@ -28981,6 +29636,10 @@ function finishIslandStep(island, world, deltaTime) {
 * @param timeStep the time step to advance the world by, in seconds
 */
 function updateWorld(world, listener, timeStep) {
+	if (timeStep <= 0) {
+		optimize(world.broadphase);
+		return;
+	}
 	flushPendingContactRemoved(world.contacts, listener);
 	clear(world.ccd, world.bodies);
 	world.contactConstraints.count = 0;
@@ -28989,10 +29648,15 @@ function updateWorld(world, listener, timeStep) {
 	accelerationIntegrationUpdate(world, timeStep);
 	optimize(world.broadphase);
 	findCollidingPairs(world, world.settings.narrowphase.speculativeContactDistance, listener);
-	const collidingPairs = world.pairs.collidingPairs;
-	const collidingPairCount = world.pairs.collidingPairCount;
 	const useBodyPairCache = world.settings.narrowphase.useBodyPairContactCache;
-	for (let i = 0; i < collidingPairCount; i++) {
+	const speculativeContactDistance = world.settings.narrowphase.speculativeContactDistance;
+	for (let i = 0;; i++) {
+		while (i === world.pairs.collidingPairCount && world.pairs.activeReadIndex < world.bodies.activeBodyCount) {
+			const woken = world.bodies.pool[world.bodies.activeBodyIndices[world.pairs.activeReadIndex++]];
+			emitWokenBodyPairs(world, woken, speculativeContactDistance, listener);
+		}
+		if (i === world.pairs.collidingPairCount) break;
+		const collidingPairs = world.pairs.collidingPairs;
 		const bodyIndexA = collidingPairs[i * 3];
 		const bodyIndexB = collidingPairs[i * 3 + 1];
 		const pairRecordIndex = collidingPairs[i * 3 + 2];
@@ -29020,47 +29684,45 @@ function updateWorld(world, listener, timeStep) {
 		}
 		if (!pairHandled) destroyStaleContactsInPair(world.contacts, world.pairs, pairRecordIndex, listener);
 	}
-	if (timeStep > 0) {
-		wakeBodiesInUserConstraints(world);
-		prepare(world.islands, world.bodies, world.contactConstraints.count);
-		linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
-		linkUserConstraints(world.islands, world.constraints, world.bodies);
-		finalize(world.islands, world.bodies, world.constraints, world.settings);
-		updateSleeping(world.constraints, world.bodies);
-		setupVelocityConstraints(world.constraints, world.bodies, timeStep);
+	wakeBodiesInUserConstraints(world);
+	prepare(world.islands, world.bodies, world.contactConstraints.count);
+	linkContactConstraints(world.islands, world.contactConstraints, world.contacts, world.bodies);
+	linkUserConstraints(world.islands, world.constraints, world.bodies);
+	finalize(world.islands, world.bodies, world.constraints, world.settings);
+	updateSleeping(world.constraints, world.bodies);
+	setupVelocityConstraints(world.constraints, world.bodies, timeStep);
+	const warmStartImpulseRatio = world.settings.solver.warmStarting && world.previousTimeStep > 0 ? Math.min(timeStep / world.previousTimeStep, 4) : 0;
+	world.previousTimeStep = timeStep;
+	for (const island of world.islands.islands) {
+		if (island.contactIndices.length === 0 && island.constraintIds.length === 0) continue;
+		sortConstraintIds(world.constraints, island.constraintIds);
+		sortContactIndices(world.contactConstraints, world.bodies, island.contactIndices);
 		if (world.settings.solver.warmStarting) {
-			const warmStartImpulseRatio = world.settings.solver.warmStarting && world.previousTimeStep > 0 ? timeStep / world.previousTimeStep : 0;
-			warmStartVelocityConstraints(world.contactConstraints, world.bodies, warmStartImpulseRatio);
-			warmStartVelocityConstraints$1(world.constraints, world.bodies, warmStartImpulseRatio);
+			warmStartVelocityConstraints$1(world.constraints, world.bodies, island.constraintIds, warmStartImpulseRatio);
+			warmStartVelocityConstraints(world.contactConstraints, world.bodies, island.contactIndices, warmStartImpulseRatio);
 		}
-		world.previousTimeStep = timeStep;
-		for (const island of world.islands.islands) {
-			if (island.contactIndices.length === 0 && island.constraintIds.length === 0) continue;
-			sortConstraintIds(world.constraints, island.constraintIds);
-			sortContactIndices(world.contactConstraints, world.bodies, island.contactIndices);
-			for (let i = 0; i < island.numVelocitySteps; i++) {
-				let appliedImpulse = false;
-				if (island.contactIndices.length > 0) appliedImpulse = solveVelocityConstraintsForIsland(world.contactConstraints, world.bodies, island.contactIndices);
-				if (island.constraintIds.length > 0) appliedImpulse = solveVelocityConstraintsForIsland$1(world.constraints, world.bodies, island.constraintIds, timeStep) || appliedImpulse;
-				if (!appliedImpulse) break;
-			}
+		for (let i = 0; i < island.numVelocitySteps; i++) {
+			let appliedImpulse = false;
+			if (island.contactIndices.length > 0) appliedImpulse = solveVelocityConstraintsForIsland(world.contactConstraints, world.bodies, island.contactIndices);
+			if (island.constraintIds.length > 0) appliedImpulse = solveVelocityConstraintsForIsland$1(world.constraints, world.bodies, island.constraintIds, timeStep) || appliedImpulse;
+			if (!appliedImpulse) break;
 		}
-		storeAppliedImpulses(world.contactConstraints, world.contacts);
-		velocityIntegrationUpdate(world, timeStep);
-		findCCDContacts(world, timeStep, listener);
-		sortCCDBodies(world.ccd);
-		resolveCCDContacts(world);
-		for (const island of world.islands.islands) {
-			if (island.contactIndices.length === 0 && island.constraintIds.length === 0) continue;
-			for (let i = 0; i < island.numPositionSteps; i++) {
-				let appliedImpulse = false;
-				if (island.contactIndices.length > 0) appliedImpulse = solvePositionConstraintsForIsland(world.contactConstraints, world.bodies, island.contactIndices, world.settings.solver.penetrationSlop, world.settings.solver.baumgarteFactor, world.settings.solver.maxPenetrationDistance);
-				if (island.constraintIds.length > 0) appliedImpulse = solvePositionConstraintsForIsland$1(world.constraints, world.bodies, island.constraintIds, world.settings.solver.baumgarteFactor, timeStep) || appliedImpulse;
-				if (!appliedImpulse) break;
-			}
+	}
+	storeAppliedImpulses(world.contactConstraints, world.contacts);
+	velocityIntegrationUpdate(world, timeStep);
+	findCCDContacts(world, timeStep, listener);
+	sortCCDBodies(world.ccd);
+	resolveCCDContacts(world);
+	for (const island of world.islands.islands) {
+		if (island.contactIndices.length === 0 && island.constraintIds.length === 0) continue;
+		for (let i = 0; i < island.numPositionSteps; i++) {
+			let appliedImpulse = false;
+			if (island.contactIndices.length > 0) appliedImpulse = solvePositionConstraintsForIsland(world.contactConstraints, world.bodies, island.contactIndices, world.settings.solver.penetrationSlop, world.settings.solver.baumgarteFactor, world.settings.solver.maxPenetrationDistance);
+			if (island.constraintIds.length > 0) appliedImpulse = solvePositionConstraintsForIsland$1(world.constraints, world.bodies, island.constraintIds, world.settings.solver.baumgarteFactor, timeStep) || appliedImpulse;
+			if (!appliedImpulse) break;
 		}
-		for (const island of world.islands.islands) finishIslandStep(island, world, timeStep);
-	} else resetForces(world);
+	}
+	for (const island of world.islands.islands) finishIslandStep(island, world, timeStep);
 	flipManifoldCache(world.contacts);
 }
 const _acceleration_angularDelta = /* @__PURE__ */ create$47();
@@ -29188,8 +29850,6 @@ const narrowphaseWithReductionCollector = {
 				foundManifold.penetrationDepth = hit.penetration;
 				foundManifold.subShapeIdA = hit.subShapeIdA;
 				foundManifold.subShapeIdB = hit.subShapeIdB;
-				foundManifold.materialIdA = hit.materialIdA;
-				foundManifold.materialIdB = hit.materialIdB;
 			} else {
 				foundIndex = this.numManifolds;
 				foundManifold = this.manifoldsPool[this.numManifolds];
@@ -29200,8 +29860,6 @@ const narrowphaseWithReductionCollector = {
 				foundManifold.penetrationDepth = hit.penetration;
 				foundManifold.subShapeIdA = hit.subShapeIdA;
 				foundManifold.subShapeIdB = hit.subShapeIdB;
-				foundManifold.materialIdA = hit.materialIdA;
-				foundManifold.materialIdB = hit.materialIdB;
 			}
 			copy$9(this.firstWorldSpaceNormals[foundIndex], _narrowphase_worldSpaceNormal);
 		} else add$3(foundManifold.worldSpaceNormal, foundManifold.worldSpaceNormal, _narrowphase_worldSpaceNormal);
@@ -29289,8 +29947,6 @@ const narrowphaseWithoutReductionCollector = {
 		tempManifold.penetrationDepth = hit.penetration;
 		tempManifold.subShapeIdA = hit.subShapeIdA;
 		tempManifold.subShapeIdB = hit.subShapeIdB;
-		tempManifold.materialIdA = hit.materialIdA;
-		tempManifold.materialIdB = hit.materialIdB;
 		manifoldBetweenTwoFaces(tempManifold, hit.pointA, hit.pointB, hit.penetrationAxis, maxContactDistance, hit.faceA, hit.faceB);
 		if (tempManifold.numContactPoints > 4) pruneContactPoints(tempManifold, tempManifold.worldSpaceNormal);
 		if (tempManifold.numContactPoints > 0) {
@@ -29415,7 +30071,7 @@ function wakeBodiesInUserConstraints(world) {
 		for (const constraint of pool.constraints) if (!constraint._pooled && constraint.enabled) {
 			const bodyA = bodies.pool[constraint.bodyIndexA];
 			const bodyB = bodies.pool[constraint.bodyIndexB];
-			const hasActiveBody = !bodyA.sleeping || !bodyB.sleeping;
+			const hasActiveBody = bodyA.motionType !== 0 && !bodyA.sleeping || bodyB.motionType !== 0 && !bodyB.sleeping;
 			const hasDynamicBody = bodyA.motionType === 2 || bodyB.motionType === 2;
 			if (hasActiveBody && hasDynamicBody) {
 				if (bodyA.sleeping && bodyA.motionType === 2) wake(world, bodyA);
@@ -29475,13 +30131,11 @@ function velocityIntegrationUpdate(world, timeStep) {
 }
 /**
 * calculate the motion of a body for CCD correction.
-* if the body is using LinearCast (hasn't moved yet), returns velocity * deltaTime.
-* works for both dynamic and kinematic bodies.
-* otherwise returns zero (body already moved in discrete update).
+* a dynamic LinearCast body has not moved yet, so its motion is velocity * deltaTime.
+* anything else (kinematic bodies included) already moved during velocity integration, so it is zero.
 */
 function calculateBodyMotion(out, body, deltaTime) {
-	const isLinearCast = body.motionProperties?.motionQuality === 1;
-	if ((body.motionType === 2 || body.motionType === 1) && isLinearCast) {
+	if (body.motionType === 2 && body.motionProperties.motionQuality === 1) {
 		scale$4(out, body.motionProperties.linearVelocity, deltaTime);
 		return;
 	}
@@ -29492,6 +30146,7 @@ const _ccd_expandedAABB = /* @__PURE__ */ create$38();
 const _ccd_shapeExtent = /* @__PURE__ */ create$47();
 const _ccd_normal = /* @__PURE__ */ create$47();
 const _ccd_bodyBMotion = /* @__PURE__ */ create$47();
+const _ccd_otherBodyMotion = /* @__PURE__ */ create$47();
 /** collector that processes shape cast hits for CCD, updates CCDBody with earliest collision found */
 const ccdCastShapeCollector = {
 	ccdBody: null,
@@ -29582,11 +30237,8 @@ const ccdBodyVisitor = {
 		}
 		if (!shouldPairCollide(this.bodyA.collisionGroups, this.bodyA.collisionMask, bodyB.collisionGroups, bodyB.collisionMask)) return;
 		if (bodyB.sensor) return;
-		copy$9(_ccd_relativeDisplacement, this.ccdBody.deltaPosition);
-		if (ccdBodyBIndex >= 0) {
-			const ccdBodyB = this.world.ccd.ccdBodies[ccdBodyBIndex];
-			subtract$1(_ccd_relativeDisplacement, _ccd_relativeDisplacement, ccdBodyB.deltaPosition);
-		}
+		calculateBodyMotion(_ccd_otherBodyMotion, bodyB, this.timeStep);
+		subtract$1(_ccd_relativeDisplacement, this.ccdBody.deltaPosition, _ccd_otherBodyMotion);
 		if (squaredLength(_ccd_relativeDisplacement) < this.ccdBody.linearCastThresholdSq) return;
 		size(_ccd_shapeExtent, this.bodyA.aabb);
 		scale$4(_ccd_shapeExtent, _ccd_shapeExtent, .5);
@@ -29623,17 +30275,19 @@ function onCCDContactAdded(world, listener, bodyA, bodyB, contactManifold, conta
 		orderedBodyA = bodyB;
 		orderedBodyB = bodyA;
 		swappedManifold = _onCCDContactAdded_swappedManifold;
-		resetContactManifold(swappedManifold);
-		swappedManifold.subShapeIdA = contactManifold.subShapeIdB;
-		swappedManifold.subShapeIdB = contactManifold.subShapeIdA;
+		swappedManifold.numContactPoints = contactManifold.numContactPoints;
 		copy$9(swappedManifold.baseOffset, contactManifold.baseOffset);
 		copy$9(swappedManifold.worldSpaceNormal, contactManifold.worldSpaceNormal);
 		swappedManifold.penetrationDepth = contactManifold.penetrationDepth;
-		swappedManifold.numContactPoints = contactManifold.numContactPoints;
+		swappedManifold.subShapeIdA = contactManifold.subShapeIdA;
+		swappedManifold.subShapeIdB = contactManifold.subShapeIdB;
+		swappedManifold.materialIdA = contactManifold.materialIdA;
+		swappedManifold.materialIdB = contactManifold.materialIdB;
 		for (let i = 0; i < contactManifold.numContactPoints * 3; i++) {
-			swappedManifold.relativeContactPointsOnA[i] = contactManifold.relativeContactPointsOnB[i];
-			swappedManifold.relativeContactPointsOnB[i] = contactManifold.relativeContactPointsOnA[i];
+			swappedManifold.relativeContactPointsOnA[i] = contactManifold.relativeContactPointsOnA[i];
+			swappedManifold.relativeContactPointsOnB[i] = contactManifold.relativeContactPointsOnB[i];
 		}
+		swapShapes(swappedManifold);
 	}
 	let rec = findPairRecord(world.pairs, orderedBodyA, orderedBodyB);
 	if (rec === -1) rec = addPairRecord(world.pairs, orderedBodyA, orderedBodyB);
@@ -29668,7 +30322,7 @@ function findCCDContacts(world, timeStep, listener) {
 		computeSweptAABB(_findCCDContacts_sweptAABB, bodyA, ccdBody.deltaPosition);
 		ccdBodyVisitor.setup(world, ccdBody, bodyA, timeStep);
 		setFromBody(bodyFilter, world.settings.layers, bodyA);
-		castAABB(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
+		castAABB$1(world, _findCCDContacts_sweptAABB, ccdBody.deltaPosition, bodyFilter, ccdBodyVisitor);
 		if (ccdBody.fractionPlusSlop < 1) {
 			const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
 			const hit = ccdCastShapeCollector.hit;
@@ -29678,8 +30332,8 @@ function findCCDContacts(world, timeStep, listener) {
 			manifoldBetweenTwoFaces(contactManifold, hit.pointA, hit.pointB, hit.penetrationAxis, world.settings.narrowphase.manifoldTolerance, hit.faceA, hit.faceB);
 			contactManifold.subShapeIdA = hit.subShapeIdA;
 			contactManifold.subShapeIdB = hit.subShapeIdB;
-			contactManifold.materialIdA = hit.materialIdA;
-			contactManifold.materialIdB = hit.materialIdB;
+			contactManifold.materialIdA = getShapeMaterial(bodyA.shape, hit.subShapeIdA);
+			contactManifold.materialIdB = getShapeMaterial(bodyB.shape, hit.subShapeIdB);
 			contactManifold.penetrationDepth = hit.penetrationDepth;
 			copy$9(contactManifold.worldSpaceNormal, ccdBody.contactNormal);
 			onCCDContactAdded(world, listener, bodyA, bodyB, contactManifold, ccdBody.contactSettings);
@@ -29719,8 +30373,8 @@ const _applyCCD_invInertiaB = /* @__PURE__ */ create$41();
 const _applyCCD_normalScaled = /* @__PURE__ */ create$47();
 const _applyCCD_tangentVel = /* @__PURE__ */ create$47();
 const _applyCCD_frictionDir = /* @__PURE__ */ create$47();
-const _applyCCD_normalConstraint = /* @__PURE__ */ create$23();
-const _applyCCD_frictionConstraint = /* @__PURE__ */ create$23();
+const _applyCCD_normalConstraint = /* @__PURE__ */ create$28();
+const _applyCCD_frictionConstraint = /* @__PURE__ */ create$28();
 /** apply collision impulse for CCD contact using constraint solver infrastructure, does a single solve iteration using @see AxisConstraintPart */
 function applyCCD(world, ccdBody, bodyA, bodyB) {
 	if (bodyA.motionType !== 2) return;
@@ -29732,7 +30386,6 @@ function applyCCD(world, ccdBody, bodyA, bodyB) {
 	else zero$1(_applyCCD_v2);
 	subtract$1(_applyCCD_relVel, _applyCCD_v2, _applyCCD_v1);
 	const normalVel = dot$2(_applyCCD_relVel, ccdBody.contactNormal);
-	if (normalVel >= 0) return;
 	const settings = ccdBody.contactSettings;
 	let normalVelocityBias = 0;
 	if (settings.combinedRestitution > 0 && normalVel < -world.settings.ccd.minVelocityForRestitution) normalVelocityBias = settings.combinedRestitution * normalVel;
@@ -29769,58 +30422,50 @@ function applyCCD(world, ccdBody, bodyA, bodyB) {
 		clampAngularVelocity(bodyB.motionProperties);
 	}
 }
-/** comparator for sorting CCD bodies by time of impact */
-function compareCCDBodies(a, b) {
+let _compareCCDOrder_ccdBodies = [];
+/** comparator for sorting CCD body indices by time of impact */
+function compareCCDOrder(indexA, indexB) {
+	const a = _compareCCDOrder_ccdBodies[indexA];
+	const b = _compareCCDOrder_ccdBodies[indexB];
 	if (a.fractionPlusSlop !== b.fractionPlusSlop) return a.fractionPlusSlop - b.fractionPlusSlop;
 	return a.bodyIndex - b.bodyIndex;
 }
-/** sort CCD bodies by time of impact (earliest first), uses fractionPlusSlop (includes penetration allowance) for stability */
+/**
+* sort CCD bodies by time of impact (earliest first), uses fractionPlusSlop (includes penetration allowance) for stability.
+* sorts indices into state.order, so the records and every body's ccdBodyIndex stay where they are.
+*/
 function sortCCDBodies(state) {
+	const order = state.order;
 	const count = state.ccdBodies.length;
+	order.length = count;
+	for (let i = 0; i < count; i++) order[i] = i;
 	if (count <= 1) return;
-	const ccdBodies = state.ccdBodies;
-	const sorted = ccdBodies.slice(0, count).sort(compareCCDBodies);
-	for (let i = 0; i < count; i++) ccdBodies[i] = sorted[i];
+	_compareCCDOrder_ccdBodies = state.ccdBodies;
+	order.sort(compareCCDOrder);
 }
 const _resolveCCDContacts_movement = /* @__PURE__ */ create$47();
 /** resolve CCD contacts in chronological order, moves bodies to their collision points and applies impulses */
 function resolveCCDContacts(world) {
-	for (let i = 0; i < world.ccd.ccdBodies.length; i++) {
-		const ccdBody = world.ccd.ccdBodies[i];
+	const order = world.ccd.order;
+	for (let i = 0; i < order.length; i++) {
+		const ccdBody = world.ccd.ccdBodies[order[i]];
 		const bodyA = world.bodies.pool[ccdBody.bodyIndex];
-		if (ccdBody.hitBodyIndex === -1) {
-			if (bodyA.motionType === 2) {
-				add$3(bodyA.position, bodyA.position, ccdBody.deltaPosition);
-				setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
-			}
-			continue;
-		}
-		const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
-		const ccdBodyBIndex = bodyB.ccdBodyIndex;
-		if (ccdBodyBIndex >= 0) {
-			const ccdBodyB = world.ccd.ccdBodies[ccdBodyBIndex];
-			if (ccdBodyB.hitBodyIndex !== -1 && ccdBodyB.fraction > ccdBody.fraction) {
+		if (ccdBody.hitBodyIndex !== -1) {
+			const bodyB = world.bodies.pool[ccdBody.hitBodyIndex];
+			const ccdBodyBIndex = bodyB.ccdBodyIndex;
+			const ccdBodyB = ccdBodyBIndex >= 0 ? world.ccd.ccdBodies[ccdBodyBIndex] : null;
+			if (ccdBodyB !== null && ccdBodyB.fraction > ccdBody.fraction) {
 				ccdBodyB.hitBodyIndex = -1;
 				ccdBodyB.fractionPlusSlop = ccdBody.fraction;
 			}
+			if (ccdBodyB === null || ccdBodyB.fraction >= ccdBody.fraction) {
+				applyCCD(world, ccdBody, bodyA, bodyB);
+				if (bodyB.sleeping) wake(world, bodyB);
+			}
 		}
-		applyCCD(world, ccdBody, bodyA, bodyB);
-		if (bodyA.motionType === 2) {
-			scale$4(_resolveCCDContacts_movement, ccdBody.deltaPosition, ccdBody.fractionPlusSlop);
-			add$3(bodyA.position, bodyA.position, _resolveCCDContacts_movement);
-			setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
-		}
-		if (bodyB.sleeping) wake(world, bodyB);
-	}
-}
-function resetForces(world) {
-	const pool = world.bodies.pool;
-	const activeIndices = world.bodies.activeBodyIndices;
-	const activeCount = world.bodies.activeBodyCount;
-	for (let i = 0; i < activeCount; i++) {
-		const body = pool[activeIndices[i]];
-		if (body.sleeping) continue;
-		clearForces(body);
+		scale$4(_resolveCCDContacts_movement, ccdBody.deltaPosition, ccdBody.fractionPlusSlop);
+		add$3(bodyA.position, bodyA.position, _resolveCCDContacts_movement);
+		setTransform(world, bodyA, bodyA.position, bodyA.quaternion, false);
 	}
 }
 //#endregion
@@ -29922,6 +30567,6 @@ function disableCollision(settings, objectLayerA, objectLayerB) {
 	disableCollision$1(settings.layers, objectLayerA, objectLayerB);
 }
 //#endregion
-export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, boxSupport, broadphase_exports as broadphase, bvh_exports as bvh, capsule_exports as capsule, capsuleSupport, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeHitEarlyOutFraction, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, cylinderSupport, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getConvexMaterial, getShapeInnerRadius, getShapeMaterial, getShapeSupportingFace, getShapeSurfaceNormal, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, hullSupport, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, pairs_exports as pairs, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, pointSupport, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, sphereSupport, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformScale, transformed_exports as transformed, translateFace, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, triangleSupport, updateWorld };
+export { ALL_CONSTRAINT_DEFS, ALL_SHAPE_DEFS, AllCastRayCollector, AllCastShapeCollector, AllCollidePointCollector, AllCollideShapeCollector, AnyCastRayCollector, AnyCastShapeCollector, AnyCollidePointCollector, AnyCollideShapeCollector, CastRayStatus, CastShapeStatus, ClosestCastRayCollector, ClosestCastShapeCollector, ClosestCollideShapeCollector, ConstraintSpace, ConstraintType, ContactValidateResult, DEFAULT_CONVEX_RADIUS, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ, DEFAULT_SHAPE_DENSITY, DOF_ALL, DOF_ROTATION_ONLY, DOF_TRANSLATION_ONLY, EMPTY_SUB_SHAPE_ID, FACE_MAX_VERTICES, INACTIVE_BODY_INDEX, InternalEdgeRemovingCollector, MaterialCombineMode, MotionQuality, MotionType, MotorState, PenetrationDepthStatus, ShapeType, SixDOFAxis, SpringMode, SupportFunctionMode, SwingType, active_edges_exports as activeEdges, addBroadphaseLayer, addObjectLayer, bitmask_exports as bitmask, box_exports as box, boxSupport, broadphase_exports as broadphase, broadphase_query_exports as broadphaseQuery, bvh_exports as bvh, capsule_exports as capsule, capsuleSupport, castConvexVsConvex, castConvexVsConvexLocal, castRay, castRayVsConvex, castRayVsShape, castShape, castShapeHitEarlyOutFraction, castShapeVsShape, cloneFace, collideConvexVsConvex, collideConvexVsConvexLocal, collidePoint, collidePointVsConvex, collidePointVsShape, collideShape, collideShapeVsShape, collideShapeVsShapeWithInternalEdgeRemoval, collideShapeWithInternalEdgeRemoval, collisionDispatch, combineMaterial, compound_exports as compound, computeMassProperties, computeShrunkHullPoints, cone_constraint_exports as coneConstraint, constraints_exports as constraints, contacts_exports as contacts, convex_hull_exports as convexHull, convex_hull_builder_exports as convexHullBuilder, copyCastRayHit, copyCastShapeHit, copyCollidePointHit, copyCollideShapeHit, copyCollideShapeSettings, copySimplex, createAllCastRayCollector, createAllCastShapeCollector, createAllCollidePointCollector, createAllCollideShapeCollector, createAnyCastRayCollector, createAnyCastShapeCollector, createAnyCollidePointCollector, createAnyCollideShapeCollector, createCastRayHit, createCastShapeHit, createClosestCastRayCollector, createClosestCastShapeCollector, createClosestCollideShapeCollector, createCollidePointHit, createCollideShapeHit, createCollisionEstimationResult, createContactSettings, createDefaultCastRaySettings, createDefaultCastShapeSettings, createDefaultCollidePointSettings, createDefaultCollideShapeSettings, createFace, createGjkCastRayResult, createGjkCastShapeResult, createGjkClosestPoints, createPenetrationDepth, createSimplex, createSupport, createSupportingFaceResult, createWorld, createWorldSettings, cylinder_exports as cylinder, cylinderSupport, dbvt_exports as dbvt, debug_exports as debug, defineShape, disableCollision, distance_constraint_exports as distanceConstraint, dof, empty_shape_exports as emptyShape, enableCollision, estimateCollisionResponse, filter_exports as filter, fixed_constraint_exports as fixedConstraint, getConvexMaterial, getShapeInnerRadius, getShapeMaterial, getShapeSupportingFace, getShapeSurfaceNormal, getWorldSpaceContactPointOnA, getWorldSpaceContactPointOnB, gjkCastRay, gjkCastShape, gjkClosestPoints, hinge_constraint_exports as hingeConstraint, hullSupport, isScaleInsideOut, kcc_exports as kcc, layers_exports as layers, mass_properties_exports as massProperties, motion_properties_exports as motionProperties, motor_settings_exports as motorSettings, offset_center_of_mass_exports as offsetCenterOfMass, pairs_exports as pairs, penetrationCastShape, penetrationDepthStepEPA, penetrationDepthStepGJK, plane_exports as plane, point_constraint_exports as pointConstraint, pointSupport, registerAll, registerAllConstraints, registerAllShapes, registerConstraints, registerShapes, reversedCastShapeVsShape, reversedCollideShapeVsShape, rigid_body_exports as rigidBody, scaled_exports as scaled, setBoxSupport, setCapsuleSupport, setCastShapeFn, setCollideShapeFn, setCylinderSupport, setHullSupport, setPointSupport, setPolygonSupport, setShapeSupport, setSphereSupport, setTriangleSupport, shapeDefs, six_dof_constraint_exports as sixDOFConstraint, slider_constraint_exports as sliderConstraint, sphere_exports as sphere, sphereSupport, spring_settings_exports as springSettings, static_compound_exports as staticCompound, static_compound_bvh_exports as staticCompoundBvh, sub_shape_exports as subShape, swing_twist_constraint_exports as swingTwistConstraint, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale, transformScale, transformed_exports as transformed, translateFace, triangle_mesh_exports as triangleMesh, triangle_mesh_builder_exports as triangleMeshBuilder, triangle_mesh_bvh_exports as triangleMeshBvh, triangleSupport, updateWorld };
 
 //# sourceMappingURL=index.js.map

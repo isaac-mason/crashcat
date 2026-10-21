@@ -4,6 +4,7 @@ import type { RigidBody } from '../body/rigid-body.js';
 import type { Filter } from '../filter.js';
 import type { World } from '../world.js';
 import type { BodyVisitor } from './body-visitor.js';
+import type { OrientedBox } from './broadphase.js';
 export type DBVT = {
     /** packed-double node bounds, stride 6 (see file header) */
     bounds: number[];
@@ -51,6 +52,8 @@ export declare function rebuild(dbvt: DBVT): void;
 export declare function intersectAABBFatLeaves(world: World, dbvt: DBVT, aabb: Box3, visitor: BodyVisitor): void;
 export declare function intersectAABB(world: World, dbvt: DBVT, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void;
 export declare function intersectPoint(world: World, dbvt: DBVT, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
+export declare function intersectSphere(world: World, dbvt: DBVT, center: Vec3, radius: number, queryFilter: Filter, visitor: BodyVisitor): void;
+export declare function intersectOrientedBox(world: World, dbvt: DBVT, box: OrientedBox, queryFilter: Filter, visitor: BodyVisitor): void;
 /** visit every body in the tree — no filtering, no aabb tests */
 export declare function walk(world: World, dbvt: DBVT, visitor: BodyVisitor): void;
 export declare function castRay(world: World, dbvt: DBVT, origin: Vec3, direction: Vec3, length: number, queryFilter: Filter, visitor: BodyVisitor): void;

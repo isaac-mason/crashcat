@@ -11,8 +11,6 @@ export type CastRayHit = {
     subShapeId: number;
     /** id of the body that was hit */
     bodyIdB: number;
-    /** material id of the hit sub-shape */
-    materialId: number;
 };
 export declare function createCastRayHit(): CastRayHit;
 export declare function copyCastRayHit(out: CastRayHit, src: CastRayHit): void;

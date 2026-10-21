@@ -3,8 +3,6 @@ export type CollidePointHit = {
     subShapeIdB: number;
     /** body id of shape b */
     bodyIdB: number;
-    /** material id of the hit sub-shape */
-    materialId: number;
 };
 export declare function createCollidePointHit(): CollidePointHit;
 export declare function copyCollidePointHit(out: CollidePointHit, source: CollidePointHit): void;

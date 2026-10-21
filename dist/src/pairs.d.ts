@@ -57,6 +57,11 @@ export type Pairs = {
      * (invariant: flag set ⟺ index present here); insertion order is deterministic.
      */
     moved: number[];
+    /**
+     * how far into the active body list this step's pairs have been found. a body a contact wakes during the
+     * narrowphase lands past it, and still needs its own pairs this step (emitWokenBodyPairs).
+     */
+    activeReadIndex: number;
 };
 /** stride of a pair record: [bodyIndexA, bodyIndexB, prevEdgeA, nextEdgeA, prevEdgeB, nextEdgeB] */
 export declare const RECORD_STRIDE = 6;
@@ -102,6 +107,8 @@ export declare function findPairRecord(pairs: Pairs, bodyA: RigidBody, bodyB: Ri
  * the listener is unavailable at body-removal time). does not depend on the body's dbvt leaf, so it
  * is safe to call before or independently of tree-leaf removal.
  */
+/** every pair of the body runs the narrowphase next update instead of reusing its cached manifolds: its shape changed */
+export declare function invalidateBodyCache(pairs: Pairs, body: RigidBody): void;
 export declare function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: RigidBody[], body: RigidBody): void;
 /**
  * find potentially colliding body pairs, updates world.pairs.collidingPairs.
@@ -112,3 +119,10 @@ export declare function purgeBodyPairs(pairs: Pairs, contacts: Contacts, pool: R
  * intra-pair/record order may differ).
  */
 export declare function findCollidingPairs(world: World, speculativeContactDistance: number, listener: Listener | undefined): void;
+/**
+ * emit the pairs of a body woken after the sweep (a contact woke it in the narrowphase), so they run in the same step's
+ * narrowphase: its records that pass the sweep's overlap tests and that it reports (the other body asleep, or woken after
+ * it; a body active at the sweep already reported its pair). a record that no longer overlaps is left for the next sweep
+ * to destroy.
+ */
+export declare function emitWokenBodyPairs(world: World, body: RigidBody, speculativeContactDistance: number, listener: Listener | undefined): void;

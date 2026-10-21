@@ -1,4 +1,4 @@
-import type { Vec3 } from 'math';
+import type { Mat4, Vec3 } from 'math';
 import { type Box3 } from 'math/shapes';
 import type { RigidBody } from '../body/rigid-body.js';
 import type { Filter } from '../filter.js';
@@ -35,13 +35,22 @@ export declare function updateBody(broadphase: Broadphase, body: RigidBody): boo
 export declare function notifyBodyBoundsChanged(world: World, body: RigidBody): void;
 /** removes and re-adds a body in the broadphase when its layer changes */
 export declare function reinsertBody(broadphase: Broadphase, body: RigidBody, layers: Layers): void;
-/** finds bodies with AABBs that intersect the given ray */
+/** finds bodies with AABBs that intersect the given ray, the visitor given where the ray entered each */
 export declare function castRay(world: World, origin: Vec3, direction: Vec3, length: number, queryFilter: Filter, visitor: BodyVisitor): void;
 /** finds bodies with AABBs that intersect the given AABB */
 export declare function intersectAABB(world: World, aabb: Box3, queryFilter: Filter, visitor: BodyVisitor): void;
 /** finds bodies with AABBs that contain the given point */
 export declare function intersectPoint(world: World, point: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
-/** finds bodies with AABBs that intersect the given swept AABB */
+/** a box turned and moved by `orientation` (rotation and translation, no scale), `halfExtents` along its own axes, as jolt's OrientedBox */
+export type OrientedBox = {
+    orientation: Mat4;
+    halfExtents: Vec3;
+};
+/** finds bodies with AABBs within radius of the centre */
+export declare function intersectSphere(world: World, center: Vec3, radius: number, queryFilter: Filter, visitor: BodyVisitor): void;
+/** finds bodies with AABBs that overlap the oriented box */
+export declare function intersectOrientedBox(world: World, box: OrientedBox, queryFilter: Filter, visitor: BodyVisitor): void;
+/** finds bodies with AABBs that intersect the given swept AABB, the visitor given where the sweep entered each */
 export declare function castAABB(world: World, bounds: Box3, displacement: Vec3, queryFilter: Filter, visitor: BodyVisitor): void;
 /** get the bounds of all DBVTs in the broadphase */
 export declare function bounds(out: Box3, broadphase: Broadphase): Box3;

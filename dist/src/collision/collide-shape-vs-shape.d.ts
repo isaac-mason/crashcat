@@ -14,10 +14,6 @@ export type CollideShapeHit = {
     subShapeIdA: number;
     /** sub shape id of shape B, EMPTY_SUB_SHAPE_ID if not a compound shape */
     subShapeIdB: number;
-    /** material id of sub-shape A */
-    materialIdA: number;
-    /** material id of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */

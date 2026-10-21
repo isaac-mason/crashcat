@@ -17,6 +17,7 @@ export { EMPTY_SUB_SHAPE_ID } from './body/sub-shape.js';
 export type { BodyVisitor } from './broadphase/body-visitor.js';
 export * as broadphase from './broadphase/broadphase.js';
 export * as dbvt from './broadphase/dbvt.js';
+export * as broadphaseQuery from './broadphase-query.js';
 export type { KCC, KCCSettings } from './character/kcc.js';
 export * as kcc from './character/kcc.js';
 export * as activeEdges from './collision/active-edges.js';
@@ -44,6 +45,7 @@ export type { Constraint, ConstraintIterationOverrides, ConstraintSortFields, Co
 export * as constraints from './constraints/constraints.js';
 export { ConstraintSpace } from './constraints/constraints.js';
 export type { ContactConstraint, ContactConstraints, ContactSettings, WorldContactPoint, } from './constraints/contact-constraints.js';
+export { createContactSettings } from './constraints/contact-constraints.js';
 export type { DistanceConstraint, DistanceConstraintSettings } from './constraints/distance-constraint.js';
 export * as distanceConstraint from './constraints/distance-constraint.js';
 export type { FixedConstraint, FixedConstraintSettings } from './constraints/fixed-constraint.js';

@@ -47,10 +47,8 @@ export declare function prepare(state: Islands, bodies: Bodies, numContactConstr
 /** link two bodies into the same island (union operation) */
 export declare function linkBodies(state: Islands, bodies: Bodies, bodyIndexA: number, bodyIndexB: number): void;
 /**
- * Link bodies connected by a contact. Stores the minimum active body index - does NOT call LinkBodies.
+ * Link a contact to the island of its dynamic body - does NOT call LinkBodies.
  * The union-find happens only through explicit body links (constraints, etc).
- *
- * INACTIVE_BODY_INDEX is 0xffffffff, so min() will pick the active body when one is inactive, or INACTIVE_BODY_INDEX when both are inactive.
  */
 export declare function linkContact(state: Islands, contactIndex: number, bodyA: RigidBody, bodyB: RigidBody): void;
 /**

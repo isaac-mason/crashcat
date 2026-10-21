@@ -7,6 +7,8 @@ import type { ContactSettings } from './constraints/contact-constraints.js';
 export type CCD = {
     /** CCD bodies detected this frame */
     ccdBodies: CCDBody[];
+    /** indices into ccdBodies in time of impact order, so the records and every body's ccdBodyIndex stay put */
+    order: number[];
 };
 /**
  * CCD body data for one frame.

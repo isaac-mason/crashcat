@@ -47,18 +47,13 @@ export type ContactConstraint = {
     /** pool of 4 contact points, only the first numContactPoints entries are valid */
     contactPoints: [WorldContactPoint, WorldContactPoint, WorldContactPoint, WorldContactPoint];
     /**
-     * Average contact point ("friction point") in world space — unweighted mean of contact
-     * midpoints. The two linear friction constraints are anchored at this point.
-     */
-    frictionPoint: Vec3;
-    /**
-     * Linear friction constraint along tangent1, anchored at frictionPoint.
+     * Linear friction constraint along tangent1, anchored on each body at the mean of that body's contact points.
      * Lambda clamping (joint with frictionConstraint2):
      * λ1² + λ2² ≤ (μ · Σ_i normalLambda_i)²
      */
     frictionConstraint1: axisConstraintPart.AxisConstraintPart;
     /**
-     * Linear friction constraint along tangent2, anchored at frictionPoint.
+     * Linear friction constraint along tangent2, anchored on each body at the mean of that body's contact points.
      * Lambda clamping (joint with frictionConstraint1):
      * λ1² + λ2² ≤ (μ · Σ_i normalLambda_i)²
      */
@@ -89,9 +84,9 @@ export type ContactConstraint = {
  * Links world-space geometry to constraint solving.
  *
  * Friction is no longer per-contact-point — it lives on the parent
- * ContactConstraint (anchored at frictionPoint). Each WorldContactPoint
- * only owns the 1-DOF non-penetration constraint plus a cached moment-arm
- * to the friction point for computing the angular friction cap.
+ * ContactConstraint. Each WorldContactPoint only owns the 1-DOF
+ * non-penetration constraint plus a cached moment-arm to the friction
+ * center for computing the angular friction cap.
  */
 export type WorldContactPoint = {
     /**
@@ -121,7 +116,7 @@ export type WorldContactPoint = {
      */
     normalConstraint: axisConstraintPart.AxisConstraintPart;
     /**
-     * Distance from this contact point to the manifold's friction point, projected onto
+     * Distance from this contact point on body A to the mean of body A's contact points, projected onto
      * the plane perpendicular to the contact normal. Used as the moment arm when computing
      * the angular friction cap: μ · Σ_i (distanceToFrictionCenter_i · normalLambda_i).
      */
@@ -183,9 +178,10 @@ export declare function addContactConstraintFromCache(contactConstraints: Contac
  * buffers for us.
  *
  * @param contactConstraints contact constraint state
+ * @param constraintIndices an island's contact constraint indices, in their solve order
  * @param warmStartRatio scale factor for warm start impulses (usually 1.0)
  */
-export declare function warmStartVelocityConstraints(contactConstraints: ContactConstraints, bodies: Bodies, warmStartRatio: number): void;
+export declare function warmStartVelocityConstraints(contactConstraints: ContactConstraints, bodies: Bodies, constraintIndices: number[], warmStartRatio: number): void;
 /**
  * solve velocity constraints for a specific island. only processes constraints at the given indices.
  *

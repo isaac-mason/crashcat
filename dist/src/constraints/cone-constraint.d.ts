@@ -54,7 +54,7 @@ export type ConeConstraintSettings = {
     halfConeAngle?: number;
     /** constraint space @default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
