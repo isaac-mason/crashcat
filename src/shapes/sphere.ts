@@ -208,7 +208,6 @@ function collidePointVsSphere(
 
     if (distSq <= radiusSq) {
         _collidePointHit.subShapeIdB = subShapeIdB;
-        _collidePointHit.materialId = shapeB.materialId;
         _collidePointHit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointHit);
     }
@@ -313,8 +312,6 @@ export function collideSphereVsSphere(
     hit.penetration = penetration;
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = subShapeIdB;
-    hit.materialIdA = sphereA.materialId;
-    hit.materialIdB = sphereB.materialId;
     hit.bodyIdB = collector.bodyIdB;
 
     // a sphere has no supporting face, and the hit struct is reused

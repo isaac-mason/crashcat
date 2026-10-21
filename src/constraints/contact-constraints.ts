@@ -858,6 +858,10 @@ export function addContactConstraint(
         bodyA.sensor || bodyB.sensor,
     );
 
+    // the listener's materials are the shapes', by sub shape id, as jolt's: the hits that found the contact carry none
+    contactManifold.materialIdA = getShapeMaterial(bodyA.shape, contactManifold.subShapeIdA);
+    contactManifold.materialIdB = getShapeMaterial(bodyB.shape, contactManifold.subShapeIdB);
+
     // call contact listener, which can modify ContactSettings to customize contact behavior
     if (existingContact) {
         curr.flags |= contacts.CachedManifoldFlags.ContactPersisted;

@@ -17,10 +17,6 @@ export type CollideShapeHit = {
     subShapeIdA: number;
     /** sub shape id of shape B, EMPTY_SUB_SHAPE_ID if not a compound shape */
     subShapeIdB: number;
-    /** material id of sub-shape A */
-    materialIdA: number;
-    /** material id of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */
@@ -37,8 +33,6 @@ export function createCollideShapeHit(): CollideShapeHit {
         penetration: 0,
         subShapeIdA: EMPTY_SUB_SHAPE_ID,
         subShapeIdB: EMPTY_SUB_SHAPE_ID,
-        materialIdA: -1,
-        materialIdB: -1,
         faceA: createFace(),
         faceB: createFace(),
         bodyIdB: -1,
@@ -52,8 +46,6 @@ export function copyCollideShapeHit(out: CollideShapeHit, source: CollideShapeHi
     out.penetration = source.penetration;
     out.subShapeIdA = source.subShapeIdA;
     out.subShapeIdB = source.subShapeIdB;
-    out.materialIdA = source.materialIdA;
-    out.materialIdB = source.materialIdB;
 
     out.faceA.numVertices = source.faceA.numVertices;
     for (let i = 0; i < source.faceA.numVertices * 3; i++) {
@@ -267,10 +259,6 @@ function createInvertedCollector() {
             const tmpSubShapeId = hit.subShapeIdA;
             hit.subShapeIdA = hit.subShapeIdB;
             hit.subShapeIdB = tmpSubShapeId;
-
-            const tmpMaterialId = hit.materialIdA;
-            hit.materialIdA = hit.materialIdB;
-            hit.materialIdB = tmpMaterialId;
 
             const tmpFace = hit.faceA;
             hit.faceA = hit.faceB;

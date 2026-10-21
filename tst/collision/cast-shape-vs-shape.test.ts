@@ -17,6 +17,7 @@ import {
     createDefaultCastShapeSettings,
     cylinder,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     plane,
     reversedCastShapeVsShape,
     type Shape,
@@ -2513,8 +2514,8 @@ describe('reversedCastShapeVsShape', () => {
         }
         expect(r.normal[0]).toBeCloseTo(1, 3);
 
-        expect(r.materialIdA).toBe(7);
-        expect(r.materialIdB).toBe(3);
+        expect(getShapeMaterial(boxShape, r.subShapeIdA)).toBe(7);
+        expect(getShapeMaterial(sphereShape, r.subShapeIdB)).toBe(3);
 
         // shape a (the box) is reported in its swept frame: centre at x = -1.5, face at x = -2.5
         expect(r.pointA[0]).toBeCloseTo(-2.5, 3);
@@ -2564,8 +2565,8 @@ describe('reversedCastShapeVsShape', () => {
         // normal points from b (sphere) towards a (plane)
         expect(hit.normal[1]).toBeCloseTo(-1, 5);
         expect(hit.penetrationAxis[1]).toBeGreaterThan(0);
-        expect(hit.materialIdA).toBe(5);
-        expect(hit.materialIdB).toBe(3);
+        expect(getShapeMaterial(planeShape, hit.subShapeIdA)).toBe(5);
+        expect(getShapeMaterial(sphereShape, hit.subShapeIdB)).toBe(3);
     });
 });
 

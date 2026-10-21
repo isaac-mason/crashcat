@@ -2,6 +2,7 @@ import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
+    CastRayStatus,
     castRay,
     castShape,
     collidePoint,
@@ -10,6 +11,7 @@ import {
     createAllCastShapeCollector,
     createAllCollidePointCollector,
     createAllCollideShapeCollector,
+    createClosestCastRayCollector,
     createClosestCastShapeCollector,
     createDefaultCastRaySettings,
     createDefaultCastShapeSettings,
@@ -19,6 +21,7 @@ import {
     MotionType,
     rigidBody,
     sphere,
+    triangleMesh,
 } from '../src';
 import { createTestWorld } from './helpers';
 
@@ -75,6 +78,46 @@ describe('Query API - castRay', () => {
         castRay(world, collector, settings, origin, direction, length, queryFilter);
 
         expect(collector.hits.length).toBe(0);
+    });
+});
+
+describe('Query API - hit materials', () => {
+    // hits carry no material, as jolt's: the hit's sub shape id names the part, whose material the body gives
+    test('a ray hit on a mesh names its triangle, whose material rigidBody.getMaterial gives', () => {
+        const { world, layers } = createTestWorld();
+        const queryFilter = filter.create(world.settings.layers);
+        const floor = rigidBody.create(world, {
+            shape: triangleMesh.create({
+                positions: [-10, 0, -10, 10, 0, -10, 10, 0, 10, -10, 0, 10],
+                indices: [0, 2, 1, 0, 3, 2],
+                materialIndices: [5, 9],
+            }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+        });
+
+        // either side of the diagonal x = z: one triangle each
+        const collector = createClosestCastRayCollector();
+        const materials: number[] = [];
+        for (const [x, z] of [
+            [5, -3],
+            [-3, 5],
+        ]) {
+            collector.reset();
+            castRay(
+                world,
+                collector,
+                createDefaultCastRaySettings(),
+                vec3.fromValues(x, 5, z),
+                vec3.fromValues(0, -1, 0),
+                10,
+                queryFilter,
+            );
+            expect(collector.hit.status).toBe(CastRayStatus.COLLIDING);
+            expect(collector.hit.bodyIdB).toBe(floor.id);
+            materials.push(rigidBody.getMaterial(floor, collector.hit.subShapeId));
+        }
+        expect(materials.sort()).toEqual([5, 9]);
     });
 });
 

@@ -21,7 +21,14 @@ import { createSupport, type Support, SupportFunctionMode, setPolygonSupport } f
 import type { Filter } from '../filter';
 import * as query from '../query';
 import type { Shape } from '../shapes/shapes';
-import { getShapeSupportingFace, ShapeType, setShapeSupport, shapeDefs, transformScale } from '../shapes/shapes';
+import {
+    getShapeMaterial,
+    getShapeSupportingFace,
+    ShapeType,
+    setShapeSupport,
+    shapeDefs,
+    transformScale,
+} from '../shapes/shapes';
 import { createFace } from '../utils/face';
 import type { World } from '../world';
 
@@ -996,7 +1003,7 @@ const characterCollideCollector = {
 
         contact.bodyId = hit.bodyIdB;
         contact.subShapeId = hit.subShapeIdB;
-        contact.materialId = hit.materialIdB;
+        contact.materialId = getShapeMaterial(body.shape, hit.subShapeIdB);
 
         // store motion type, velocity, and sensor flag
         contact.motionType = body.motionType;
@@ -1137,7 +1144,7 @@ const characterCastCollector = /* @__PURE__ */ (() => ({
 
         contact.bodyId = hit.bodyIdB;
         contact.subShapeId = hit.subShapeIdB;
-        contact.materialId = hit.materialIdB;
+        contact.materialId = getShapeMaterial(body.shape, hit.subShapeIdB);
 
         // store motion type, velocity, and sensor flag
         contact.motionType = body.motionType;

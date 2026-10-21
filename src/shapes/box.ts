@@ -336,8 +336,6 @@ export function collideSphereVsBox(
     hit.penetration = penetration;
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = subShapeIdB;
-    hit.materialIdA = sphereShape.materialId;
-    hit.materialIdB = boxShape.materialId;
     hit.bodyIdB = collector.bodyIdB;
 
     if (settings.collectFaces) {
@@ -673,7 +671,6 @@ export function castRayVsBox(
 
     _castRayVsBox_hit.status = CastRayStatus.COLLIDING;
     _castRayVsBox_hit.subShapeId = subShapeId;
-    _castRayVsBox_hit.materialId = shape.materialId;
     _castRayVsBox_hit.bodyIdB = collector.bodyIdB;
     let hitAdded = false;
 
@@ -745,7 +742,6 @@ function collidePointVsBox(
         Math.abs(_collidePointVsBox_posB[2]) <= scaledHalfZ
     ) {
         _collidePointVsBox_hit.subShapeIdB = subShapeIdB;
-        _collidePointVsBox_hit.materialId = shapeB.materialId;
         _collidePointVsBox_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointVsBox_hit);
     }

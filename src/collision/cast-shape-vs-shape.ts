@@ -37,10 +37,6 @@ export type CastShapeHit = {
     subShapeIdA: number;
     /** sub-shape ID on shape B */
     subShapeIdB: number;
-    /** material ID of sub-shape A */
-    materialIdA: number;
-    /** material ID of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */
@@ -60,8 +56,6 @@ export function createCastShapeHit(): CastShapeHit {
         normal: vec3.create(),
         subShapeIdA: 0,
         subShapeIdB: 0,
-        materialIdA: -1,
-        materialIdB: -1,
         faceA: createFace(),
         faceB: createFace(),
         bodyIdB: -1,
@@ -86,8 +80,6 @@ export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
     vec3.copy(out.normal, hit.normal);
     out.subShapeIdA = hit.subShapeIdA;
     out.subShapeIdB = hit.subShapeIdB;
-    out.materialIdA = hit.materialIdA;
-    out.materialIdB = hit.materialIdB;
 
     out.faceA.numVertices = hit.faceA.numVertices;
     for (let i = 0; i < hit.faceA.vertices.length; i++) {
@@ -292,10 +284,6 @@ function createInvertedCollector() {
             const tmpSubShapeId = hit.subShapeIdA;
             hit.subShapeIdA = hit.subShapeIdB;
             hit.subShapeIdB = tmpSubShapeId;
-
-            const tmpMaterialId = hit.materialIdA;
-            hit.materialIdA = hit.materialIdB;
-            hit.materialIdB = tmpMaterialId;
 
             const tmpFace = hit.faceA;
             hit.faceA = hit.faceB;

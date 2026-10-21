@@ -123,7 +123,6 @@ export function castRayVsConvex(
         _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
         _castRayVsConvex_hit.fraction = Math.max(0.0, fraction);
         _castRayVsConvex_hit.subShapeId = subShapeId;
-        _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
         _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_castRayVsConvex_hit);
         hitAdded = true;
@@ -157,7 +156,6 @@ export function castRayVsConvex(
                 _castRayVsConvex_hit.status = CastRayStatus.COLLIDING;
                 _castRayVsConvex_hit.fraction = fraction + (_castRayVsConvex_gjkResult.lambda - 1.0) * deltaFraction;
                 _castRayVsConvex_hit.subShapeId = subShapeId;
-                _castRayVsConvex_hit.materialId = (shape as ConvexShape).materialId;
                 _castRayVsConvex_hit.bodyIdB = collector.bodyIdB;
                 collector.addHit(_castRayVsConvex_hit);
                 hitAdded = true;
@@ -255,7 +253,6 @@ export function collidePointVsConvex(
     const toleranceSq = settings.collisionTolerance * settings.collisionTolerance;
     if (_collidePointVsConvex_gjkResult.squaredDistance <= toleranceSq) {
         _collidePointHit.subShapeIdB = subShapeIdB;
-        _collidePointHit.materialId = (shapeB as ConvexShape).materialId;
         _collidePointHit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointHit);
     }
@@ -520,8 +517,6 @@ export function collideConvexVsConvexLocal(
     _collideConvex_hit.penetration = penetration;
     _collideConvex_hit.subShapeIdA = subShapeIdA;
     _collideConvex_hit.subShapeIdB = subShapeIdB;
-    _collideConvex_hit.materialIdA = (shapeA as ConvexShape).materialId;
-    _collideConvex_hit.materialIdB = (shapeB as ConvexShape).materialId;
     _collideConvex_hit.bodyIdB = collector.bodyIdB;
 
     // gather faces
@@ -740,8 +735,6 @@ export function castConvexVsConvexLocal(
     _castConvex_castShapeHit.penetrationDepth = penetrationDepth;
     _castConvex_castShapeHit.subShapeIdA = subShapeIdA;
     _castConvex_castShapeHit.subShapeIdB = subShapeIdB;
-    _castConvex_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-    _castConvex_castShapeHit.materialIdB = (shapeB as ConvexShape).materialId;
     _castConvex_castShapeHit.bodyIdB = collector.bodyIdB;
 
     // extract supporting faces if requested

@@ -11,6 +11,7 @@ import {
     computeMassProperties,
     type GetLeafShapeResult,
     type GetSubShapeTransformedShapeResult,
+    getShapeMaterial,
     getShapeSurfaceNormal,
     type Shape,
     shapeDefs,
@@ -1013,6 +1014,11 @@ export function moveKinematic(body: RigidBody, targetPosition: Vec3, targetQuate
 const _getWorldSurfaceNormal_localPos = /* @__PURE__ */ vec3.create();
 const _getWorldSurfaceNormal_normal = /* @__PURE__ */ vec3.create();
 const _getWorldSurfaceNormal_invQuat = /* @__PURE__ */ quat.create();
+
+/** the material id of the part of the body's shape a hit's or a contact's sub shape id names; -1 for none */
+export function getMaterial(body: RigidBody, subShapeId: number): number {
+    return getShapeMaterial(body.shape, subShapeId);
+}
 
 /**
  * Gets the surface normal at a world-space position on the body's shape.

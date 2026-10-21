@@ -16,8 +16,6 @@ export type CastRayHit = {
     subShapeId: number;
     /** id of the body that was hit */
     bodyIdB: number;
-    /** material id of the hit sub-shape */
-    materialId: number;
 };
 
 export function createCastRayHit(): CastRayHit {
@@ -26,7 +24,6 @@ export function createCastRayHit(): CastRayHit {
         fraction: 1.0,
         subShapeId: EMPTY_SUB_SHAPE_ID,
         bodyIdB: -1,
-        materialId: -1,
     };
 }
 
@@ -35,7 +32,6 @@ export function copyCastRayHit(out: CastRayHit, src: CastRayHit): void {
     out.fraction = src.fraction;
     out.subShapeId = src.subShapeId;
     out.bodyIdB = src.bodyIdB;
-    out.materialId = src.materialId;
 }
 
 export type CastRaySettings = {

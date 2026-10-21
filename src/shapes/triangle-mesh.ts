@@ -53,7 +53,6 @@ import { createClosestPointOnTriangleResult, getClosestPointOnTriangle } from '.
 import { assert } from '../utils/assert';
 import { isScaleInsideOut, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale } from '../utils/face';
 import {
-    type ConvexShape,
     defineShape,
     getShapeSupportingFace,
     type Shape,
@@ -420,7 +419,6 @@ function castRayVsTriangleMesh(
                     _castRayVsTriangleMesh_hit.status = CastRayStatus.COLLIDING;
                     _castRayVsTriangleMesh_hit.fraction = _castRayVsTriangleMesh_hitResult.fraction;
                     _castRayVsTriangleMesh_hit.subShapeId = _castRayVsTriangleMesh_subShapeIdBuilder.value;
-                    _castRayVsTriangleMesh_hit.materialId = triangleMeshData.getMaterialId(meshData, triangleIndex);
                     _castRayVsTriangleMesh_hit.bodyIdB = collector.bodyIdB;
                     collector.addHit(_castRayVsTriangleMesh_hit);
 
@@ -629,7 +627,6 @@ function collidePointVsTriangleMesh(
 
         // extract triangle index from subShapeId to get material
         subShape.popIndex(_collidePointVsTriangleMesh_popResult, hitCountCollector.lastSubShapeId, shapeB.data.triangleCount);
-        _collidePointHit.materialId = triangleMeshData.getMaterialId(shapeB.data, _collidePointVsTriangleMesh_popResult.value);
 
         _collidePointHit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointHit);
@@ -1075,8 +1072,6 @@ function castConvexVsTriangleMesh(
                 );
 
                 _castConvexVsTriangleMesh_castShapeHit.subShapeIdB = _castConvexVsTriangleMesh_subShapeIdBuilder.value;
-                _castConvexVsTriangleMesh_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-                _castConvexVsTriangleMesh_castShapeHit.materialIdB = triangleMeshData.getMaterialId(meshData, triangleIndex);
                 _castConvexVsTriangleMesh_castShapeHit.bodyIdB = collector.bodyIdB;
 
                 // gather faces if requested
@@ -1711,11 +1706,6 @@ function collideConvexVsTriangleMesh(
                 _collideConvexVsTriangleMesh_collideShapeHit.penetration = penetration;
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdA = subShapeIdA;
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdB = _collideConvexVsTriangleMesh_subShapeIdBuilder.value;
-                _collideConvexVsTriangleMesh_collideShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-                _collideConvexVsTriangleMesh_collideShapeHit.materialIdB = triangleMeshData.getMaterialId(
-                    meshShape.data,
-                    triangleIndex,
-                );
                 _collideConvexVsTriangleMesh_collideShapeHit.bodyIdB = collector.bodyIdB;
 
                 // collect faces if requested
@@ -2097,8 +2087,6 @@ function collideSphereVsTriangleMesh(
                 hit.penetration = penetrationDepth;
                 hit.subShapeIdA = subShapeIdA;
                 hit.subShapeIdB = _collideSphereVsTriangleMesh_subShapeIdBuilder.value;
-                hit.materialIdA = sphereShape.materialId;
-                hit.materialIdB = triangleMeshData.getMaterialId(meshShape.data, triangleIndex);
                 hit.bodyIdB = collector.bodyIdB;
 
                 // collect faces if requested
@@ -2228,7 +2216,6 @@ const _castSphereVsTriangleMesh_p = /* @__PURE__ */ vec3.create();
 function castSphereVsTriangleMeshAddHit(
     collector: CastShapeCollector,
     settings: CastShapeSettings,
-    sphereShape: SphereShape,
     meshShape: TriangleMeshShape,
     subShapeIdA: number,
     subShapeIdB: number,
@@ -2326,8 +2313,6 @@ function castSphereVsTriangleMeshAddHit(
     hit.penetrationDepth = vec3.distance(hit.pointA, hit.pointB);
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = _castSphereVsTriangleMesh_subShapeIdBuilder.value;
-    hit.materialIdA = sphereShape.materialId;
-    hit.materialIdB = triangleMeshData.getMaterialId(meshShape.data, triangleIndex);
     hit.bodyIdB = collector.bodyIdB;
     hit.faceA.numVertices = 0; // sphere has no face
     hit.faceB.numVertices = 0; // don't collect faces for swept tests
@@ -2555,7 +2540,6 @@ function castSphereVsTriangleMesh(
                         castSphereVsTriangleMeshAddHit(
                             collector,
                             settings,
-                            sphereShape,
                             meshShape,
                             subShapeIdA,
                             subShapeIdB,
@@ -2627,7 +2611,6 @@ function castSphereVsTriangleMesh(
                                 castSphereVsTriangleMeshAddHit(
                                     collector,
                                     settings,
-                                    sphereShape,
                                     meshShape,
                                     subShapeIdA,
                                     subShapeIdB,
@@ -2706,7 +2689,6 @@ function castSphereVsTriangleMesh(
                     castSphereVsTriangleMeshAddHit(
                         collector,
                         settings,
-                        sphereShape,
                         meshShape,
                         subShapeIdA,
                         subShapeIdB,

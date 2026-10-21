@@ -2,13 +2,13 @@ import type { Quat, Vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
+    castRayVsShape,
     type CastShapeSettings,
     CastShapeStatus,
-    castRayVsShape,
     castShapeVsShape,
     collidePointVsShape,
-    computeMassProperties,
     collideShapeVsShape,
+    computeMassProperties,
     createAllCastRayCollector,
     createAllCollidePointCollector,
     createAllCollideShapeCollector,
@@ -19,6 +19,7 @@ import {
     createDefaultCollidePointSettings,
     createDefaultCollideShapeSettings,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     massProperties,
     plane,
     sphere,
@@ -281,7 +282,7 @@ describe('plane - jolt parity', () => {
             1, 1, 1,
         );
         expect(collector.hits.length).toBe(1);
-        expect(collector.hits[0].materialId).toBe(7);
+        expect(getShapeMaterial(materialPlane, collector.hits[0].subShapeIdB)).toBe(7);
     });
 
     test('a ray starting inside the solid hits at 0 and still hits the surface from behind', () => {

@@ -37,7 +37,7 @@ import { ContactValidateResult, type Listener } from './listener';
 import * as manifold from './manifold/manifold';
 import { MAX_CONTACT_POINTS } from './manifold/manifold';
 import * as pairs from './pairs';
-import { getShapeInnerRadius } from './shapes/shapes';
+import { getShapeInnerRadius, getShapeMaterial } from './shapes/shapes';
 import { translateFace } from './utils/face';
 import type { World } from './world';
 
@@ -537,8 +537,6 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.penetrationDepth = hit.penetration;
                 foundManifold.subShapeIdA = hit.subShapeIdA;
                 foundManifold.subShapeIdB = hit.subShapeIdB;
-                foundManifold.materialIdA = hit.materialIdA;
-                foundManifold.materialIdB = hit.materialIdB;
             } else {
                 // use next slot in pool (already allocated)
                 foundIndex = this.numManifolds;
@@ -550,8 +548,6 @@ const narrowphaseWithReductionCollector: CollideShapeCollector & {
                 foundManifold.penetrationDepth = hit.penetration;
                 foundManifold.subShapeIdA = hit.subShapeIdA;
                 foundManifold.subShapeIdB = hit.subShapeIdB;
-                foundManifold.materialIdA = hit.materialIdA;
-                foundManifold.materialIdB = hit.materialIdB;
             }
             vec3.copy(this.firstWorldSpaceNormals[foundIndex], _narrowphase_worldSpaceNormal);
         } else {
@@ -751,8 +747,6 @@ const narrowphaseWithoutReductionCollector: CollideShapeCollector & {
         tempManifold.penetrationDepth = hit.penetration;
         tempManifold.subShapeIdA = hit.subShapeIdA;
         tempManifold.subShapeIdB = hit.subShapeIdB;
-        tempManifold.materialIdA = hit.materialIdA;
-        tempManifold.materialIdB = hit.materialIdB;
 
         // generate contact points for this hit
         manifold.manifoldBetweenTwoFaces(
@@ -1623,8 +1617,9 @@ function findCCDContacts(world: World, timeStep: number, listener: Listener | un
             // set metadata
             contactManifold.subShapeIdA = hit.subShapeIdA;
             contactManifold.subShapeIdB = hit.subShapeIdB;
-            contactManifold.materialIdA = hit.materialIdA;
-            contactManifold.materialIdB = hit.materialIdB;
+            // the listener's materials are the shapes', by sub shape id, as jolt's
+            contactManifold.materialIdA = getShapeMaterial(bodyA.shape, hit.subShapeIdA);
+            contactManifold.materialIdB = getShapeMaterial(bodyB.shape, hit.subShapeIdB);
             contactManifold.penetrationDepth = hit.penetrationDepth;
             vec3.copy(contactManifold.worldSpaceNormal, ccdBody.contactNormal);
 

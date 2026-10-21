@@ -8,6 +8,7 @@ import {
     createAnyCollidePointCollector,
     createDefaultCollidePointSettings,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     plane,
     scaled,
     sphere,
@@ -266,7 +267,7 @@ describe('collidePointVsShape - Box', () => {
 			1, 1, 1,
 		);
 
-        expect(collector.hit?.materialId).toBe(7);
+        expect(collector.hit && getShapeMaterial(shape, collector.hit.subShapeIdB)).toBe(7);
     });
 
     test('should detect point inside box (off-center)', () => {

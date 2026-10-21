@@ -14,6 +14,7 @@ import {
     createDefaultCollideShapeSettings,
     cylinder,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     plane,
     scaled,
     sphere,
@@ -3109,15 +3110,15 @@ describe('collideShapeVsShape - reversed pair materials', () => {
 
     test('sphere vs box reports the sphere as a', () => {
         const hit = collide(sphereShape, boxShape);
-        expect(hit.materialIdA).toBe(3);
-        expect(hit.materialIdB).toBe(5);
+        expect(getShapeMaterial(sphereShape, hit.subShapeIdA)).toBe(3);
+        expect(getShapeMaterial(boxShape, hit.subShapeIdB)).toBe(5);
         expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
     });
 
     test('box vs sphere reports the box as a', () => {
         const hit = collide(boxShape, sphereShape);
-        expect(hit.materialIdA).toBe(5);
-        expect(hit.materialIdB).toBe(3);
+        expect(getShapeMaterial(boxShape, hit.subShapeIdA)).toBe(5);
+        expect(getShapeMaterial(sphereShape, hit.subShapeIdB)).toBe(3);
         expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
     });
 });

@@ -199,7 +199,9 @@ function scalePlane(out: Plane3, plane: Plane3, scale: Vec3): Plane3 {
     const scaledNormalY = plane.normal[1] / scale[1];
     const scaledNormalZ = plane.normal[2] / scale[2];
 
-    const scaledNormalLength = Math.sqrt(scaledNormalX * scaledNormalX + scaledNormalY * scaledNormalY + scaledNormalZ * scaledNormalZ);
+    const scaledNormalLength = Math.sqrt(
+        scaledNormalX * scaledNormalX + scaledNormalY * scaledNormalY + scaledNormalZ * scaledNormalZ,
+    );
     const inverseLength = 1 / scaledNormalLength;
     vec3.set(out.normal, scaledNormalX * inverseLength, scaledNormalY * inverseLength, scaledNormalZ * inverseLength);
     out.constant = plane.constant / scaledNormalLength;
@@ -381,7 +383,6 @@ function castRayVsPlane(
         _castRayVsPlane_hit.status = CastRayStatus.COLLIDING;
         _castRayVsPlane_hit.fraction = 0.0;
         _castRayVsPlane_hit.subShapeId = subShapeId;
-        _castRayVsPlane_hit.materialId = (shape as PlaneShape).materialId;
         _castRayVsPlane_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_castRayVsPlane_hit);
     }
@@ -411,7 +412,6 @@ function castRayVsPlane(
         _castRayVsPlane_hit.status = CastRayStatus.COLLIDING;
         _castRayVsPlane_hit.fraction = fraction;
         _castRayVsPlane_hit.subShapeId = subShapeId;
-        _castRayVsPlane_hit.materialId = (shape as PlaneShape).materialId;
         _castRayVsPlane_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_castRayVsPlane_hit);
     } else {
@@ -466,7 +466,6 @@ function collidePointVsPlane(
 
     if (distance < 0.0) {
         _collidePointVsPlane_hit.subShapeIdB = subShapeId;
-        _collidePointVsPlane_hit.materialId = shape.materialId;
         _collidePointVsPlane_hit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointVsPlane_hit);
     }
@@ -606,8 +605,6 @@ function collideConvexVsPlane(
         _collideConvexVsPlane_hit.penetration = penetration;
         _collideConvexVsPlane_hit.subShapeIdA = subShapeIdA;
         _collideConvexVsPlane_hit.subShapeIdB = subShapeIdB;
-        _collideConvexVsPlane_hit.materialIdA = convexShape.materialId;
-        _collideConvexVsPlane_hit.materialIdB = planeShape.materialId;
         _collideConvexVsPlane_hit.bodyIdB = collector.bodyIdB;
 
         // gather supporting faces if requested
@@ -892,8 +889,6 @@ export function castConvexVsPlane(
     vec3.normalize(_castConvexVsPlane_hit.normal, _castConvexVsPlane_hit.normal);
     _castConvexVsPlane_hit.subShapeIdA = subShapeIdA;
     _castConvexVsPlane_hit.subShapeIdB = subShapeIdB;
-    _castConvexVsPlane_hit.materialIdA = (shapeA as ConvexShape).materialId;
-    _castConvexVsPlane_hit.materialIdB = planeShape.materialId;
     _castConvexVsPlane_hit.bodyIdB = collector.bodyIdB;
 
     // gather faces if requested
