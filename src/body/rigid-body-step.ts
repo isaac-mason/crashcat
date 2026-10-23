@@ -42,22 +42,15 @@ const _addRotationStep_axis = /* @__PURE__ */ vec3.create();
 const _addRotationStep_rotation = /* @__PURE__ */ quat.create();
 
 /**
- * Update rotation using an Euler step (used during position solver).
- *
- * This uses a proper axis-angle quaternion construction instead of a first-order
- * approximation, which is more accurate for large rotations (important for kinematic bodies).
+ * Turns the body by the rotation vector: a rotation of its length about its direction, before the current one,
+ * normalized. Jolt's Body::AddRotationStep; the position solve's step.
  *
  * @param body - Body to update
  * @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
  */
 export function addRotationStep(body: RigidBody, angularVelocityTimesDeltaTime: Vec3): void {
-    // This used to use the equation: d/dt R(t) = 1/2 * w(t) * R(t) so that R(t + dt) = R(t) + 1/2 * w(t) * R(t) * dt
-    // See: Appendix B of An Introduction to Physically Based Modeling: Rigid Body Simulation II-Nonpenetration Constraints
-    // URL: https://www.cs.cmu.edu/~baraff/sigcourse/notesd2.pdf
-    // But this is a first order approximation and does not work well for kinematic ragdolls that are driven to a new
-    // pose if the poses differ enough. So now we split w(t) * dt into an axis and angle part and create a quaternion with it.
-    // Note that the resulting quaternion is normalized since otherwise numerical drift will eventually make the rotation non-normalized.
-
+    // The exact rotation, not the first-order R + 1/2 w R dt, which falls apart for a large step (a kinematic ragdoll
+    // driven to a new pose); normalized, or drift would make it stop being a rotation.
     const len = vec3.length(angularVelocityTimesDeltaTime);
     if (len > 1.0e-6) {
         // axis = (ω × dt) / |ω × dt|
@@ -73,7 +66,7 @@ export function addRotationStep(body: RigidBody, angularVelocityTimesDeltaTime: 
 }
 
 /**
- * Update rotation using an Euler step in the opposite direction (used during position solver).
+ * addRotationStep the other way.
  *
  * @param body - Body to update
  * @param angularVelocityTimesDeltaTime - Angular velocity × deltaTime (ω × dt)
