@@ -40,6 +40,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "typecheck-examples": "tsc --noEmit -p examples/tsconfig.json",
     "test": "vitest ./tst",
+    "release": "pnpm run build && vitest run ./tst && pnpm run typecheck",
     "test-tree-shaking": "cd tst/tree-shaking && ./tesh.sh",
     "typecheck-docs": "tsc --project docs/tsconfig.json --noEmit",
     "docs": "(cd docs && node ./build.js)",
