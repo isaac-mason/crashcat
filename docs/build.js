@@ -28,12 +28,12 @@ function resolveModuleToSourceDir(modulePath) {
         return path.join(projectRoot, 'src');
     }
 
-    // Handle subpath exports (e.g., "crashcat/three" -> "./three")
+    // Handle subpath exports (e.g., "crashcat/foo" -> "./foo")
     const subpath = modulePath.replace(`${packageName}/`, '');
     const exportEntry = packageJson.exports?.[`./${subpath}`];
 
     if (exportEntry?.types) {
-        // Extract directory from types path (e.g., "./dist/three/index.d.ts" -> "three")
+        // Extract directory from types path (e.g., "./dist/foo/index.d.ts" -> "foo")
         const typesPath = exportEntry.types;
         const match = typesPath.match(/\.\/dist\/([^/]+)\//);
         if (match) {

@@ -1,4 +1,4 @@
-import { vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { EMPTY_SUB_SHAPE_ID } from '../../src/body/sub-shape';
 import {
@@ -7,6 +7,7 @@ import {
     createCollideShapeHit,
     InternalEdgeRemovingCollector,
 } from '../../src/collision/narrowphase';
+import { DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ } from '../../src/collision/collide-shape-vs-shape';
 import { createFace } from '../../src/utils/face';
 
 describe('InternalEdgeRemovingCollector', () => {
@@ -14,7 +15,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should forward face contacts immediately', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             // create a hit with face normal aligned with contact normal (within 1 degree)
             const hit = createCollideShapeHit();
@@ -51,7 +52,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should delay edge/vertex contacts', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             const hit = createCollideShapeHit();
             hit.bodyIdB = 1;
@@ -92,7 +93,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should forward degenerate faces immediately', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             const hit = createCollideShapeHit();
             hit.bodyIdB = 1;
@@ -127,7 +128,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should void edge contacts when face contact exists at same location', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             // first hit: face contact (deeper penetration)
             const faceHit = createCollideShapeHit();
@@ -197,7 +198,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should process delayed results in penetration depth order', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             // create three edge contacts with different penetration depths
             const createEdgeHit = (penetration: number, edgeX: number): CollideShapeHit => {
@@ -246,7 +247,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should handle vertex voiding correctly', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             // first triangle touching at a vertex
             const hit1 = createCollideShapeHit();
@@ -309,7 +310,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should track voiding per sub-shape id', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             // two hits with same vertex but different sub-shape ids
             const createHit = (subShapeId: number, penetration: number): CollideShapeHit => {
@@ -352,7 +353,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should clear state on reset', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             const hit = createCollideShapeHit();
             hit.bodyIdB = 1;
@@ -389,7 +390,7 @@ describe('InternalEdgeRemovingCollector', () => {
         it('should propagate early out from chained collector', () => {
             const chainedCollector = createAllCollideShapeCollector();
             const collector = new InternalEdgeRemovingCollector();
-            collector.set(chainedCollector);
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
 
             expect(collector.shouldEarlyOut()).toBe(false);
 
@@ -423,6 +424,89 @@ describe('InternalEdgeRemovingCollector', () => {
 
             // early out fraction should be synced
             expect(collector.earlyOutFraction).toBe(0);
+        });
+    });
+
+    describe('jolt alignment', () => {
+        const makeHit = (penetration: number, vertices: number[], point: Vec3, axis: Vec3): CollideShapeHit => {
+            const hit = createCollideShapeHit();
+            hit.bodyIdB = 1;
+            hit.penetration = penetration;
+            hit.subShapeIdA = EMPTY_SUB_SHAPE_ID;
+            hit.subShapeIdB = EMPTY_SUB_SHAPE_ID;
+            const face = createFace();
+            face.numVertices = vertices.length / 3;
+            for (let i = 0; i < vertices.length; i++) face.vertices[i] = vertices[i];
+            hit.faceB = face;
+            vec3.copy(hit.penetrationAxis, axis);
+            vec3.copy(hit.pointB, point);
+            return hit;
+        };
+
+        it('treats vertices 5e-5 apart as one feature at the default tolerance', () => {
+            const chainedCollector = createAllCollideShapeCollector();
+            const collector = new InternalEdgeRemovingCollector();
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
+
+            // two vertex contacts on triangles whose shared vertex is welded 5e-5 apart (squared 2.5e-9 <= 1e-8)
+            const deeper = makeHit(2.0, [0, 0, 0, 1, 0, 0, 0.5, 1, 0], [1, 0, 0], [0, -1, 0]);
+            const shallower = makeHit(1.0, [1 + 5e-5, 0, 0, 2, 0, 0, 1.5, 1, 0], [1 + 5e-5, 0, 0], [0, -1, 0]);
+
+            collector.addHit(deeper);
+            collector.addHit(shallower);
+            collector.flush();
+
+            expect(chainedCollector.hits.length).toBe(1);
+            expect(chainedCollector.hits[0].penetration).toBe(2.0);
+        });
+
+        it('a vertex just outside the tolerance is a separate feature', () => {
+            const chainedCollector = createAllCollideShapeCollector();
+            const collector = new InternalEdgeRemovingCollector();
+            collector.set(chainedCollector, 1e-10);
+
+            const deeper = makeHit(2.0, [0, 0, 0, 1, 0, 0, 0.5, 1, 0], [1, 0, 0], [0, -1, 0]);
+            const shallower = makeHit(1.0, [1 + 5e-5, 0, 0, 2, 0, 0, 1.5, 1, 0], [1 + 5e-5, 0, 0], [0, -1, 0]);
+
+            collector.addHit(deeper);
+            collector.addHit(shallower);
+            collector.flush();
+
+            expect(chainedCollector.hits.length).toBe(2);
+        });
+
+        it('an edge of length 5e-7 is an edge, not degenerate (f32 epsilon)', () => {
+            const chainedCollector = createAllCollideShapeCollector();
+            const collector = new InternalEdgeRemovingCollector();
+            collector.set(chainedCollector, 0);
+
+            // the deeper contact voids (1, 0, 0) but not (1, 5e-7, 0)
+            const deeper = makeHit(2.0, [1, 0, 0, 2, 0, 0, 2, -1, 0], [1, 0, 0], [0, -1, 0]);
+            // the shallower contact is closest to the short edge (1, 0, 0) - (1, 5e-7, 0), nearer its voided end: only one end is voided
+            const shallower = makeHit(1.0, [0, 1, 0, 0, 0, 0, 1, 0, 0, 1, 5e-7, 0], [1 + 1e-3, 1e-7, 0], [-1, 0, 0]);
+
+            collector.addHit(deeper);
+            collector.addHit(shallower);
+            collector.flush();
+
+            expect(chainedCollector.hits.length).toBe(2);
+        });
+
+        it('reset resets the chained collector', () => {
+            const chainedCollector = createAllCollideShapeCollector();
+            const collector = new InternalEdgeRemovingCollector();
+            collector.set(chainedCollector, DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ);
+
+            // a face contact is forwarded immediately
+            collector.addHit(makeHit(1.0, [0, 0, 0, 1, 0, 0, 0.5, 1, 0], [0.5, 0.3, 0], [0, 0, -1]));
+            expect(chainedCollector.hits.length).toBe(1);
+
+            chainedCollector.earlyOutFraction = 0;
+            collector.reset();
+
+            expect(chainedCollector.hits.length).toBe(0);
+            expect(chainedCollector.earlyOutFraction).toBe(Number.MAX_VALUE);
+            expect(collector.earlyOutFraction).toBe(Number.MAX_VALUE);
         });
     });
 });

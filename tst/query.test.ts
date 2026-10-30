@@ -1,7 +1,8 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
+    CastRayStatus,
     castRay,
     castShape,
     collidePoint,
@@ -10,6 +11,8 @@ import {
     createAllCastShapeCollector,
     createAllCollidePointCollector,
     createAllCollideShapeCollector,
+    createClosestCastRayCollector,
+    createClosestCastShapeCollector,
     createDefaultCastRaySettings,
     createDefaultCastShapeSettings,
     createDefaultCollidePointSettings,
@@ -18,6 +21,7 @@ import {
     MotionType,
     rigidBody,
     sphere,
+    triangleMesh,
 } from '../src';
 import { createTestWorld } from './helpers';
 
@@ -74,6 +78,46 @@ describe('Query API - castRay', () => {
         castRay(world, collector, settings, origin, direction, length, queryFilter);
 
         expect(collector.hits.length).toBe(0);
+    });
+});
+
+describe('Query API - hit materials', () => {
+    // hits carry no material, as jolt's: the hit's sub shape id names the part, whose material the body gives
+    test('a ray hit on a mesh names its triangle, whose material rigidBody.getMaterial gives', () => {
+        const { world, layers } = createTestWorld();
+        const queryFilter = filter.create(world.settings.layers);
+        const floor = rigidBody.create(world, {
+            shape: triangleMesh.create({
+                positions: [-10, 0, -10, 10, 0, -10, 10, 0, 10, -10, 0, 10],
+                indices: [0, 2, 1, 0, 3, 2],
+                materialIndices: [5, 9],
+            }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+        });
+
+        // either side of the diagonal x = z: one triangle each
+        const collector = createClosestCastRayCollector();
+        const materials: number[] = [];
+        for (const [x, z] of [
+            [5, -3],
+            [-3, 5],
+        ]) {
+            collector.reset();
+            castRay(
+                world,
+                collector,
+                createDefaultCastRaySettings(),
+                vec3.fromValues(x, 5, z),
+                vec3.fromValues(0, -1, 0),
+                10,
+                queryFilter,
+            );
+            expect(collector.hit.status).toBe(CastRayStatus.COLLIDING);
+            expect(collector.hit.bodyIdB).toBe(floor.id);
+            materials.push(rigidBody.getMaterial(floor, collector.hit.subShapeId));
+        }
+        expect(materials.sort()).toEqual([5, 9]);
     });
 });
 
@@ -135,6 +179,48 @@ describe('Query API - castShape', () => {
 
         expect(collector.hits.length).toBe(0);
     });
+
+    // two slab bodies side by side: the left one's top at y = 0 over x in [-2, 0], the right one's at y = 0.3 over
+    // x in [0, 2]. a radius 0.5 sphere centred at (0, 0.4) starts 0.1 into the left body and 0.4 into the right one.
+    for (const order of ['left first', 'right first']) {
+        test(`closest collector reports the deeper of two bodies the cast starts inside (${order})`, () => {
+            const { world, layers } = createTestWorld();
+            const queryFilter = filter.create(world.settings.layers);
+
+            const slabs = [vec3.fromValues(-1, -0.5, 0), vec3.fromValues(1, -0.2, 0)];
+            if (order === 'right first') slabs.reverse();
+            for (const position of slabs) {
+                rigidBody.create(world, {
+                    shape: box.create({ halfExtents: [1, 0.5, 1], convexRadius: 0 }),
+                    objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+                    motionType: MotionType.STATIC,
+                    position,
+                    quaternion: quat.create(),
+                });
+            }
+
+            const collector = createClosestCastShapeCollector();
+            const settings = createDefaultCastShapeSettings();
+            settings.returnDeepestPoint = true;
+            const sweepShape = sphere.create({ radius: 0.5 });
+
+            castShape(
+                world,
+                collector,
+                settings,
+                sweepShape,
+                vec3.fromValues(0, 0.4, 0),
+                quat.create(),
+                vec3.fromValues(1, 1, 1),
+                vec3.fromValues(0, -1, 0),
+                queryFilter,
+            );
+
+            expect(collector.hit.fraction).toBe(0);
+            expect(collector.hit.penetrationDepth).toBeCloseTo(0.4, 4);
+            expect(collector.hit.pointB[1]).toBeCloseTo(0.3, 4);
+        });
+    }
 });
 
 describe('Query API - collidePoint', () => {

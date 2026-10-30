@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import type { RigidBody } from './body/rigid-body';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import type { Listener } from './listener';

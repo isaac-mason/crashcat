@@ -1,8 +1,8 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import type { CastShapeVsShapeFn, Shape } from '../shapes/shapes';
 import { createFace, type Face } from '../utils/face';
 import { pool } from '../utils/pool';
-import { INITIAL_EARLY_OUT_FRACTION, SHOULD_EARLY_OUT_FRACTION } from './cast-utils';
+import { INITIAL_EARLY_OUT_FRACTION } from './cast-utils';
 
 export enum CastShapeStatus {
     NOT_COLLIDING,
@@ -37,10 +37,6 @@ export type CastShapeHit = {
     subShapeIdA: number;
     /** sub-shape ID on shape B */
     subShapeIdB: number;
-    /** material ID of sub-shape A */
-    materialIdA: number;
-    /** material ID of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */
@@ -60,12 +56,18 @@ export function createCastShapeHit(): CastShapeHit {
         normal: vec3.create(),
         subShapeIdA: 0,
         subShapeIdB: 0,
-        materialIdA: -1,
-        materialIdB: -1,
         faceA: createFace(),
         faceB: createFace(),
         bodyIdB: -1,
     };
+}
+
+/**
+ * the value a cast hit is ordered by and bounds further searching with: the fraction, or for a hit
+ * that starts overlapping (fraction 0) the negated penetration depth, so deeper overlaps sort first
+ */
+export function castShapeHitEarlyOutFraction(hit: CastShapeHit): number {
+    return hit.fraction > 0 ? hit.fraction : -hit.penetrationDepth;
 }
 
 export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
@@ -78,8 +80,6 @@ export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
     vec3.copy(out.normal, hit.normal);
     out.subShapeIdA = hit.subShapeIdA;
     out.subShapeIdB = hit.subShapeIdB;
-    out.materialIdA = hit.materialIdA;
-    out.materialIdB = hit.materialIdB;
 
     out.faceA.numVertices = hit.faceA.numVertices;
     for (let i = 0; i < hit.faceA.vertices.length; i++) {
@@ -95,8 +95,10 @@ export function copyCastShapeHit(out: CastShapeHit, hit: CastShapeHit) {
 }
 
 export type CastShapeSettings = {
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
-    collideWithBackfaces: boolean;
+    /** if true, back facing triangles (triangle meshes) are hit, otherwise they are ignored */
+    collideWithBackfacesTriangles: boolean;
+    /** if true, convex shapes (and planes) are hit when the cast moves away from them, otherwise those hits are ignored */
+    collideWithBackfacesConvex: boolean;
     /** if true, the supporting faces at the contact points will be computed and returned in the CastShapeHit objects */
     collectFaces: boolean;
     /** if objects are closer than this distance, they are considered to be colliding (used for GJK) (unit: meter) */
@@ -111,18 +113,22 @@ export type CastShapeSettings = {
     collideOnlyWithActiveEdges: boolean;
     /** when collideOnlyWithActiveEdges is true a movement direction can be provided. When hitting an inactive edge, the system will select the triangle normal as penetration depth only if it impedes the movement less than with the calculated penetration depth */
     activeEdgeMovementDirection: Vec3;
+    /** when above 0, the cast shape is inflated by this much on every side, as an extra convex radius (unit: meter) */
+    extraConvexRadius: number;
 };
 
 export function createDefaultCastShapeSettings(): CastShapeSettings {
     return {
-        collideWithBackfaces: false,
+        collideWithBackfacesTriangles: false,
+        collideWithBackfacesConvex: false,
         collectFaces: false,
-        collisionTolerance: 0.01,
-        penetrationTolerance: 0.01,
+        collisionTolerance: 1e-4,
+        penetrationTolerance: 1e-4,
         returnDeepestPoint: false,
         useShrunkenShapeAndConvexRadius: false,
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: [0, 0, 0],
+        extraConvexRadius: 0,
     };
 }
 
@@ -133,6 +139,12 @@ export type CastShapeCollector = {
     addMiss(): void;
     shouldEarlyOut(): boolean;
 };
+
+function compareCastShapeHits(a: CastShapeHit, b: CastShapeHit): number {
+    const fractionA = castShapeHitEarlyOutFraction(a);
+    const fractionB = castShapeHitEarlyOutFraction(b);
+    return fractionA < fractionB ? -1 : fractionA > fractionB ? 1 : 0;
+}
 
 export class AllCastShapeCollector implements CastShapeCollector {
     bodyIdB = -1;
@@ -160,6 +172,11 @@ export class AllCastShapeCollector implements CastShapeCollector {
         this.hits.length = 0;
         this.earlyOutFraction = INITIAL_EARLY_OUT_FRACTION;
     }
+
+    /** orders hits closest first: by fraction, deepest first among hits that start overlapping */
+    sort(): void {
+        this.hits.sort(compareCastShapeHits);
+    }
 }
 
 export function createAllCastShapeCollector() {
@@ -173,7 +190,8 @@ export class AnyCastShapeCollector implements CastShapeCollector {
 
     addHit(h: CastShapeHit): void {
         copyCastShapeHit(this.hit, h);
-        this.earlyOutFraction = SHOULD_EARLY_OUT_FRACTION;
+        // hits at fraction 0 are bounded by -penetration, so -infinity prunes every further candidate
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {
@@ -181,7 +199,7 @@ export class AnyCastShapeCollector implements CastShapeCollector {
     }
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= SHOULD_EARLY_OUT_FRACTION;
+        return this.earlyOutFraction <= -Infinity;
     }
 
     reset(): void {
@@ -202,8 +220,9 @@ export class ClosestCastShapeCollector implements CastShapeCollector {
     hit: CastShapeHit = createCastShapeHit();
 
     addHit(h: CastShapeHit): void {
-        if (this.hit.status === CastShapeStatus.NOT_COLLIDING || h.fraction < this.hit.fraction) {
-            this.earlyOutFraction = h.fraction;
+        const earlyOut = castShapeHitEarlyOutFraction(h);
+        if (this.hit.status === CastShapeStatus.NOT_COLLIDING || earlyOut < castShapeHitEarlyOutFraction(this.hit)) {
+            this.earlyOutFraction = earlyOut;
             copyCastShapeHit(this.hit, h);
         }
     }
@@ -213,7 +232,7 @@ export class ClosestCastShapeCollector implements CastShapeCollector {
     }
 
     shouldEarlyOut(): boolean {
-        return this.earlyOutFraction <= SHOULD_EARLY_OUT_FRACTION;
+        return this.earlyOutFraction <= -Infinity;
     }
 
     reset(): void {
@@ -232,23 +251,45 @@ function createInvertedCollector() {
     const collector = {
         base: null! as CastShapeCollector,
         bodyIdB: -1,
+        /** world space displacement of the reversed cast (shape b moving against shape a) */
+        reversedDisplacement: vec3.create(),
         get earlyOutFraction() {
             return this.base.earlyOutFraction;
         },
         addHit(hit: CastShapeHit) {
-            const tmpPoint = hit.pointA;
-            hit.pointA = hit.pointB;
-            hit.pointB = tmpPoint;
+            // the reversed cast reports shape b in its swept frame and shape a at rest, shift both back
+            // by fraction x reversed displacement so shape a is in its swept frame and shape b at rest
+            const deltaX = hit.fraction * this.reversedDisplacement[0];
+            const deltaY = hit.fraction * this.reversedDisplacement[1];
+            const deltaZ = hit.fraction * this.reversedDisplacement[2];
 
+            // swap pointA and pointB
+            const tmpX = hit.pointA[0];
+            const tmpY = hit.pointA[1];
+            const tmpZ = hit.pointA[2];
+            hit.pointA[0] = hit.pointB[0] - deltaX;
+            hit.pointA[1] = hit.pointB[1] - deltaY;
+            hit.pointA[2] = hit.pointB[2] - deltaZ;
+            hit.pointB[0] = tmpX - deltaX;
+            hit.pointB[1] = tmpY - deltaY;
+            hit.pointB[2] = tmpZ - deltaZ;
+
+            // negate penetrationAxis, normal follows as -penetrationAxis.normalized()
+            hit.penetrationAxis[0] = -hit.penetrationAxis[0];
+            hit.penetrationAxis[1] = -hit.penetrationAxis[1];
+            hit.penetrationAxis[2] = -hit.penetrationAxis[2];
+            vec3.normalize(hit.normal, hit.penetrationAxis);
             vec3.negate(hit.normal, hit.normal);
-
-            const tmpFace = hit.faceA;
-            hit.faceA = hit.faceB;
-            hit.faceB = tmpFace;
 
             const tmpSubShapeId = hit.subShapeIdA;
             hit.subShapeIdA = hit.subShapeIdB;
             hit.subShapeIdB = tmpSubShapeId;
+
+            const tmpFace = hit.faceA;
+            hit.faceA = hit.faceB;
+            hit.faceB = tmpFace;
+            shiftFace(hit.faceA, deltaX, deltaY, deltaZ);
+            shiftFace(hit.faceB, deltaX, deltaY, deltaZ);
 
             this.base.addHit(hit);
         },
@@ -260,9 +301,18 @@ function createInvertedCollector() {
         },
     } satisfies CastShapeCollector & {
         base: CastShapeCollector;
+        reversedDisplacement: Vec3;
     };
 
     return collector;
+}
+
+function shiftFace(face: Face, deltaX: number, deltaY: number, deltaZ: number): void {
+    for (let i = 0; i < face.numVertices; i++) {
+        face.vertices[i * 3] -= deltaX;
+        face.vertices[i * 3 + 1] -= deltaY;
+        face.vertices[i * 3 + 2] -= deltaZ;
+    }
 }
 
 export function reversedCastShapeVsShape(fn: CastShapeVsShapeFn): CastShapeVsShapeFn {
@@ -303,6 +353,7 @@ export function reversedCastShapeVsShape(fn: CastShapeVsShapeFn): CastShapeVsSha
     ) => {
         invertedCollector.base = collector;
         invertedCollector.bodyIdB = collector.bodyIdB;
+        vec3.set(invertedCollector.reversedDisplacement, -dispAX, -dispAY, -dispAZ);
 
         const result = fn(
             invertedCollector,

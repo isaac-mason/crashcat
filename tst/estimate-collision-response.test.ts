@@ -1,12 +1,14 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
     createCollisionEstimationResult,
+    createContactSettings,
     estimateCollisionResponse,
     type Listener,
     MotionType,
     rigidBody,
+    sphere,
     updateWorld,
 } from '../src';
 import { createContactManifold } from '../src/manifold/manifold';
@@ -38,7 +40,10 @@ describe('estimateCollisionResponse', () => {
         manifold.numContactPoints = 0;
 
         const result = createCollisionEstimationResult();
-        estimateCollisionResponse(result, body1, body2, manifold, 0.5, 0.5);
+        const settings = createContactSettings();
+        settings.combinedFriction = 0.5;
+        settings.combinedRestitution = 0.5;
+        estimateCollisionResponse(result, body1, body2, manifold, settings);
 
         expect(result.numImpulses).toBe(0);
     });
@@ -74,14 +79,7 @@ describe('estimateCollisionResponse', () => {
 
                                 const listener: Listener = {
                                     onContactAdded: (bodyA, bodyB, manifold, settings) => {
-                                        estimateCollisionResponse(
-                                            result,
-                                            bodyA,
-                                            bodyB,
-                                            manifold,
-                                            settings.combinedFriction,
-                                            settings.combinedRestitution,
-                                        );
+                                        estimateCollisionResponse(result, bodyA, bodyB, manifold, settings);
                                     },
                                 };
 
@@ -162,5 +160,65 @@ describe('estimateCollisionResponse', () => {
 
         // should pass the vast majority of cases
         expect(passCount).toBeGreaterThan(testCount * 0.95);
+    });
+
+    test('follows the contact settings: sensors, mass and inertia scales, surface velocity', () => {
+        const { world, layers } = createTestWorld();
+        const radius = 0.5;
+        const v0 = 4;
+        // a ball resting its lowest point on a static box's top face at y = 0, the one contact at the origin
+        const ball = rigidBody.create(world, {
+            shape: sphere.create({ radius, density: 1000 }),
+            objectLayer: layers.OBJECT_LAYER_MOVING,
+            motionType: MotionType.DYNAMIC,
+            position: vec3.fromValues(0, radius, 0),
+        });
+        const ground = rigidBody.create(world, {
+            shape: box.create({ halfExtents: vec3.fromValues(5, 1, 5) }),
+            objectLayer: layers.OBJECT_LAYER_NOT_MOVING,
+            motionType: MotionType.STATIC,
+            position: vec3.fromValues(0, -1, 0),
+        });
+        vec3.set(ball.motionProperties.linearVelocity, 0, -v0, 0);
+        const mass = 1 / ball.motionProperties.invMass;
+        const manifold = createContactManifold();
+        manifold.numContactPoints = 1;
+        vec3.set(manifold.worldSpaceNormal, 0, -1, 0);
+        const result = createCollisionEstimationResult();
+        const materials = (friction: number, restitution: number) => {
+            const settings = createContactSettings();
+            settings.combinedFriction = friction;
+            settings.combinedRestitution = restitution;
+            return settings;
+        };
+
+        // a sensor reports the contact but has no response
+        const sensor = materials(0.5, 0.5);
+        sensor.isSensor = true;
+        estimateCollisionResponse(result, ball, ground, manifold, sensor);
+        expect(result.numImpulses).toBe(1);
+        expect(result.contactImpulse[0]).toBe(0);
+        expect(result.linearVelocity1[1]).toBe(-v0);
+
+        // the ball made immovable for this contact, against a static ground: nothing can respond
+        const immovable = materials(0.5, 0);
+        immovable.invMassScale1 = 0;
+        immovable.invInertiaScale1 = 0;
+        estimateCollisionResponse(result, ball, ground, manifold, immovable);
+        expect(result.contactImpulse[0]).toBe(0);
+        expect(result.linearVelocity1[1]).toBe(-v0);
+
+        // twice the inverse mass: half the impulse stops it
+        const lighter = materials(0, 0);
+        lighter.invMassScale1 = 2;
+        estimateCollisionResponse(result, ball, ground, manifold, lighter);
+        expect(result.contactImpulse[0]).toBeCloseTo(mass * v0 * 0.5, 3);
+        expect(result.linearVelocity1[1]).toBeCloseTo(0, 5);
+
+        // a conveyor: the ground's surface moving along -x, relative to the ball, drags the ball along with it
+        const conveyor = materials(1, 0);
+        vec3.set(conveyor.relativeLinearSurfaceVelocity, -2, 0, 0);
+        estimateCollisionResponse(result, ball, ground, manifold, conveyor);
+        expect(result.linearVelocity1[0]).toBeLessThan(-0.5);
     });
 });

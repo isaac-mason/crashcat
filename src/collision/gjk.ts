@@ -1,11 +1,11 @@
-import { clamp, type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { clamp, type Mat4, mat4, type Vec3, vec3 } from 'math';
 import {
     computeBarycentricCoordinates2d,
     computeBarycentricCoordinates3d,
     createBarycentricCoordinatesResult,
 } from './closest-points';
 import { copySimplex, createSimplex, type Simplex } from './simplex';
-import { getSupport, type Support } from './support';
+import type { Support } from './support';
 
 /*
 References:
@@ -57,16 +57,18 @@ function computeClosestPointOnTriangle(
     mustIncludeC: boolean,
     squaredTolerance: number,
 ): void {
-    // the most accurate normal is calculated by using the two shortest edges
-    const acx = inC[0] - inA[0];
-    const acy = inC[1] - inA[1];
-    const acz = inC[2] - inA[2];
+    // the most accurate normal is calculated by using the two shortest edges. the normals differ most when one edge is
+    // much shorter than the others (which are then about as long as each other), so the shorter of the two edges at b
+    // will do with the third: a and c are swapped so that ab is the shorter one
+    const bax = inA[0] - inB[0];
+    const bay = inA[1] - inB[1];
+    const baz = inA[2] - inB[2];
 
     const bcx = inC[0] - inB[0];
     const bcy = inC[1] - inB[1];
     const bcz = inC[2] - inB[2];
 
-    const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < acx * acx + acy * acy + acz * acz;
+    const swapAC = bcx * bcx + bcy * bcy + bcz * bcz < bax * bax + bay * bay + baz * baz;
 
     // choose a and c based on swap
     const ax = swapAC ? inC[0] : inA[0];
@@ -506,7 +508,6 @@ const _simplexY3 = /* @__PURE__ */ vec3.create();
 /**
  * Recompute simplex.y from y = x - p (ray cast variant).
  *
- * @optimize
  */
 function recomputeSimplexYFromP(simplex: Simplex, x: Vec3): void {
     const end = simplex.size * 3;
@@ -522,7 +523,6 @@ function recomputeSimplexYFromP(simplex: Simplex, x: Vec3): void {
 /**
  * Recompute simplex.y from y = x - (q - p) (shape cast variant).
  *
- * @optimize
  */
 function recomputeSimplexYFromPQ(simplex: Simplex, x: Vec3): void {
     const end = simplex.size * 3;
@@ -539,7 +539,6 @@ function recomputeSimplexYFromPQ(simplex: Simplex, x: Vec3): void {
 /**
  * Compact simplex.p down to the subset selected by inSet (bit i selects point i).
  *
- * @optimize
  */
 function updatePointSetP(simplex: Simplex, inSet: number): void {
     let newSize = 0;
@@ -562,7 +561,6 @@ function updatePointSetP(simplex: Simplex, inSet: number): void {
 /**
  * Compact simplex.y, simplex.p, simplex.q down to the subset selected by inSet.
  *
- * @optimize
  */
 function updatePointSetYPQ(simplex: Simplex, inSet: number): void {
     let newSize = 0;
@@ -591,7 +589,6 @@ function updatePointSetYPQ(simplex: Simplex, inSet: number): void {
 }
 
 /**
- * @optimize
  */
 function computeClosestPointToSimplex(
     result: ClosestPointToSimplexResult,
@@ -715,7 +712,6 @@ export function createGjkCastRayResult(): GjkCastRayResult {
  * @param support support function for the shape
  * @param maxLambda maximum lambda to check (default 1.0). Result lambda will not exceed this.
  *
- * @optimize
  */
 export function gjkCastRay(
     out: GjkCastRayResult,
@@ -735,7 +731,7 @@ export function gjkCastRay(
 
     // v = x - support(0)
     vec3.set(_directionA, 0, 0, 0);
-    getSupport(_p, support, _directionA);
+    support.getSupport(_p, support, _directionA);
     vec3.subtract(_v, _x, _p);
 
     let v_len_sq = Number.MAX_VALUE;
@@ -746,7 +742,7 @@ export function gjkCastRay(
         iterations++;
 
         // get new support point
-        getSupport(_p, support, _v);
+        support.getSupport(_p, support, _v);
 
         vec3.subtract(_w, _x, _p);
 
@@ -910,7 +906,6 @@ export function createGjkCastShapeResult(): GjkCastShapeResult {
  * @param convexRadiusB convex radius of shape B
  * @param maxLambda the max fraction along the sweep
  *
- * @optimize
  */
 export function gjkCastShape(
     out: GjkCastShapeResult,
@@ -944,11 +939,11 @@ export function gjkCastShape(
 
     // v = -support_B + support_A (Minkowski difference B - A in the space of A)
     vec3.set(_directionB, 0, 0, 0);
-    getSupport(_q, shapeBSupport, _directionB);
+    shapeBSupport.getSupport(_q, shapeBSupport, _directionB);
     vec3.negate(_q, _q);
 
     vec3.set(_directionA, 0, 0, 0);
-    getSupport(_p, shapeASupport, _directionA);
+    shapeASupport.getSupport(_p, shapeASupport, _directionA);
 
     vec3.subtract(_v, _q, _p);
 
@@ -967,10 +962,10 @@ export function gjkCastShape(
         // A is moving, so we need to add the back side of B to the front side of A
         // keep the support points on A and B separate so that in the end we can calculate a contact point
         vec3.negate(_directionA, _v);
-        getSupport(_p, shapeASupport, _directionA);
+        shapeASupport.getSupport(_p, shapeASupport, _directionA);
 
         vec3.copy(_directionB, _v);
-        getSupport(_q, shapeBSupport, _directionB);
+        shapeBSupport.getSupport(_q, shapeBSupport, _directionB);
 
         vec3.subtract(_pq, _q, _p);
         vec3.subtract(_w, _x, _pq);
@@ -1055,6 +1050,9 @@ export function gjkCastShape(
         if (!found) {
             // only allow 1 restart, if we still can't get a closest point we're so close that we return this as a hit
             if (!allowRestart) {
+                // the last support point did not produce a closer simplex, remove it so that the
+                // contact points below are reconstructed from the previous valid simplex
+                _simplex.size--;
                 break;
             }
 
@@ -1187,6 +1185,8 @@ export function gjkCastShape(
     }
 
     // store results
+    // epa continues from this simplex when the cast starts intersecting
+    copySimplex(out.simplex, _simplex);
     out.lambda = lambda;
     out.hit = true;
 
@@ -1232,7 +1232,6 @@ export function createGjkClosestPoints(): GjkClosestPoints {
  * @param maxDistanceSquared maximum squared distance between A and B before objects are considered infinitely far away.
  *                           If exceeded, out.squaredDistance will be set to Number.MAX_VALUE
  *
- * @optimize
  */
 export function gjkClosestPoints(
     out: GjkClosestPoints,
@@ -1260,8 +1259,8 @@ export function gjkClosestPoints(
         vec3.copy(_directionA, _closestPointToSimplex.point);
         vec3.negate(_directionB, _closestPointToSimplex.point);
 
-        getSupport(_p, supportA, _directionA);
-        getSupport(_q, supportB, _directionB);
+        supportA.getSupport(_p, supportA, _directionA);
+        supportB.getSupport(_q, supportB, _directionB);
 
         // get support point of the minkowski sum A - B of v
         vec3.subtract(_w, _p, _q);

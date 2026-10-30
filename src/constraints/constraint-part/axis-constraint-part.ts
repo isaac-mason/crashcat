@@ -1,7 +1,8 @@
-import { type Mat4, mat4, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, type Vec3, vec3 } from 'math';
 import { MotionType } from '../../body/motion-type';
 import type { RigidBody } from '../../body/rigid-body';
 import { addPositionStep, addRotationStep, subPositionStep, subRotationStep } from '../../body/rigid-body-step';
+import { MIN_NORMAL } from '../../utils/float';
 import {
     calculateSpringPropertiesWithBias,
     calculateSpringPropertiesWithFrequencyAndDamping,
@@ -12,7 +13,7 @@ import {
     isSpringActive,
     type SpringPart,
 } from './spring-part';
-import type { SpringSettings } from './spring-settings';
+import { hasStiffness, type SpringSettings } from './spring-settings';
 
 /**
  * Constraint part that constrains motion along 1 axis.
@@ -92,7 +93,9 @@ function calculateInverseEffectiveMass(
 ): number {
     let invEffectiveMass = 0;
 
-    if (bodyA.motionType === MotionType.DYNAMIC) {
+    // the cross products are needed for every moving body (a kinematic body's angular velocity enters
+    // the jacobian), the inverse inertia terms only for dynamic ones
+    if (bodyA.motionType !== MotionType.STATIC) {
         // r1 × axis
         const r1x = r1PlusU[0];
         const r1y = r1PlusU[1];
@@ -103,7 +106,9 @@ function calculateInverseEffectiveMass(
         part.r1PlusUxAxis[0] = r1y * az - r1z * ay;
         part.r1PlusUxAxis[1] = r1z * ax - r1x * az;
         part.r1PlusUxAxis[2] = r1x * ay - r1y * ax;
+    }
 
+    if (bodyA.motionType === MotionType.DYNAMIC) {
         // I1^-1 × (r1 × axis)
         const cx = part.r1PlusUxAxis[0];
         const cy = part.r1PlusUxAxis[1];
@@ -117,7 +122,7 @@ function calculateInverseEffectiveMass(
             invMassA + (part.invI1_r1PlusUxAxis[0] * cx + part.invI1_r1PlusUxAxis[1] * cy + part.invI1_r1PlusUxAxis[2] * cz);
     }
 
-    if (bodyB.motionType === MotionType.DYNAMIC) {
+    if (bodyB.motionType !== MotionType.STATIC) {
         // r2 × axis
         const r2x = r2[0];
         const r2y = r2[1];
@@ -128,7 +133,9 @@ function calculateInverseEffectiveMass(
         part.r2xAxis[0] = r2y * az - r2z * ay;
         part.r2xAxis[1] = r2z * ax - r2x * az;
         part.r2xAxis[2] = r2x * ay - r2y * ax;
+    }
 
+    if (bodyB.motionType === MotionType.DYNAMIC) {
         // I2^-1 × (r2 × axis)
         const cx = part.r2xAxis[0];
         const cy = part.r2xAxis[1];
@@ -187,7 +194,7 @@ export function calculateConstraintProperties(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
@@ -255,7 +262,7 @@ export function calculateConstraintPropertiesWithMassOverride(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = 1 / invEffectiveMass;
@@ -312,7 +319,7 @@ export function calculateConstraintPropertiesWithFrequencyAndDamping(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithFrequencyAndDamping(
@@ -375,7 +382,7 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithStiffnessAndDamping(
@@ -391,8 +398,8 @@ export function calculateConstraintPropertiesWithStiffnessAndDamping(
 }
 
 /**
- * Calculate constraint properties using SpringSettings.
- * Selects the appropriate calculation method based on the spring mode.
+ * Calculate constraint properties for a limit using SpringSettings.
+ * Turns to a hard limit when the spring has no frequency or stiffness.
  * @param part the constraint part to initialize
  * @param deltaTime time step
  * @param bodyA first body
@@ -437,7 +444,71 @@ export function calculateConstraintPropertiesWithSettings(
         axis,
     );
 
-    if (invEffectiveMass === 0) {
+    if (invEffectiveMass < MIN_NORMAL) {
+        deactivate(part);
+    } else if (!hasStiffness(settings)) {
+        part.effectiveMass = 1 / invEffectiveMass;
+        calculateSpringPropertiesWithBias(part.springPart, bias);
+    } else {
+        part.effectiveMass = calculateSpringPropertiesWithSettings(
+            part.springPart,
+            deltaTime,
+            invEffectiveMass,
+            bias,
+            C,
+            settings,
+        );
+    }
+}
+
+/**
+ * Calculate constraint properties for a motor using SpringSettings.
+ * The spring must have stiffness or damping; damping alone drives the velocity only.
+ * @param part the constraint part to initialize
+ * @param deltaTime time step
+ * @param bodyA first body
+ * @param bodyB second body
+ * @param invMassA inverse mass of body A
+ * @param invMassB inverse mass of body B
+ * @param invInertiaA inverse inertia of body A (world space)
+ * @param invInertiaB inverse inertia of body B (world space)
+ * @param r1PlusU moment arm for body A
+ * @param r2 moment arm for body B
+ * @param axis constraint axis (normalized)
+ * @param bias velocity bias
+ * @param C value of the constraint equation (C)
+ * @param settings spring settings (mode, frequency/stiffness, damping)
+ */
+export function calculateConstraintPropertiesWithSettingsForMotor(
+    part: AxisConstraintPart,
+    deltaTime: number,
+    bodyA: RigidBody,
+    bodyB: RigidBody,
+    invMassA: number,
+    invMassB: number,
+    invInertiaA: Mat4,
+    invInertiaB: Mat4,
+    r1PlusU: Vec3,
+    r2: Vec3,
+    axis: Vec3,
+    bias: number,
+    C: number,
+    settings: SpringSettings,
+): void {
+    const invEffectiveMass = calculateInverseEffectiveMass(
+        part,
+        bodyA,
+        bodyB,
+        invMassA,
+        invMassB,
+        invInertiaA,
+        invInertiaB,
+        r1PlusU,
+        r2,
+        axis,
+    );
+
+    if (invEffectiveMass < MIN_NORMAL) {
         deactivate(part);
     } else {
         part.effectiveMass = calculateSpringPropertiesWithSettings(
@@ -484,6 +555,38 @@ export function getTotalLambdaValue(part: AxisConstraintPart): number {
 }
 
 /**
+ * Turn a jacobian-velocity product into the part's new total lambda.
+ *
+ * NUMBERS IN, NUMBERS OUT. A solver that keeps a body pair's twelve velocity components in locals
+ * computes `jv` itself — it already holds the operands — and this owns the constraint math. That
+ * split is what lets those components stay in registers: a function which MUTATES a shared velocity
+ * buffer forces that buffer to exist, while one which RETURNS a number costs nothing, because V8
+ * inlines it. Worth ~1.75x on the contact solve loop.
+ */
+export function totalLambdaFor(part: AxisConstraintPart, jv: number): number {
+    return part.totalLambda + part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+}
+
+/**
+ * Commit a new total lambda and hand back the delta to apply; `0` means there is nothing to apply.
+ * The caller applies the delta to its own velocity locals.
+ */
+export function deltaLambdaFor(part: AxisConstraintPart, totalLambda: number): number {
+    const deltaLambda = totalLambda - part.totalLambda;
+    part.totalLambda = totalLambda;
+    return deltaLambda;
+}
+
+/**
+ * Scale the stored impulse for the new timestep and hand it back; `0` means there is nothing to
+ * apply. The caller applies it to its own velocity locals.
+ */
+export function warmStartLambda(part: AxisConstraintPart, warmStartRatio: number): number {
+    part.totalLambda *= warmStartRatio;
+    return part.totalLambda;
+}
+
+/**
  * Apply warm start impulse from previous frame.
  * Call this once before velocity iterations.
  *
@@ -517,11 +620,10 @@ export function warmStart(
     // body a: subtract impulse (opposite direction)
     if (isDynamicA) {
         // inlined subLinearVelocityStep
-        // linear: v -= (axis × totalLambda) × invMassA
-        const linearScaleA = part.totalLambda * invMassA;
-        mpA.linearVelocity[0] -= axis[0] * linearScaleA;
-        mpA.linearVelocity[1] -= axis[1] * linearScaleA;
-        mpA.linearVelocity[2] -= axis[2] * linearScaleA;
+        // linear: v -= invMassA × (totalLambda × axis)
+        mpA.linearVelocity[0] -= invMassA * (part.totalLambda * axis[0]);
+        mpA.linearVelocity[1] -= invMassA * (part.totalLambda * axis[1]);
+        mpA.linearVelocity[2] -= invMassA * (part.totalLambda * axis[2]);
 
         // apply DOF constraints
         const allowedTranslationA = mpA.allowedDegreesOfFreedom & 0b111;
@@ -540,11 +642,10 @@ export function warmStart(
     // body b: add impulse
     if (isDynamicB) {
         // inlined addLinearVelocityStep
-        // linear: v += (axis × totalLambda) × invMassB
-        const linearScaleB = part.totalLambda * invMassB;
-        mpB.linearVelocity[0] += axis[0] * linearScaleB;
-        mpB.linearVelocity[1] += axis[1] * linearScaleB;
-        mpB.linearVelocity[2] += axis[2] * linearScaleB;
+        // linear: v += invMassB × (totalLambda × axis)
+        mpB.linearVelocity[0] += invMassB * (part.totalLambda * axis[0]);
+        mpB.linearVelocity[1] += invMassB * (part.totalLambda * axis[1]);
+        mpB.linearVelocity[2] += invMassB * (part.totalLambda * axis[2]);
 
         // apply DOF constraints
         const allowedTranslationB = mpB.allowedDegreesOfFreedom & 0b111;
@@ -582,10 +683,78 @@ export function solveVelocityConstraint(
     minLambda: number,
     maxLambda: number,
 ): boolean {
-    const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
-    const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
+    const movingA = bodyA.motionType !== MotionType.STATIC;
+    const movingB = bodyB.motionType !== MotionType.STATIC;
+    const mpA = bodyA.motionProperties;
+    const mpB = bodyB.motionProperties;
 
-    return solveVelocityConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, minLambda, maxLambda);
+    // jacobian multiplied by velocity: the linear and angular terms summed per component, reduced once
+    let x: number;
+    let y: number;
+    let z: number;
+    if (movingA) {
+        if (movingB) {
+            x = axis[0] * (mpA.linearVelocity[0] - mpB.linearVelocity[0]);
+            y = axis[1] * (mpA.linearVelocity[1] - mpB.linearVelocity[1]);
+            z = axis[2] * (mpA.linearVelocity[2] - mpB.linearVelocity[2]);
+            x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+            y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+            z -= part.r2xAxis[2] * mpB.angularVelocity[2];
+        } else {
+            x = axis[0] * mpA.linearVelocity[0];
+            y = axis[1] * mpA.linearVelocity[1];
+            z = axis[2] * mpA.linearVelocity[2];
+        }
+        x += part.r1PlusUxAxis[0] * mpA.angularVelocity[0];
+        y += part.r1PlusUxAxis[1] * mpA.angularVelocity[1];
+        z += part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
+    } else if (movingB) {
+        x = axis[0] * -mpB.linearVelocity[0];
+        y = axis[1] * -mpB.linearVelocity[1];
+        z = axis[2] * -mpB.linearVelocity[2];
+        x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+        y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+        z -= part.r2xAxis[2] * mpB.angularVelocity[2];
+    } else {
+        x = y = z = 0;
+    }
+    const jv = x + y + z;
+
+    // lambda = -K^-1 (J v + b), the accumulated impulse clamped (with inverted bounds the max wins)
+    const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
+    const totalLambda = Math.min(Math.max(part.totalLambda + lambda, minLambda), maxLambda);
+    const deltaLambda = totalLambda - part.totalLambda;
+    part.totalLambda = totalLambda;
+    if (deltaLambda === 0) return false;
+
+    // impulse = deltaLambda × axis, each dynamic body moved by its own inverse mass
+    if (bodyA.motionType === MotionType.DYNAMIC) {
+        const invMassA = mpA.invMass;
+        mpA.linearVelocity[0] -= invMassA * (deltaLambda * axis[0]);
+        mpA.linearVelocity[1] -= invMassA * (deltaLambda * axis[1]);
+        mpA.linearVelocity[2] -= invMassA * (deltaLambda * axis[2]);
+        const allowedTranslation = mpA.allowedDegreesOfFreedom & 0b111;
+        if (!(allowedTranslation & 0b001)) mpA.linearVelocity[0] = 0;
+        if (!(allowedTranslation & 0b010)) mpA.linearVelocity[1] = 0;
+        if (!(allowedTranslation & 0b100)) mpA.linearVelocity[2] = 0;
+        mpA.angularVelocity[0] -= part.invI1_r1PlusUxAxis[0] * deltaLambda;
+        mpA.angularVelocity[1] -= part.invI1_r1PlusUxAxis[1] * deltaLambda;
+        mpA.angularVelocity[2] -= part.invI1_r1PlusUxAxis[2] * deltaLambda;
+    }
+    if (bodyB.motionType === MotionType.DYNAMIC) {
+        const invMassB = mpB.invMass;
+        mpB.linearVelocity[0] += invMassB * (deltaLambda * axis[0]);
+        mpB.linearVelocity[1] += invMassB * (deltaLambda * axis[1]);
+        mpB.linearVelocity[2] += invMassB * (deltaLambda * axis[2]);
+        const allowedTranslation = mpB.allowedDegreesOfFreedom & 0b111;
+        if (!(allowedTranslation & 0b001)) mpB.linearVelocity[0] = 0;
+        if (!(allowedTranslation & 0b010)) mpB.linearVelocity[1] = 0;
+        if (!(allowedTranslation & 0b100)) mpB.linearVelocity[2] = 0;
+        mpB.angularVelocity[0] += part.invI2_r2xAxis[0] * deltaLambda;
+        mpB.angularVelocity[1] += part.invI2_r2xAxis[1] * deltaLambda;
+        mpB.angularVelocity[2] += part.invI2_r2xAxis[2] * deltaLambda;
+    }
+    return true;
 }
 
 /**
@@ -607,41 +776,36 @@ export function getTotalLambda(part: AxisConstraintPart, bodyA: RigidBody, bodyB
     const mpA = bodyA.motionProperties;
     const mpB = bodyB.motionProperties;
 
-    // calculate jacobian multiplied by linear velocity
-    let jv: number;
+    // jacobian multiplied by velocity: the linear and angular terms summed per component, reduced once
+    let x: number;
+    let y: number;
+    let z: number;
     if (movingA && movingB) {
-        // vec3.subtract(_acp_gtl_velDiff, mpA.linearVelocity, mpB.linearVelocity);
-        const dx = mpA.linearVelocity[0] - mpB.linearVelocity[0];
-        const dy = mpA.linearVelocity[1] - mpB.linearVelocity[1];
-        const dz = mpA.linearVelocity[2] - mpB.linearVelocity[2];
-        // jv = vec3.dot(axis, _acp_gtl_velDiff);
-        jv = axis[0] * dx + axis[1] * dy + axis[2] * dz;
+        x = axis[0] * (mpA.linearVelocity[0] - mpB.linearVelocity[0]);
+        y = axis[1] * (mpA.linearVelocity[1] - mpB.linearVelocity[1]);
+        z = axis[2] * (mpA.linearVelocity[2] - mpB.linearVelocity[2]);
     } else if (movingA) {
-        // jv = vec3.dot(axis, mpA.linearVelocity);
-        jv = axis[0] * mpA.linearVelocity[0] + axis[1] * mpA.linearVelocity[1] + axis[2] * mpA.linearVelocity[2];
+        x = axis[0] * mpA.linearVelocity[0];
+        y = axis[1] * mpA.linearVelocity[1];
+        z = axis[2] * mpA.linearVelocity[2];
     } else if (movingB) {
-        // jv = -vec3.dot(axis, mpB.linearVelocity);
-        jv = -(axis[0] * mpB.linearVelocity[0] + axis[1] * mpB.linearVelocity[1] + axis[2] * mpB.linearVelocity[2]);
+        x = axis[0] * -mpB.linearVelocity[0];
+        y = axis[1] * -mpB.linearVelocity[1];
+        z = axis[2] * -mpB.linearVelocity[2];
     } else {
-        jv = 0;
+        x = y = z = 0;
     }
-
-    // calculate jacobian multiplied by angular velocity
     if (movingA) {
-        // jv += vec3.dot(part.r1PlusUxAxis, mpA.angularVelocity);
-        jv +=
-            part.r1PlusUxAxis[0] * mpA.angularVelocity[0] +
-            part.r1PlusUxAxis[1] * mpA.angularVelocity[1] +
-            part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
+        x += part.r1PlusUxAxis[0] * mpA.angularVelocity[0];
+        y += part.r1PlusUxAxis[1] * mpA.angularVelocity[1];
+        z += part.r1PlusUxAxis[2] * mpA.angularVelocity[2];
     }
-
     if (movingB) {
-        // jv -= vec3.dot(part.r2xAxis, mpB.angularVelocity);
-        jv -=
-            part.r2xAxis[0] * mpB.angularVelocity[0] +
-            part.r2xAxis[1] * mpB.angularVelocity[1] +
-            part.r2xAxis[2] * mpB.angularVelocity[2];
+        x -= part.r2xAxis[0] * mpB.angularVelocity[0];
+        y -= part.r2xAxis[1] * mpB.angularVelocity[1];
+        z -= part.r2xAxis[2] * mpB.angularVelocity[2];
     }
+    const jv = x + y + z;
 
     // calculate lambda
     const lambda = part.effectiveMass * (jv - getSpringBias(part.springPart, part.totalLambda));
@@ -759,7 +923,8 @@ export function solveVelocityConstraintWithMassOverride(
 ): boolean {
     // use two-step process: get total lambda, clamp, apply
     const totalLambda = getTotalLambda(part, bodyA, bodyB, axis);
-    const clampedLambda = Math.max(minLambda, Math.min(maxLambda, totalLambda));
+    // jolt's clamp order: with inverted bounds (a friction limit from a negative normal lambda) the max wins
+    const clampedLambda = Math.min(Math.max(totalLambda, minLambda), maxLambda);
     return applyLambda(part, bodyA, bodyB, invMassA, invMassB, axis, clampedLambda);
 }
 
@@ -789,10 +954,30 @@ export function solvePositionConstraint(
     C: number,
     baumgarte: number,
 ): boolean {
-    const invMassA = bodyA.motionType === MotionType.DYNAMIC ? bodyA.motionProperties.invMass : 0;
-    const invMassB = bodyB.motionType === MotionType.DYNAMIC ? bodyB.motionProperties.invMass : 0;
+    // only apply position constraint when the constraint is hard, otherwise the velocity bias will fix the constraint
+    if (C === 0 || !isActive(part) || isSpringActive(part.springPart)) {
+        return false;
+    }
 
-    return solvePositionConstraintWithMassOverride(part, bodyA, bodyB, invMassA, invMassB, axis, C, baumgarte);
+    // lambda = -K^-1 × β × C, the euler velocity and position steps folded together (see the mass override version)
+    const lambda = -part.effectiveMass * baumgarte * C;
+
+    // impulse = lambda × axis, each dynamic body moved by its own inverse mass
+    if (bodyA.motionType === MotionType.DYNAMIC) {
+        const invMassA = bodyA.motionProperties.invMass;
+        vec3.set(_acp_sp_impulse, invMassA * (lambda * axis[0]), invMassA * (lambda * axis[1]), invMassA * (lambda * axis[2]));
+        subPositionStep(bodyA, _acp_sp_impulse);
+        vec3.scale(_acp_sp_angularStep, part.invI1_r1PlusUxAxis, lambda);
+        subRotationStep(bodyA, _acp_sp_angularStep);
+    }
+    if (bodyB.motionType === MotionType.DYNAMIC) {
+        const invMassB = bodyB.motionProperties.invMass;
+        vec3.set(_acp_sp_impulse, invMassB * (lambda * axis[0]), invMassB * (lambda * axis[1]), invMassB * (lambda * axis[2]));
+        addPositionStep(bodyB, _acp_sp_impulse);
+        vec3.scale(_acp_sp_angularStep, part.invI2_r2xAxis, lambda);
+        addRotationStep(bodyB, _acp_sp_angularStep);
+    }
+    return true;
 }
 
 /**

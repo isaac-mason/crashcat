@@ -1,4 +1,4 @@
-import { euler, quat, vec3 } from 'mathcat';
+import { euler, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     box,
@@ -8,6 +8,7 @@ import {
     createAnyCollidePointCollector,
     createDefaultCollidePointSettings,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     plane,
     scaled,
     sphere,
@@ -248,6 +249,25 @@ describe('collidePointVsShape - Box', () => {
 
         expect(collector.hit).not.toBeNull();
         expect(collector.hit?.bodyIdB).toBe(1);
+    });
+
+    test('reports the box material', () => {
+        const shape = box.create({ halfExtents: vec3.fromValues(1, 1, 1), materialId: 7 });
+        const collector = createAnyCollidePointCollector();
+
+        // biome-ignore format: readability
+        collidePointVsShape(
+			collector,
+			settings,
+			0, 0, 0,
+			shape,
+			EMPTY_SUB_SHAPE_ID, 0,
+			0, 0, 0,
+			0, 0, 0, 1,
+			1, 1, 1,
+		);
+
+        expect(collector.hit && getShapeMaterial(shape, collector.hit.subShapeIdB)).toBe(7);
     });
 
     test('should detect point inside box (off-center)', () => {
@@ -1362,5 +1382,26 @@ describe('collidePointVsShape - Plane', () => {
         );
 
         expect(collector.hit).toBeNull();
+    });
+});
+
+describe('collidePointVsShape - any collector early out', () => {
+    test('the first hit forces the deepest possible early out, as for collide shape', () => {
+        const collector = createAnyCollidePointCollector();
+        // biome-ignore format: readability
+        collidePointVsShape(
+            collector,
+            settings,
+            0, 0, 0,
+            sphere.create({ radius: 1.0 }),
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        expect(collector.hit).not.toBeNull();
+        expect(collector.earlyOutFraction).toBe(-Infinity);
+        expect(collector.shouldEarlyOut()).toBe(true);
     });
 });

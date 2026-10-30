@@ -1,10 +1,11 @@
-import type { Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
-import { getInverseInertiaForRotation } from '../body/motion-properties';
+import { getWorldInverseInertia, STEP_STAMP_NONE } from '../body/motion-properties';
 import { MotionType } from '../body/motion-type';
 import type { RigidBody } from '../body/rigid-body';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -20,13 +21,16 @@ import * as axisConstraintPart from './constraint-part/axis-constraint-part';
 import type { SpringSettings } from './constraint-part/spring-settings';
 import * as springSettings from './constraint-part/spring-settings';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /** distance constraint removes 1 translational DOF (distance between two points) */
@@ -83,7 +87,7 @@ export type DistanceConstraintSettings = {
     springSettings?: SpringSettings;
     /** constraint space@default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -101,6 +105,7 @@ function resetConstraint(constraint: DistanceConstraint): void {
 
 /** create a distance constraint */
 export function create(world: World, settings: DistanceConstraintSettings): DistanceConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<DistanceConstraint>(world.constraints, ConstraintType.DISTANCE);
     const bodies = world.bodies;
 
@@ -184,20 +189,27 @@ export function create(world: World, settings: DistanceConstraintSettings): Dist
     vec3.subtract(delta, constraint.worldSpacePosition2, constraint.worldSpacePosition1);
     const distance = vec3.length(delta);
 
-    // Set min/max (use initial distance if not specified)
+    // set min/max (use initial distance if not specified)
     const minDistance = settings.minDistance ?? -1;
     const maxDistance = settings.maxDistance ?? -1;
     if (minDistance < 0 && maxDistance < 0) {
-        constraint.minDistance = distance;
-        constraint.maxDistance = distance;
+        setDistance(constraint, distance, distance);
     } else {
-        constraint.minDistance = minDistance < 0 ? Math.min(distance, maxDistance) : minDistance;
-        constraint.maxDistance = maxDistance < 0 ? Math.max(distance, minDistance) : maxDistance;
+        setDistance(
+            constraint,
+            minDistance < 0 ? Math.min(distance, maxDistance) : minDistance,
+            maxDistance < 0 ? Math.max(distance, minDistance) : maxDistance,
+        );
     }
 
-    // Set spring settings
+    // most likely gravity is going to tear us apart (this is only used when the distance between the points = 0)
+    vec3.set(constraint.worldSpaceNormal, 0, 1, 0);
+
+    // set spring settings
     if (settings.springSettings) {
         springSettings.copy(constraint.limitsSpringSettings, settings.springSettings);
+    } else {
+        springSettings.reset(constraint.limitsSpringSettings);
     }
 
     // track constraint on both bodies
@@ -205,6 +217,7 @@ export function create(world: World, settings: DistanceConstraintSettings): Dist
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -229,6 +242,7 @@ export function remove(world: World, constraint: DistanceConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -244,8 +258,6 @@ export function get(world: World, id: ConstraintId): DistanceConstraint | undefi
     return constraint;
 }
 
-const _distanceConstraint_rotA = /* @__PURE__ */ mat4.create();
-const _distanceConstraint_rotB = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_invInertiaA = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_invInertiaB = /* @__PURE__ */ mat4.create();
 const _distanceConstraint_r1PlusU = /* @__PURE__ */ vec3.create();
@@ -258,6 +270,7 @@ function calculateDistanceConstraintProperties(
     bodyA: RigidBody,
     bodyB: RigidBody,
     deltaTime: number,
+    stepStamp: number,
 ): void {
     // update world space positions (the bodies may have moved)
     // worldPos = centerOfMassPosition + rotation * localPos
@@ -296,15 +309,11 @@ function calculateDistanceConstraintProperties(
     const invInertiaB = _distanceConstraint_invInertiaB;
 
     if (mpA) {
-        const rotA = _distanceConstraint_rotA;
-        mat4.fromQuat(rotA, bodyA.quaternion);
-        getInverseInertiaForRotation(invInertiaA, mpA, rotA);
+        mat4.copy(invInertiaA, getWorldInverseInertia(invInertiaA, mpA, bodyA.quaternion, stepStamp));
     }
 
     if (mpB) {
-        const rotB = _distanceConstraint_rotB;
-        mat4.fromQuat(rotB, bodyB.quaternion);
-        getInverseInertiaForRotation(invInertiaB, mpB, rotB);
+        mat4.copy(invInertiaB, getWorldInverseInertia(invInertiaB, mpB, bodyB.quaternion, stepStamp));
     }
 
     // determine constraint mode based on current distance vs limits
@@ -380,7 +389,7 @@ function setupVelocity(constraint: DistanceConstraint, bodies: Bodies, deltaTime
 
     if (!bodyA || !bodyB || bodyA._pooled || bodyB._pooled) return;
 
-    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, bodies.stepStamp);
 }
 
 function warmStartVelocity(constraint: DistanceConstraint, bodies: Bodies, warmStartImpulseRatio: number): void {
@@ -453,7 +462,7 @@ function solvePosition(constraint: DistanceConstraint, bodies: Bodies, deltaTime
     }
 
     // recalculate constraint properties (bodies may have moved during position solve)
-    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime);
+    calculateDistanceConstraintProperties(constraint, bodyA, bodyB, deltaTime, STEP_STAMP_NONE);
 
     return axisConstraintPart.solvePositionConstraint(
         constraint.axisConstraint,
@@ -480,18 +489,13 @@ export function getTotalLambda(constraint: DistanceConstraint): number {
 /**
  * Set the distance limits for a distance constraint.
  * @param constraint - The constraint to modify
- * @param minDistance - Minimum distance (use -1 to keep current)
- * @param maxDistance - Maximum distance (use -1 to keep current)
+ * @param minDistance - Minimum distance, must be <= maxDistance
+ * @param maxDistance - Maximum distance
  */
 export function setDistance(constraint: DistanceConstraint, minDistance: number, maxDistance: number): void {
-    constraint.minDistance = minDistance < 0 ? constraint.minDistance : minDistance;
-    constraint.maxDistance = maxDistance < 0 ? constraint.maxDistance : maxDistance;
-    // Ensure min <= max
-    if (constraint.minDistance > constraint.maxDistance) {
-        const avg = (constraint.minDistance + constraint.maxDistance) / 2;
-        constraint.minDistance = avg;
-        constraint.maxDistance = avg;
-    }
+    assert(minDistance <= maxDistance, 'min distance must be <= max distance');
+    constraint.minDistance = minDistance;
+    constraint.maxDistance = maxDistance;
 }
 
 /** the constraint definition for distance constraint */
@@ -509,6 +513,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();

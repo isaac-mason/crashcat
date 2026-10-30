@@ -6,22 +6,18 @@ export type CollidePointHit = {
     subShapeIdB: number;
     /** body id of shape b */
     bodyIdB: number;
-    /** material id of the hit sub-shape */
-    materialId: number;
 };
 
 export function createCollidePointHit(): CollidePointHit {
     return {
         subShapeIdB: EMPTY_SUB_SHAPE_ID,
         bodyIdB: -1,
-        materialId: -1,
     };
 }
 
 export function copyCollidePointHit(out: CollidePointHit, source: CollidePointHit): void {
     out.subShapeIdB = source.subShapeIdB;
     out.bodyIdB = source.bodyIdB;
-    out.materialId = source.materialId;
 }
 
 export type CollidePointSettings = {
@@ -83,7 +79,7 @@ export class AnyCollidePointCollector implements CollidePointCollector {
     addHit(h: CollidePointHit): void {
         copyCollidePointHit(this._hit, h);
         this.hit = this._hit;
-        this.earlyOutFraction = 0; // early out immediately
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {

@@ -1,9 +1,11 @@
-import { type Box3, box3, mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat3, mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
 import type { CastShapeCollector, CastShapeSettings } from '../collision/cast-shape-vs-shape';
+import { FLT_MIN, rayFractionToBox3, safeReciprocal } from '../collision/cast-utils';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import type { CollideShapeCollector, CollideShapeSettings } from '../collision/collide-shape-vs-shape';
 import { assert } from '../utils/assert';
@@ -14,13 +16,13 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
     setCastShapeFn,
     setCollideShapeFn,
     shapeDefs,
+    transformScale,
 } from './shapes';
 
 export type CompoundShapeChild = {
@@ -32,6 +34,8 @@ export type CompoundShapeChild = {
 export type CompoundShape = {
     type: ShapeType.COMPOUND;
     children: CompoundShapeChild[];
+    /** each child's bounds in the compound's unscaled space, 6 per child (min xyz, max xyz), for culling children against a query */
+    childBounds: number[];
     aabb: Box3;
     centerOfMass: Vec3;
     volume: number;
@@ -47,6 +51,7 @@ export function create(o: CompoundShapeSettings): CompoundShape {
     const shape: CompoundShape = {
         type: ShapeType.COMPOUND,
         children: o.children,
+        childBounds: [],
         aabb: box3.create(),
         centerOfMass: vec3.create(),
         volume: 0,
@@ -106,6 +111,93 @@ function computeCompoundLocalBounds(out: Box3, shape: CompoundShape): void {
     }
 }
 
+const _computeCompoundChildBounds_transform = /* @__PURE__ */ mat4.create();
+const _computeCompoundChildBounds_bounds = /* @__PURE__ */ box3.create();
+
+function computeCompoundChildBounds(out: number[], shape: CompoundShape): void {
+    out.length = shape.children.length * 6;
+    for (let childIndex = 0; childIndex < shape.children.length; childIndex++) {
+        const child = shape.children[childIndex];
+        const transform = mat4.fromRotationTranslation(_computeCompoundChildBounds_transform, child.quaternion, child.position);
+        const bounds = box3.transformMat4(_computeCompoundChildBounds_bounds, child.shape.aabb, transform);
+        const offset = childIndex * 6;
+        for (let i = 0; i < 6; i++) {
+            out[offset + i] = bounds[i];
+        }
+    }
+}
+
+/**
+ * bring a box from the compound's scaled local space into its unscaled space, where the child bounds are.
+ * a negative scale component swaps that axis' min and max, so they are re-ordered.
+ */
+function divideBoxByScale(box: Box3, scaleX: number, scaleY: number, scaleZ: number): void {
+    if (scaleX === 1 && scaleY === 1 && scaleZ === 1) return;
+
+    const x0 = box[0] / scaleX;
+    const x1 = box[3] / scaleX;
+    box[0] = x0 < x1 ? x0 : x1;
+    box[3] = x0 < x1 ? x1 : x0;
+    const y0 = box[1] / scaleY;
+    const y1 = box[4] / scaleY;
+    box[1] = y0 < y1 ? y0 : y1;
+    box[4] = y0 < y1 ? y1 : y0;
+    const z0 = box[2] / scaleZ;
+    const z1 = box[5] / scaleZ;
+    box[2] = z0 < z1 ? z0 : z1;
+    box[5] = z0 < z1 ? z1 : z0;
+}
+
+const _boundsInCompoundSpace_invQuat = /* @__PURE__ */ quat.create();
+const _boundsInCompoundSpace_localPos = /* @__PURE__ */ vec3.create();
+const _boundsInCompoundSpace_localQuat = /* @__PURE__ */ quat.create();
+const _boundsInCompoundSpace_scale = /* @__PURE__ */ vec3.create();
+const _boundsInCompoundSpace_transform = /* @__PURE__ */ mat4.create();
+
+/** the bounds of a posed shape in the unscaled space of a posed compound, grown by `expand` on every side */
+function boundsInCompoundSpace(
+    out: Box3,
+    shape: Shape,
+    posX: number,
+    posY: number,
+    posZ: number,
+    quatX: number,
+    quatY: number,
+    quatZ: number,
+    quatW: number,
+    scaleX: number,
+    scaleY: number,
+    scaleZ: number,
+    compoundPosX: number,
+    compoundPosY: number,
+    compoundPosZ: number,
+    compoundQuatX: number,
+    compoundQuatY: number,
+    compoundQuatZ: number,
+    compoundQuatW: number,
+    compoundScaleX: number,
+    compoundScaleY: number,
+    compoundScaleZ: number,
+    expand: number,
+): void {
+    const invQuat = quat.set(_boundsInCompoundSpace_invQuat, -compoundQuatX, -compoundQuatY, -compoundQuatZ, compoundQuatW);
+    const localPos = vec3.set(_boundsInCompoundSpace_localPos, posX - compoundPosX, posY - compoundPosY, posZ - compoundPosZ);
+    vec3.transformQuat(localPos, localPos, invQuat);
+    const localQuat = quat.set(_boundsInCompoundSpace_localQuat, quatX, quatY, quatZ, quatW);
+    quat.multiply(localQuat, invQuat, localQuat);
+    const scale = vec3.set(_boundsInCompoundSpace_scale, scaleX, scaleY, scaleZ);
+
+    const transform = mat4.fromRotationTranslationScale(_boundsInCompoundSpace_transform, localQuat, localPos, scale);
+    box3.transformMat4(out, shape.aabb, transform);
+    out[0] -= expand;
+    out[1] -= expand;
+    out[2] -= expand;
+    out[3] += expand;
+    out[4] += expand;
+    out[5] += expand;
+    divideBoxByScale(out, compoundScaleX, compoundScaleY, compoundScaleZ);
+}
+
 const _computeCompoundCenterOfMass_childCOM = /* @__PURE__ */ vec3.create();
 const _computeCompoundCenterOfMass_worldChildCOM = /* @__PURE__ */ vec3.create();
 
@@ -144,6 +236,7 @@ function computeCompoundCenterOfMass(out: Vec3, shape: CompoundShape): void {
 
 /** updates a compound shape after it's properties have changed or children have changed */
 export function update(shape: CompoundShape): void {
+    computeCompoundChildBounds(shape.childBounds, shape);
     computeCompoundLocalBounds(shape.aabb, shape);
     computeCompoundCenterOfMass(shape.centerOfMass, shape);
     shape.volume = computeCompoundVolume(shape);
@@ -157,20 +250,22 @@ const _computeCompoundMassProperties_childRotMat3 = /* @__PURE__ */ mat3.create(
 const _computeCompoundMassProperties_childRotMat4 = /* @__PURE__ */ mat4.create();
 
 const _getSurfaceNormal_invRotation = /* @__PURE__ */ quat.create();
-const _getSurfaceNormal_forwardRotation = /* @__PURE__ */ quat.create();
 
 const _subShapeIdPopResult = /* @__PURE__ */ subShape.popResult();
 
 const _getSupportingFace_childTransform = /* @__PURE__ */ mat4.create();
+const _getSupportingFace_scaledPosition = /* @__PURE__ */ vec3.create();
 const _getSupportingFace_localDirection = /* @__PURE__ */ vec3.create();
+
+const _getSubShapeTransformedShape_childPosition = /* @__PURE__ */ vec3.create();
 
 export const def = /* @__PURE__ */ (() =>
     defineShape<CompoundShape>({
         type: ShapeType.COMPOUND,
-        category: ShapeCategory.COMPOSITE,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -248,6 +343,14 @@ function computeMassProperties(out: MassProperties, shape: CompoundShape): void 
     out.inertia[15] = 1.0;
 }
 
+function getMaterial(shape: CompoundShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    const childIndex = _subShapeIdPopResult.value;
+    assert(childIndex < shape.children.length, 'Invalid SubShapeID for CompoundShape');
+    const child = shape.children[childIndex].shape;
+    return shapeDefs[child.type].getMaterial(child, _subShapeIdPopResult.remainder);
+}
+
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CompoundShape, subShapeId: number): void {
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
 
@@ -261,24 +364,16 @@ function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: CompoundShape, s
 
     const child = shape.children[childIndex];
 
-    // accumulate transform: position = position - child.position (inverse transform)
+    // transform surface position to the child's local space
     vec3.subtract(ioResult.position, ioResult.position, child.position);
-
-    // accumulate rotation: quaternion = conjugate(child.quaternion) * quaternion (inverse transform)
     const invRotation = quat.conjugate(_getSurfaceNormal_invRotation, child.quaternion);
-    quat.multiply(ioResult.quaternion, invRotation, ioResult.quaternion);
-
-    // transform position to local space
     vec3.transformQuat(ioResult.position, ioResult.position, invRotation);
 
     // get normal from child shape in its local space
     shapeDefs[child.shape.type].getSurfaceNormal(ioResult, child.shape, remainder);
 
-    // transform normal back to compound space using accumulated rotation.
-    // the accumulated quaternion contains the inverse transforms, so we need to apply its conjugate
-    // to get the forward transformation for the normal.
-    const forwardAccumulatedRotation = quat.conjugate(_getSurfaceNormal_forwardRotation, ioResult.quaternion);
-    vec3.transformQuat(ioResult.normal, ioResult.normal, forwardAccumulatedRotation);
+    // the normal comes back in the child's local space; this child's rotation alone takes it to the compound's
+    vec3.transformQuat(ioResult.normal, ioResult.normal, child.quaternion);
 }
 
 function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shape: CompoundShape, subShapeId: number): void {
@@ -293,13 +388,18 @@ function getSupportingFace(ioResult: SupportingFaceResult, direction: Vec3, shap
 
     const child = shape.children[childIndex];
 
-    // build child transform matrix and accumulate: transform = transform * childTransform
-    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, child.position);
+    // build child transform matrix and accumulate: transform = transform * childTransform.
+    // the transform carries no scale, so the child's position is scaled here
+    vec3.multiply(_getSupportingFace_scaledPosition, child.position, ioResult.scale);
+    mat4.fromRotationTranslation(_getSupportingFace_childTransform, child.quaternion, _getSupportingFace_scaledPosition);
     mat4.multiply(ioResult.transform, ioResult.transform, _getSupportingFace_childTransform);
 
     // transform direction to child local space using inverse child rotation
     // inverse rotation = conjugate for unit quaternions, same as transposed 3x3 portion
     mat4.multiply3x3TransposedVec(_getSupportingFace_localDirection, _getSupportingFace_childTransform, direction);
+
+    // the child sees the scale in its own space
+    transformScale(ioResult.scale, child.quaternion, ioResult.scale[0], ioResult.scale[1], ioResult.scale[2]);
 
     shapeDefs[child.shape.type].getSupportingFace(ioResult, _getSupportingFace_localDirection, child.shape, remainder);
 }
@@ -314,13 +414,14 @@ function getInnerRadius(shape: CompoundShape): number {
 
 function getLeafShape(out: GetLeafShapeResult, shape: CompoundShape, subShapeId: number): void {
     // navigate to child shape
-    if (subShape.isEmpty(subShapeId)) {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    if (_subShapeIdPopResult.value >= shape.children.length) {
+        // no longer a valid index
         out.shape = null;
         out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
         return;
     }
 
-    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
     const childShape = shape.children[_subShapeIdPopResult.value].shape;
 
     // get leaf shape from child
@@ -330,34 +431,36 @@ function getLeafShape(out: GetLeafShapeResult, shape: CompoundShape, subShapeId:
 
 function getSubShapeTransformedShape(out: GetSubShapeTransformedShapeResult, shape: CompoundShape, subShapeId: number): void {
     // navigate to child shape
-    if (subShape.isEmpty(subShapeId)) {
-        out.shape = null;
-        out.remainder = subShape.EMPTY_SUB_SHAPE_ID;
-        return;
-    }
-
     subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.children.length);
+    assert(_subShapeIdPopResult.value < shape.children.length, 'Invalid SubShapeID for CompoundShape');
     const child = shape.children[_subShapeIdPopResult.value];
 
-    // apply child's transform: pos = pos + rotate(rot, childPos), rot = rot * childRot
-    const rotatedChildPos = vec3.create();
-    vec3.transformQuat(rotatedChildPos, child.position, out.rotation);
-    vec3.add(out.position, out.position, rotatedChildPos);
+    // apply child's transform: pos = pos + rotate(rot, scale * childPos), rot = rot * childRot
+    const childPosition = _getSubShapeTransformedShape_childPosition;
+    vec3.multiply(childPosition, child.position, out.scale);
+    vec3.transformQuat(childPosition, childPosition, out.rotation);
+    vec3.add(out.position, out.position, childPosition);
     quat.multiply(out.rotation, out.rotation, child.quaternion);
+    transformScale(out.scale, child.quaternion, out.scale[0], out.scale[1], out.scale[2]);
 
     // recursively get transformed shape from child
     const childShapeDef = shapeDefs[child.shape.type];
     childShapeDef.getSubShapeTransformedShape(out, child.shape, _subShapeIdPopResult.remainder);
 }
 
+/** the scale a child is dispatched with, see transformScale */
+const _childScale = /* @__PURE__ */ vec3.create();
+
 /* cast ray */
 
 const _castRayVsCompound_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_quat = /* @__PURE__ */ quat.create();
-const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_worldRot = /* @__PURE__ */ quat.create();
+const _castRayVsCompound_transformedTranslation = /* @__PURE__ */ vec3.create();
 const _castRayVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+const _castRayVsCompound_invQuat = /* @__PURE__ */ quat.create();
+const _castRayVsCompound_local = /* @__PURE__ */ vec3.create();
 
 function castRayVsCompound(
     collector: CastRayCollector,
@@ -383,12 +486,36 @@ function castRayVsCompound(
     scaleY: number,
     scaleZ: number,
 ): void {
-    vec3.set(_castRayVsCompound_pos, posX, posY, posZ);
-    quat.set(_castRayVsCompound_quat, quatX, quatY, quatZ, quatW);
+    // the ray in the compound's unscaled space, where the child bounds are
+    const invQuat = quat.set(_castRayVsCompound_invQuat, -quatX, -quatY, -quatZ, quatW);
+    const local = vec3.set(_castRayVsCompound_local, originX - posX, originY - posY, originZ - posZ);
+    vec3.transformQuat(local, local, invQuat);
+    const localOriginX = local[0] / scaleX;
+    const localOriginY = local[1] / scaleY;
+    const localOriginZ = local[2] / scaleZ;
+    vec3.set(local, directionX, directionY, directionZ);
+    vec3.transformQuat(local, local, invQuat);
+    const invDispX = safeReciprocal((local[0] / scaleX) * length);
+    const invDispY = safeReciprocal((local[1] / scaleY) * length);
+    const invDispZ = safeReciprocal((local[2] / scaleZ) * length);
+    const childBounds = shape.childBounds;
 
     for (let childIndex = 0; childIndex < shape.children.length; childIndex++) {
         if (collector.earlyOutFraction <= 0) {
             break;
+        }
+
+        // skip children the ray cannot reach before the closest hit so far
+        const offset = childIndex * 6;
+        // biome-ignore format: pretty
+        const childFraction = rayFractionToBox3(
+            localOriginX, localOriginY, localOriginZ,
+            invDispX, invDispY, invDispZ,
+            childBounds[offset], childBounds[offset + 1], childBounds[offset + 2],
+            childBounds[offset + 3], childBounds[offset + 4], childBounds[offset + 5],
+        );
+        if (childFraction >= collector.earlyOutFraction) {
+            continue;
         }
 
         const child = shape.children[childIndex];
@@ -403,9 +530,22 @@ function castRayVsCompound(
         );
 
         // accumulate transform
-        vec3.transformQuat(_castRayVsCompound_transformedTranslation, child.position, _castRayVsCompound_quat);
+        vec3.set(_castRayVsCompound_pos, posX, posY, posZ);
+        quat.set(_castRayVsCompound_quat, quatX, quatY, quatZ, quatW);
+        vec3.set(
+            _castRayVsCompound_transformedTranslation,
+            child.position[0] * scaleX,
+            child.position[1] * scaleY,
+            child.position[2] * scaleZ,
+        );
+        vec3.transformQuat(
+            _castRayVsCompound_transformedTranslation,
+            _castRayVsCompound_transformedTranslation,
+            _castRayVsCompound_quat,
+        );
         vec3.add(_castRayVsCompound_worldPos, _castRayVsCompound_pos, _castRayVsCompound_transformedTranslation);
         quat.multiply(_castRayVsCompound_worldRot, _castRayVsCompound_quat, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleX, scaleY, scaleZ);
 
         const childShapeDef = shapeDefs[child.shape.type];
         childShapeDef.castRay(
@@ -428,9 +568,9 @@ function castRayVsCompound(
             _castRayVsCompound_worldRot[1],
             _castRayVsCompound_worldRot[2],
             _castRayVsCompound_worldRot[3],
-            scaleX,
-            scaleY,
-            scaleZ,
+            childScale[0],
+            childScale[1],
+            childScale[2],
         );
     }
 }
@@ -443,6 +583,8 @@ const _collidePointVsCompound_transformedTranslation = /* @__PURE__ */ vec3.crea
 const _collidePointVsCompound_worldPos = /* @__PURE__ */ vec3.create();
 const _collidePointVsCompound_worldRot = /* @__PURE__ */ quat.create();
 const _collidePointVsCompound_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
+const _collidePointVsCompound_invQuatB = /* @__PURE__ */ quat.create();
+const _collidePointVsCompound_localPoint = /* @__PURE__ */ vec3.create();
 
 function collidePointVsCompound(
     collector: CollidePointCollector,
@@ -464,9 +606,31 @@ function collidePointVsCompound(
     scaleBY: number,
     scaleBZ: number,
 ): void {
+    // the point in the compound's unscaled space, where the child bounds are
+    const invQuatB = quat.set(_collidePointVsCompound_invQuatB, -quatBX, -quatBY, -quatBZ, quatBW);
+    const localPoint = vec3.set(_collidePointVsCompound_localPoint, pointX - posBX, pointY - posBY, pointZ - posBZ);
+    vec3.transformQuat(localPoint, localPoint, invQuatB);
+    const localPointX = localPoint[0] / scaleBX;
+    const localPointY = localPoint[1] / scaleBY;
+    const localPointZ = localPoint[2] / scaleBZ;
+    const childBounds = shapeB.childBounds;
+
     for (let childIndex = 0; childIndex < shapeB.children.length; childIndex++) {
         if (collector.shouldEarlyOut()) {
             break;
+        }
+
+        // skip children whose bounds do not hold the point
+        const offset = childIndex * 6;
+        if (
+            localPointX < childBounds[offset] ||
+            localPointY < childBounds[offset + 1] ||
+            localPointZ < childBounds[offset + 2] ||
+            localPointX > childBounds[offset + 3] ||
+            localPointY > childBounds[offset + 4] ||
+            localPointZ > childBounds[offset + 5]
+        ) {
+            continue;
         }
 
         const child = shapeB.children[childIndex];
@@ -483,9 +647,20 @@ function collidePointVsCompound(
         // accumulate transform
         vec3.set(_collidePointVsCompound_posB, posBX, posBY, posBZ);
         quat.set(_collidePointVsCompound_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_collidePointVsCompound_transformedTranslation, child.position, _collidePointVsCompound_quatB);
+        vec3.set(
+            _collidePointVsCompound_transformedTranslation,
+            child.position[0] * scaleBX,
+            child.position[1] * scaleBY,
+            child.position[2] * scaleBZ,
+        );
+        vec3.transformQuat(
+            _collidePointVsCompound_transformedTranslation,
+            _collidePointVsCompound_transformedTranslation,
+            _collidePointVsCompound_quatB,
+        );
         vec3.add(_collidePointVsCompound_worldPos, _collidePointVsCompound_posB, _collidePointVsCompound_transformedTranslation);
         quat.multiply(_collidePointVsCompound_worldRot, _collidePointVsCompound_quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const childShapeDef = shapeDefs[child.shape.type];
         childShapeDef.collidePoint(
@@ -504,9 +679,9 @@ function collidePointVsCompound(
             _collidePointVsCompound_worldRot[1],
             _collidePointVsCompound_worldRot[2],
             _collidePointVsCompound_worldRot[3],
-            scaleBX,
-            scaleBY,
-            scaleBZ,
+            childScale[0],
+            childScale[1],
+            childScale[2],
         );
     }
 }
@@ -514,6 +689,7 @@ function collidePointVsCompound(
 /* collide shape */
 
 const _transformedTranslation = /* @__PURE__ */ vec3.create();
+const _queryBounds = /* @__PURE__ */ box3.create();
 
 function collideCompoundVsShape(
     collector: CollideShapeCollector,
@@ -547,9 +723,39 @@ function collideCompoundVsShape(
 ): void {
     const compound = shapeA as CompoundShape;
 
+    // b's bounds in a's unscaled space, held in locals as a nested compound rewrites the scratch
+    const queryBounds = _queryBounds;
+    // biome-ignore format: pretty
+    boundsInCompoundSpace(
+        queryBounds, shapeB,
+        posBX, posBY, posBZ, quatBX, quatBY, quatBZ, quatBW, scaleBX, scaleBY, scaleBZ,
+        posAX, posAY, posAZ, quatAX, quatAY, quatAZ, quatAW, scaleAX, scaleAY, scaleAZ,
+        settings.maxSeparationDistance,
+    );
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+    const childBounds = compound.childBounds;
+
     for (let childIndex = 0; childIndex < compound.children.length; childIndex++) {
         if (collector.shouldEarlyOut()) {
             break;
+        }
+
+        // skip children whose bounds the other shape's bounds miss
+        const offset = childIndex * 6;
+        if (
+            childBounds[offset] > queryMaxX ||
+            childBounds[offset + 1] > queryMaxY ||
+            childBounds[offset + 2] > queryMaxZ ||
+            childBounds[offset + 3] < queryMinX ||
+            childBounds[offset + 4] < queryMinY ||
+            childBounds[offset + 5] < queryMinZ
+        ) {
+            continue;
         }
 
         const child = compound.children[childIndex];
@@ -561,9 +767,11 @@ function collideCompoundVsShape(
         // accumulate transform
         vec3.set(_posA, posAX, posAY, posAZ);
         quat.set(_quatA, quatAX, quatAY, quatAZ, quatAW);
-        vec3.transformQuat(_transformedTranslation, child.position, _quatA);
+        vec3.set(_transformedTranslation, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+        vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatA);
         vec3.add(_worldPos, _posA, _transformedTranslation);
         quat.multiply(_worldRot, _quatA, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
         const fn = collisionDispatch.collideFns.get(child.shape.type)?.get(shapeB.type);
         if (fn) {
@@ -580,9 +788,9 @@ function collideCompoundVsShape(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleAX,
-                scaleAY,
-                scaleAZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
                 shapeB,
                 subShapeIdB,
                 subShapeIdBitsB,
@@ -633,9 +841,39 @@ function collideShapeVsCompound(
 ): void {
     const compound = shapeB as CompoundShape;
 
+    // a's bounds in b's unscaled space, held in locals as a nested compound rewrites the scratch
+    const queryBounds = _queryBounds;
+    // biome-ignore format: pretty
+    boundsInCompoundSpace(
+        queryBounds, shapeA,
+        posAX, posAY, posAZ, quatAX, quatAY, quatAZ, quatAW, scaleAX, scaleAY, scaleAZ,
+        posBX, posBY, posBZ, quatBX, quatBY, quatBZ, quatBW, scaleBX, scaleBY, scaleBZ,
+        settings.maxSeparationDistance,
+    );
+    const queryMinX = queryBounds[0];
+    const queryMinY = queryBounds[1];
+    const queryMinZ = queryBounds[2];
+    const queryMaxX = queryBounds[3];
+    const queryMaxY = queryBounds[4];
+    const queryMaxZ = queryBounds[5];
+    const childBounds = compound.childBounds;
+
     for (let childIndex = 0; childIndex < compound.children.length; childIndex++) {
         if (collector.shouldEarlyOut()) {
             break;
+        }
+
+        // skip children whose bounds the other shape's bounds miss
+        const offset = childIndex * 6;
+        if (
+            childBounds[offset] > queryMaxX ||
+            childBounds[offset + 1] > queryMaxY ||
+            childBounds[offset + 2] > queryMaxZ ||
+            childBounds[offset + 3] < queryMinX ||
+            childBounds[offset + 4] < queryMinY ||
+            childBounds[offset + 5] < queryMinZ
+        ) {
+            continue;
         }
 
         const child = compound.children[childIndex];
@@ -647,9 +885,11 @@ function collideShapeVsCompound(
         // accumulate transform
         vec3.set(_posB, posBX, posBY, posBZ);
         quat.set(_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_transformedTranslation, child.position, _quatB);
+        vec3.set(_transformedTranslation, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+        vec3.transformQuat(_transformedTranslation, _transformedTranslation, _quatB);
         vec3.add(_worldPos, _posB, _transformedTranslation);
         quat.multiply(_worldRot, _quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const fn = collisionDispatch.collideFns.get(shapeA.type)?.get(child.shape.type);
         if (fn) {
@@ -679,9 +919,9 @@ function collideShapeVsCompound(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleBX,
-                scaleBY,
-                scaleBZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
             );
         }
     }
@@ -693,11 +933,11 @@ const _subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 const _worldPos = /* @__PURE__ */ vec3.create();
 const _worldRot = /* @__PURE__ */ quat.create();
 const _castDecorated_temp = /* @__PURE__ */ vec3.create();
-const _transformDisplacementA = /* @__PURE__ */ vec3.create();
 
 const _posA = /* @__PURE__ */ vec3.create();
 const _quatA = /* @__PURE__ */ quat.create();
-const _displacementA = /* @__PURE__ */ vec3.create();
+const _castShapeVsCompound_invQuatB = /* @__PURE__ */ quat.create();
+const _castShapeVsCompound_localDisplacement = /* @__PURE__ */ vec3.create();
 const _posB = /* @__PURE__ */ vec3.create();
 const _quatB = /* @__PURE__ */ quat.create();
 
@@ -750,13 +990,11 @@ function castCompoundVsShape(
         // accumulate transform
         vec3.set(_posA, posAX, posAY, posAZ);
         quat.set(_quatA, quatAX, quatAY, quatAZ, quatAW);
-        vec3.transformQuat(_castDecorated_temp, child.position, _quatA);
+        vec3.set(_castDecorated_temp, child.position[0] * scaleAX, child.position[1] * scaleAY, child.position[2] * scaleAZ);
+        vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatA);
         vec3.add(_worldPos, _posA, _castDecorated_temp);
         quat.multiply(_worldRot, _quatA, child.quaternion);
-
-        // transform displacement - rotate by accumulated quaternion
-        vec3.set(_displacementA, dispAX, dispAY, dispAZ);
-        vec3.transformQuat(_transformDisplacementA, _displacementA, _quatA);
+        const childScale = transformScale(_childScale, child.quaternion, scaleAX, scaleAY, scaleAZ);
 
         const fn = collisionDispatch.castFns.get(child.shape.type)?.get(shapeB.type);
         if (fn) {
@@ -773,9 +1011,9 @@ function castCompoundVsShape(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleAX,
-                scaleAY,
-                scaleAZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
                 dispAX,
                 dispAY,
                 dispAZ,
@@ -832,9 +1070,48 @@ function castShapeVsCompound(
 ): void {
     const compound = shapeB as CompoundShape;
 
+    // a's bounds at the start of the cast and its displacement in b's unscaled space: the children are
+    // culled by sweeping the centre of those bounds against child bounds grown by their extent
+    const queryBounds = _queryBounds;
+    // biome-ignore format: pretty
+    boundsInCompoundSpace(
+        queryBounds, shapeA,
+        posAX, posAY, posAZ, quatAX, quatAY, quatAZ, quatAW, scaleAX, scaleAY, scaleAZ,
+        posBX, posBY, posBZ, quatBX, quatBY, quatBZ, quatBW, scaleBX, scaleBY, scaleBZ,
+        0,
+    );
+    const centerX = (queryBounds[0] + queryBounds[3]) * 0.5;
+    const centerY = (queryBounds[1] + queryBounds[4]) * 0.5;
+    const centerZ = (queryBounds[2] + queryBounds[5]) * 0.5;
+    // grown by the extra convex radius, in the unscaled space
+    const extra = settings.extraConvexRadius;
+    const extentX = (queryBounds[3] - queryBounds[0]) * 0.5 + extra / Math.abs(scaleBX);
+    const extentY = (queryBounds[4] - queryBounds[1]) * 0.5 + extra / Math.abs(scaleBY);
+    const extentZ = (queryBounds[5] - queryBounds[2]) * 0.5 + extra / Math.abs(scaleBZ);
+    const invQuatB = quat.set(_castShapeVsCompound_invQuatB, -quatBX, -quatBY, -quatBZ, quatBW);
+    const localDisplacement = vec3.set(_castShapeVsCompound_localDisplacement, dispAX, dispAY, dispAZ);
+    vec3.transformQuat(localDisplacement, localDisplacement, invQuatB);
+    const invDispX = safeReciprocal(localDisplacement[0] / scaleBX);
+    const invDispY = safeReciprocal(localDisplacement[1] / scaleBY);
+    const invDispZ = safeReciprocal(localDisplacement[2] / scaleBZ);
+    const childBounds = compound.childBounds;
+
     for (let childIndex = 0; childIndex < compound.children.length; childIndex++) {
         if (collector.earlyOutFraction <= -Infinity) {
             break;
+        }
+
+        // skip children the swept bounds cannot reach before the closest hit so far
+        const offset = childIndex * 6;
+        // biome-ignore format: pretty
+        const childFraction = rayFractionToBox3(
+            centerX, centerY, centerZ,
+            invDispX, invDispY, invDispZ,
+            childBounds[offset] - extentX, childBounds[offset + 1] - extentY, childBounds[offset + 2] - extentZ,
+            childBounds[offset + 3] + extentX, childBounds[offset + 4] + extentY, childBounds[offset + 5] + extentZ,
+        );
+        if (childFraction >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
+            continue;
         }
 
         const child = compound.children[childIndex];
@@ -846,9 +1123,11 @@ function castShapeVsCompound(
         // accumulate transform
         vec3.set(_posB, posBX, posBY, posBZ);
         quat.set(_quatB, quatBX, quatBY, quatBZ, quatBW);
-        vec3.transformQuat(_castDecorated_temp, child.position, _quatB);
+        vec3.set(_castDecorated_temp, child.position[0] * scaleBX, child.position[1] * scaleBY, child.position[2] * scaleBZ);
+        vec3.transformQuat(_castDecorated_temp, _castDecorated_temp, _quatB);
         vec3.add(_worldPos, _posB, _castDecorated_temp);
         quat.multiply(_worldRot, _quatB, child.quaternion);
+        const childScale = transformScale(_childScale, child.quaternion, scaleBX, scaleBY, scaleBZ);
 
         const fn = collisionDispatch.castFns.get(shapeA.type)?.get(child.shape.type);
         if (fn) {
@@ -881,9 +1160,9 @@ function castShapeVsCompound(
                 _worldRot[1],
                 _worldRot[2],
                 _worldRot[3],
-                scaleBX,
-                scaleBY,
-                scaleBZ,
+                childScale[0],
+                childScale[1],
+                childScale[2],
             );
         }
     }

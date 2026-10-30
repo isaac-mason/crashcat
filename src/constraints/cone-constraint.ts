@@ -1,8 +1,10 @@
-import type { Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
 import type { RigidBody } from '../body/rigid-body';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -18,13 +20,16 @@ import * as angleConstraintPart from './constraint-part/angle-constraint-part';
 import type { PointConstraintPart } from './constraint-part/point-constraint-part';
 import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /**
@@ -113,7 +118,7 @@ export type ConeConstraintSettings = {
     halfConeAngle?: number;
     /** constraint space @default ConstraintSpace.WORLD */
     space?: ConstraintSpace;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -121,30 +126,9 @@ export type ConeConstraintSettings = {
     numPositionStepsOverride?: number;
 };
 
-/** get a normalized perpendicular vector to the given vector */
-function getNormalizedPerpendicular(out: Vec3, v: Vec3): Vec3 {
-    // find the smallest component and cross with that basis vector
-    const ax = Math.abs(v[0]);
-    const ay = Math.abs(v[1]);
-    const az = Math.abs(v[2]);
-
-    if (ax <= ay && ax <= az) {
-        // X is smallest - cross with X axis
-        vec3.set(out, 0, -v[2], v[1]);
-    } else if (ay <= az) {
-        // Y is smallest - cross with Y axis
-        vec3.set(out, v[2], 0, -v[0]);
-    } else {
-        // Z is smallest - cross with Z axis
-        vec3.set(out, -v[1], v[0], 0);
-    }
-
-    vec3.normalize(out, out);
-    return out;
-}
-
 /** Create a cone constraint */
 export function create(world: World, settings: ConeConstraintSettings): ConeConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<ConeConstraint>(world.constraints, ConstraintType.CONE);
     const bodies = world.bodies;
 
@@ -191,12 +175,11 @@ export function create(world: World, settings: ConeConstraintSettings): ConeCons
     vec3.normalize(twistAxis2, settings.twistAxisB);
 
     // set cone limit
-    const halfConeAngle = settings.halfConeAngle ?? 0;
-    constraint.cosHalfConeAngle = Math.cos(halfConeAngle);
+    setHalfConeAngle(constraint, settings.halfConeAngle ?? 0);
 
     // initialize rotation axis to perpendicular of twist axis
     // (used when twist axes are nearly parallel and cross product would be zero)
-    getNormalizedPerpendicular(constraint.worldSpaceRotationAxis, twistAxis1);
+    vec3.perpendicular(constraint.worldSpaceRotationAxis, twistAxis1);
 
     // convert to local space if needed
     const space = settings.space ?? ConstraintSpace.WORLD;
@@ -239,6 +222,7 @@ export function create(world: World, settings: ConeConstraintSettings): ConeCons
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -263,6 +247,7 @@ export function remove(world: World, constraint: ConeConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -284,7 +269,8 @@ export function get(world: World, id: ConstraintId): ConeConstraint | undefined 
  * @param halfConeAngle half cone angle in radians (0 to π)
  */
 export function setHalfConeAngle(constraint: ConeConstraint, halfConeAngle: number): void {
-    constraint.cosHalfConeAngle = Math.cos(Math.max(0, Math.min(Math.PI, halfConeAngle)));
+    assert(halfConeAngle >= 0 && halfConeAngle <= Math.PI, 'half cone angle must be in [0, pi]');
+    constraint.cosHalfConeAngle = Math.cos(halfConeAngle);
 }
 
 /** get the cosine of half cone angle */
@@ -320,9 +306,9 @@ function calculateRotationConstraintProperties(constraint: ConeConstraint, bodyA
         // rotation axis is t2 × t1 (cross product)
         vec3.cross(_cone_rotAxis, _cone_twist2, _cone_twist1);
 
-        // if we can't find a rotation axis (twist axes nearly parallel), use last frame's axis
+        // if we can't find a rotation axis because the twist is too small, use last frame's axis
         const len = vec3.length(_cone_rotAxis);
-        if (len > 1e-6) {
+        if (len > 0) {
             vec3.scale(constraint.worldSpaceRotationAxis, _cone_rotAxis, 1 / len);
         }
         // else keep previous worldSpaceRotationAxis
@@ -357,6 +343,7 @@ function setupVelocity(constraint: ConeConstraint, bodies: Bodies, _deltaTime: n
         bodyB,
         _cone_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 
     // setup rotation constraint (cone limit)
@@ -421,6 +408,7 @@ function solvePosition(constraint: ConeConstraint, bodies: Bodies, _deltaTime: n
         bodyB,
         _cone_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 
@@ -475,6 +463,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();

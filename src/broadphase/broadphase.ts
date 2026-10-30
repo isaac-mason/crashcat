@@ -1,8 +1,10 @@
-import { type Box3, box3, type Vec3 } from 'mathcat';
+import type { Mat4, Vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { RigidBody } from '../body/rigid-body';
 import type { Filter } from '../filter';
 import * as filter from '../filter';
 import type { Layers } from '../layers';
+import * as pairs from '../pairs';
 import { assert } from '../utils/assert';
 import type { World } from '../world';
 import type { BodyVisitor } from './body-visitor';
@@ -101,13 +103,24 @@ export function updateBody(broadphase: Broadphase, body: RigidBody): boolean {
     return dbvt.update(tree, body);
 }
 
+/**
+ * publish a body's current world aabb to its broadphase leaf, so queries and pair discovery see it.
+ * the step calls this once per body per step, from the island pass.
+ */
+export function notifyBodyBoundsChanged(world: World, body: RigidBody): void {
+    if (updateBody(world.broadphase, body)) {
+        // escaped its fat leaf: rediscover overlaps next findCollidingPairs
+        pairs.markMoved(world.pairs, body);
+    }
+}
+
 /** removes and re-adds a body in the broadphase when its layer changes */
 export function reinsertBody(broadphase: Broadphase, body: RigidBody, layers: Layers): void {
     removeBody(broadphase, body);
     addBody(broadphase, body, layers);
 }
 
-/** finds bodies with AABBs that intersect the given ray */
+/** finds bodies with AABBs that intersect the given ray, the visitor given where the ray entered each */
 export function castRay(
     world: World,
     origin: Vec3,
@@ -154,7 +167,39 @@ export function intersectPoint(world: World, point: Vec3, queryFilter: Filter, v
     }
 }
 
-/** finds bodies with AABBs that intersect the given swept AABB */
+/** a box turned and moved by `orientation` (rotation and translation, no scale), `halfExtents` along its own axes, as jolt's OrientedBox */
+export type OrientedBox = {
+    orientation: Mat4;
+    halfExtents: Vec3;
+};
+
+/** finds bodies with AABBs within radius of the centre */
+export function intersectSphere(world: World, center: Vec3, radius: number, queryFilter: Filter, visitor: BodyVisitor): void {
+    for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
+        if (!filter.filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
+
+        const tree = world.broadphase.dbvts[broadphaseLayer];
+
+        dbvt.intersectSphere(world, tree, center, radius, queryFilter, visitor);
+
+        if (visitor.shouldExit) break;
+    }
+}
+
+/** finds bodies with AABBs that overlap the oriented box */
+export function intersectOrientedBox(world: World, box: OrientedBox, queryFilter: Filter, visitor: BodyVisitor): void {
+    for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
+        if (!filter.filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;
+
+        const tree = world.broadphase.dbvts[broadphaseLayer];
+
+        dbvt.intersectOrientedBox(world, tree, box, queryFilter, visitor);
+
+        if (visitor.shouldExit) break;
+    }
+}
+
+/** finds bodies with AABBs that intersect the given swept AABB, the visitor given where the sweep entered each */
 export function castAABB(world: World, bounds: Box3, displacement: Vec3, queryFilter: Filter, visitor: BodyVisitor): void {
     for (let broadphaseLayer = 0; broadphaseLayer < world.broadphase.dbvts.length; broadphaseLayer++) {
         if (!filter.filterBroadphaseLayer(queryFilter, broadphaseLayer)) continue;

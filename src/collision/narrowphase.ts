@@ -296,8 +296,7 @@ export function collideShapeVsShapeWithInternalEdgeRemoval(
     _internalEdgeRemoval_modifiedSettings.collectFaces = true; // must collect faces
 
     // setup reusable wrapper collector
-    _internalEdgeRemovingCollector.reset();
-    _internalEdgeRemovingCollector.set(collector);
+    _internalEdgeRemovingCollector.set(collector, settings.internalEdgeRemovalVertexToleranceSq);
 
     // delegate to standard collision
     collideShapeVsShape(

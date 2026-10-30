@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import {
@@ -12,7 +12,7 @@ import {
     rigidBody,
     updateWorld,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* rendering */

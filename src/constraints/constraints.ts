@@ -1,4 +1,5 @@
 import type { Bodies } from '../body/bodies';
+import { MotionType } from '../body/motion-type';
 import type { World } from '../world';
 import type { ConeConstraint } from './cone-constraint';
 import {
@@ -53,13 +54,42 @@ export type ConstraintPool<C extends ConstraintBase = ConstraintBase> = {
 /** the constraint pools container - keyed by type for monomorphic iteration */
 export type Constraints = {
     pools: Partial<Record<ConstraintType, ConstraintPool>>;
+    /** every live constraint, in creation order but for removal moving the last into the gap, as jolt's constraint manager */
+    list: ConstraintId[];
 };
 
 /** initialize empty constraints */
 export function init(): Constraints {
     return {
         pools: {},
+        list: [],
     };
+}
+
+/** whether a priority fits jolt's uint32 */
+export function isValidConstraintPriority(priority: number): boolean {
+    return Number.isInteger(priority) && priority >= 0 && priority <= 0xffffffff;
+}
+
+/** appends the constraint to the list */
+export function addToList(constraints: Constraints, constraint: ConstraintBase): void {
+    constraint.listIndex = constraints.list.length;
+    constraints.list.push(constraint.id);
+}
+
+/** takes the constraint out of the list, the last one moving into its place */
+export function removeFromList(constraints: Constraints, constraint: ConstraintBase): void {
+    const listIndex = constraint.listIndex;
+    if (listIndex === -1) return;
+    const lastIndex = constraints.list.length - 1;
+    if (listIndex !== lastIndex) {
+        const lastId = constraints.list[lastIndex];
+        constraints.list[listIndex] = lastId;
+        const pool = constraints.pools[getConstraintIdType(lastId)]!;
+        pool.constraints[getConstraintIdIndex(lastId)].listIndex = listIndex;
+    }
+    constraints.list.length = lastIndex;
+    constraint.listIndex = -1;
 }
 
 /** result type for constraint iteration overrides */
@@ -186,6 +216,8 @@ export function removeConstraintById(world: World, constraintId: ConstraintId): 
             removeConstraintIdFromBody(bodyB, constraint.id);
         }
 
+        removeFromList(world.constraints, constraint);
+
         // return to pool
         pool.freeIndices.push(index);
         constraint._pooled = true;
@@ -268,7 +300,10 @@ export function updateSleeping(constraintsState: Constraints, bodies: Bodies): v
             if (constraint._pooled) continue;
             const bodyA = bodies.pool[constraint.bodyIndexA];
             const bodyB = bodies.pool[constraint.bodyIndexB];
-            constraint._sleeping = bodyA.sleeping && bodyB.sleeping;
+            // asleep unless a body is active; a static body never is
+            constraint._sleeping =
+                (bodyA.motionType === MotionType.STATIC || bodyA.sleeping) &&
+                (bodyB.motionType === MotionType.STATIC || bodyB.sleeping);
         }
     }
 }
@@ -286,16 +321,20 @@ export function setupVelocityConstraints(constraintsState: Constraints, bodies: 
     }
 }
 
-/** warm start velocity constraints for all active user constraints */
-export function warmStartVelocityConstraints(constraintsState: Constraints, bodies: Bodies, warmStartImpulseRatio: number): void {
-    for (const type in constraintsState.pools) {
-        const pool = constraintsState.pools[type as unknown as ConstraintType]!;
-        const def = constraintDefs[pool.type]!;
-        for (const constraint of pool.constraints) {
-            if (!constraint._pooled && constraint.enabled && !constraint._sleeping) {
-                def.warmStartVelocity(constraint, bodies, warmStartImpulseRatio);
-            }
-        }
+/** warm start velocity constraints for an island's user constraints, in their solve order */
+export function warmStartVelocityConstraints(
+    constraints: Constraints,
+    bodies: Bodies,
+    constraintIds: ConstraintId[],
+    warmStartImpulseRatio: number,
+): void {
+    for (const constraintId of constraintIds) {
+        const type = getConstraintIdType(constraintId);
+        const index = getConstraintIdIndex(constraintId);
+        const def = constraintDefs[type];
+        const pool = constraints.pools[type];
+        if (!pool || !def) continue;
+        def.warmStartVelocity(pool.constraints[index], bodies, warmStartImpulseRatio);
     }
 }
 
@@ -370,10 +409,13 @@ export type ConstraintBase = {
     /** sequence number from constraint ID */
     sequence: number;
 
+    /** the place in Constraints.list, which orders the solve at equal priority, as jolt's constraint index; -1 when not in it */
+    listIndex: number;
+
     /** whether constraint is enabled */
     enabled: boolean;
 
-    /** constraint priority (higher = solved first) */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold */
     constraintPriority: number;
 
     /** velocity iteration override (0 = use default) */
@@ -412,6 +454,7 @@ export function makeConstraintBase(): ConstraintBase {
         id: INVALID_CONSTRAINT_ID,
         index: -1,
         sequence: -1,
+        listIndex: -1,
         enabled: true,
         constraintPriority: 0,
         numVelocityStepsOverride: 0,

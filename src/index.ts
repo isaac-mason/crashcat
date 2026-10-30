@@ -18,6 +18,7 @@ export { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 export type { BodyVisitor } from './broadphase/body-visitor';
 export * as broadphase from './broadphase/broadphase';
 export * as dbvt from './broadphase/dbvt';
+export * as broadphaseQuery from './broadphase-query';
 export type { KCC, KCCSettings } from './character/kcc';
 export * as kcc from './character/kcc';
 export * as activeEdges from './collision/active-edges';
@@ -55,6 +56,7 @@ export type {
     ContactSettings,
     WorldContactPoint,
 } from './constraints/contact-constraints';
+export { createContactSettings } from './constraints/contact-constraints';
 export type { DistanceConstraint, DistanceConstraintSettings } from './constraints/distance-constraint';
 export * as distanceConstraint from './constraints/distance-constraint';
 export type { FixedConstraint, FixedConstraintSettings } from './constraints/fixed-constraint';

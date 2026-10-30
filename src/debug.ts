@@ -1,4 +1,4 @@
-import { type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { type Quat, quat, type Vec3, vec3 } from 'math';
 import { MotionType } from './body/motion-type';
 import type { RigidBody } from './body/rigid-body';
 import type { ConeConstraint } from './constraints/cone-constraint';
@@ -11,7 +11,7 @@ import type { SixDOFConstraint } from './constraints/six-dof-constraint';
 import type { SliderConstraint } from './constraints/slider-constraint';
 import type { SwingTwistConstraint } from './constraints/swing-twist-constraint';
 import type { Shape } from './shapes/shapes';
-import { ShapeType } from './shapes/shapes';
+import { ShapeType, transformScale } from './shapes/shapes';
 import type { World } from './world';
 
 export enum BodyColorMode {
@@ -544,6 +544,8 @@ function drawShape(
                 vec3.multiply(localPos, localPos, scale);
                 const rotatedPos = vec3.create();
                 vec3.transformQuat(rotatedPos, localPos, parentQ);
+                // the parent's scale as the child sees it in its own space, as collision does
+                const childScale = transformScale(vec3.create(), childLocalQ, sx, sy, sz);
                 drawShape(
                     out,
                     child.shape,
@@ -554,9 +556,9 @@ function drawShape(
                     combined[1],
                     combined[2],
                     combined[3],
-                    sx,
-                    sy,
-                    sz,
+                    childScale[0],
+                    childScale[1],
+                    childScale[2],
                     r,
                     g,
                     b,
@@ -575,6 +577,7 @@ function drawShape(
             vec3.multiply(localPos, localPos, scale);
             const rotatedPos = vec3.create();
             vec3.transformQuat(rotatedPos, localPos, parentQ);
+            const innerScale = transformScale(vec3.create(), childLocalQ, sx, sy, sz);
             drawShape(
                 out,
                 shape.shape,
@@ -585,9 +588,9 @@ function drawShape(
                 combined[1],
                 combined[2],
                 combined[3],
-                sx,
-                sy,
-                sz,
+                innerScale[0],
+                innerScale[1],
+                innerScale[2],
                 r,
                 g,
                 b,
@@ -652,6 +655,21 @@ function pushConstraintMarker(out: LineBuffer, pos: Vec3, size: number, r: numbe
 
 function pushConstraintLine(out: LineBuffer, from: Vec3, to: Vec3, r: number, g: number, b: number): void {
     pushLine(out, from[0], from[1], from[2], to[0], to[1], to[2], r, g, b);
+}
+
+function pushConstraintAxis(out: LineBuffer, from: Vec3, direction: Vec3, length: number, r: number, g: number, b: number): void {
+    pushLine(
+        out,
+        from[0],
+        from[1],
+        from[2],
+        from[0] + direction[0] * length,
+        from[1] + direction[1] * length,
+        from[2] + direction[2] * length,
+        r,
+        g,
+        b,
+    );
 }
 
 const _pieRotationQuat = /* @__PURE__ */ quat.create();
@@ -912,17 +930,10 @@ export function contactConstraints(world: World, _options?: Partial<ContactConst
                 constraint.frictionConstraint2.totalLambda !== 0 ||
                 constraint.angularFrictionConstraint.totalLambda !== 0;
 
-            // point A — cyan (bright if active)
-            const ar = hasImpulse ? 0 : 0;
-            const ag = hasImpulse ? 1 : 0.4;
-            const ab = hasImpulse ? 1 : 0.6;
-            pushCross(out, ax, ay, az, hasImpulse ? 0.04 : 0.02, ar, ag, ab);
-
-            // point B — magenta
-            const br2 = hasImpulse ? 1 : 0.5;
-            const bg2 = hasImpulse ? 0 : 0;
-            const bb2 = hasImpulse ? 1 : 0.5;
-            pushCross(out, bx, by, bz, hasImpulse ? 0.04 : 0.02, br2, bg2, bb2);
+            // point A cyan, point B magenta, both brighter and bigger when the point carries an impulse
+            const crossSize = hasImpulse ? 0.04 : 0.02;
+            pushCross(out, ax, ay, az, crossSize, 0, hasImpulse ? 1 : 0.4, hasImpulse ? 1 : 0.6);
+            pushCross(out, bx, by, bz, crossSize, hasImpulse ? 1 : 0.5, 0, hasImpulse ? 1 : 0.5);
 
             // edge between consecutive A points — yellow
             if (hasPrev) {
@@ -992,52 +1003,32 @@ export function joints(world: World, options?: Partial<JointsOptions>): DebugRen
             transformPointToWorld(_constraintPointA, constraint.localSpacePosition1, xfA);
             transformPointToWorld(_constraintPointB, constraint.localSpacePosition2, xfB);
             transformDirectionToWorld(_constraintDirA, constraint.localSpaceHingeAxis1, xfA);
+            transformDirectionToWorld(_constraintDirB, constraint.localSpaceHingeAxis2, xfB);
 
+            // a's pivot and hinge axis in red, b's in green
             pushConstraintMarker(out, _constraintPointA, size * 0.1, 1, 0, 0);
-            pushLine(
-                out,
-                _constraintPointA[0],
-                _constraintPointA[1],
-                _constraintPointA[2],
-                _constraintPointA[0] + _constraintDirA[0] * size,
-                _constraintPointA[1] + _constraintDirA[1] * size,
-                _constraintPointA[2] + _constraintDirA[2] * size,
-                1,
-                0,
-                0,
-            );
+            pushConstraintAxis(out, _constraintPointA, _constraintDirA, size, 1, 0, 0);
             pushConstraintMarker(out, _constraintPointB, size * 0.1, 0, 1, 0);
+            pushConstraintAxis(out, _constraintPointB, _constraintDirB, size, 0, 1, 0);
 
-            // normal axis ref line + optional pie limits
-            vec3.transformQuat(_constraintNormalAxis, constraint.localSpaceNormalAxis1 as Vec3, xfA.quaternion);
-            pushLine(
-                out,
-                _constraintPointB[0],
-                _constraintPointB[1],
-                _constraintPointB[2],
-                _constraintPointB[0] + _constraintNormalAxis[0] * size,
-                _constraintPointB[1] + _constraintNormalAxis[1] * size,
-                _constraintPointB[2] + _constraintNormalAxis[2] * size,
-                1,
-                1,
-                1,
-            );
-            if (drawLimits && (constraint as HingeConstraint & { hasLimits?: boolean }).hasLimits) {
-                const c = constraint as HingeConstraint & { limitsMin: number; limitsMax: number };
-                if (c.limitsMax > c.limitsMin) {
-                    drawPie(
-                        out,
-                        _constraintPointA,
-                        size,
-                        _constraintDirA,
-                        _constraintNormalAxis,
-                        c.limitsMin,
-                        c.limitsMax,
-                        0.5,
-                        0,
-                        0.5,
-                    );
-                }
+            // b's normal axis, which turns against a's limit pie as the hinge swings
+            transformDirectionToWorld(_constraintNormalAxis, constraint.localSpaceNormalAxis2, xfB);
+            pushConstraintAxis(out, _constraintPointB, _constraintNormalAxis, size, 1, 1, 1);
+
+            if (drawLimits && constraint.hasLimits && constraint.limitsMax > constraint.limitsMin) {
+                transformDirectionToWorld(_constraintNormalAxis, constraint.localSpaceNormalAxis1, xfA);
+                drawPie(
+                    out,
+                    _constraintPointA,
+                    size,
+                    _constraintDirA,
+                    _constraintNormalAxis,
+                    constraint.limitsMin,
+                    constraint.limitsMax,
+                    0.5,
+                    0,
+                    0.5,
+                );
             }
         }
     }

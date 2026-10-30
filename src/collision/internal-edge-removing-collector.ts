@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import type { Face } from '../utils/face';
 import { pool } from '../utils/pool';
 import {
@@ -11,8 +11,8 @@ import {
 // cosine of 1 degree (for face contact detection threshold)
 const COS_1_DEGREE = Math.cos((1 * Math.PI) / 180);
 
-// epsilon for floating point comparisons
-const FLT_EPSILON = 1e-6;
+// f32 machine epsilon
+const FLT_EPSILON = 1.1920929e-7;
 const FLT_EPSILON_SQ = FLT_EPSILON * FLT_EPSILON;
 
 const _faceV0 = /* @__PURE__ */ vec3.create();
@@ -82,6 +82,8 @@ export class InternalEdgeRemovingCollector implements CollideShapeCollector {
     private chainedCollector: CollideShapeCollector = null!;
     private voidedFeatures: VoidedFeature[] = [];
     private delayedResults: CollideShapeHit[] = [];
+    /** max squared distance to consider a vertex to be the same as another vertex, used to determine if a feature is voided */
+    private vertexToleranceSq = 0;
 
     addHit(hit: CollideShapeHit): void {
         // 1. degenerate check - faces with < 3 vertices can't have internal edges
@@ -165,6 +167,34 @@ export class InternalEdgeRemovingCollector implements CollideShapeCollector {
         }
 
         // 7. clear for next body
+        this.clear();
+    }
+
+    /**
+     * reset the collector state, and the chained collector's
+     */
+    reset(): void {
+        this.earlyOutFraction = Number.MAX_VALUE;
+        this.bodyIdB = -1;
+        this.chainedCollector.reset?.();
+        this.clear();
+    }
+
+    /**
+     * set the chained collector and the vertex tolerance (for reusing the wrapper)
+     * @param chainedCollector collector that receives all the results that do not hit internal edges
+     * @param vertexToleranceSq max squared distance to consider a vertex to be the same as another vertex
+     */
+    set(chainedCollector: CollideShapeCollector, vertexToleranceSq: number): void {
+        this.chainedCollector = chainedCollector;
+        this.vertexToleranceSq = vertexToleranceSq;
+        this.earlyOutFraction = chainedCollector.earlyOutFraction;
+        this.bodyIdB = chainedCollector.bodyIdB;
+        this.clear();
+    }
+
+    /** release the delayed results and voided features */
+    private clear(): void {
         for (const result of this.delayedResults) {
             delayedResultsPool.release(result);
         }
@@ -173,25 +203,6 @@ export class InternalEdgeRemovingCollector implements CollideShapeCollector {
         }
         this.voidedFeatures.length = 0;
         this.delayedResults.length = 0;
-    }
-
-    /**
-     * reset the collector state
-     */
-    reset(): void {
-        this.voidedFeatures.length = 0;
-        this.delayedResults.length = 0;
-        this.earlyOutFraction = Number.MAX_VALUE;
-        this.bodyIdB = -1;
-    }
-
-    /**
-     * set the chained collector (for reusing the wrapper)
-     */
-    set(chainedCollector: CollideShapeCollector): void {
-        this.chainedCollector = chainedCollector;
-        this.earlyOutFraction = chainedCollector.earlyOutFraction;
-        this.bodyIdB = chainedCollector.bodyIdB;
     }
 
     /**
@@ -290,7 +301,7 @@ export class InternalEdgeRemovingCollector implements CollideShapeCollector {
     /** check if a feature (vertex) is voided */
     private isVoided(subShapeId: number, feature: Vec3): boolean {
         for (const vf of this.voidedFeatures) {
-            if (vf.subShapeId === subShapeId && vec3.squaredDistance(vf.feature, feature) < 1e-16) {
+            if (vf.subShapeId === subShapeId && vec3.squaredDistance(vf.feature, feature) <= this.vertexToleranceSq) {
                 return true;
             }
         }

@@ -1,7 +1,10 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat4, quat, vec3 } from 'math';
 import type { Bodies } from '../body/bodies';
 import { type BodyId, getBodyIdIndex } from '../body/body-id';
+import { STEP_STAMP_NONE } from '../body/motion-properties';
+import { MotionType } from '../body/motion-type';
+import { assert } from '../utils/assert';
 import type { World } from '../world';
 import {
     type ConstraintId,
@@ -17,13 +20,16 @@ import * as pointConstraintPart from './constraint-part/point-constraint-part';
 import type { RotationEulerConstraintPart } from './constraint-part/rotation-euler-constraint-part';
 import * as rotationEulerConstraintPart from './constraint-part/rotation-euler-constraint-part';
 import {
+    addToList,
     type ConstraintBase,
     type ConstraintPool,
     ConstraintSpace,
     defineConstraint,
     ensurePool,
+    isValidConstraintPriority,
     makeConstraintBase,
     removeConstraintIdFromBody,
+    removeFromList,
 } from './constraints';
 
 /**
@@ -98,7 +104,7 @@ export type FixedConstraintSettings = {
      * @default false
      */
     autoDetectPoint?: boolean;
-    /** constraint priority (higher = solved first) @default 0 */
+    /** an integer in [0, 2^32), as jolt's uint32: solved in ascending order, so the highest is solved last and is most likely to hold @default 0 */
     constraintPriority?: number;
     /** override number of velocity solver iterations (0 = use default) @default 0 */
     numVelocityStepsOverride?: number;
@@ -108,6 +114,7 @@ export type FixedConstraintSettings = {
 
 /** create a fixed constraint */
 export function create(world: World, settings: FixedConstraintSettings): FixedConstraint {
+    assert(isValidConstraintPriority(settings.constraintPriority ?? 0), 'constraint priority must be a uint32');
     const pool = ensurePool<FixedConstraint>(world.constraints, ConstraintType.FIXED);
     const bodies = world.bodies;
 
@@ -181,21 +188,25 @@ export function create(world: World, settings: FixedConstraintSettings): FixedCo
             quat.conjugate(invQuatB, bodyB.quaternion);
 
             if (settings.autoDetectPoint) {
-                // auto-detect anchor point based on inverse masses
-                // weighted average towards lighter body (higher invMass = more influence)
+                // if either body is static, anchor on the other body's center of mass.
+                // otherwise weight the anchor towards the lighter body (higher invMass = more influence)
                 const invM1 = bodyA.motionProperties.invMass;
                 const invM2 = bodyB.motionProperties.invMass;
                 const totalInvMass = invM1 + invM2;
 
                 const anchor = vec3.create();
-                if (totalInvMass > 0) {
+                if (bodyA.motionType === MotionType.STATIC) {
+                    vec3.copy(anchor, bodyB.centerOfMassPosition);
+                } else if (bodyB.motionType === MotionType.STATIC) {
+                    vec3.copy(anchor, bodyA.centerOfMassPosition);
+                } else if (totalInvMass > 0) {
                     // weighted average: lighter body (higher invMass) pulls anchor towards it
                     const w1 = invM1 / totalInvMass;
                     const w2 = invM2 / totalInvMass;
                     vec3.scaleAndAdd(anchor, anchor, bodyA.centerOfMassPosition, w1);
                     vec3.scaleAndAdd(anchor, anchor, bodyB.centerOfMassPosition, w2);
                 } else {
-                    // both infinite mass - use body A's position
+                    // both bodies have infinite mass, use body A's position
                     vec3.copy(anchor, bodyA.centerOfMassPosition);
                 }
 
@@ -251,6 +262,7 @@ export function create(world: World, settings: FixedConstraintSettings): FixedCo
     if (constraint.bodyIndexA !== constraint.bodyIndexB) {
         bodyB.constraintIds.push(constraint.id);
     }
+    addToList(world.constraints, constraint);
 
     return constraint;
 }
@@ -275,6 +287,7 @@ export function remove(world: World, constraint: FixedConstraint): void {
 
     constraint._pooled = true;
     constraint.id = INVALID_CONSTRAINT_ID;
+    removeFromList(world.constraints, constraint);
     pool.freeIndices.push(constraint.index);
 }
 
@@ -310,6 +323,7 @@ function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         _fixedConstraint_rotA,
         bodyB,
         _fixedConstraint_rotB,
+        bodies.stepStamp,
     );
 
     // setup point constraint (3 DOF - keeps positions together)
@@ -321,6 +335,7 @@ function setupVelocity(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _fixedConstraint_rotB,
         constraint.localSpacePosition2,
+        bodies.stepStamp,
     );
 }
 
@@ -367,6 +382,7 @@ function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         _fixedConstraint_rotA,
         bodyB,
         _fixedConstraint_rotB,
+        STEP_STAMP_NONE,
     );
     const rot = rotationEulerConstraintPart.solvePositionConstraint(
         constraint.rotationConstraintPart,
@@ -388,6 +404,7 @@ function solvePosition(constraint: FixedConstraint, bodies: Bodies, _deltaTime: 
         bodyB,
         _fixedConstraint_rotB,
         constraint.localSpacePosition2,
+        STEP_STAMP_NONE,
     );
     const pos = pointConstraintPart.solvePositionConstraint(constraint.pointConstraintPart, bodyA, bodyB, baumgarteFactor);
 
@@ -430,6 +447,6 @@ export const def = /* @__PURE__ */ (() =>
         },
         getSortFields: (out, constraint) => {
             out.priority = constraint.constraintPriority;
-            out.index = constraint.index;
+            out.index = constraint.listIndex;
         },
     }))();

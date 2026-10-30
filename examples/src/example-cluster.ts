@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import * as THREE from 'three';
 import type { RigidBody } from 'crashcat';
 import {
@@ -13,7 +13,7 @@ import {
     sphere,
     updateWorld,
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import * as debugUI from './debug/debug-ui';
 
 /* constants */

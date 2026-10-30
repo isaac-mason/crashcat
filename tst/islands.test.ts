@@ -1,6 +1,6 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
-import { INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
+import { box, INACTIVE_BODY_INDEX, MotionType, rigidBody, sphere, updateWorld } from '../src';
 import { createTestWorld } from './helpers';
 
 describe('Islands', () => {
@@ -134,4 +134,81 @@ describe('Islands', () => {
         // bodyOther requests 3 position steps, no body uses 0 -> uses 3
         expect(island2!.numPositionSteps).toBe(3);
     });
+
+    test('body island index names the island that lists the body after islands are sorted', () => {
+        const { world, layers } = createTestWorld();
+
+        const shape = sphere.create({ radius: 0.5 });
+        const create = (x: number, y: number) =>
+            rigidBody.create(world, {
+                shape,
+                objectLayer: layers.OBJECT_LAYER_MOVING,
+                motionType: MotionType.DYNAMIC,
+                position: vec3.fromValues(x, y, 0),
+            });
+
+        // built in this order: a lone body (no contacts), a touching pair (1 contact), a chain of three (2 contacts).
+        // islands sort by contact count, largest first, so the build order reverses
+        const lone = create(20, 0);
+        const pair = [create(10, 0), create(10, 0.9)];
+        const chain = [create(0, 0), create(0, 0.9), create(0, 1.8)];
+
+        updateWorld(world, undefined, 1 / 60);
+
+        const islands = world.islands.islands;
+        expect(islands.length).toBe(3);
+        expect(islands[0].bodyIndices.length).toBe(3);
+        expect(islands[1].bodyIndices.length).toBe(2);
+        expect(islands[2].bodyIndices.length).toBe(1);
+
+        for (let i = 0; i < islands.length; i++) {
+            expect(islands[i].index).toBe(i);
+            for (const activeIndex of islands[i].bodyIndices) {
+                const body = world.bodies.pool[world.bodies.activeBodyIndices[activeIndex]];
+                expect(body.islandIndex).toBe(i);
+            }
+        }
+
+        expect(lone.islandIndex).toBe(2);
+        for (const body of pair) expect(body.islandIndex).toBe(1);
+        for (const body of chain) expect(body.islandIndex).toBe(0);
+    });
+
+    // two dynamic bodies share an island, a kinematic one, or a dynamic one touching only kinematic or static ones, has
+    // an island of its own, a static one none, as jolt's TestContactsVsSimulationIslands
+    const motionTypes = [MotionType.STATIC, MotionType.KINEMATIC, MotionType.DYNAMIC];
+    test.each(motionTypes.flatMap((m1) => motionTypes.flatMap((m2) => motionTypes.map((m3) => [m1, m2, m3]))))(
+        'three touching boxes of motion types %i, %i, %i join only dynamic bodies',
+        (m1, m2, m3) => {
+            const { world, layers } = createTestWorld();
+            vec3.set(world.settings.gravity, 0, 0, 0);
+            const create = (motionType: MotionType, x: number) =>
+                rigidBody.create(world, {
+                    shape: box.create({ halfExtents: vec3.fromValues(1, 1, 1) }),
+                    objectLayer: motionType === MotionType.STATIC ? layers.OBJECT_LAYER_NOT_MOVING : layers.OBJECT_LAYER_MOVING,
+                    motionType,
+                    position: vec3.fromValues(x, 0, 0),
+                });
+            const b1 = create(m1, 0);
+            const b2 = create(m2, 1.99);
+            const b3 = create(m3, 3.98);
+            updateWorld(world, undefined, 1 / 60);
+
+            for (const [outer, other] of [
+                [b1, b3],
+                [b3, b1],
+            ]) {
+                if (outer.motionType === MotionType.DYNAMIC && b2.motionType === MotionType.DYNAMIC) {
+                    expect(outer.islandIndex).toBeGreaterThanOrEqual(0);
+                    expect(outer.islandIndex).toBe(b2.islandIndex);
+                } else if (outer.motionType !== MotionType.STATIC) {
+                    expect(outer.islandIndex).toBeGreaterThanOrEqual(0);
+                    expect(outer.islandIndex).not.toBe(b2.islandIndex);
+                    expect(outer.islandIndex).not.toBe(other.islandIndex);
+                } else {
+                    expect(outer.islandIndex).toBe(-1);
+                }
+            }
+        },
+    );
 });

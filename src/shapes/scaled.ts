@@ -1,4 +1,5 @@
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -12,7 +13,6 @@ import {
     type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -26,6 +26,11 @@ import {
  *
  * note that some shapes only support uniform scaling:
  * - sphere
+ *
+ * compound and transformed shapes scale their children's offsets as well as the children themselves,
+ * and a rotated child gets the scale rotated into its own frame. under a non-uniform scale that only
+ * exists for rotations that keep the scale's axes aligned (multiples of 90 degrees); any other rotation
+ * would need a shear, which no shape supports.
  *
  * non-uniform scaling of a convex hull is supported but significantly slower than uniform scaling:
  * the convex-radius-shrunk vertex set is rebaked per collision pair every frame. prefer uniform scale,
@@ -71,23 +76,20 @@ function computeScaledVolume(shape: ScaledShape): number {
 function computeScaledLocalBounds(out: Box3, shape: ScaledShape): void {
     const innerAABB = shape.shape.aabb;
 
-    const scaleX = Math.abs(shape.scale[0]);
-    const scaleY = Math.abs(shape.scale[1]);
-    const scaleZ = Math.abs(shape.scale[2]);
-
-    out[0] = innerAABB[0] * scaleX;
-    out[1] = innerAABB[1] * scaleY;
-    out[2] = innerAABB[2] * scaleZ;
-
-    out[3] = innerAABB[3] * scaleX;
-    out[4] = innerAABB[4] * scaleY;
-    out[5] = innerAABB[5] * scaleZ;
+    // a negative scale swaps an axis' min and max
+    for (let i = 0; i < 3; i++) {
+        const scaledMin = innerAABB[i] * shape.scale[i];
+        const scaledMax = innerAABB[i + 3] * shape.scale[i];
+        out[i] = Math.min(scaledMin, scaledMax);
+        out[i + 3] = Math.max(scaledMin, scaledMax);
+    }
 }
 
 function computeScaledCenterOfMass(out: Vec3, shape: ScaledShape): void {
-    out[0] = shape.centerOfMass[0] * shape.scale[0];
-    out[1] = shape.centerOfMass[1] * shape.scale[1];
-    out[2] = shape.centerOfMass[2] * shape.scale[2];
+    const innerCenterOfMass = shape.shape.centerOfMass;
+    out[0] = innerCenterOfMass[0] * shape.scale[0];
+    out[1] = innerCenterOfMass[1] * shape.scale[1];
+    out[2] = innerCenterOfMass[2] * shape.scale[2];
 }
 
 /** updates a scaled shape after it's properties have changed */
@@ -102,10 +104,10 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<ScaledShape>({
         type: ShapeType.SCALED,
-        category: ShapeCategory.DECORATOR,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
         getLeafShape,
         getSubShapeTransformedShape,
@@ -126,6 +128,10 @@ function computeMassProperties(out: MassProperties, shape: ScaledShape): void {
     const shapeDef = shapeDefs[shape.shape.type];
     shapeDef.computeMassProperties(_childMassProperties, shape.shape);
     massProperties.scale(out, _childMassProperties, shape.scale);
+}
+
+function getMaterial(shape: ScaledShape, subShapeId: number): number {
+    return shapeDefs[shape.shape.type].getMaterial(shape.shape, subShapeId);
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: ScaledShape, subShapeId: number): void {

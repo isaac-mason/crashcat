@@ -1,7 +1,9 @@
-import { box3, mat4, type Quat, quat, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Quat, quat, type Vec3, vec3 } from 'math';
+import { box3 } from 'math/shapes';
 import type { RigidBody } from './body/rigid-body';
 import { EMPTY_SUB_SHAPE_ID } from './body/sub-shape';
 import * as broadphase from './broadphase/broadphase';
+import { FLT_MIN } from './collision/cast-utils';
 import type { CastRayCollector, CastRaySettings, CollidePointCollector, CollidePointSettings } from './collision/narrowphase';
 import {
     type CastShapeCollector,
@@ -153,9 +155,9 @@ const CastShapeBodyVisitor = {
         );
 
         this.shouldExit = collector.shouldEarlyOut();
-        // positive early-out fraction (floored at 0, since a shape cast may hit at fraction 0) so
-        // castAABB can prune nodes past the closest impact so far
-        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
+        // positive early-out fraction so castAABB can prune nodes past the closest impact so far; floored
+        // at FLT_MIN, not 0, so bodies the cast starts inside are still visited after a hit at fraction 0
+        this.earlyOutFraction = Math.max(FLT_MIN, collector.earlyOutFraction);
     },
     set(
         collector: CastShapeCollector,
@@ -168,7 +170,7 @@ const CastShapeBodyVisitor = {
     ) {
         this.collector = collector;
         this.settings = settings;
-        this.earlyOutFraction = Math.max(0, collector.earlyOutFraction);
+        this.earlyOutFraction = Math.max(FLT_MIN, collector.earlyOutFraction);
         this.shape = shape;
         this.position[0] = position[0];
         this.position[1] = position[1];
@@ -206,6 +208,8 @@ export function castShape(
     const aabb = box3.copy(_castShape_aabb, shape.aabb);
     const mat = mat4.fromRotationTranslationScale(_castShape_mat4, quaternion, position, scale);
     box3.transformMat4(aabb, aabb, mat);
+    // grown by the extra convex radius the shape is cast with
+    box3.expandByMargin(aabb, aabb, settings.extraConvexRadius);
 
     CastShapeBodyVisitor.set(collector, settings, shape, position, quaternion, scale, displacement);
 

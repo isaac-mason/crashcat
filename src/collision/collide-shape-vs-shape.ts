@@ -1,4 +1,4 @@
-import { type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
 import type { CollideShapeVsShapeFn, Shape } from '../shapes/shapes';
 import { createFace, type Face } from '../utils/face';
@@ -17,10 +17,6 @@ export type CollideShapeHit = {
     subShapeIdA: number;
     /** sub shape id of shape B, EMPTY_SUB_SHAPE_ID if not a compound shape */
     subShapeIdB: number;
-    /** material id of sub-shape A */
-    materialIdA: number;
-    /** material id of sub-shape B */
-    materialIdB: number;
     /** supporting face on shape A (world space, flat array of vertices) */
     faceA: Face;
     /** supporting face on shape B (world space, flat array of vertices) */
@@ -37,8 +33,6 @@ export function createCollideShapeHit(): CollideShapeHit {
         penetration: 0,
         subShapeIdA: EMPTY_SUB_SHAPE_ID,
         subShapeIdB: EMPTY_SUB_SHAPE_ID,
-        materialIdA: -1,
-        materialIdB: -1,
         faceA: createFace(),
         faceB: createFace(),
         bodyIdB: -1,
@@ -52,8 +46,6 @@ export function copyCollideShapeHit(out: CollideShapeHit, source: CollideShapeHi
     out.penetration = source.penetration;
     out.subShapeIdA = source.subShapeIdA;
     out.subShapeIdB = source.subShapeIdB;
-    out.materialIdA = source.materialIdA;
-    out.materialIdB = source.materialIdB;
 
     out.faceA.numVertices = source.faceA.numVertices;
     for (let i = 0; i < source.faceA.numVertices * 3; i++) {
@@ -78,6 +70,10 @@ export type CollideShapeCollector = {
     onBodyEnd?(): void;
     reset?(): void;
 };
+
+function compareCollideShapeHits(a: CollideShapeHit, b: CollideShapeHit): number {
+    return a.penetration > b.penetration ? -1 : a.penetration < b.penetration ? 1 : 0;
+}
 
 export class AllCollideShapeCollector implements CollideShapeCollector {
     bodyIdB = -1;
@@ -105,6 +101,11 @@ export class AllCollideShapeCollector implements CollideShapeCollector {
         this.earlyOutFraction = Number.MAX_VALUE;
         this.bodyIdB = -1;
     }
+
+    /** orders hits deepest first */
+    sort(): void {
+        this.hits.sort(compareCollideShapeHits);
+    }
 }
 
 export function createAllCollideShapeCollector() {
@@ -120,7 +121,8 @@ export class AnyCollideShapeCollector implements CollideShapeCollector {
     addHit(h: CollideShapeHit): void {
         copyCollideShapeHit(this._hit, h);
         this.hit = this._hit;
-        this.earlyOutFraction = 0; // early out immediately
+        // the bound is -penetration, so -infinity prunes every further candidate
+        this.earlyOutFraction = -Infinity;
     }
 
     addMiss(): void {
@@ -150,7 +152,7 @@ export class ClosestCollideShapeCollector implements CollideShapeCollector {
 
     addHit(h: CollideShapeHit): void {
         if (this.hit === null || h.penetration > this.hit.penetration) {
-            this.earlyOutFraction = h.penetration;
+            this.earlyOutFraction = -h.penetration;
             copyCollideShapeHit(this._hit, h);
             this.hit = this._hit;
         }
@@ -185,7 +187,7 @@ export type CollideShapeSettings = {
     /** a factor that determines the accuracy of the penetration depth calculation. If the change of the squared distance is less than tolerance * current_penetration_depth^2 the algorithm will terminate. (unit: dimensionless) */
     penetrationTolerance: number;
 
-    /** if true, back-faces are considered for collision (otherwise they are ignored) */
+    /** if true, back facing triangles (triangle meshes) are collided with, otherwise they are ignored */
     collideWithBackfaces: boolean;
 
     /** how active edges (edges that a moving object should bump into) are handled */
@@ -196,17 +198,23 @@ export type CollideShapeSettings = {
 
     /** if true, supporting faces will be collected and stored in the collision result */
     collectFaces: boolean;
+
+    /** max squared distance to consider a vertex to be the same as another vertex, used by the internal edge removal algorithm to determine if two edges are shared (unit: meter^2) */
+    internalEdgeRemovalVertexToleranceSq: number;
 };
+
+export const DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ = 1e-8;
 
 export function createDefaultCollideShapeSettings(): CollideShapeSettings {
     return {
         maxSeparationDistance: 0,
         collisionTolerance: 1e-4,
         penetrationTolerance: 1e-4,
-        collideWithBackfaces: true,
+        collideWithBackfaces: false,
         collideOnlyWithActiveEdges: true,
         activeEdgeMovementDirection: vec3.create(),
         collectFaces: false,
+        internalEdgeRemovalVertexToleranceSq: DEFAULT_INTERNAL_EDGE_REMOVAL_VERTEX_TOLERANCE_SQ,
     };
 }
 
@@ -218,6 +226,7 @@ export function copyCollideShapeSettings(out: CollideShapeSettings, source: Coll
     out.collideOnlyWithActiveEdges = source.collideOnlyWithActiveEdges;
     vec3.copy(out.activeEdgeMovementDirection, source.activeEdgeMovementDirection);
     out.collectFaces = source.collectFaces;
+    out.internalEdgeRemovalVertexToleranceSq = source.internalEdgeRemovalVertexToleranceSq;
 }
 
 function createInvertedCollector() {

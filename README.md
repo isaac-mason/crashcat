@@ -367,7 +367,7 @@ import {
     rigidBody,
     updateWorld,
 } from 'crashcat';
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 
 // register all shapes
 registerAll();
@@ -1831,36 +1831,37 @@ console.log('shape overlaps', allShapeOverlapCollector.hits.length, 'bodies');
 
 ### Broadphase Queries
 
-For advanced scenarios, you can query the broadphase spatial acceleration structure directly. This is faster than narrowphase queries but less precise - it only tests axis-aligned bounding boxes (AABBs), not exact shapes.
+`broadphaseQuery` finds bodies by their bounds alone, without testing their shapes, as Jolt's `BroadPhaseQuery`: a box, a sphere, a point or an oriented box for the bodies it overlaps, through a body collector (all or any), and a ray or a moving box for the bodies it enters and where, through a body cast collector (all, any or closest). It is faster than the narrowphase queries but less precise, as bounds are not shapes. For traversal of your own, `broadphase` takes a visitor instead.
 
 ```ts
-// for advanced scenarios: query the broadphase spatial acceleration structure directly
-// useful when you need custom traversal logic or want to avoid narrowphase overhead
+// the bodies whose bounds a box overlaps, their shapes not tested
+const nearby = broadphaseQuery.createAllBodyCollector();
+broadphaseQuery.collideAABB(world, nearby, [-5, -5, -5, 5, 5, 5], queryFilter);
+console.log('bodies with bounds in the box:', nearby.hits);
 
-// intersectAABB: find all bodies whose AABBs overlap a box
-const queryAABB: Box3 = [-5, -5, -5, 5, 5, 5];
+// a sphere, a point and a turned box, likewise
+nearby.reset();
+broadphaseQuery.collideSphere(world, nearby, vec3.fromValues(0, 5, 0), 2, queryFilter);
+broadphaseQuery.collidePoint(world, nearby, vec3.fromValues(0, 5, 0), queryFilter);
+const turned = {
+    orientation: mat4.fromRotationTranslation(mat4.create(), quat.setAxisAngle(quat.create(), [0, 1, 0], 0.7), [0, 1, 0]),
+    halfExtents: vec3.fromValues(1, 0.5, 1),
+};
+broadphaseQuery.collideOrientedBox(world, nearby, turned, queryFilter);
 
-const aabbVisitor: BodyVisitor = {
+// a box swept down: the first body whose bounds it enters, and where
+const first = broadphaseQuery.createClosestBodyCastCollector();
+broadphaseQuery.castAABB(world, first, [-0.5, 9.5, -0.5, 0.5, 10.5, 0.5], vec3.fromValues(0, -20, 0), queryFilter);
+if (first.hit.bodyId !== -1) console.log('bounds entered at fraction', first.hit.fraction);
+
+// for traversal of your own, the broadphase takes a visitor, which a cast also tells where it entered each body
+const visitor: BodyVisitor = {
     shouldExit: false,
-    visit(body: RigidBody) {
-        console.log('body AABB overlaps query AABB:', body.id);
-        // set shouldExit = true to stop traversal early
+    visit(body: RigidBody, fraction?: number) {
+        console.log('ray enters the bounds of', body.id, 'at', fraction);
     },
 };
-
-broadphase.intersectAABB(world, queryAABB, queryFilter, aabbVisitor);
-
-// intersectPoint: find all bodies whose AABBs contain a point
-const queryPoint = vec3.fromValues(0, 5, 0);
-
-const pointVisitor: BodyVisitor = {
-    shouldExit: false,
-    visit(body: RigidBody) {
-        console.log('body AABB contains point:', body.id);
-    },
-};
-
-broadphase.intersectPoint(world, queryPoint, queryFilter, pointVisitor);
+broadphase.castRay(world, vec3.fromValues(0, 10, 0), vec3.fromValues(0, -1, 0), 20, queryFilter, visitor);
 ```
 
 ### Shape vs Shape
@@ -2535,75 +2536,9 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 ### Three.js Debug Renderer
 
-crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+The examples include a three.js debug renderer for visualizing physics simulation state - bodies, contacts, constraints, broadphase and triangle mesh bvhs. It isn't part of the published package, but it is self-contained, so you can copy [`examples/src/debug/debug-renderer.ts`](./examples/src/debug/debug-renderer.ts) into your project and adapt it to your needs.
 
 The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
-
-**Usage**
-
-```ts
-import type { World } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
-import type * as THREE from 'three';
-
-declare const scene: THREE.Scene;
-declare const world: World;
-
-// create debug renderer with default options
-const options = debugRenderer.createDefaultOptions();
-const state = debugRenderer.init(options);
-
-// add to scene
-scene.add(state.object3d);
-
-// update each frame after physics step
-function animate() {
-    // ... update physics ...
-
-    debugRenderer.update(state, world);
-
-    // ... render scene ...
-}
-
-// customize what to visualize
-const customOptions = debugRenderer.createDefaultOptions();
-
-/* body visualization options */
-customOptions.bodies.enabled = true;
-customOptions.bodies.wireframe = false;
-customOptions.bodies.showLinearVelocity = false;
-customOptions.bodies.showAngularVelocity = false;
-
-// unique color per body instance
-customOptions.bodies.color = debugRenderer.BodyColorMode.INSTANCE;
-// color by motion type (static, dynamic, kinematic)
-customOptions.bodies.color = debugRenderer.BodyColorMode.MOTION_TYPE;
-// color by sleeping state
-customOptions.bodies.color = debugRenderer.BodyColorMode.SLEEPING;
-// color by simulation island
-customOptions.bodies.color = debugRenderer.BodyColorMode.ISLAND;
-
-/* contact points options */
-customOptions.contacts.enabled = true;
-
-/* contact constraints options */
-customOptions.contactConstraints.enabled = true;
-
-/* constraints options (hinges, sliders, etc.) */
-customOptions.constraints.enabled = true;
-customOptions.constraints.drawLimits = true;
-customOptions.constraints.size = 0.5;
-
-/* broadphase options */
-customOptions.broadphaseDbvt.enabled = false;
-customOptions.broadphaseDbvt.showLeafNodes = true;
-customOptions.broadphaseDbvt.showNonLeafNodes = true;
-
-/* triangle mesh bvh options */
-customOptions.triangleMeshBvh.enabled = false;
-customOptions.triangleMeshBvh.showLeafNodes = true;
-customOptions.triangleMeshBvh.showNonLeafNodes = true;
-```
 
 ## FAQ
 

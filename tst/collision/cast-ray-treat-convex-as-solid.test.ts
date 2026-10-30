@@ -1,11 +1,18 @@
-import { vec3 } from 'mathcat';
+import { vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
-import { CastRayStatus, createAnyCastRayCollector, createDefaultCastRaySettings } from '../../src/collision/cast-ray-vs-shape';
+import {
+    type CastRaySettings,
+    CastRayStatus,
+    createAllCastRayCollector,
+    createAnyCastRayCollector,
+    createDefaultCastRaySettings,
+} from '../../src/collision/cast-ray-vs-shape';
 import { castRayVsShape } from '../../src/collision/narrowphase';
 import * as box from '../../src/shapes/box';
 import * as capsule from '../../src/shapes/capsule';
 import * as plane from '../../src/shapes/plane';
 import * as sphere from '../../src/shapes/sphere';
+import * as triangleMesh from '../../src/shapes/triangle-mesh';
 
 // base settings with common defaults
 const baseSettings = createDefaultCastRaySettings();
@@ -532,5 +539,127 @@ describe('treatConvexAsSolid ray casting', () => {
             expect(collector.hit.fraction).toBeGreaterThan(0);
             expect(collector.hit.fraction).toBeCloseTo(0.2, 2);
         });
+    });
+});
+
+describe('back face modes', () => {
+    // ray from inside a unit sphere along +x: it exits at x = 1, so at fraction (1 - 0.25) / 10
+    const castFromInsideSphere = (settings: CastRaySettings) => {
+        const sphereShape = sphere.create({ radius: 1.0 });
+        const collector = createAllCastRayCollector();
+        collector.bodyIdB = 1;
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0.25, 0, 0,
+            1, 0, 0,
+            10,
+            sphereShape,
+            0, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    // a single triangle in the z = 0 plane, cast at from below so the ray meets its back face at fraction 0.5
+    const castAtTriangleBackFace = (settings: CastRaySettings) => {
+        const meshShape = triangleMesh.create({ positions: [0, 0, 0, 1, 0, 0, 0, 1, 0], indices: [0, 1, 2] });
+        const collector = createAllCastRayCollector();
+        collector.bodyIdB = 1;
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0.25, 0.25, -1,
+            0, 0, 1,
+            2,
+            meshShape,
+            0, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    const hollow = { ...baseSettings, treatConvexAsSolid: false };
+
+    // box with half extents (1, 2, 3) scaled by 2 along x, so its faces are at x = +-2. a ray from x = 0.5 along +x
+    // leaves it at fraction (2 - 0.5) / 10
+    const castFromInsideBox = (settings: CastRaySettings) => {
+        const boxShape = box.create({ halfExtents: [1, 2, 3] });
+        const collector = createAllCastRayCollector();
+        collector.bodyIdB = 1;
+        // biome-ignore format: readability
+        castRayVsShape(
+            collector,
+            settings,
+            0.5, 0.25, -0.5,
+            1, 0, 0,
+            10,
+            boxShape,
+            0, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            2, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    it('a hollow box with convex back faces hits the far face at the analytic fraction', () => {
+        const hits = castFromInsideBox({ ...hollow, collideWithBackfacesConvex: true });
+        expect(hits.length).toBe(1);
+        expect(hits[0].status).toBe(CastRayStatus.COLLIDING);
+        expect(hits[0].fraction).toBeCloseTo(0.15, 12);
+    });
+
+    it('a hollow box without convex back faces misses', () => {
+        expect(castFromInsideBox(hollow).length).toBe(0);
+        expect(castFromInsideBox({ ...hollow, collideWithBackfacesTriangles: true }).length).toBe(0);
+    });
+
+    it('a solid box with convex back faces reports both the start and the exit', () => {
+        const hits = castFromInsideBox({ ...baseSettings, collideWithBackfacesConvex: true });
+        expect(hits.length).toBe(2);
+        expect(hits[0].fraction).toBe(0);
+        expect(hits[1].fraction).toBeCloseTo(0.15, 12);
+    });
+
+    it('a hollow convex with convex back faces hits the far surface on the way out', () => {
+        const hits = castFromInsideSphere({ ...hollow, collideWithBackfacesConvex: true });
+        expect(hits.length).toBe(1);
+        expect(hits[0].status).toBe(CastRayStatus.COLLIDING);
+        expect(hits[0].fraction).toBeCloseTo(0.075, 4);
+    });
+
+    it('a hollow convex without back faces misses', () => {
+        expect(castFromInsideSphere(hollow).length).toBe(0);
+    });
+
+    it('triangle back faces alone do not make a hollow convex report its exit', () => {
+        expect(castFromInsideSphere({ ...hollow, collideWithBackfacesTriangles: true }).length).toBe(0);
+    });
+
+    it('a solid convex hits at fraction 0', () => {
+        const hits = castFromInsideSphere(baseSettings);
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBe(0);
+    });
+
+    it('a mesh back face is culled by default', () => {
+        expect(castAtTriangleBackFace(baseSettings).length).toBe(0);
+    });
+
+    it('a mesh back face is hit with triangle back faces', () => {
+        const hits = castAtTriangleBackFace({ ...baseSettings, collideWithBackfacesTriangles: true });
+        expect(hits.length).toBe(1);
+        expect(hits[0].fraction).toBeCloseTo(0.5, 6);
+    });
+
+    it('convex back faces alone do not make a mesh back face hittable', () => {
+        expect(castAtTriangleBackFace({ ...baseSettings, collideWithBackfacesConvex: true }).length).toBe(0);
     });
 });

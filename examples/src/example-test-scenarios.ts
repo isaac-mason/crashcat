@@ -31,9 +31,9 @@ import {
     updateWorld,
     type World
 } from 'crashcat';
-import { debugRenderer } from 'crashcat/three';
+import * as debugRenderer from './debug/debug-renderer';
 import type GUI from 'lil-gui';
-import { euler, quat, type Vec3, vec3 } from 'mathcat';
+import { euler, quat, type Vec3, vec3 } from 'math';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/Addons.js';
 import * as debugUI from './debug/debug-ui';

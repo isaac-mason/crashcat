@@ -1,5 +1,7 @@
+import { type Vec3, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import { convexHull } from '../../src';
+import * as convexHullBuilder from '../../src/shapes/utils/convex-hull-builder';
 
 describe('ConvexHull - Convex Radius Reduction', () => {
     describe('Pass 1: Hull Thickness Check', () => {
@@ -155,6 +157,99 @@ describe('ConvexHull - Convex Radius Reduction', () => {
 
             // Should still reduce radius based on default tolerance
             expect(hull.convexRadius).toBeLessThanOrEqual(2);
+        });
+    });
+
+    describe('Pass 2: Non-Orthogonal Planes', () => {
+        test('tetrahedron radius is maxError / (|n^-1 (1, 1, 1)| - 1) at its sharpest vertex', () => {
+            const vertices: Vec3[] = [
+                [0, 0, 0],
+                [3, 0, 0],
+                [0.5, 2, 0],
+                [0.8, 0.7, 1.9],
+            ];
+            const convexRadius = 0.5;
+            const maxErrorConvexRadius = 0.05;
+            const shape = convexHull.create({ positions: vertices.flat(), convexRadius, maxErrorConvexRadius });
+
+            // every vertex is shifted along its 3 planes
+            expect(shape.numPoints).toBe(4);
+            for (let p = 0; p < 4; p++) {
+                expect(shape.pointNumFaces[p]).toBe(3);
+            }
+
+            // outward planes of the 4 faces, each away from the vertex it leaves out
+            const planes = [0, 1, 2, 3].map((excluded) => {
+                const [a, b, c] = vertices.filter((_, i) => i !== excluded);
+                const normal = vec3.cross(vec3.create(), vec3.subtract(vec3.create(), b, a), vec3.subtract(vec3.create(), c, a));
+                vec3.normalize(normal, normal);
+                if (vec3.dot(normal, vec3.subtract(vec3.create(), vertices[excluded], a)) > 0) vec3.negate(normal, normal);
+                return { normal, constant: -vec3.dot(normal, a), excluded };
+            });
+
+            // pass 1: half the thinnest extent across any plane
+            let expected = convexRadius;
+            for (const plane of planes) {
+                let thickness = 0;
+                for (const v of vertices) thickness = Math.max(thickness, -(vec3.dot(plane.normal, v) + plane.constant));
+                expected = Math.min(expected, 0.5 * thickness);
+            }
+
+            // pass 2: n has the vertex's plane normals as rows, so n^-1 has columns (n2 x n3, n3 x n1, n1 x n2) / det(n)
+            let sawNonUnitDeterminant = false;
+            for (let v = 0; v < 4; v++) {
+                const [n1, n2, n3] = planes.filter((plane) => plane.excluded !== v).map((plane) => plane.normal);
+                const n2CrossN3 = vec3.cross(vec3.create(), n2, n3);
+                const det = vec3.dot(n1, n2CrossN3);
+                if (Math.abs(Math.abs(det) - 1) > 0.1) sawNonUnitDeterminant = true;
+                const sum = vec3.add(vec3.create(), n2CrossN3, vec3.cross(vec3.create(), n3, n1));
+                vec3.add(sum, sum, vec3.cross(vec3.create(), n1, n2));
+                const offset = vec3.length(sum) / Math.abs(det);
+                expected = Math.min(expected, maxErrorConvexRadius / (offset - 1));
+            }
+            expect(sawNonUnitDeterminant).toBe(true);
+
+            expect(shape.convexRadius).toBeCloseTo(expected, 10);
+        });
+    });
+
+    describe('Hull Max Error', () => {
+        // a wide square with one point above its centre. the builder treats points within 6 coplanar distances of the
+        // initial triangle's plane as flat and builds a two-sided hull, but the hull is only allowed an error of
+        // 4 * max(coplanar distance, hull tolerance)
+        const halfExtent = 10000;
+        const coplanarDistance = 3 * 1.1920929e-7 * (2 * halfExtent);
+        const squareWithApex = (apexHeight: number) => [
+            -halfExtent, -halfExtent, 0, halfExtent, -halfExtent, 0, halfExtent, halfExtent, 0, -halfExtent, halfExtent, 0,
+            0, 0, apexHeight,
+        ];
+
+        test('rejects a hull the builder accepts when a point is outside it by more than the bound', () => {
+            const positions = squareWithApex(5 * coplanarDistance);
+            const points: Vec3[] = [];
+            for (let i = 0; i < positions.length; i += 3) points.push([positions[i], positions[i + 1], positions[i + 2]]);
+
+            const builder = convexHullBuilder.create(points);
+            expect(convexHullBuilder.initialize(builder, 256, 1e-3).result).toBe(convexHullBuilder.Result.Success);
+            expect(builder.faces.length).toBe(2);
+            const { maxError, maxErrorPositionIdx, coplanarDistance: builderCoplanarDistance } = convexHullBuilder.determineMaxError(builder);
+            expect(maxErrorPositionIdx).toBe(4);
+            expect(maxError).toBeGreaterThan(4 * Math.max(builderCoplanarDistance, 1e-3));
+
+            expect(() => convexHull.create({ positions })).toThrow(/Hull building failed, point 4/);
+        });
+
+        test('accepts the same square when the point is within the bound', () => {
+            const shape = convexHull.create({ positions: squareWithApex(2 * coplanarDistance) });
+            expect(shape.faces.length).toBe(2);
+        });
+
+        test('accepts a clean box', () => {
+            const shape = convexHull.create({
+                positions: [-1, -2, -3, 1, -2, -3, 1, 2, -3, -1, 2, -3, -1, -2, 3, 1, -2, 3, 1, 2, 3, -1, 2, 3],
+            });
+            expect(shape.faces.length).toBe(6);
+            expect(shape.volume).toBeCloseTo(48, 10);
         });
     });
 

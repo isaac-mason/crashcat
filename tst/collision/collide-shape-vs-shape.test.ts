@@ -1,7 +1,11 @@
-import { euler, quat, vec3 } from 'mathcat';
+import { euler, quat, vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
+    AnyCollideShapeCollector,
     box,
+    ClosestCollideShapeCollector,
+    type CollideShapeCollector,
+    type CollideShapeHit,
     capsule,
     collideShapeVsShape,
     compound,
@@ -10,6 +14,7 @@ import {
     createDefaultCollideShapeSettings,
     cylinder,
     EMPTY_SUB_SHAPE_ID,
+    getShapeMaterial,
     plane,
     scaled,
     sphere,
@@ -1606,14 +1611,14 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
         const scaleB = vec3.fromValues(1, 1, 1);
 
         // Test with backface culling enabled
-        const settingsNoCull = { ...settings, collideWithBackfaces: false };
+        const settingsWithCull = { ...settings, collideWithBackfaces: false };
         const collector1 = createAllCollideShapeCollector();
         const results1 = collector1.hits;
 
         // biome-ignore format: readability
         collideShapeVsShape(
             collector1,
-            settingsNoCull,
+            settingsWithCull,
             sphereA,
             EMPTY_SUB_SHAPE_ID, 0,
             posA[0], posA[1], posA[2],
@@ -1630,14 +1635,14 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
         expect(results1.length).toBe(0);
 
         // Test with backface culling disabled
-        const settingsWithCull = { ...settings, collideWithBackfaces: true };
+        const settingsNoCull = { ...settings, collideWithBackfaces: true };
         const collector2 = createAllCollideShapeCollector();
         const results2 = collector2.hits;
 
         // biome-ignore format: readability
         collideShapeVsShape(
             collector2,
-            settingsWithCull,
+            settingsNoCull,
             sphereA,
             EMPTY_SUB_SHAPE_ID, 0,
             posA[0], posA[1], posA[2],
@@ -1777,8 +1782,9 @@ describe('collideShapeVsShape - Sphere vs Triangle Mesh (specialized path)', () 
                 const i2 = i0 + (gridSize + 1);
                 const i3 = i2 + 1;
 
-                indices.push(i0, i2, i1);
-                indices.push(i1, i2, i3);
+                // ccw seen from +z, so the box above the grid hits front faces
+                indices.push(i0, i1, i2);
+                indices.push(i1, i3, i2);
             }
         }
 
@@ -3072,5 +3078,253 @@ describe('collideShapeVsShape - Box vs Plane', () => {
 
         expect(results.length).toBe(1);
         expect(results[0].penetration).toBeCloseTo(1.5, 4);
+    });
+});
+
+describe('collideShapeVsShape - reversed pair materials', () => {
+    // sphere vs box runs the specialised handler; box vs sphere runs it reversed, and the hit's
+    // materials must follow the shape order like its points and sub shape ids do
+    const sphereShape = sphere.create({ radius: 1, materialId: 3 });
+    const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1), materialId: 5 });
+
+    const collide = (shapeA: typeof sphereShape | typeof boxShape, shapeB: typeof sphereShape | typeof boxShape) => {
+        const collector = createAllCollideShapeCollector();
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            shapeA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            shapeB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            1.5, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        expect(collector.hits.length).toBe(1);
+        return collector.hits[0];
+    };
+
+    test('sphere vs box reports the sphere as a', () => {
+        const hit = collide(sphereShape, boxShape);
+        expect(getShapeMaterial(sphereShape, hit.subShapeIdA)).toBe(3);
+        expect(getShapeMaterial(boxShape, hit.subShapeIdB)).toBe(5);
+        expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
+    });
+
+    test('box vs sphere reports the box as a', () => {
+        const hit = collide(boxShape, sphereShape);
+        expect(getShapeMaterial(boxShape, hit.subShapeIdA)).toBe(5);
+        expect(getShapeMaterial(sphereShape, hit.subShapeIdB)).toBe(3);
+        expect(hit.penetrationAxis[0]).toBeGreaterThan(0);
+    });
+});
+
+describe('ClosestCollideShapeCollector early out', () => {
+    // counts the hits that get past the shape's early-out check and reach the collector
+    class CountingClosestCollector extends ClosestCollideShapeCollector {
+        hitsReceived = 0;
+        override addHit(h: CollideShapeHit): void {
+            this.hitsReceived++;
+            super.addHit(h);
+        }
+    }
+
+    const boxShape = box.create({ halfExtents: vec3.fromValues(1, 1, 1) });
+
+    // unit boxes overlapping along x by the given penetration depth
+    const collideBoxes = (collector: CountingClosestCollector, penetration: number) => {
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            boxShape,
+            EMPTY_SUB_SHAPE_ID, 0,
+            2 - penetration, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    test('the bound is the negated deepest penetration and prunes shallower candidates only', () => {
+        const collector = new CountingClosestCollector();
+
+        collideBoxes(collector, 0.2);
+        expect(collector.hitsReceived).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.2, 5);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.2, 5);
+
+        // shallower: rejected by the convex early-out check before reaching the collector
+        collideBoxes(collector, 0.1);
+        expect(collector.hitsReceived).toBe(1);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.2, 5);
+
+        // deeper: passes the check and becomes the closest hit
+        collideBoxes(collector, 0.3);
+        expect(collector.hitsReceived).toBe(2);
+        expect(collector.hit?.penetration).toBeCloseTo(0.3, 5);
+        expect(collector.earlyOutFraction).toBeCloseTo(-0.3, 5);
+    });
+});
+
+describe('collideShapeVsShape - any collector early out', () => {
+    class CountingAnyCollideShapeCollector extends AnyCollideShapeCollector {
+        hitCount = 0;
+
+        addHit(hit: CollideShapeHit): void {
+            this.hitCount++;
+            super.addHit(hit);
+        }
+    }
+
+    const cylinderA = cylinder.create({ halfHeight: 1, radius: 0.5 });
+    const cylinderB = cylinder.create({ halfHeight: 1, radius: 0.5 });
+
+    // two upright cylinders of radius 0.5 whose axes are `distance` apart overlap by 1 - distance
+    const collideAtDistance = (collector: CollideShapeCollector, distance: number) => {
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            settings,
+            cylinderA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            cylinderB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            distance, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+    };
+
+    test('after the first hit, a deeper candidate is pruned before it reaches the collector', () => {
+        const collector = new CountingAnyCollideShapeCollector();
+
+        collideAtDistance(collector, 0.9);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.1, 3);
+        expect(collector.shouldEarlyOut()).toBe(true);
+
+        collideAtDistance(collector, 0.5);
+        expect(collector.hitCount).toBe(1);
+        expect(collector.hit?.penetration).toBeCloseTo(0.1, 3);
+    });
+});
+
+describe('collideShapeVsShape - default back face mode', () => {
+    // a single triangle facing +z, with a sphere overlapping it from behind
+    const meshB = triangleMesh.create({ positions: [-2, -2, 0, 2, -2, 0, 0, 2, 0], indices: [0, 1, 2] });
+    const sphereA = sphere.create({ radius: 0.5 });
+
+    const collideFromBehind = (collideSettings: typeof settings) => {
+        const collector = createAllCollideShapeCollector();
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            collideSettings,
+            sphereA,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, -0.3,
+            0, 0, 0, 1,
+            1, 1, 1,
+            meshB,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+        return collector.hits;
+    };
+
+    test('default settings ignore back faces', () => {
+        const defaults = createDefaultCollideShapeSettings();
+        expect(defaults.collideWithBackfaces).toBe(false);
+        expect(collideFromBehind(defaults).length).toBe(0);
+    });
+
+    test('back faces collide when asked for', () => {
+        const backFaces = createDefaultCollideShapeSettings();
+        backFaces.collideWithBackfaces = true;
+        const hits = collideFromBehind(backFaces);
+        expect(hits.length).toBe(1);
+        expect(hits[0].penetration).toBeCloseTo(0.2, 4);
+    });
+});
+
+describe('AllCollideShapeCollector.sort', () => {
+    test('orders hits deepest first', () => {
+        const unitSphere = sphere.create({ radius: 1 });
+        const collector = createAllCollideShapeCollector();
+
+        // spheres overlapping the one at the origin by 0.2, 0.6 and 0.4
+        for (const centerX of [1.8, 1.4, 1.6]) {
+            // biome-ignore format: pretty
+            collideShapeVsShape(
+                collector, settings,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                0, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+                unitSphere, EMPTY_SUB_SHAPE_ID, 0,
+                centerX, 0, 0,
+                0, 0, 0, 1,
+                1, 1, 1,
+            );
+        }
+
+        expect(collector.hits.length).toBe(3);
+        collector.sort();
+        expect(collector.hits[0].penetration).toBeCloseTo(0.6, 5);
+        expect(collector.hits[1].penetration).toBeCloseTo(0.4, 5);
+        expect(collector.hits[2].penetration).toBeCloseTo(0.2, 5);
+    });
+});
+
+describe('collideShapeVsShape - all collector with faces', () => {
+    test('a box resting on a box reports both supporting faces', () => {
+        const faceSettings = createDefaultCollideShapeSettings();
+        faceSettings.collectFaces = true;
+
+        const collector = createAllCollideShapeCollector();
+        const floor = box.create({ halfExtents: vec3.fromValues(4, 0.5, 4) });
+        const crate = box.create({ halfExtents: vec3.fromValues(0.5, 0.5, 0.5) });
+
+        // biome-ignore format: readability
+        collideShapeVsShape(
+            collector,
+            faceSettings,
+            crate,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0.99, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+            floor,
+            EMPTY_SUB_SHAPE_ID, 0,
+            0, 0, 0,
+            0, 0, 0, 1,
+            1, 1, 1,
+        );
+
+        expect(collector.hits.length).toBe(1);
+        const hit = collector.hits[0];
+
+        // the crate's bottom face and the floor's top face
+        expect(hit.faceA.numVertices).toBe(4);
+        expect(hit.faceB.numVertices).toBe(4);
+        for (let i = 0; i < 4; i++) {
+            expect(hit.faceA.vertices[i * 3 + 1]).toBeCloseTo(0.49, 5);
+            expect(hit.faceB.vertices[i * 3 + 1]).toBeCloseTo(0.5, 5);
+            expect(Math.abs(hit.faceB.vertices[i * 3])).toBeCloseTo(4, 5);
+        }
     });
 });

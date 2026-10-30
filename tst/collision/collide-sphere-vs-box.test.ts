@@ -233,3 +233,38 @@ describe('collideShapeVsShape - Sphere vs Box (analytical)', () => {
         expect(checked).toBeGreaterThan(200);
     });
 });
+
+describe('faces are not carried over between collides', () => {
+    const withFaces = { ...createDefaultCollideShapeSettings(), collectFaces: true };
+    const withoutFaces = createDefaultCollideShapeSettings();
+
+    test('sphere vs box: a collide without faces after one with faces reports none', () => {
+        const ball = sphere.create({ radius: 1 });
+        const cube = box.create({ halfExtents: [1, 1, 1], convexRadius: 0 });
+        const above: Pose = { pos: [0, 1.5, 0], rot: [0, 0, 0, 1], scale: [1, 1, 1] };
+
+        const first = collide(collideShapeVsShape, ball, above, cube, identity, withFaces);
+        expect(first.length).toBe(1);
+        expect(first[0].faceB.numVertices).toBe(4);
+
+        const second = collide(collideShapeVsShape, ball, above, cube, identity, withoutFaces);
+        expect(second.length).toBe(1);
+        expect(second[0].faceA.numVertices).toBe(0);
+        expect(second[0].faceB.numVertices).toBe(0);
+    });
+
+    test('convex vs convex: a collide without faces after one with faces reports none', () => {
+        const cube = box.create({ halfExtents: [1, 1, 1], convexRadius: 0 });
+        const above: Pose = { pos: [0, 1.9, 0], rot: [0, 0, 0, 1], scale: [1, 1, 1] };
+
+        const first = collide(collideShapeVsShape, cube, identity, cube, above, withFaces);
+        expect(first.length).toBe(1);
+        expect(first[0].faceA.numVertices).toBe(4);
+        expect(first[0].faceB.numVertices).toBe(4);
+
+        const second = collide(collideShapeVsShape, cube, identity, cube, above, withoutFaces);
+        expect(second.length).toBe(1);
+        expect(second[0].faceA.numVertices).toBe(0);
+        expect(second[0].faceB.numVertices).toBe(0);
+    });
+});

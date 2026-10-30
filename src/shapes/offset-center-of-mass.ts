@@ -1,4 +1,5 @@
-import { type Box3, box3, type Vec3, vec3 } from 'mathcat';
+import { type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as massProperties from '../body/mass-properties';
 import type { CastRayCollector, CastRaySettings } from '../collision/cast-ray-vs-shape';
@@ -8,9 +9,10 @@ import type { CollideShapeCollector, CollideShapeSettings } from '../collision/c
 import {
     collisionDispatch,
     defineShape,
+    type GetLeafShapeResult,
+    type GetSubShapeTransformedShapeResult,
     getShapeInnerRadius,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -86,12 +88,14 @@ const _childMassProperties = /* @__PURE__ */ massProperties.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<OffsetCenterOfMassShape>({
         type: ShapeType.OFFSET_CENTER_OF_MASS,
-        category: ShapeCategory.DECORATOR,
 
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         getInnerRadius,
+        getLeafShape,
+        getSubShapeTransformedShape,
         castRay: castRayVsOffsetCenterOfMass,
         collidePoint: collidePointVsOffsetCenterOfMass,
 
@@ -117,6 +121,10 @@ function computeMassProperties(out: MassProperties, shape: OffsetCenterOfMassSha
     massProperties.translate(out, _childMassProperties, shape.offset);
 }
 
+function getMaterial(shape: OffsetCenterOfMassShape, subShapeId: number): number {
+    return shapeDefs[shape.shape.type].getMaterial(shape.shape, subShapeId);
+}
+
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
     // in crashcat, collision geometry is at origin, not COM-centered
     // so we just pass through to the inner shape
@@ -135,6 +143,20 @@ function getSupportingFace(
 function getInnerRadius(shape: OffsetCenterOfMassShape): number {
     // inner radius doesn't change with COM offset
     return getShapeInnerRadius(shape.shape);
+}
+
+function getLeafShape(outResult: GetLeafShapeResult, shape: OffsetCenterOfMassShape, subShapeId: number): void {
+    // pass through to inner shape
+    shapeDefs[shape.shape.type].getLeafShape(outResult, shape.shape, subShapeId);
+}
+
+function getSubShapeTransformedShape(
+    outResult: GetSubShapeTransformedShapeResult,
+    shape: OffsetCenterOfMassShape,
+    subShapeId: number,
+): void {
+    // the inner shape sits where this shape does
+    shapeDefs[shape.shape.type].getSubShapeTransformedShape(outResult, shape.shape, subShapeId);
 }
 
 // in crashcat, collision geometry is at origin, not COM-centered

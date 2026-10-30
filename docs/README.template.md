@@ -454,7 +454,7 @@ Test if a shape overlaps any bodies. Perfect for area triggers, placement valida
 
 ### Broadphase Queries
 
-For advanced scenarios, you can query the broadphase spatial acceleration structure directly. This is faster than narrowphase queries but less precise - it only tests axis-aligned bounding boxes (AABBs), not exact shapes.
+`broadphaseQuery` finds bodies by their bounds alone, without testing their shapes, as Jolt's `BroadPhaseQuery`: a box, a sphere, a point or an oriented box for the bodies it overlaps, through a body collector (all or any), and a ray or a moving box for the bodies it enters and where, through a body cast collector (all, any or closest). It is faster than the narrowphase queries but less precise, as bounds are not shapes. For traversal of your own, `broadphase` takes a visitor instead.
 
 <Snippet source="./queries.ts" select="broadphase-query" />
 
@@ -758,13 +758,9 @@ The examples use threejs for rendering, but the core crashcat apis are completel
 
 ### Three.js Debug Renderer
 
-crashcat provides a debug renderer for three.js via the `crashcat/three` package export. This is useful for visualizing physics simulation state during development.
+The examples include a three.js debug renderer for visualizing physics simulation state - bodies, contacts, constraints, broadphase and triangle mesh bvhs. It isn't part of the published package, but it is self-contained, so you can copy [`examples/src/debug/debug-renderer.ts`](./examples/src/debug/debug-renderer.ts) into your project and adapt it to your needs.
 
 The debug renderer uses batched rendering for efficiency, but visualizing many bodies, contacts, or constraints can still impact performance.
-
-**Usage**
-
-<Snippet source="./debug-renderer.ts" />
 
 ## FAQ
 

@@ -1,4 +1,5 @@
 node_modules
+dist
 examples/dist
 tst/tree-shaking/dist
 dist-*

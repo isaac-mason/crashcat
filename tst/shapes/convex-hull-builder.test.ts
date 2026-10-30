@@ -1,4 +1,4 @@
-import type { Vec3 } from 'mathcat';
+import type { Vec3 } from 'math';
 import { describe, expect, test } from 'vitest';
 import {
     containsFace,

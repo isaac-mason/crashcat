@@ -1,4 +1,5 @@
-import { type Box3, box3, mat4, type Vec3, vec3 } from 'mathcat';
+import { mat4, type Vec3, vec3 } from 'math';
+import { type Box3, box3 } from 'math/shapes';
 import type { CompoundShapeChild } from '../compound';
 import {
     NODE_AXIS_OR_COUNT,
@@ -39,27 +40,33 @@ export function nodeChildCount(buffer: number[], offset: number): number {
 
 /**
  * stride for precomputed child build data.
- * layout per child: [centerX, halfExtentX, centerY, halfExtentY, centerZ, halfExtentZ]
+ * layout per child: [minX, minY, minZ, maxX, maxY, maxZ], the child's exact aabb, so node bounds
+ * built as unions of these contain their children exactly.
  */
 const BUILD_DATA_STRIDE = 6;
 
-/** offset to centerX in build data */
-const BUILD_DATA_CENTER_X = 0;
+/** offset to minX in build data; minY and minZ follow */
+const BUILD_DATA_MIN_X = 0;
 
-/** offset to halfExtentX in build data */
-const BUILD_DATA_HALF_EXTENT_X = 1;
+/** offset to minY in build data */
+const BUILD_DATA_MIN_Y = 1;
 
-/** offset to centerY in build data */
-const BUILD_DATA_CENTER_Y = 2;
+/** offset to minZ in build data */
+const BUILD_DATA_MIN_Z = 2;
 
-/** offset to halfExtentY in build data */
-const BUILD_DATA_HALF_EXTENT_Y = 3;
+/** offset to maxX in build data; maxY and maxZ follow */
+const BUILD_DATA_MAX_X = 3;
 
-/** offset to centerZ in build data */
-const BUILD_DATA_CENTER_Z = 4;
+/** offset to maxY in build data */
+const BUILD_DATA_MAX_Y = 4;
 
-/** offset to halfExtentZ in build data */
-const BUILD_DATA_HALF_EXTENT_Z = 5;
+/** offset to maxZ in build data */
+const BUILD_DATA_MAX_Z = 5;
+
+/** the child's aabb center along axis (0=x, 1=y, 2=z), from its build data at offset */
+function buildDataCenter(buildData: number[], offset: number, axis: number): number {
+    return (buildData[offset + BUILD_DATA_MIN_X + axis] + buildData[offset + BUILD_DATA_MAX_X + axis]) * 0.5;
+}
 
 const _extent = /* @__PURE__ */ vec3.create();
 const _centerMin = /* @__PURE__ */ vec3.create();
@@ -81,10 +88,7 @@ function computeChildBounds(out: Box3, child: CompoundShapeChild): void {
     box3.transformMat4(out, childAABB, _transformMatrix);
 }
 
-/**
- * precompute child bounds in center-halfExtent format.
- * also reorders children array to match indices array order.
- */
+/** precompute child bounds (exact min and max) in indices array order */
 function precomputeChildBuildData(buildData: number[], indices: number[], children: CompoundShapeChild[]): void {
     const count = indices.length;
     const childBounds = box3.create();
@@ -96,26 +100,12 @@ function precomputeChildBuildData(buildData: number[], indices: number[], childr
 
         computeChildBounds(childBounds, child);
 
-        const minX = childBounds[0];
-        const minY = childBounds[1];
-        const minZ = childBounds[2];
-        const maxX = childBounds[3];
-        const maxY = childBounds[4];
-        const maxZ = childBounds[5];
-
-        const centerX = (minX + maxX) * 0.5;
-        const centerY = (minY + maxY) * 0.5;
-        const centerZ = (minZ + maxZ) * 0.5;
-        const halfExtentX = (maxX - minX) * 0.5;
-        const halfExtentY = (maxY - minY) * 0.5;
-        const halfExtentZ = (maxZ - minZ) * 0.5;
-
-        buildData[buildOffset + BUILD_DATA_CENTER_X] = centerX;
-        buildData[buildOffset + BUILD_DATA_HALF_EXTENT_X] = halfExtentX;
-        buildData[buildOffset + BUILD_DATA_CENTER_Y] = centerY;
-        buildData[buildOffset + BUILD_DATA_HALF_EXTENT_Y] = halfExtentY;
-        buildData[buildOffset + BUILD_DATA_CENTER_Z] = centerZ;
-        buildData[buildOffset + BUILD_DATA_HALF_EXTENT_Z] = halfExtentZ;
+        buildData[buildOffset + BUILD_DATA_MIN_X] = childBounds[0];
+        buildData[buildOffset + BUILD_DATA_MIN_Y] = childBounds[1];
+        buildData[buildOffset + BUILD_DATA_MIN_Z] = childBounds[2];
+        buildData[buildOffset + BUILD_DATA_MAX_X] = childBounds[3];
+        buildData[buildOffset + BUILD_DATA_MAX_Y] = childBounds[4];
+        buildData[buildOffset + BUILD_DATA_MAX_Z] = childBounds[5];
     }
 }
 
@@ -166,7 +156,7 @@ export function build(children: CompoundShapeChild[], settings: BvhBuildSettings
         indices[i] = i;
     }
 
-    // precompute bounds
+    // precompute bounds (exact min and max)
     const buildData: number[] = new Array(count * BUILD_DATA_STRIDE);
     precomputeChildBuildData(buildData, indices, children);
 
@@ -254,20 +244,16 @@ function buildRecursive(
 
     if (count > 0) {
         let offset = startIndex * BUILD_DATA_STRIDE;
-        const cx = buildData[offset + BUILD_DATA_CENTER_X];
-        const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-        const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-        const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-        const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-        const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
+        node.bounds[0] = buildData[offset + BUILD_DATA_MIN_X];
+        node.bounds[1] = buildData[offset + BUILD_DATA_MIN_Y];
+        node.bounds[2] = buildData[offset + BUILD_DATA_MIN_Z];
+        node.bounds[3] = buildData[offset + BUILD_DATA_MAX_X];
+        node.bounds[4] = buildData[offset + BUILD_DATA_MAX_Y];
+        node.bounds[5] = buildData[offset + BUILD_DATA_MAX_Z];
 
-        node.bounds[0] = cx - hx;
-        node.bounds[1] = cy - hy;
-        node.bounds[2] = cz - hz;
-        node.bounds[3] = cx + hx;
-        node.bounds[4] = cy + hy;
-        node.bounds[5] = cz + hz;
-
+        const cx = buildDataCenter(buildData, offset, 0);
+        const cy = buildDataCenter(buildData, offset, 1);
+        const cz = buildDataCenter(buildData, offset, 2);
         _centerMin[0] = cx;
         _centerMin[1] = cy;
         _centerMin[2] = cz;
@@ -277,19 +263,15 @@ function buildRecursive(
 
         for (let i = startIndex + 1; i < endIndex; i++) {
             offset = i * BUILD_DATA_STRIDE;
-            const cx = buildData[offset + BUILD_DATA_CENTER_X];
-            const hx = buildData[offset + BUILD_DATA_HALF_EXTENT_X];
-            const cy = buildData[offset + BUILD_DATA_CENTER_Y];
-            const hy = buildData[offset + BUILD_DATA_HALF_EXTENT_Y];
-            const cz = buildData[offset + BUILD_DATA_CENTER_Z];
-            const hz = buildData[offset + BUILD_DATA_HALF_EXTENT_Z];
-
-            const minX = cx - hx;
-            const minY = cy - hy;
-            const minZ = cz - hz;
-            const maxX = cx + hx;
-            const maxY = cy + hy;
-            const maxZ = cz + hz;
+            const minX = buildData[offset + BUILD_DATA_MIN_X];
+            const minY = buildData[offset + BUILD_DATA_MIN_Y];
+            const minZ = buildData[offset + BUILD_DATA_MIN_Z];
+            const maxX = buildData[offset + BUILD_DATA_MAX_X];
+            const maxY = buildData[offset + BUILD_DATA_MAX_Y];
+            const maxZ = buildData[offset + BUILD_DATA_MAX_Z];
+            const cx = (minX + maxX) * 0.5;
+            const cy = (minY + maxY) * 0.5;
+            const cz = (minZ + maxZ) * 0.5;
 
             if (minX < node.bounds[0]) node.bounds[0] = minX;
             if (minY < node.bounds[1]) node.bounds[1] = minY;
@@ -376,14 +358,12 @@ function partitionChildren(
     let left = startIndex;
     let right = endIndex - 1;
 
-    const centerOffset = axis * 2;
-
     while (left <= right) {
-        const leftCenter = buildData[left * BUILD_DATA_STRIDE + centerOffset];
+        const leftCenter = buildDataCenter(buildData, left * BUILD_DATA_STRIDE, axis);
         if (leftCenter < splitPos) {
             left++;
         } else {
-            const rightCenter = buildData[right * BUILD_DATA_STRIDE + centerOffset];
+            const rightCenter = buildDataCenter(buildData, right * BUILD_DATA_STRIDE, axis);
             if (rightCenter >= splitPos) {
                 right--;
             } else {

@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import { box, compound, sphere, subShape } from '../../src';
 
@@ -49,6 +49,30 @@ describe('SubShapeID', () => {
         const popResult = subShape.popResult();
         subShape.popIndex(popResult, builder1.value, compoundShape.children.length);
         expect(popResult.value).toBe(1);
+        expect(popResult.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
+    });
+
+    it('a zero bit level pops nothing and keeps the whole id', () => {
+        const popResult = subShape.popResult();
+        subShape.pop(popResult, 0xfffffffe, 0);
+        expect(popResult.value).toBe(0);
+        expect(popResult.remainder).toBe(0xfffffffe);
+
+        // a one child list takes zero bits
+        subShape.popIndex(popResult, 0x12345678, 1);
+        expect(popResult.value).toBe(0);
+        expect(popResult.remainder).toBe(0x12345678);
+    });
+
+    it('a full width level pushes and pops every bit', () => {
+        const pushed = subShape.builder();
+        subShape.push(pushed, subShape.builder(), 0x12345678, 32);
+        expect(pushed.value).toBe(0x12345678);
+        expect(pushed.currentBit).toBe(32);
+
+        const popResult = subShape.popResult();
+        subShape.pop(popResult, 0x9abcdef0, 32);
+        expect(popResult.value).toBe(0x9abcdef0);
         expect(popResult.remainder).toBe(subShape.EMPTY_SUB_SHAPE_ID);
     });
 

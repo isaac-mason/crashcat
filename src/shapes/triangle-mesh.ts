@@ -1,4 +1,5 @@
-import { type Box3, box3, mat4, type Quat, quat, triangle3, type Vec3, vec3 } from 'mathcat';
+import { type Mat4, mat4, quat, type Vec3, vec3 } from 'math';
+import { type Box3, box3, triangle3 } from 'math/shapes';
 import type { MassProperties } from '../body/mass-properties';
 import * as subShape from '../body/sub-shape';
 import { EMPTY_SUB_SHAPE_ID } from '../body/sub-shape';
@@ -20,11 +21,15 @@ import {
 } from '../collision/cast-shape-vs-shape';
 import {
     createRayIntersectsTriangleResult,
+    FLT_MIN,
     INITIAL_EARLY_OUT_FRACTION,
     rayDistanceToBox3,
+    rayFractionToBox3,
     rayHitsBox3,
     rayIntersectsTriangle,
+    safeReciprocal,
 } from '../collision/cast-utils';
+import { computeBarycentricCoordinates3d, createBarycentricCoordinatesResult } from '../collision/closest-points';
 import type { CollidePointCollector, CollidePointSettings } from '../collision/collide-point-vs-shape';
 import { createCollidePointHit } from '../collision/collide-point-vs-shape';
 import {
@@ -48,11 +53,9 @@ import { createClosestPointOnTriangleResult, getClosestPointOnTriangle } from '.
 import { assert } from '../utils/assert';
 import { isScaleInsideOut, transformFaceWithMat4RotationTranslation, transformFaceWithMat4Scale } from '../utils/face';
 import {
-    type ConvexShape,
     defineShape,
     getShapeSupportingFace,
     type Shape,
-    ShapeCategory,
     ShapeType,
     type SupportingFaceResult,
     type SurfaceNormalResult,
@@ -155,15 +158,15 @@ const _getSupportingFace_c = /* @__PURE__ */ vec3.create();
 export const def = /* @__PURE__ */ (() =>
     defineShape<TriangleMeshShape>({
         type: ShapeType.TRIANGLE_MESH,
-        category: ShapeCategory.MESH,
         computeMassProperties,
         getSurfaceNormal,
         getSupportingFace,
+        getMaterial,
         castRay: castRayVsTriangleMesh,
         collidePoint: collidePointVsTriangleMesh,
         register: () => {
             for (const shapeDef of Object.values(shapeDefs)) {
-                if (shapeDef.category === ShapeCategory.CONVEX) {
+                if (shapeDef.convex !== undefined) {
                     setCollideShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, collideConvexVsTriangleMesh);
                     setCollideShapeFn(ShapeType.TRIANGLE_MESH, shapeDef.type, collideTriangleMeshVsConvex);
                     setCastShapeFn(shapeDef.type, ShapeType.TRIANGLE_MESH, castConvexVsTriangleMesh);
@@ -184,6 +187,13 @@ function computeMassProperties(out: MassProperties, _shape: TriangleMeshShape): 
     // mass properties should be overridden at the body level if needed.
     out.mass = 0;
     mat4.identity(out.inertia);
+}
+
+function getMaterial(shape: TriangleMeshShape, subShapeId: number): number {
+    subShape.popIndex(_subShapeIdPopResult, subShapeId, shape.data.triangleCount);
+    const triangleIndex = _subShapeIdPopResult.value;
+    assert(triangleIndex < shape.data.triangleCount, 'Invalid SubShapeID for TriangleMeshShape');
+    return triangleMeshData.getMaterialId(shape.data, triangleIndex);
 }
 
 function getSurfaceNormal(ioResult: SurfaceNormalResult, shape: TriangleMeshShape, subShapeId: number): void {
@@ -247,22 +257,13 @@ function getSupportingFace(ioResult: SupportingFaceResult, _direction: Vec3, sha
 
 /* cast ray */
 
-const _castRayVsTriangleMesh_pos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_quat = /* @__PURE__ */ quat.create();
-const _castRayVsTriangleMesh_scale = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayOriginLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_rayDirectionLocal = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_invQuat = /* @__PURE__ */ quat.create();
-const _castRayVsTriangleMesh_mat4_WorldToB = /* @__PURE__ */ mat4.create();
-const _castRayVsTriangleMesh_negPos = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_hitResult = /* @__PURE__ */ createRayIntersectsTriangleResult();
 const _castRayVsTriangleMesh_stackNodes: number[] = [];
 const _castRayVsTriangleMesh_stackDist: number[] = [];
-const _castRayVsTriangleMesh_leftBounds = /* @__PURE__ */ box3.create();
-const _castRayVsTriangleMesh_rightBounds = /* @__PURE__ */ box3.create();
-const _castRayVsTriangleMesh_a = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_b = /* @__PURE__ */ vec3.create();
-const _castRayVsTriangleMesh_c = /* @__PURE__ */ vec3.create();
 const _castRayVsTriangleMesh_hit = /* @__PURE__ */ createCastRayHit();
 const _castRayVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
 
@@ -290,52 +291,6 @@ function castRayVsTriangleMesh(
     scaleY: number,
     scaleZ: number,
 ): void {
-    vec3.set(_castRayVsTriangleMesh_pos, posX, posY, posZ);
-    quat.set(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
-    vec3.set(_castRayVsTriangleMesh_scale, scaleX, scaleY, scaleZ);
-
-    // pre-compute world-to-B matrix (inverse of B's transform)
-    // inverse transform: conjugate rotation, then negate-rotated position
-    quat.conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
-    vec3.negate(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_pos);
-    vec3.transformQuat(_castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_negPos, _castRayVsTriangleMesh_invQuat);
-    mat4.fromRotationTranslation(
-        _castRayVsTriangleMesh_mat4_WorldToB,
-        _castRayVsTriangleMesh_invQuat,
-        _castRayVsTriangleMesh_negPos,
-    );
-
-    // set ray origin from parameters
-    vec3.set(_castRayVsTriangleMesh_rayOriginLocal, originX, originY, originZ);
-    // transform ray from world space to mesh local space using pre-computed matrix
-    vec3.transformMat4(
-        _castRayVsTriangleMesh_rayOriginLocal,
-        _castRayVsTriangleMesh_rayOriginLocal,
-        _castRayVsTriangleMesh_mat4_WorldToB,
-    );
-
-    // set ray direction from parameters
-    vec3.set(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
-    mat4.multiply3x3Vec(
-        _castRayVsTriangleMesh_rayDirectionLocal,
-        _castRayVsTriangleMesh_mat4_WorldToB,
-        _castRayVsTriangleMesh_rayDirectionLocal,
-    );
-
-    // handle scale by dividing ray direction components by scale
-    // (scale affects how far we need to go in local space to reach world distance)
-    _castRayVsTriangleMesh_rayDirectionLocal[0] /= _castRayVsTriangleMesh_scale[0];
-    _castRayVsTriangleMesh_rayDirectionLocal[1] /= _castRayVsTriangleMesh_scale[1];
-    _castRayVsTriangleMesh_rayDirectionLocal[2] /= _castRayVsTriangleMesh_scale[2];
-
-    // hoisted scalars for the per-node slab tests and per-triangle intersections
-    const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0];
-    const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1];
-    const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2];
-    const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0];
-    const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1];
-    const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2];
-
     const buffer = shape.bvh.buffer;
     const meshData = shape.data;
 
@@ -344,6 +299,53 @@ function castRayVsTriangleMesh(
         return;
     }
 
+    // transform the ray into the mesh's unscaled local space: rigid inverse, then divide origin and
+    // direction by the scale. the bvh and the vertices are unscaled, so nothing is scaled per
+    // triangle; the hit parameter t is unchanged by rescaling origin and direction together, so the
+    // fraction needs no correction either (jolt: ScaledShape::CastRay)
+    quat.set(_castRayVsTriangleMesh_quat, quatX, quatY, quatZ, quatW);
+    quat.conjugate(_castRayVsTriangleMesh_invQuat, _castRayVsTriangleMesh_quat);
+
+    vec3.set(_castRayVsTriangleMesh_rayOriginLocal, originX - posX, originY - posY, originZ - posZ);
+    vec3.transformQuat(
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_rayOriginLocal,
+        _castRayVsTriangleMesh_invQuat,
+    );
+    vec3.set(_castRayVsTriangleMesh_rayDirectionLocal, directionX, directionY, directionZ);
+    vec3.transformQuat(
+        _castRayVsTriangleMesh_rayDirectionLocal,
+        _castRayVsTriangleMesh_rayDirectionLocal,
+        _castRayVsTriangleMesh_invQuat,
+    );
+
+    const localOriginX = _castRayVsTriangleMesh_rayOriginLocal[0] / scaleX;
+    const localOriginY = _castRayVsTriangleMesh_rayOriginLocal[1] / scaleY;
+    const localOriginZ = _castRayVsTriangleMesh_rayOriginLocal[2] / scaleZ;
+    const localDirX = _castRayVsTriangleMesh_rayDirectionLocal[0] / scaleX;
+    const localDirY = _castRayVsTriangleMesh_rayDirectionLocal[1] / scaleY;
+    const localDirZ = _castRayVsTriangleMesh_rayDirectionLocal[2] / scaleZ;
+
+    // reciprocals of the local displacement, once per query, for the fraction-space slab tests
+    const invDispX = safeReciprocal(localDirX * length);
+    const invDispY = safeReciprocal(localDirY * length);
+    const invDispZ = safeReciprocal(localDirZ * length);
+
+    // a mirrored scale needs no winding fix-up: the ray was mirrored into local space with the
+    // mesh, so the local front-face test already answers for the world-space surface side
+    // (jolt: ScaledShape::CastRay rescales the ray and casts against the inner shape as is)
+    const backfaceCulling = !settings.collideWithBackfacesTriangles;
+
+    const positions = meshData.positions;
+    const triangleBuffer = meshData.triangleBuffer;
+
+    // the collector's early-out fraction, held in a local and refreshed after each hit so the node
+    // loop does one polymorphic property read per hit instead of several per node. the triangle
+    // test gets the same bound in ray units, clamped to the ray length: the initial early-out sits
+    // a hair above 1 so that a hit at the very end still counts, but nothing beyond the segment may
+    let earlyOut = collector.earlyOutFraction;
+    let maxT = earlyOut < 1 ? earlyOut * length : length;
+
     let foundHit = false;
     let stackSize = 0;
     _castRayVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -351,50 +353,34 @@ function castRayVsTriangleMesh(
     stackSize++;
 
     while (stackSize > 0) {
-        // early out: very close hit
-        if (collector.earlyOutFraction <= 0) {
-            break;
-        }
-
         stackSize--;
         const nodeOffset = _castRayVsTriangleMesh_stackNodes[stackSize];
         const nodeDistance = _castRayVsTriangleMesh_stackDist[stackSize];
 
-        // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        // early out: if fraction to this node >= closest hit, skip it. a node is only ever pushed
+        // with a finite entry fraction, so no re-test of its bounds is needed here
+        if (nodeDistance >= earlyOut) {
             continue;
         }
-
-        // note: no need to test ray x triangle bounds intersection here - we already proved the ray
-        // intersects this node's bounds when we computed the distance during push.
-        // if the ray didn't intersect, rayDistanceToBox3 would have returned Infinity
-        // and we wouldn't have pushed this node onto the stack.
 
         if (bvh.nodeIsLeaf(buffer, nodeOffset)) {
             // leaf: check triangles
             const triStart = triangleMeshBvh.nodeTriStart(buffer, nodeOffset);
             const triCount = triangleMeshBvh.nodeTriCount(buffer, nodeOffset);
             for (let i = 0; i < triCount; i++) {
+                // an any-hit collector drops its early-out to zero: nothing further can qualify
+                if (earlyOut <= 0) break;
+
                 const triangleIndex = triStart + i;
 
-                // get triangle vertices from interleaved buffer
-                getTriangleVertices(
-                    _castRayVsTriangleMesh_a,
-                    _castRayVsTriangleMesh_b,
-                    _castRayVsTriangleMesh_c,
-                    meshData,
-                    triangleIndex,
-                );
+                // triangle vertices straight from the interleaved buffer, no scratch copy
+                const triOffset = triangleIndex * triangleMeshData.TRIANGLE_STRIDE;
+                const ia = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_A] * 3;
+                const ib = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_B] * 3;
+                const ic = triangleBuffer[triOffset + triangleMeshData.OFFSET_INDEX_C] * 3;
 
-                // apply scale to vertices (mesh is in local space)
-                const a = vec3.mul(_castRayVsTriangleMesh_a, _castRayVsTriangleMesh_a, _castRayVsTriangleMesh_scale);
-                const b = vec3.mul(_castRayVsTriangleMesh_b, _castRayVsTriangleMesh_b, _castRayVsTriangleMesh_scale);
-                const c = vec3.mul(_castRayVsTriangleMesh_c, _castRayVsTriangleMesh_c, _castRayVsTriangleMesh_scale);
-
-                // note: we don't do a per-triangle aabb test, the bvh node aabb already provides tight culling
-                // and the ray x triangle test is not so expensive as gjk/epa collision or shapecast.
-
-                // test ray vs triangle
+                // note: no per-triangle aabb test, the bvh node aabb already provides tight culling
+                // and the ray x triangle test is cheap next to gjk/epa or a shape cast
                 rayIntersectsTriangle(
                     _castRayVsTriangleMesh_hitResult,
                     localOriginX,
@@ -404,16 +390,21 @@ function castRayVsTriangleMesh(
                     localDirY,
                     localDirZ,
                     length,
-                    a,
-                    b,
-                    c,
-                    !settings.collideWithBackfaces,
+                    maxT,
+                    positions[ia],
+                    positions[ia + 1],
+                    positions[ia + 2],
+                    positions[ib],
+                    positions[ib + 1],
+                    positions[ib + 2],
+                    positions[ic],
+                    positions[ic + 1],
+                    positions[ic + 2],
+                    backfaceCulling,
                 );
 
-                if (
-                    _castRayVsTriangleMesh_hitResult.hit &&
-                    _castRayVsTriangleMesh_hitResult.fraction < collector.earlyOutFraction
-                ) {
+                // the triangle test already rejected anything beyond maxT
+                if (_castRayVsTriangleMesh_hitResult.hit) {
                     foundHit = true;
 
                     _castRayVsTriangleMesh_subShapeIdBuilder.value = subShapeId;
@@ -428,72 +419,66 @@ function castRayVsTriangleMesh(
                     _castRayVsTriangleMesh_hit.status = CastRayStatus.COLLIDING;
                     _castRayVsTriangleMesh_hit.fraction = _castRayVsTriangleMesh_hitResult.fraction;
                     _castRayVsTriangleMesh_hit.subShapeId = _castRayVsTriangleMesh_subShapeIdBuilder.value;
-                    _castRayVsTriangleMesh_hit.materialId = triangleMeshData.getMaterialId(meshData, triangleIndex);
                     _castRayVsTriangleMesh_hit.bodyIdB = collector.bodyIdB;
                     collector.addHit(_castRayVsTriangleMesh_hit);
+
+                    earlyOut = collector.earlyOutFraction;
+                    maxT = earlyOut < 1 ? earlyOut * length : length;
                 }
             }
         } else {
-            // internal node: compute distances to both children and sort by distance
-            // push farther child first so closer is popped first
+            // internal node: entry fractions of both children, bounds read straight from the buffer;
+            // push the farther child first so the closer one is popped first
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            bvh.nodeGetBounds(_castRayVsTriangleMesh_leftBounds, buffer, leftOffset);
-            bvh.nodeGetBounds(_castRayVsTriangleMesh_rightBounds, buffer, rightOffset);
-
-            const leftDist = rayDistanceToBox3(
+            const leftDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsTriangleMesh_leftBounds[0],
-                _castRayVsTriangleMesh_leftBounds[1],
-                _castRayVsTriangleMesh_leftBounds[2],
-                _castRayVsTriangleMesh_leftBounds[3],
-                _castRayVsTriangleMesh_leftBounds[4],
-                _castRayVsTriangleMesh_leftBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[leftOffset + bvh.NODE_MIN_X],
+                buffer[leftOffset + bvh.NODE_MIN_Y],
+                buffer[leftOffset + bvh.NODE_MIN_Z],
+                buffer[leftOffset + bvh.NODE_MAX_X],
+                buffer[leftOffset + bvh.NODE_MAX_Y],
+                buffer[leftOffset + bvh.NODE_MAX_Z],
             );
-            const rightDist = rayDistanceToBox3(
+            const rightDist = rayFractionToBox3(
                 localOriginX,
                 localOriginY,
                 localOriginZ,
-                localDirX,
-                localDirY,
-                localDirZ,
-                length,
-                _castRayVsTriangleMesh_rightBounds[0],
-                _castRayVsTriangleMesh_rightBounds[1],
-                _castRayVsTriangleMesh_rightBounds[2],
-                _castRayVsTriangleMesh_rightBounds[3],
-                _castRayVsTriangleMesh_rightBounds[4],
-                _castRayVsTriangleMesh_rightBounds[5],
+                invDispX,
+                invDispY,
+                invDispZ,
+                buffer[rightOffset + bvh.NODE_MIN_X],
+                buffer[rightOffset + bvh.NODE_MIN_Y],
+                buffer[rightOffset + bvh.NODE_MIN_Z],
+                buffer[rightOffset + bvh.NODE_MAX_X],
+                buffer[rightOffset + bvh.NODE_MAX_Y],
+                buffer[rightOffset + bvh.NODE_MAX_Z],
             );
 
-            // push farther child first (so closer child is on top of stack)
             if (leftDist <= rightDist) {
-                // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
-                // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < earlyOut) {
                     _castRayVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castRayVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
@@ -538,7 +523,9 @@ const hitCountCollector = {
 
 const _collidePointVsTriangleMesh_castRaySettings = /* @__PURE__ */ (() => {
     const s = createDefaultCastRaySettings();
-    s.collideWithBackfaces = true; // backface collision required for odd-even rule
+    // the odd-even rule counts every crossing, front or back
+    s.collideWithBackfacesTriangles = true;
+    s.collideWithBackfacesConvex = true;
     return s;
 })();
 
@@ -602,6 +589,11 @@ function collidePointVsTriangleMesh(
     const aabbHeight = _collidePointVsTriangleMesh_aabbSize[1];
     const rayLength = aabbHeight * 1.1;
 
+    // a mesh with no height gives a ray of no length, which crosses nothing: the point is outside
+    if (rayLength === 0) {
+        return;
+    }
+
     // reset hit counter and perform raycast
     hitCountCollector.reset();
     hitCountCollector.bodyIdB = collector.bodyIdB;
@@ -635,17 +627,49 @@ function collidePointVsTriangleMesh(
 
         // extract triangle index from subShapeId to get material
         subShape.popIndex(_collidePointVsTriangleMesh_popResult, hitCountCollector.lastSubShapeId, shapeB.data.triangleCount);
-        _collidePointHit.materialId = triangleMeshData.getMaterialId(shapeB.data, _collidePointVsTriangleMesh_popResult.value);
 
         _collidePointHit.bodyIdB = collector.bodyIdB;
         collector.addHit(_collidePointHit);
     }
 }
 
+/**
+ * bring a box from the mesh's scaled local space into the unscaled space its bvh is built in.
+ * a negative scale component swaps that axis' min and max, so they are re-ordered.
+ */
+function divideBoxByScale(box: Box3, scaleX: number, scaleY: number, scaleZ: number): void {
+    if (scaleX === 1 && scaleY === 1 && scaleZ === 1) return;
+
+    const x0 = box[0] / scaleX;
+    const x1 = box[3] / scaleX;
+    box[0] = x0 < x1 ? x0 : x1;
+    box[3] = x0 < x1 ? x1 : x0;
+    const y0 = box[1] / scaleY;
+    const y1 = box[4] / scaleY;
+    box[1] = y0 < y1 ? y0 : y1;
+    box[4] = y0 < y1 ? y1 : y0;
+    const z0 = box[2] / scaleZ;
+    const z1 = box[5] / scaleZ;
+    box[2] = z0 < z1 ? z0 : z1;
+    box[5] = z0 < z1 ? z1 : z0;
+}
+
+/** transform a point by an affine matrix (rotation, scale, translation): no projective divide */
+function transformPointAffine(out: Vec3, m: Mat4, p: Vec3): Vec3 {
+    const x = p[0];
+    const y = p[1];
+    const z = p[2];
+    out[0] = m[0] * x + m[4] * y + m[8] * z + m[12];
+    out[1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+    out[2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+    return out;
+}
+
 /* cast shape */
 
 const _castConvexVsTriangleMesh_castShapeHit = /* @__PURE__ */ createCastShapeHit();
 const _castConvexVsTriangleMesh_displacementInB = /* @__PURE__ */ vec3.create();
+const _castConvexVsTriangleMesh_walkDisplacement = /* @__PURE__ */ vec3.create();
 const _castConvexVsTriangleMesh_triangleSupport = /* @__PURE__ */ createSupport();
 const _castConvexVsTriangleMesh_sweptAABB: Box3 = /* @__PURE__ */ box3.create();
 
@@ -747,13 +771,12 @@ function castConvexVsTriangleMesh(
     quat.set(_castConvexVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     vec3.set(_castConvexVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    // transform A into B's local space (aligned with castConvexVsConvex pattern)
-    // transformA = A's transform in world space
-    const transformA = mat4.fromRotationTranslationScale(
+    // transform A into B's local space (as castConvexVsConvex): rotation and translation only, A's
+    // scale goes to its support
+    const transformA = mat4.fromRotationTranslation(
         _castConvexVsTriangleMesh_AtoWorld,
         _castConvexVsTriangleMesh_quatA,
         _castConvexVsTriangleMesh_posA,
-        _castConvexVsTriangleMesh_scaleA,
     );
 
     // targetTransform = B's transform in world space
@@ -775,8 +798,18 @@ function castConvexVsTriangleMesh(
         _castConvexVsTriangleMesh_displacementA,
     );
 
-    // compute base AABB of shape A at t=0 in mesh local space
-    box3.transformMat4(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, castTransform);
+    // compute base AABB of shape A at t=0 in mesh local space, then into the unscaled space the bvh
+    // is built in. the cast itself stays in scaled mesh space; the walk ray, half-extents and
+    // displacement below are the unscaled-space copies
+    box3.scale(_castConvexVsTriangleMesh_sweptAABB, shapeA.aabb, _castConvexVsTriangleMesh_scaleA);
+    box3.transformMat4(_castConvexVsTriangleMesh_sweptAABB, _castConvexVsTriangleMesh_sweptAABB, castTransform);
+    divideBoxByScale(_castConvexVsTriangleMesh_sweptAABB, scaleBX, scaleBY, scaleBZ);
+    vec3.set(
+        _castConvexVsTriangleMesh_walkDisplacement,
+        _castConvexVsTriangleMesh_displacementInB[0] / scaleBX,
+        _castConvexVsTriangleMesh_displacementInB[1] / scaleBY,
+        _castConvexVsTriangleMesh_displacementInB[2] / scaleBZ,
+    );
 
     // determine if we want to use the actual shape or a shrunken shape with convex radius
     const supportMode = settings.useShrunkenShapeAndConvexRadius
@@ -794,23 +827,36 @@ function castConvexVsTriangleMesh(
     // targetTransform is already B-to-world from above
     const mat4_BtoWorld = targetTransform;
 
+    // the active edge movement hint in the mesh's local space
+    quat.conjugate(_castConvexVsTriangleMesh_inverseQuaternionB, _castConvexVsTriangleMesh_quatB);
+    vec3.transformQuat(
+        _castConvexVsTriangleMesh_activeEdgeMovementDirection,
+        settings.activeEdgeMovementDirection,
+        _castConvexVsTriangleMesh_inverseQuaternionB,
+    );
+
     // compute centroid of base AABB
     // cast ray: swept AABB center along the normalized displacement
     const rayOriginX = (_castConvexVsTriangleMesh_sweptAABB[0] + _castConvexVsTriangleMesh_sweptAABB[3]) * 0.5;
     const rayOriginY = (_castConvexVsTriangleMesh_sweptAABB[1] + _castConvexVsTriangleMesh_sweptAABB[4]) * 0.5;
     const rayOriginZ = (_castConvexVsTriangleMesh_sweptAABB[2] + _castConvexVsTriangleMesh_sweptAABB[5]) * 0.5;
 
-    const rayLength = vec3.length(_castConvexVsTriangleMesh_displacementInB);
+    const rayLength = vec3.length(_castConvexVsTriangleMesh_walkDisplacement);
     const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
-    const rayDirX = _castConvexVsTriangleMesh_displacementInB[0] * invRayLength;
-    const rayDirY = _castConvexVsTriangleMesh_displacementInB[1] * invRayLength;
-    const rayDirZ = _castConvexVsTriangleMesh_displacementInB[2] * invRayLength;
+    const rayDirX = _castConvexVsTriangleMesh_walkDisplacement[0] * invRayLength;
+    const rayDirY = _castConvexVsTriangleMesh_walkDisplacement[1] * invRayLength;
+    const rayDirZ = _castConvexVsTriangleMesh_walkDisplacement[2] * invRayLength;
 
     // compute half-extents of the base AABB
+    // grown by the extra convex radius, in the unscaled space
     const halfExtents = _castConvexVsTriangleMesh_halfExtents;
-    halfExtents[0] = (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * 0.5;
-    halfExtents[1] = (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5;
-    halfExtents[2] = (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5;
+    const extra = settings.extraConvexRadius;
+    halfExtents[0] =
+        (_castConvexVsTriangleMesh_sweptAABB[3] - _castConvexVsTriangleMesh_sweptAABB[0]) * 0.5 + extra / Math.abs(scaleBX);
+    halfExtents[1] =
+        (_castConvexVsTriangleMesh_sweptAABB[4] - _castConvexVsTriangleMesh_sweptAABB[1]) * 0.5 + extra / Math.abs(scaleBY);
+    halfExtents[2] =
+        (_castConvexVsTriangleMesh_sweptAABB[5] - _castConvexVsTriangleMesh_sweptAABB[2]) * 0.5 + extra / Math.abs(scaleBZ);
 
     let stackSize = 0;
     _castConvexVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -825,7 +871,7 @@ function castConvexVsTriangleMesh(
         const nodeDistance = _castConvexVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -874,8 +920,8 @@ function castConvexVsTriangleMesh(
                     continue;
                 }
 
-                // early out if we've found a very close hit
-                if (collector.earlyOutFraction <= 0) {
+                // stop once the collector wants no more hits
+                if (collector.earlyOutFraction <= -Infinity) {
                     return;
                 }
 
@@ -917,7 +963,8 @@ function castConvexVsTriangleMesh(
                 );
 
                 // backface check
-                if (!settings.collideWithBackfaces && vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0) {
+                const backFacing = vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
+                if (!settings.collideWithBackfacesTriangles && backFacing) {
                     continue;
                 }
 
@@ -934,7 +981,7 @@ function castConvexVsTriangleMesh(
                     _castConvexVsTriangleMesh_displacementInB,
                     settings.collisionTolerance,
                     settings.penetrationTolerance,
-                    supportA.convexRadius,
+                    supportA.convexRadius + settings.extraConvexRadius,
                     0, // triangle has no convex radius
                     collector.earlyOutFraction,
                     settings.returnDeepestPoint,
@@ -962,17 +1009,7 @@ function castConvexVsTriangleMesh(
                 // active edge detection - correct normal if hitting inactive edge
                 const triangleActiveEdges = getActiveEdges(meshData, triangleIndex);
                 if (settings.collideOnlyWithActiveEdges && triangleActiveEdges !== 0b111) {
-                    // transform movement direction from world space to mesh's local space (reuse pre-computed inverse)
-                    vec3.transformQuat(
-                        _castConvexVsTriangleMesh_activeEdgeMovementDirection,
-                        settings.activeEdgeMovementDirection,
-                        _castConvexVsTriangleMesh_inverseQuaternionB,
-                    );
-
-                    // prepare triangle normal for fixNormal
-                    // back-facing check: if displacement dot normal > 0, we're approaching from back
-                    const backFacing =
-                        !settings.collideWithBackfaces || vec3.dot(normal, _castConvexVsTriangleMesh_displacementInB) > 0;
+                    // the triangle normal is flipped as the axis points towards the triangle instead of away
                     if (backFacing) {
                         vec3.copy(_castConvexVsTriangleMesh_triangleNormalForFix, normal);
                     } else {
@@ -1035,8 +1072,6 @@ function castConvexVsTriangleMesh(
                 );
 
                 _castConvexVsTriangleMesh_castShapeHit.subShapeIdB = _castConvexVsTriangleMesh_subShapeIdBuilder.value;
-                _castConvexVsTriangleMesh_castShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-                _castConvexVsTriangleMesh_castShapeHit.materialIdB = triangleMeshData.getMaterialId(meshData, triangleIndex);
                 _castConvexVsTriangleMesh_castShapeHit.bodyIdB = collector.bodyIdB;
 
                 // gather faces if requested
@@ -1075,17 +1110,20 @@ function castConvexVsTriangleMesh(
                         _castConvexVsTriangleMesh_scaleA,
                     );
 
-                    // face b: supporting face is the triangle vertices (already scaled and in B's local space)
+                    // face b: supporting face is the triangle vertices (already scaled and in B's local space),
+                    // winding swapped when the scale turns the mesh inside out
+                    const faceSecond = scaleSign < 0 ? c : b;
+                    const faceThird = scaleSign < 0 ? b : c;
                     _castConvexVsTriangleMesh_castShapeHit.faceB.numVertices = 3;
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[0] = a[0];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[1] = a[1];
                     _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[2] = a[2];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[3] = b[0];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[4] = b[1];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[5] = b[2];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[6] = c[0];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[7] = c[1];
-                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[8] = c[2];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[3] = faceSecond[0];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[4] = faceSecond[1];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[5] = faceSecond[2];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[6] = faceThird[0];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[7] = faceThird[1];
+                    _castConvexVsTriangleMesh_castShapeHit.faceB.vertices[8] = faceThird[2];
 
                     // transform to world space (rotation + translation only, no scale - vertices are already scaled)
                     transformFaceWithMat4RotationTranslation(_castConvexVsTriangleMesh_castShapeHit.faceB, mat4_BtoWorld);
@@ -1154,27 +1192,30 @@ function castConvexVsTriangleMesh(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
                 // left is closer or equal - push right first
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
                 // right is closer - push left first
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castConvexVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castConvexVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
@@ -1216,10 +1257,6 @@ const _collideConvexVsTriangleMesh_transform2To1Quat = /* @__PURE__ */ quat.crea
 const _collideConvexVsTriangleMesh_triangleA_inA = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_triangleB_inA = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_triangleC_inA = /* @__PURE__ */ vec3.create();
-
-const _collideConvexVsTriangleMesh_triangleA = /* @__PURE__ */ vec3.create();
-const _collideConvexVsTriangleMesh_triangleB = /* @__PURE__ */ vec3.create();
-const _collideConvexVsTriangleMesh_triangleC = /* @__PURE__ */ vec3.create();
 
 const _collideConvexVsTriangleMesh_getTriangleVertices_a = /* @__PURE__ */ vec3.create();
 const _collideConvexVsTriangleMesh_getTriangleVertices_b = /* @__PURE__ */ vec3.create();
@@ -1366,6 +1403,8 @@ function collideConvexVsTriangleMesh(
         _collideConvexVsTriangleMesh_boundsOf1InSpaceOf2,
         vec3.setScalar(_collideConvexVsTriangleMesh_aabbShapeExpand, settings.maxSeparationDistance),
     );
+    // the bvh is built in the mesh's unscaled local space
+    divideBoxByScale(_collideConvexVsTriangleMesh_boundsOf1InSpaceOf2, scaleBX, scaleBY, scaleBZ);
 
     // pre-compute transformation matrices
     // A-to-world matrix (rotation + translation only, no scale)
@@ -1375,19 +1414,25 @@ function collideConvexVsTriangleMesh(
         _collideConvexVsTriangleMesh_posA,
     );
 
-    // B-to-A matrix (rotation + translation only, no scale - vertices are scaled separately)
-    const mat4_BtoA = mat4.fromRotationTranslation(
+    // B-to-A matrix with the mesh scale folded in (scale first, then rotation and translation), so
+    // each vertex is one affine transform (jolt: mTransform2To1 * (mScale2 * v))
+    const mat4_BtoA = mat4.fromRotationTranslationScale(
         _collideConvexVsTriangleMesh_mat4_BtoA,
         _collideConvexVsTriangleMesh_transform2To1Quat,
         _collideConvexVsTriangleMesh_transform2To1Pos,
+        _collideConvexVsTriangleMesh_scaleB,
     );
 
     // determine if mesh is inside-out
     const scaleSign = vec3.isScaleInsideOut(_collideConvexVsTriangleMesh_scaleB) ? -1 : 1;
 
-    // get support function for shape A (shrunk core; filled once, reused across the triangle loop)
+    // both supports for shape A are filled once per pair, the first time a triangle needs one: the
+    // shrunk core on the first triangle to reach gjk, the inflated one on the first to reach epa.
+    // a pair whose bvh walk reaches no leaf fills neither.
     const supportA = _collideConvexVsTriangleMesh_supportA;
-    setShapeSupport(supportA, shapeA, SupportFunctionMode.EXCLUDE_CONVEX_RADIUS, _collideConvexVsTriangleMesh_scaleA);
+    let supportAFilled = false;
+    const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
+    let supportAWithRadiusFilled = false;
 
     // bvh traversal
     let stackSize = 0;
@@ -1434,28 +1479,22 @@ function collideConvexVsTriangleMesh(
                     triangleIndex,
                 );
 
-                // scale triangle in mesh local space, then transform to shape A's local space
-                // using pre-computed mat4_BtoA matrix
-                const a = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleA,
+                // scaled and transformed into shape A's local space in one affine multiply each
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleA_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_a,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-                const b = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleB,
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleB_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_b,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-                const c = vec3.mul(
-                    _collideConvexVsTriangleMesh_triangleC,
+                transformPointAffine(
+                    _collideConvexVsTriangleMesh_triangleC_inA,
+                    mat4_BtoA,
                     _collideConvexVsTriangleMesh_getTriangleVertices_c,
-                    _collideConvexVsTriangleMesh_scaleB,
                 );
-
-                // transform scaled triangle vertices to shape A's local space using mat4
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleA_inA, a, mat4_BtoA);
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleB_inA, b, mat4_BtoA);
-                vec3.transformMat4(_collideConvexVsTriangleMesh_triangleC_inA, c, mat4_BtoA);
 
                 // compute triangle AABB in shape A's local space
                 const triangleAABB = _collideConvexVsTriangleMesh_triangleAABB;
@@ -1520,6 +1559,16 @@ function collideConvexVsTriangleMesh(
                     vec3.normalize(penetrationAxis, penetrationAxis);
                 }
 
+                if (!supportAFilled) {
+                    setShapeSupport(
+                        supportA,
+                        shapeA,
+                        SupportFunctionMode.EXCLUDE_CONVEX_RADIUS,
+                        _collideConvexVsTriangleMesh_scaleA,
+                    );
+                    supportAFilled = true;
+                }
+
                 // perform GJK step with inflated shape (convex radius + max separation distance)
                 let maxSeparationDistance = settings.maxSeparationDistance;
                 penetrationDepthStepGJK(
@@ -1543,14 +1592,15 @@ function collideConvexVsTriangleMesh(
                     // clamp max separation distance to avoid excessive inflation
                     maxSeparationDistance = Math.min(maxSeparationDistance, 1.0);
 
-                    // fill the inflated A (include convex radius + separation distance) for EPA
-                    const supportAWithRadius = _collideConvexVsTriangleMesh_supportAWithRadius;
-                    setShapeSupport(
-                        supportAWithRadius,
-                        shapeA,
-                        SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
-                        _collideConvexVsTriangleMesh_scaleA,
-                    );
+                    if (!supportAWithRadiusFilled) {
+                        setShapeSupport(
+                            supportAWithRadius,
+                            shapeA,
+                            SupportFunctionMode.INCLUDE_CONVEX_RADIUS,
+                            _collideConvexVsTriangleMesh_scaleA,
+                        );
+                        supportAWithRadiusFilled = true;
+                    }
                     supportAWithRadius.addRadius = maxSeparationDistance;
 
                     // perform EPA step
@@ -1656,11 +1706,6 @@ function collideConvexVsTriangleMesh(
                 _collideConvexVsTriangleMesh_collideShapeHit.penetration = penetration;
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdA = subShapeIdA;
                 _collideConvexVsTriangleMesh_collideShapeHit.subShapeIdB = _collideConvexVsTriangleMesh_subShapeIdBuilder.value;
-                _collideConvexVsTriangleMesh_collideShapeHit.materialIdA = (shapeA as ConvexShape).materialId;
-                _collideConvexVsTriangleMesh_collideShapeHit.materialIdB = triangleMeshData.getMaterialId(
-                    meshShape.data,
-                    triangleIndex,
-                );
                 _collideConvexVsTriangleMesh_collideShapeHit.bodyIdB = collector.bodyIdB;
 
                 // collect faces if requested
@@ -1679,26 +1724,23 @@ function collideConvexVsTriangleMesh(
                         _collideConvexVsTriangleMesh_scaleA,
                     );
 
-                    // shape B face: triangle has 3 vertices in shape A's local space
+                    // shape B face: triangle has 3 vertices in shape A's local space, winding swapped when
+                    // the scale turns the mesh inside out
+                    const faceFirst = _collideConvexVsTriangleMesh_triangleA_inA;
+                    const faceSecond =
+                        scaleSign < 0 ? _collideConvexVsTriangleMesh_triangleC_inA : _collideConvexVsTriangleMesh_triangleB_inA;
+                    const faceThird =
+                        scaleSign < 0 ? _collideConvexVsTriangleMesh_triangleB_inA : _collideConvexVsTriangleMesh_triangleC_inA;
                     _collideConvexVsTriangleMesh_collideShapeHit.faceB.numVertices = 3;
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[0] =
-                        _collideConvexVsTriangleMesh_triangleA_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[1] =
-                        _collideConvexVsTriangleMesh_triangleA_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[2] =
-                        _collideConvexVsTriangleMesh_triangleA_inA[2];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[3] =
-                        _collideConvexVsTriangleMesh_triangleB_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[4] =
-                        _collideConvexVsTriangleMesh_triangleB_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[5] =
-                        _collideConvexVsTriangleMesh_triangleB_inA[2];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[6] =
-                        _collideConvexVsTriangleMesh_triangleC_inA[0];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[7] =
-                        _collideConvexVsTriangleMesh_triangleC_inA[1];
-                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[8] =
-                        _collideConvexVsTriangleMesh_triangleC_inA[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[0] = faceFirst[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[1] = faceFirst[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[2] = faceFirst[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[3] = faceSecond[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[4] = faceSecond[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[5] = faceSecond[2];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[6] = faceThird[0];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[7] = faceThird[1];
+                    _collideConvexVsTriangleMesh_collideShapeHit.faceB.vertices[8] = faceThird[2];
 
                     // transform from shape A's local space to world space
                     // note: vertices are already scaled (by scaleB), so we use mat4 without scale
@@ -1746,10 +1788,7 @@ const collideTriangleMeshVsConvex = /* @__PURE__ */ reversedCollideShapeVsShape(
 
 const _collideSphereVsTriangleMesh_sphereCenterInMesh = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _collideSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
-const _collideSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_boundsOfSphere = /* @__PURE__ */ box3.create();
 const _collideSphereVsTriangleMesh_queryCenter = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_nodeCenter = /* @__PURE__ */ vec3.create();
@@ -1772,10 +1811,6 @@ const _collideSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create(
 const _collideSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
 const _collideSphereVsTriangleMesh_penetrationAxis = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_point1 = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_point1World = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_point2World = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_penetrationAxisWorld = /* @__PURE__ */ vec3.create();
-const _collideSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_newPenetrationAxis = /* @__PURE__ */ vec3.create();
 const _collideSphereVsTriangleMesh_hit = /* @__PURE__ */ createCollideShapeHit();
 const _collideSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
@@ -1825,20 +1860,40 @@ function collideSphereVsTriangleMesh(
     const maxSeparationSq = (sphereRadius + settings.maxSeparationDistance) ** 2;
 
     // transform sphere center to mesh local space
-    const posA = vec3.set(_collideSphereVsTriangleMesh_sphereCenterInMesh, posAX, posAY, posAZ);
     const posB = vec3.set(_collideSphereVsTriangleMesh_posB, posBX, posBY, posBZ);
-    const quatB = quat.set(_collideSphereVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     const scaleB = vec3.set(_collideSphereVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
 
-    quat.conjugate(_collideSphereVsTriangleMesh_inverseQuatB, quatB);
-    vec3.subtract(_collideSphereVsTriangleMesh_positionDifference, posA, posB);
-    vec3.transformQuat(
-        _collideSphereVsTriangleMesh_sphereCenterInMesh,
-        _collideSphereVsTriangleMesh_positionDifference,
-        _collideSphereVsTriangleMesh_inverseQuatB,
-    );
+    // mesh rotation as a basis, held for the whole triangle walk; the inverse is the transpose
+    const x2 = quatBX + quatBX;
+    const y2 = quatBY + quatBY;
+    const z2 = quatBZ + quatBZ;
+    const xx = quatBX * x2;
+    const yx = quatBY * x2;
+    const yy = quatBY * y2;
+    const zx = quatBZ * x2;
+    const zy = quatBZ * y2;
+    const zz = quatBZ * z2;
+    const wx = quatBW * x2;
+    const wy = quatBW * y2;
+    const wz = quatBW * z2;
+    const m0 = 1 - yy - zz;
+    const m1 = yx + wz;
+    const m2 = zx - wy;
+    const m4 = yx - wz;
+    const m5 = 1 - xx - zz;
+    const m6 = zy + wx;
+    const m8 = zx + wy;
+    const m9 = zy - wx;
+    const m10 = 1 - xx - yy;
 
+    // sphere centre into mesh-local: (posA - posB) through the transposed basis
     const sphereCenterInMesh = _collideSphereVsTriangleMesh_sphereCenterInMesh;
+    const centreOffsetX = posAX - posBX;
+    const centreOffsetY = posAY - posBY;
+    const centreOffsetZ = posAZ - posBZ;
+    sphereCenterInMesh[0] = m0 * centreOffsetX + m1 * centreOffsetY + m2 * centreOffsetZ;
+    sphereCenterInMesh[1] = m4 * centreOffsetX + m5 * centreOffsetY + m6 * centreOffsetZ;
+    sphereCenterInMesh[2] = m8 * centreOffsetX + m9 * centreOffsetY + m10 * centreOffsetZ;
 
     // detect inside-out scaling
     const scaleSign = vec3.isScaleInsideOut(scaleB) ? -1 : 1;
@@ -1846,12 +1901,13 @@ function collideSphereVsTriangleMesh(
     // create sphere AABB for BVH culling
     const sphereBounds = _collideSphereVsTriangleMesh_boundsOfSphere;
     const expandedRadius = sphereRadius + settings.maxSeparationDistance;
-    sphereBounds[0] = sphereCenterInMesh[0] - expandedRadius;
-    sphereBounds[1] = sphereCenterInMesh[1] - expandedRadius;
-    sphereBounds[2] = sphereCenterInMesh[2] - expandedRadius;
-    sphereBounds[3] = sphereCenterInMesh[0] + expandedRadius;
-    sphereBounds[4] = sphereCenterInMesh[1] + expandedRadius;
-    sphereBounds[5] = sphereCenterInMesh[2] + expandedRadius;
+    // in the unscaled space the bvh is built in
+    sphereBounds[0] = sphereCenterInMesh[0] / scaleBX - expandedRadius / Math.abs(scaleBX);
+    sphereBounds[1] = sphereCenterInMesh[1] / scaleBY - expandedRadius / Math.abs(scaleBY);
+    sphereBounds[2] = sphereCenterInMesh[2] / scaleBZ - expandedRadius / Math.abs(scaleBZ);
+    sphereBounds[3] = sphereCenterInMesh[0] / scaleBX + expandedRadius / Math.abs(scaleBX);
+    sphereBounds[4] = sphereCenterInMesh[1] / scaleBY + expandedRadius / Math.abs(scaleBY);
+    sphereBounds[5] = sphereCenterInMesh[2] / scaleBZ + expandedRadius / Math.abs(scaleBZ);
 
     // BVH traversal
     let stackSize = 0;
@@ -1967,40 +2023,56 @@ function collideSphereVsTriangleMesh(
 
                     // check if the feature we hit requires an active edge that isn't active
                     if ((triangleActiveEdges & requiredEdges) === 0) {
-                        // transform movement direction to mesh space
-                        vec3.transformQuat(
-                            _collideSphereVsTriangleMesh_activeEdgeMovementDir,
-                            settings.activeEdgeMovementDirection,
-                            _collideSphereVsTriangleMesh_inverseQuatB,
-                        );
+                        // movement direction into mesh space, through the transposed basis
+                        const edgeDir = settings.activeEdgeMovementDirection;
+                        const edgeDirX = edgeDir[0];
+                        const edgeDirY = edgeDir[1];
+                        const edgeDirZ = edgeDir[2];
+                        const movementX = m0 * edgeDirX + m1 * edgeDirY + m2 * edgeDirZ;
+                        const movementY = m4 * edgeDirX + m5 * edgeDirY + m6 * edgeDirZ;
+                        const movementZ = m8 * edgeDirX + m9 * edgeDirY + m10 * edgeDirZ;
 
-                        // apply simplified active edge correction
                         const newPenetrationAxis = backFacing
                             ? triangleNormal
                             : vec3.negate(_collideSphereVsTriangleMesh_newPenetrationAxis, triangleNormal);
                         const newPenetrationAxisLen = vec3.length(newPenetrationAxis);
 
-                        // if penetration_axis affects movement less than triangle normal, use triangle normal
-                        if (
-                            vec3.dot(_collideSphereVsTriangleMesh_activeEdgeMovementDir, penetrationAxis) *
-                                newPenetrationAxisLen >=
-                            vec3.dot(_collideSphereVsTriangleMesh_activeEdgeMovementDir, newPenetrationAxis)
-                        ) {
+                        // if penetration axis affects movement less than the triangle normal, use the normal
+                        const alongPenetration =
+                            movementX * penetrationAxis[0] + movementY * penetrationAxis[1] + movementZ * penetrationAxis[2];
+                        const alongNormal =
+                            movementX * newPenetrationAxis[0] +
+                            movementY * newPenetrationAxis[1] +
+                            movementZ * newPenetrationAxis[2];
+                        if (alongPenetration * newPenetrationAxisLen >= alongNormal) {
                             vec3.copy(penetrationAxis, newPenetrationAxis);
                         }
                     }
                 }
 
-                // transform to world space
-                vec3.add(_collideSphereVsTriangleMesh_point1World, sphereCenterInMesh, point1);
-                vec3.transformQuat(_collideSphereVsTriangleMesh_point1World, _collideSphereVsTriangleMesh_point1World, quatB);
-                vec3.add(_collideSphereVsTriangleMesh_point1World, _collideSphereVsTriangleMesh_point1World, posB);
+                // results into world space, straight into the hit
+                const hit = _collideSphereVsTriangleMesh_hit;
 
-                vec3.add(_collideSphereVsTriangleMesh_point2World, sphereCenterInMesh, point2);
-                vec3.transformQuat(_collideSphereVsTriangleMesh_point2World, _collideSphereVsTriangleMesh_point2World, quatB);
-                vec3.add(_collideSphereVsTriangleMesh_point2World, _collideSphereVsTriangleMesh_point2World, posB);
+                const point1X = sphereCenterInMesh[0] + point1[0];
+                const point1Y = sphereCenterInMesh[1] + point1[1];
+                const point1Z = sphereCenterInMesh[2] + point1[2];
+                hit.pointA[0] = m0 * point1X + m4 * point1Y + m8 * point1Z + posB[0];
+                hit.pointA[1] = m1 * point1X + m5 * point1Y + m9 * point1Z + posB[1];
+                hit.pointA[2] = m2 * point1X + m6 * point1Y + m10 * point1Z + posB[2];
 
-                vec3.transformQuat(_collideSphereVsTriangleMesh_penetrationAxisWorld, penetrationAxis, quatB);
+                const point2X = sphereCenterInMesh[0] + point2[0];
+                const point2Y = sphereCenterInMesh[1] + point2[1];
+                const point2Z = sphereCenterInMesh[2] + point2[2];
+                hit.pointB[0] = m0 * point2X + m4 * point2Y + m8 * point2Z + posB[0];
+                hit.pointB[1] = m1 * point2X + m5 * point2Y + m9 * point2Z + posB[1];
+                hit.pointB[2] = m2 * point2X + m6 * point2Y + m10 * point2Z + posB[2];
+
+                const axisX = penetrationAxis[0];
+                const axisY = penetrationAxis[1];
+                const axisZ = penetrationAxis[2];
+                hit.penetrationAxis[0] = m0 * axisX + m4 * axisY + m8 * axisZ;
+                hit.penetrationAxis[1] = m1 * axisX + m5 * axisY + m9 * axisZ;
+                hit.penetrationAxis[2] = m2 * axisX + m6 * axisY + m10 * axisZ;
 
                 // build sub shape id
                 _collideSphereVsTriangleMesh_subShapeIdBuilder.value = subShapeIdB;
@@ -2012,16 +2084,9 @@ function collideSphereVsTriangleMesh(
                     meshShape.data.triangleCount,
                 );
 
-                // create collision result
-                const hit = _collideSphereVsTriangleMesh_hit;
-                vec3.copy(hit.pointA, _collideSphereVsTriangleMesh_point1World);
-                vec3.copy(hit.pointB, _collideSphereVsTriangleMesh_point2World);
-                vec3.copy(hit.penetrationAxis, _collideSphereVsTriangleMesh_penetrationAxisWorld);
                 hit.penetration = penetrationDepth;
                 hit.subShapeIdA = subShapeIdA;
                 hit.subShapeIdB = _collideSphereVsTriangleMesh_subShapeIdBuilder.value;
-                hit.materialIdA = sphereShape.materialId;
-                hit.materialIdB = triangleMeshData.getMaterialId(meshShape.data, triangleIndex);
                 hit.bodyIdB = collector.bodyIdB;
 
                 // collect faces if requested
@@ -2033,22 +2098,39 @@ function collideSphereVsTriangleMesh(
                     hit.faceB.numVertices = 3;
 
                     // transform scaled triangle vertices to world space
-                    vec3.transformQuat(sv0, sv0, quatB);
-                    vec3.add(sv0, sv0, posB);
-                    vec3.transformQuat(sv1, sv1, quatB);
-                    vec3.add(sv1, sv1, posB);
-                    vec3.transformQuat(sv2, sv2, quatB);
-                    vec3.add(sv2, sv2, posB);
+                    const v0X = sv0[0];
+                    const v0Y = sv0[1];
+                    const v0Z = sv0[2];
+                    sv0[0] = m0 * v0X + m4 * v0Y + m8 * v0Z + posB[0];
+                    sv0[1] = m1 * v0X + m5 * v0Y + m9 * v0Z + posB[1];
+                    sv0[2] = m2 * v0X + m6 * v0Y + m10 * v0Z + posB[2];
 
+                    const v1X = sv1[0];
+                    const v1Y = sv1[1];
+                    const v1Z = sv1[2];
+                    sv1[0] = m0 * v1X + m4 * v1Y + m8 * v1Z + posB[0];
+                    sv1[1] = m1 * v1X + m5 * v1Y + m9 * v1Z + posB[1];
+                    sv1[2] = m2 * v1X + m6 * v1Y + m10 * v1Z + posB[2];
+
+                    const v2X = sv2[0];
+                    const v2Y = sv2[1];
+                    const v2Z = sv2[2];
+                    sv2[0] = m0 * v2X + m4 * v2Y + m8 * v2Z + posB[0];
+                    sv2[1] = m1 * v2X + m5 * v2Y + m9 * v2Z + posB[1];
+                    sv2[2] = m2 * v2X + m6 * v2Y + m10 * v2Z + posB[2];
+
+                    // winding swapped when the scale turns the mesh inside out
+                    const faceSecond = scaleSign < 0 ? sv2 : sv1;
+                    const faceThird = scaleSign < 0 ? sv1 : sv2;
                     hit.faceB.vertices[0] = sv0[0];
                     hit.faceB.vertices[1] = sv0[1];
                     hit.faceB.vertices[2] = sv0[2];
-                    hit.faceB.vertices[3] = sv1[0];
-                    hit.faceB.vertices[4] = sv1[1];
-                    hit.faceB.vertices[5] = sv1[2];
-                    hit.faceB.vertices[6] = sv2[0];
-                    hit.faceB.vertices[7] = sv2[1];
-                    hit.faceB.vertices[8] = sv2[2];
+                    hit.faceB.vertices[3] = faceSecond[0];
+                    hit.faceB.vertices[4] = faceSecond[1];
+                    hit.faceB.vertices[5] = faceSecond[2];
+                    hit.faceB.vertices[6] = faceThird[0];
+                    hit.faceB.vertices[7] = faceThird[1];
+                    hit.faceB.vertices[8] = faceThird[2];
                 }
 
                 collector.addHit(hit);
@@ -2089,12 +2171,9 @@ const collideTriangleMeshVsSphere = /* @__PURE__ */ reversedCollideShapeVsShape(
 
 const _castSphereVsTriangleMesh_start = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_direction = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_walkDisplacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_posB = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_quatB = /* @__PURE__ */ quat.create();
 const _castSphereVsTriangleMesh_scaleB = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_inverseQuatB = /* @__PURE__ */ quat.create();
-const _castSphereVsTriangleMesh_positionDifference = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_displacement = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_expandedBounds = /* @__PURE__ */ box3.create();
 const _castSphereVsTriangleMesh_stackNodes: number[] = [];
 const _castSphereVsTriangleMesh_stackDist: number[] = [];
@@ -2113,12 +2192,9 @@ const _castSphereVsTriangleMesh_triangleNormal = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_closestPointResult = /* @__PURE__ */ createClosestPointOnTriangleResult();
 const _castSphereVsTriangleMesh_hit = /* @__PURE__ */ createCastShapeHit();
 const _castSphereVsTriangleMesh_subShapeIdBuilder = /* @__PURE__ */ subShape.builder();
-const _castSphereVsTriangleMesh_activeEdgeMovementDir = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_origin = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_triangleNormalForFix = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactPointAWorld = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactPointBWorld = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_contactNormalWorld = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_activeEdgeMovementDirection = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_planeIntersectionTemp = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_interiorContactNormal = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_sphereCenterAtHit = /* @__PURE__ */ vec3.create();
@@ -2133,29 +2209,34 @@ const _castSphereVsTriangleMesh_d = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v0Rel = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v1Rel = /* @__PURE__ */ vec3.create();
 const _castSphereVsTriangleMesh_v2Rel = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n0 = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n1 = /* @__PURE__ */ vec3.create();
-const _castSphereVsTriangleMesh_n2 = /* @__PURE__ */ vec3.create();
+const _castSphereVsTriangleMesh_barycentric = /* @__PURE__ */ createBarycentricCoordinatesResult();
 const _castSphereVsTriangleMesh_p = /* @__PURE__ */ vec3.create();
 
 /** helper to add a cast hit with active edge detection for sphere vs triangle mesh */
 function castSphereVsTriangleMeshAddHit(
     collector: CastShapeCollector,
     settings: CastShapeSettings,
-    sphereShape: any,
     meshShape: TriangleMeshShape,
     subShapeIdA: number,
     subShapeIdB: number,
     subShapeIdBitsB: number,
-    sphereRadius: number,
     start: Vec3,
     posB: Vec3,
-    quatB: Quat,
-    inverseQuatB: Quat,
+    m0: number,
+    m1: number,
+    m2: number,
+    m4: number,
+    m5: number,
+    m6: number,
+    m8: number,
+    m9: number,
+    m10: number,
+    v0: Vec3,
+    v1: Vec3,
+    v2: Vec3,
     backFacing: boolean,
     triangleNormal: Vec3,
-    activeEdges: number,
+    triangleActiveEdges: number,
     triangleIndex: number,
     fraction: number,
     contactPointA: Vec3,
@@ -2164,36 +2245,58 @@ function castSphereVsTriangleMeshAddHit(
 ): void {
     let finalContactNormal = contactNormal;
 
-    if (settings.collideOnlyWithActiveEdges && activeEdges !== 0b111) {
-        // transform movement direction to mesh space
-        vec3.transformQuat(_castSphereVsTriangleMesh_activeEdgeMovementDir, settings.activeEdgeMovementDirection, inverseQuatB);
+    if (settings.collideOnlyWithActiveEdges && triangleActiveEdges !== 0b111) {
+        // movement direction into mesh space, through the transposed basis
+        const edgeDir = settings.activeEdgeMovementDirection;
+        const movement = _castSphereVsTriangleMesh_activeEdgeMovementDirection;
+        movement[0] = m0 * edgeDir[0] + m1 * edgeDir[1] + m2 * edgeDir[2];
+        movement[1] = m4 * edgeDir[0] + m5 * edgeDir[1] + m6 * edgeDir[2];
+        movement[2] = m8 * edgeDir[0] + m9 * edgeDir[1] + m10 * edgeDir[2];
 
-        // apply simplified active edge correction
+        // the triangle normal is flipped as the contact normal points towards the triangle instead of away
         const triangleNormalForFix = backFacing
             ? triangleNormal
             : vec3.negate(_castSphereVsTriangleMesh_triangleNormalForFix, triangleNormal);
-        const triangleNormalLen = vec3.length(triangleNormalForFix);
-        const contactNormalLen = vec3.length(contactNormal);
 
-        if (
-            vec3.dot(_castSphereVsTriangleMesh_activeEdgeMovementDir, contactNormal) * triangleNormalLen <
-            vec3.dot(_castSphereVsTriangleMesh_activeEdgeMovementDir, triangleNormalForFix) * contactNormalLen
-        ) {
-            finalContactNormal = triangleNormalForFix;
-        }
+        finalContactNormal = activeEdges.fixNormal(
+            v0,
+            v1,
+            v2,
+            triangleNormalForFix,
+            triangleActiveEdges,
+            contactPointB,
+            contactNormal,
+            movement,
+        );
     }
 
     // transform to world space
-    const contactPointAWorld = vec3.add(_castSphereVsTriangleMesh_contactPointAWorld, start, contactPointA);
-    vec3.transformQuat(contactPointAWorld, contactPointAWorld, quatB);
-    vec3.add(contactPointAWorld, contactPointAWorld, posB);
+    const hit = _castSphereVsTriangleMesh_hit;
 
-    const contactPointBWorld = vec3.add(_castSphereVsTriangleMesh_contactPointBWorld, start, contactPointB);
-    vec3.transformQuat(contactPointBWorld, contactPointBWorld, quatB);
-    vec3.add(contactPointBWorld, contactPointBWorld, posB);
+    const pointAX = start[0] + contactPointA[0];
+    const pointAY = start[1] + contactPointA[1];
+    const pointAZ = start[2] + contactPointA[2];
+    hit.pointA[0] = m0 * pointAX + m4 * pointAY + m8 * pointAZ + posB[0];
+    hit.pointA[1] = m1 * pointAX + m5 * pointAY + m9 * pointAZ + posB[1];
+    hit.pointA[2] = m2 * pointAX + m6 * pointAY + m10 * pointAZ + posB[2];
 
-    const contactNormalWorld = vec3.transformQuat(_castSphereVsTriangleMesh_contactNormalWorld, finalContactNormal, quatB);
-    vec3.normalize(contactNormalWorld, contactNormalWorld);
+    const pointBX = start[0] + contactPointB[0];
+    const pointBY = start[1] + contactPointB[1];
+    const pointBZ = start[2] + contactPointB[2];
+    hit.pointB[0] = m0 * pointBX + m4 * pointBY + m8 * pointBZ + posB[0];
+    hit.pointB[1] = m1 * pointBX + m5 * pointBY + m9 * pointBZ + posB[1];
+    hit.pointB[2] = m2 * pointBX + m6 * pointBY + m10 * pointBZ + posB[2];
+
+    // the contact normal points from the sphere towards the triangle, a to b: that is the penetration
+    // axis, and the normal is its negated unit as every other cast reports
+    const normalX = finalContactNormal[0];
+    const normalY = finalContactNormal[1];
+    const normalZ = finalContactNormal[2];
+    hit.penetrationAxis[0] = m0 * normalX + m4 * normalY + m8 * normalZ;
+    hit.penetrationAxis[1] = m1 * normalX + m5 * normalY + m9 * normalZ;
+    hit.penetrationAxis[2] = m2 * normalX + m6 * normalY + m10 * normalZ;
+    vec3.normalize(hit.normal, hit.penetrationAxis);
+    vec3.negate(hit.normal, hit.normal);
 
     // build sub shape id
     _castSphereVsTriangleMesh_subShapeIdBuilder.value = subShapeIdB;
@@ -2205,19 +2308,11 @@ function castSphereVsTriangleMeshAddHit(
         meshShape.data.triangleCount,
     );
 
-    // create cast result
-    const hit = _castSphereVsTriangleMesh_hit;
     hit.status = CastShapeStatus.COLLIDING;
     hit.fraction = fraction;
-    vec3.copy(hit.pointA, contactPointAWorld);
-    vec3.copy(hit.pointB, contactPointBWorld);
-    vec3.copy(hit.normal, contactNormalWorld);
-    vec3.negate(hit.penetrationAxis, contactNormalWorld);
-    hit.penetrationDepth = fraction === 0 ? sphereRadius - vec3.distance(contactPointA, contactPointB) : 0;
+    hit.penetrationDepth = vec3.distance(hit.pointA, hit.pointB);
     hit.subShapeIdA = subShapeIdA;
     hit.subShapeIdB = _castSphereVsTriangleMesh_subShapeIdBuilder.value;
-    hit.materialIdA = sphereShape.materialId;
-    hit.materialIdB = triangleMeshData.getMaterialId(meshShape.data, triangleIndex);
     hit.bodyIdB = collector.bodyIdB;
     hit.faceA.numVertices = 0; // sphere has no face
     hit.faceB.numVertices = 0; // don't collect faces for swept tests
@@ -2273,29 +2368,48 @@ function castSphereVsTriangleMesh(
     }
 
     // calculate scaled sphere radius (assuming uniform scale)
-    const sphereRadius = Math.abs(scaleAX) * sphereShape.radius;
+    const sphereRadius = Math.abs(scaleAX) * sphereShape.radius + settings.extraConvexRadius;
 
     // setup sphere sweep in mesh local space
-    const posA = vec3.set(_castSphereVsTriangleMesh_start, posAX, posAY, posAZ);
     const posB = vec3.set(_castSphereVsTriangleMesh_posB, posBX, posBY, posBZ);
-    const quatB = quat.set(_castSphereVsTriangleMesh_quatB, quatBX, quatBY, quatBZ, quatBW);
     const scaleB = vec3.set(_castSphereVsTriangleMesh_scaleB, scaleBX, scaleBY, scaleBZ);
-    const displacement = vec3.set(_castSphereVsTriangleMesh_displacement, displacementAX, displacementAY, displacementAZ);
 
-    // transform sphere start position to mesh local space
-    quat.conjugate(_castSphereVsTriangleMesh_inverseQuatB, quatB);
-    vec3.subtract(_castSphereVsTriangleMesh_positionDifference, posA, posB);
-    vec3.transformQuat(
-        _castSphereVsTriangleMesh_start,
-        _castSphereVsTriangleMesh_positionDifference,
-        _castSphereVsTriangleMesh_inverseQuatB,
-    );
+    // mesh rotation as a basis, held for the whole cast; the inverse is the transpose
+    const x2 = quatBX + quatBX;
+    const y2 = quatBY + quatBY;
+    const z2 = quatBZ + quatBZ;
+    const xx = quatBX * x2;
+    const yx = quatBY * x2;
+    const yy = quatBY * y2;
+    const zx = quatBZ * x2;
+    const zy = quatBZ * y2;
+    const zz = quatBZ * z2;
+    const wx = quatBW * x2;
+    const wy = quatBW * y2;
+    const wz = quatBW * z2;
+    const m0 = 1 - yy - zz;
+    const m1 = yx + wz;
+    const m2 = zx - wy;
+    const m4 = yx - wz;
+    const m5 = 1 - xx - zz;
+    const m6 = zy + wx;
+    const m8 = zx + wy;
+    const m9 = zy - wx;
+    const m10 = 1 - xx - yy;
 
-    // transform displacement to mesh local space
-    vec3.transformQuat(_castSphereVsTriangleMesh_direction, displacement, _castSphereVsTriangleMesh_inverseQuatB);
-
+    // sphere start and displacement into mesh-local, through the transposed basis
     const start = _castSphereVsTriangleMesh_start;
+    const startOffsetX = posAX - posBX;
+    const startOffsetY = posAY - posBY;
+    const startOffsetZ = posAZ - posBZ;
+    start[0] = m0 * startOffsetX + m1 * startOffsetY + m2 * startOffsetZ;
+    start[1] = m4 * startOffsetX + m5 * startOffsetY + m6 * startOffsetZ;
+    start[2] = m8 * startOffsetX + m9 * startOffsetY + m10 * startOffsetZ;
+
     const direction = _castSphereVsTriangleMesh_direction;
+    direction[0] = m0 * displacementAX + m1 * displacementAY + m2 * displacementAZ;
+    direction[1] = m4 * displacementAX + m5 * displacementAY + m6 * displacementAZ;
+    direction[2] = m8 * displacementAX + m9 * displacementAY + m10 * displacementAZ;
 
     // detect inside-out scaling
     const scaleSign = vec3.isScaleInsideOut(scaleB) ? -1 : 1;
@@ -2303,15 +2417,25 @@ function castSphereVsTriangleMesh(
     // ordered front-to-back traversal (matches castConvexVsTriangleMesh): ray from the
     // sphere center at t=0 along the displacement, node bounds expanded by the sphere
     // radius, children pushed nearest-on-top and pruned against the early-out fraction
-    // cast ray: sphere start along the normalized displacement
-    const rayOriginX = start[0];
-    const rayOriginY = start[1];
-    const rayOriginZ = start[2];
-    const rayLength = vec3.length(direction);
+    // cast ray: sphere start along the normalized displacement, in the unscaled space the bvh is
+    // built in; the sweep itself stays in scaled mesh space below
+    const rayOriginX = start[0] / scaleBX;
+    const rayOriginY = start[1] / scaleBY;
+    const rayOriginZ = start[2] / scaleBZ;
+    const walkDisplacement = vec3.set(
+        _castSphereVsTriangleMesh_walkDisplacement,
+        direction[0] / scaleBX,
+        direction[1] / scaleBY,
+        direction[2] / scaleBZ,
+    );
+    const rayLength = vec3.length(walkDisplacement);
     const invRayLength = rayLength > 1e-10 ? 1 / rayLength : 0;
-    const rayDirX = direction[0] * invRayLength;
-    const rayDirY = direction[1] * invRayLength;
-    const rayDirZ = direction[2] * invRayLength;
+    const rayDirX = walkDisplacement[0] * invRayLength;
+    const rayDirY = walkDisplacement[1] * invRayLength;
+    const rayDirZ = walkDisplacement[2] * invRayLength;
+    const walkRadiusX = sphereRadius / Math.abs(scaleBX);
+    const walkRadiusY = sphereRadius / Math.abs(scaleBY);
+    const walkRadiusZ = sphereRadius / Math.abs(scaleBZ);
 
     let stackSize = 0;
     _castSphereVsTriangleMesh_stackNodes[stackSize] = 0;
@@ -2326,7 +2450,7 @@ function castSphereVsTriangleMesh(
         const nodeDistance = _castSphereVsTriangleMesh_stackDist[stackSize];
 
         // early out: if fraction to this node >= closest hit, skip it
-        if (nodeDistance >= collector.earlyOutFraction) {
+        if (nodeDistance >= Math.max(FLT_MIN, collector.earlyOutFraction)) {
             continue;
         }
 
@@ -2336,6 +2460,10 @@ function castSphereVsTriangleMesh(
             const triCount = triangleMeshBvh.nodeTriCount(buffer, nodeOffset);
 
             for (let i = 0; i < triCount; i++) {
+                if (collector.earlyOutFraction <= -Infinity) {
+                    return;
+                }
+
                 const triangleIndex = triStart + i;
 
                 // get triangle vertices
@@ -2377,7 +2505,7 @@ function castSphereVsTriangleMesh(
                 const normalDotDirection = vec3.dot(triangleNormal, direction);
                 const backFacing = normalDotDirection > 0;
 
-                if (!settings.collideWithBackfaces && backFacing) {
+                if (!settings.collideWithBackfacesTriangles && backFacing) {
                     continue;
                 }
 
@@ -2400,7 +2528,7 @@ function castSphereVsTriangleMesh(
                         const contactNormal =
                             qLen > 0
                                 ? vec3.scale(_castSphereVsTriangleMesh_contactNormal, q, 1 / qLen)
-                                : vec3.fromValues(0, 1, 0);
+                                : vec3.set(_castSphereVsTriangleMesh_contactNormal, 0, 1, 0);
                         const contactPointA = vec3.scaleAndAdd(
                             _castSphereVsTriangleMesh_contactPointA,
                             q,
@@ -2412,16 +2540,24 @@ function castSphereVsTriangleMesh(
                         castSphereVsTriangleMeshAddHit(
                             collector,
                             settings,
-                            sphereShape,
                             meshShape,
                             subShapeIdA,
                             subShapeIdB,
                             subShapeIdBitsB,
-                            sphereRadius,
                             start,
                             posB,
-                            quatB,
-                            _castSphereVsTriangleMesh_inverseQuatB,
+                            m0,
+                            m1,
+                            m2,
+                            m4,
+                            m5,
+                            m6,
+                            m8,
+                            m9,
+                            m10,
+                            rv0,
+                            rv1,
+                            rv2,
                             backFacing,
                             triangleNormal,
                             triangleActiveEdges,
@@ -2458,56 +2594,51 @@ function castSphereVsTriangleMesh(
                             // calculate contact point on plane
                             const p = vec3.scaleAndAdd(_castSphereVsTriangleMesh_p, d, direction, planeIntersection);
 
-                            // check if interior point using barycentric coordinates
-                            const bary = { u: 0, v: 0, w: 0 };
-                            const v0Rel = vec3.subtract(_castSphereVsTriangleMesh_v0Rel, rv0, p);
-                            const v1Rel = vec3.subtract(_castSphereVsTriangleMesh_v1Rel, rv1, p);
-                            const v2Rel = vec3.subtract(_castSphereVsTriangleMesh_v2Rel, rv2, p);
-
-                            // simplified barycentric test
-                            const n = vec3.cross(_castSphereVsTriangleMesh_n, v1Rel, v2Rel);
-                            const nLen = vec3.length(n);
-                            if (nLen > 0) {
-                                const totalArea = vec3.dot(n, triangleNormal) / nLen;
-                                if (totalArea > 0) {
-                                    const n0 = vec3.cross(_castSphereVsTriangleMesh_n0, v1Rel, v2Rel);
-                                    const n1 = vec3.cross(_castSphereVsTriangleMesh_n1, v2Rel, v0Rel);
-                                    const n2 = vec3.cross(_castSphereVsTriangleMesh_n2, v0Rel, v1Rel);
-
-                                    bary.u = vec3.dot(n0, triangleNormal) / (totalArea * nLen);
-                                    bary.v = vec3.dot(n1, triangleNormal) / (totalArea * nLen);
-                                    bary.w = vec3.dot(n2, triangleNormal) / (totalArea * nLen);
-
-                                    if (bary.u >= 0 && bary.v >= 0 && bary.w >= 0) {
-                                        // interior hit
-                                        const contactNormal = backFacing
-                                            ? triangleNormal
-                                            : vec3.negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal);
-                                        castSphereVsTriangleMeshAddHit(
-                                            collector,
-                                            settings,
-                                            sphereShape,
-                                            meshShape,
-                                            subShapeIdA,
-                                            subShapeIdB,
-                                            subShapeIdBitsB,
-                                            sphereRadius,
-                                            start,
-                                            posB,
-                                            quatB,
-                                            _castSphereVsTriangleMesh_inverseQuatB,
-                                            backFacing,
-                                            triangleNormal,
-                                            0b111, // interior hit, all edges active
-                                            triangleIndex,
-                                            planeIntersection,
-                                            p,
-                                            p,
-                                            contactNormal,
-                                        );
-                                        continue;
-                                    }
-                                }
+                            // check if this is an interior point
+                            const barycentric = _castSphereVsTriangleMesh_barycentric;
+                            computeBarycentricCoordinates3d(
+                                barycentric,
+                                vec3.subtract(_castSphereVsTriangleMesh_v0Rel, rv0, p),
+                                vec3.subtract(_castSphereVsTriangleMesh_v1Rel, rv1, p),
+                                vec3.subtract(_castSphereVsTriangleMesh_v2Rel, rv2, p),
+                                1e-10,
+                            );
+                            if (barycentric.isValid && barycentric.u >= 0 && barycentric.v >= 0 && barycentric.w >= 0) {
+                                // interior hit
+                                const contactNormal = backFacing
+                                    ? triangleNormal
+                                    : vec3.negate(_castSphereVsTriangleMesh_interiorContactNormal, triangleNormal);
+                                castSphereVsTriangleMeshAddHit(
+                                    collector,
+                                    settings,
+                                    meshShape,
+                                    subShapeIdA,
+                                    subShapeIdB,
+                                    subShapeIdBitsB,
+                                    start,
+                                    posB,
+                                    m0,
+                                    m1,
+                                    m2,
+                                    m4,
+                                    m5,
+                                    m6,
+                                    m8,
+                                    m9,
+                                    m10,
+                                    rv0,
+                                    rv1,
+                                    rv2,
+                                    backFacing,
+                                    triangleNormal,
+                                    0b111, // interior hit, all edges active
+                                    triangleIndex,
+                                    planeIntersection,
+                                    p,
+                                    p,
+                                    contactNormal,
+                                );
+                                continue;
                             }
                         }
                     }
@@ -2541,23 +2672,41 @@ function castSphereVsTriangleMesh(
                         vec3.subtract(_castSphereVsTriangleMesh_v2RelativeToHit, rv2, p),
                     );
 
+                    // the distance between p and the triangle should be the radius, but floating point accuracy can
+                    // put p on the plane with q zero, so fall back to the normal the triangle is hit along
                     const q = _castSphereVsTriangleMesh_closestPointResult.point;
-                    const contactNormal = vec3.normalize(_castSphereVsTriangleMesh_edgeVertexContactNormal, q);
+                    const contactNormal = _castSphereVsTriangleMesh_edgeVertexContactNormal;
+                    const qLenSq = vec3.squaredLength(q);
+                    if (qLenSq > FLT_MIN) {
+                        vec3.scale(contactNormal, q, 1 / Math.sqrt(qLenSq));
+                    } else if (backFacing) {
+                        vec3.copy(contactNormal, triangleNormal);
+                    } else {
+                        vec3.negate(contactNormal, triangleNormal);
+                    }
                     const contactPointAB = vec3.add(_castSphereVsTriangleMesh_edgeVertexContactPoint, p, q);
 
                     castSphereVsTriangleMeshAddHit(
                         collector,
                         settings,
-                        sphereShape,
                         meshShape,
                         subShapeIdA,
                         subShapeIdB,
                         subShapeIdBitsB,
-                        sphereRadius,
                         start,
                         posB,
-                        quatB,
-                        _castSphereVsTriangleMesh_inverseQuatB,
+                        m0,
+                        m1,
+                        m2,
+                        m4,
+                        m5,
+                        m6,
+                        m8,
+                        m9,
+                        m10,
+                        rv0,
+                        rv1,
+                        rv2,
                         backFacing,
                         triangleNormal,
                         triangleActiveEdges,
@@ -2575,12 +2724,12 @@ function castSphereVsTriangleMesh(
             const leftOffset = bvh.nodeLeft(nodeOffset);
             const rightOffset = bvh.nodeRight(buffer, nodeOffset);
 
-            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - sphereRadius;
-            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - sphereRadius;
-            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - sphereRadius;
-            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + sphereRadius;
-            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + sphereRadius;
-            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + sphereRadius;
+            expandedBounds[0] = buffer[leftOffset + bvh.NODE_MIN_X] - walkRadiusX;
+            expandedBounds[1] = buffer[leftOffset + bvh.NODE_MIN_Y] - walkRadiusY;
+            expandedBounds[2] = buffer[leftOffset + bvh.NODE_MIN_Z] - walkRadiusZ;
+            expandedBounds[3] = buffer[leftOffset + bvh.NODE_MAX_X] + walkRadiusX;
+            expandedBounds[4] = buffer[leftOffset + bvh.NODE_MAX_Y] + walkRadiusY;
+            expandedBounds[5] = buffer[leftOffset + bvh.NODE_MAX_Z] + walkRadiusZ;
 
             const leftDist = rayDistanceToBox3(
                 rayOriginX,
@@ -2598,12 +2747,12 @@ function castSphereVsTriangleMesh(
                 expandedBounds[5],
             );
 
-            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - sphereRadius;
-            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - sphereRadius;
-            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - sphereRadius;
-            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + sphereRadius;
-            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + sphereRadius;
-            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + sphereRadius;
+            expandedBounds[0] = buffer[rightOffset + bvh.NODE_MIN_X] - walkRadiusX;
+            expandedBounds[1] = buffer[rightOffset + bvh.NODE_MIN_Y] - walkRadiusY;
+            expandedBounds[2] = buffer[rightOffset + bvh.NODE_MIN_Z] - walkRadiusZ;
+            expandedBounds[3] = buffer[rightOffset + bvh.NODE_MAX_X] + walkRadiusX;
+            expandedBounds[4] = buffer[rightOffset + bvh.NODE_MAX_Y] + walkRadiusY;
+            expandedBounds[5] = buffer[rightOffset + bvh.NODE_MAX_Z] + walkRadiusZ;
 
             const rightDist = rayDistanceToBox3(
                 rayOriginX,
@@ -2621,25 +2770,28 @@ function castSphereVsTriangleMesh(
                 expandedBounds[5],
             );
 
+            // floored at FLT_MIN so nodes the cast starts inside survive a hit at fraction 0
+            const positiveEarlyOut = Math.max(FLT_MIN, collector.earlyOutFraction);
+
             // sort: push farther child first (so closer child is on top of stack), lifo traversal
             if (leftDist <= rightDist) {
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;
                 }
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
             } else {
-                if (leftDist < collector.earlyOutFraction) {
+                if (leftDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = leftOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = leftDist;
                     stackSize++;
                 }
-                if (rightDist < collector.earlyOutFraction) {
+                if (rightDist < positiveEarlyOut) {
                     _castSphereVsTriangleMesh_stackNodes[stackSize] = rightOffset;
                     _castSphereVsTriangleMesh_stackDist[stackSize] = rightDist;
                     stackSize++;

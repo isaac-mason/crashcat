@@ -1,4 +1,4 @@
-import { quat, vec3 } from 'mathcat';
+import { quat, vec3 } from 'math';
 import { describe, expect, it } from 'vitest';
 import * as crashcat from '../../src';
 
@@ -181,7 +181,9 @@ describe('InternalEdgeRemovingCollector Integration', () => {
         const sphereQuaternion = quat.create();
         const sphereScale = vec3.fromValues(1, 1, 1);
 
+        // the sphere is behind the +z facing triangles
         const settings = crashcat.createDefaultCollideShapeSettings();
+        settings.collideWithBackfaces = true;
 
         // test both methods
         const standardCollector = crashcat.createAllCollideShapeCollector();

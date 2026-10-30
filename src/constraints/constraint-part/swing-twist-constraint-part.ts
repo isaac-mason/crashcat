@@ -1,5 +1,6 @@
-import type { Quat, Vec3 } from 'mathcat';
-import { mat4, quat, vec2, vec3 } from 'mathcat';
+import type { Quat, Vec3 } from 'math';
+import { mat4, quat, vec2, vec3 } from 'math';
+import { STEP_STAMP_NONE } from '../../body/motion-properties';
 import type { RigidBody } from '../../body/rigid-body';
 import type { AngleConstraintPart } from './angle-constraint-part';
 import * as angleConstraintPart from './angle-constraint-part';
@@ -453,7 +454,7 @@ function getClosestPointOnEllipse(out: [number, number], px: number, py: number,
 
     // Newton Raphson iteration, starting at t = 0
     let t = 0;
-    for (let i = 0; i < 100; i++) {
+    for (;;) {
         // Calculate g(t)
         const tPlusASq = t + aSq;
         const tPlusBSq = t + bSq;
@@ -473,12 +474,6 @@ function getClosestPointOnEllipse(out: [number, number], px: number, py: number,
         // Calculate t for next iteration: t_n+1 = t_n - g(t) / g'(t)
         t = t - gt / gtAccent;
     }
-
-    // Emergency fallback after max iterations (should rarely happen)
-    const tPlusASq = t + aSq;
-    const tPlusBSq = t + bSq;
-    out[0] = (aSq * px) / tPlusASq;
-    out[1] = (bSq * py) / tPlusBSq;
 }
 
 const _calc_q_swing = /* @__PURE__ */ quat.create();
@@ -612,7 +607,7 @@ export function calculateConstraintProperties(
             // axis = desired x current
             vec3.cross(_calc_cross, _calc_desired, _calc_current);
             const len = vec3.length(_calc_cross);
-            if (len > 1e-6) {
+            if (len !== 0) {
                 vec3.scale(part.worldSpaceSwingLimitYRotationAxis, _calc_cross, 1 / len);
                 angleConstraintPart.calculateConstraintProperties(
                     part.swingLimitYConstraintPart,
@@ -775,7 +770,14 @@ export function solvePositionConstraint(
         // create a fresh rotation euler constraint part
         mat4.fromQuat(_pos_rotA, bodyA.quaternion);
         mat4.fromQuat(_pos_rotB, bodyB.quaternion);
-        rotationEulerConstraintPart.calculateConstraintProperties(_pos_rotation_part, bodyA, _pos_rotA, bodyB, _pos_rotB);
+        rotationEulerConstraintPart.calculateConstraintProperties(
+            _pos_rotation_part,
+            bodyA,
+            _pos_rotA,
+            bodyB,
+            _pos_rotB,
+            STEP_STAMP_NONE,
+        );
 
         return rotationEulerConstraintPart.solvePositionConstraint(_pos_rotation_part, bodyA, bodyB, _pos_inv_initial, baumgarte);
     }
