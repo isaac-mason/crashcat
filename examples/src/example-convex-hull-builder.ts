@@ -40,15 +40,7 @@ scene.add(directionalLight);
 /* info panel */
 
 const infoPanel = document.createElement('div');
-infoPanel.style.position = 'absolute';
-infoPanel.style.top = '10px';
-infoPanel.style.left = '10px';
-infoPanel.style.color = 'white';
-infoPanel.style.fontFamily = 'monospace';
-infoPanel.style.fontSize = '12px';
-infoPanel.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-infoPanel.style.padding = '10px';
-infoPanel.style.borderRadius = '5px';
+infoPanel.className = 'mc-info mc-panel';
 infoPanel.style.minWidth = '300px';
 document.body.appendChild(infoPanel);
 

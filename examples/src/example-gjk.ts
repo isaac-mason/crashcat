@@ -504,15 +504,7 @@ window.addEventListener('resize', () => {
 /* instructions panel */
 
 const instructions = document.createElement('div');
-instructions.style.position = 'absolute';
-instructions.style.top = '10px';
-instructions.style.left = '10px';
-instructions.style.color = 'white';
-instructions.style.fontFamily = 'monospace';
-instructions.style.fontSize = '14px';
-instructions.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
-instructions.style.padding = '10px';
-instructions.style.borderRadius = '5px';
+instructions.className = 'mc-info mc-hint';
 instructions.innerHTML = `
 <b>GJK Collision Detection</b><br>
 <br>
