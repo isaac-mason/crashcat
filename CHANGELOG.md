@@ -19,6 +19,31 @@
 - perf(solver): contact velocity solving and warm starting skip the velocity write-back for constraints that applied no impulse, and the friction caps are summed only when a friction part is active
 - fix(body): a locked translation dof snapped the body to zero on that axis during the position solver instead of only stopping motion along it
 - refactor(body): `rigidBody.updatePositionFromCenterOfMass` is removed - deriving a body's cached `position` and `aabb` and publishing its bounds to the broadphase (`broadphase.notifyBodyBoundsChanged`) are separate steps now
+- feat: `broadphaseQuery` finds bodies by their bounds - `collideAABB`, `collideSphere`, `collidePoint`, `collideOrientedBox`, `castRay` and `castAABB` - through body collectors (`createAllBodyCollector`, `createAnyBodyCollector`, `createAllBodyCastCollector`, `createAnyBodyCastCollector`, `createClosestBodyCastCollector`), with casts reporting the fraction where they entered each body
+- feat: hits no longer carry materials (`materialId`, `materialIdA`, `materialIdB` are removed). look a material up from a body and sub shape id with `rigidBody.getMaterial(body, subShapeId)`; listener manifolds and kcc contacts do the same
+- feat(contacts): every shape def can give a material per sub shape id, cached contacts keep their materials, and contacts sort by a key built from their body and sub shape ids
+- feat(cast): `CastRaySettings` and `CastShapeSettings` replace `collideWithBackfaces` with separate `collideWithBackfacesTriangles` and `collideWithBackfacesConvex`, and box ray casts can report exit hits
+- fix(collide): collide settings default to `collideWithBackfaces: false`, and the kcc passes its back face mode through to its collides
+- feat(collectors): the all-hit collectors can sort their hits, and the default cast `collisionTolerance` is 1e-4
+- feat: `estimateCollisionResponse` takes the `ContactSettings` in place of `combinedFriction` and `combinedRestitution`, so it honours sensors, mass and inertia scales, surface velocity and the restitution threshold, and reports friction as one impulse in the contact plane
+- feat(constraint-part): position-and-velocity motors, and damping-only springs are soft
+- feat(kcc): sweeps are inflated by the character padding, stair walks head toward the most opposing steep contact and are cancelled when they gain no height, and convex casts honour the shrunken shape setting and collision tolerance
+- fix(constraints): constraint priority must be an integer from 0 to 2^32 - 1, higher priorities solve last, and constraints of different types with equal priority solve in creation order
+- fix: kinematic bodies no longer join islands, and a static body is never active, so a sleeping body jointed to one stays asleep
+- fix(collision): the capsule inertia tensor counts both hemispheres, mirrored scales keep the supporting face on the right side, gjk keeps a cast's simplex so epa can continue from it, a triangle thinner than about 0.06 degrees is degenerate whatever its size, and the closest point on a triangle takes its normal from the two shortest edges
+- fix(cast): reversed casts and collides swap their points, normals and materials back, closest collectors rank starting overlaps by depth, a zero-length ray inside a box is a hit at 0, and a convex cast whose normal is perpendicular to the motion is not a back face
+- fix(shapes): compounds, triangle meshes, planes, cylinders, convex hulls and wrapper shapes apply scale, rotation and centre of mass correctly, and a plane works at any pose
+- fix(manifold): pruning keeps all four points, edge-vs-face clipping runs both ways, and merging and pruning use the first hit's normal
+- fix(ccd): every body moves by its own shortened fraction, a contact's point comes from the manifold, and separating contacts no longer end the sweep early
+- fix(solver): warm starting runs in each island's sorted order so results no longer depend on the order contacts were found, the warm start scales by at most 4 when a step is longer than the last, and each contact acts at each body's own contact point so a speculative gap no longer lengthens friction lever arms
+- fix(sleep): each sleep test sphere grows just enough to hold its point's path, and a body a contact wakes has its own pairs found the same step, so a sleeping stack wakes whole
+- fix(constraints): reused slots start fresh, and hinge, slider, cone and six dof constraints get fixes to anchors, limits, motors and axis changes
+- fix(kcc): contacts are found in the body's space, padding is applied once, scaled and compound characters work, and accepted contacts survive rejected hits
+- fix: changing a body's shape invalidates its pairs' contact cache
+- fix(rigid-body): pooled slots reset their motion state, and removed bodies drop their shape
+- perf: solver jacobians reduce in one sum, woken bodies test the cheap pair gates before any box, and `scalePlane` no longer allocates
+- chore: `dist` is no longer tracked in git; install canaries with `crashcat@canary`
+- ci: publish releases from main, and canaries when the version is already published
 
 ## v0.0.5
 
